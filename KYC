@@ -1,0 +1,56 @@
+kyc-system/
+│
+├── backend/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── config/
+│   │   │   └── settings.py
+│   │   ├── api/
+│   │   │   ├── routes/
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── kyc.py
+│   │   │   │   ├── aml.py
+│   │   │   │   └── admin.py
+│   │   ├── models/
+│   │   │   ├── user.py
+│   │   │   ├── kyc.py
+│   │   │   ├── document.py
+│   │   │   └── risk.py
+│   │   ├── schemas/
+│   │   │   ├── user.py
+│   │   │   ├── kyc.py
+│   │   │   └── document.py
+│   │   ├── services/
+│   │   │   ├── ocr_service.py
+│   │   │   ├── face_service.py
+│   │   │   ├── aml_service.py
+│   │   │   └── risk_engine.py
+│   │   ├── db/
+│   │   │   ├── base.py
+│   │   │   └── session.py
+│   │   ├── core/
+│   │   │   ├── security.py
+│   │   │   └── auth.py
+│   │   └── utils/
+│   │       └── file_upload.py
+│   │
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── onboarding.jsx
+│   │   │   └── dashboard.jsx
+│   │   ├── components/
+│   │   │   ├── DocumentUpload.jsx
+│   │   │   └── SelfieCapture.jsx
+│   │   └── api/
+│   │       └── client.js
+│   └── package.json
+│
+├── infra/
+│   ├── docker-compose.yml
+│   └── nginx.conf
+│
+└── README.md
