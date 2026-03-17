@@ -1,0 +1,9 @@
+from fastapi import FastAPI
+from app.api.routes import kyc, auth, aml, admin
+
+app = FastAPI(title="KYC System")
+
+app.include_router(auth.router, prefix="/auth")
+app.include_router(kyc.router, prefix="/kyc")
+app.include_router(aml.router, prefix="/aml")
+app.include_router(admin.router, prefix="/admin")
