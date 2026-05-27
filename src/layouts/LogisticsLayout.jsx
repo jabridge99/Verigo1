@@ -1,22 +1,26 @@
 import React from 'react'
-import { Home, Map, Package } from 'lucide-react'
+import { Home, Package, Users, Map, Camera } from 'lucide-react'
 import PortalLayout from './PortalLayout'
 
 const NAV = [
-  { label: 'Dashboard', to: '/logistics',        icon: Home,    end: true },
-  { label: 'My Routes', to: '/logistics/routes', icon: Map },
-  { label: 'Jobs',      to: '/logistics/jobs',   icon: Package },
+  { label: 'Operations',      to: '/logistics',             icon: Home,    end: true },
+  { divider: 'Field Operations' },
+  { label: 'Job Engine',      to: '/logistics/jobs',        icon: Package },
+  { label: 'Route Optimizer', to: '/logistics/routes',      icon: Map },
+  { label: 'Pickup Proof',    to: '/logistics/proof',       icon: Camera },
+  { divider: 'Network' },
+  { label: 'Contractors',     to: '/logistics/contractors', icon: Users },
 ]
 
 export default function LogisticsLayout() {
   return (
     <PortalLayout
-      title="Logistics Portal"
+      title="Recovery Logistics"
       accent="amber"
       navItems={NAV}
-      userName="Mike Chen"
-      userInitials="MC"
-      userRole="Logistics Contractor"
+      userName="Ops Manager"
+      userInitials="OM"
+      userRole="Recovery Logistics Network"
     />
   )
 }

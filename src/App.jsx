@@ -32,15 +32,22 @@ import OperatorLogistics  from './pages/operator/Logistics'
 import OperatorPricing    from './pages/operator/Pricing'
 import OperatorEarnings   from './pages/operator/Earnings'
 
-import LogisticsDashboard from './pages/logistics/Dashboard'
-import LogisticsRoutes    from './pages/logistics/Routes'
-import LogisticsJobs      from './pages/logistics/Jobs'
+import LogisticsDashboard        from './pages/logistics/Dashboard'
+import LogisticsRoutes            from './pages/logistics/Routes'
+import LogisticsJobs              from './pages/logistics/Jobs'
+import ContractorMarketplace      from './pages/logistics/ContractorMarketplace'
+import PickupProof                from './pages/logistics/PickupProof'
 
-import AdminDashboard     from './pages/admin/Dashboard'
-import CommodityPricing   from './pages/admin/CommodityPricing'
-import AdminPartners      from './pages/admin/Partners'
-import AdminSettlement    from './pages/admin/Settlement'
-import AdminStations      from './pages/admin/Stations'
+import AdminDashboard       from './pages/admin/Dashboard'
+import CommodityPricing     from './pages/admin/CommodityPricing'
+import AdminPartners        from './pages/admin/Partners'
+import AdminSettlement      from './pages/admin/Settlement'
+import AdminStations        from './pages/admin/Stations'
+import WomsDashboard        from './pages/admin/WomsDashboard'
+import Weighbridge          from './pages/admin/Weighbridge'
+import ChainOfCustody       from './pages/admin/ChainOfCustody'
+import WarehouseInventory   from './pages/admin/WarehouseInventory'
+import RecyclerSettlement   from './pages/admin/RecyclerSettlement'
 
 export default function App() {
   return (
@@ -83,20 +90,27 @@ export default function App() {
           <Route path="earnings"  element={<OperatorEarnings />} />
         </Route>
 
-        {/* Logistics portal */}
+        {/* Logistics portal — Recovery Logistics Network */}
         <Route path="/logistics" element={<LogisticsLayout />}>
           <Route index element={<LogisticsDashboard />} />
-          <Route path="routes" element={<LogisticsRoutes />} />
-          <Route path="jobs"   element={<LogisticsJobs />} />
+          <Route path="jobs"         element={<LogisticsJobs />} />
+          <Route path="routes"       element={<LogisticsRoutes />} />
+          <Route path="proof"        element={<PickupProof />} />
+          <Route path="contractors"  element={<ContractorMarketplace />} />
         </Route>
 
-        {/* Admin portal */}
+        {/* Admin portal — WOMS + network */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
-          <Route path="pricing"    element={<CommodityPricing />} />
-          <Route path="partners"   element={<AdminPartners />} />
-          <Route path="settlement" element={<AdminSettlement />} />
-          <Route path="stations"   element={<AdminStations />} />
+          <Route path="woms"                element={<WomsDashboard />} />
+          <Route path="weighbridge"         element={<Weighbridge />} />
+          <Route path="custody"             element={<ChainOfCustody />} />
+          <Route path="warehouse"           element={<WarehouseInventory />} />
+          <Route path="recycler-settlement" element={<RecyclerSettlement />} />
+          <Route path="stations"            element={<AdminStations />} />
+          <Route path="pricing"             element={<CommodityPricing />} />
+          <Route path="partners"            element={<AdminPartners />} />
+          <Route path="settlement"          element={<AdminSettlement />} />
         </Route>
       </Routes>
     </BrowserRouter>
