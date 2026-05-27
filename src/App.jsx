@@ -40,6 +40,7 @@ import AdminDashboard     from './pages/admin/Dashboard'
 import CommodityPricing   from './pages/admin/CommodityPricing'
 import AdminPartners      from './pages/admin/Partners'
 import AdminSettlement    from './pages/admin/Settlement'
+import AdminStations      from './pages/admin/Stations'
 
 export default function App() {
   return (
@@ -95,6 +96,7 @@ export default function App() {
           <Route path="pricing"    element={<CommodityPricing />} />
           <Route path="partners"   element={<AdminPartners />} />
           <Route path="settlement" element={<AdminSettlement />} />
+          <Route path="stations"   element={<AdminStations />} />
         </Route>
       </Routes>
     </BrowserRouter>
