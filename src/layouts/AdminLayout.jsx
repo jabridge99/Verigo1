@@ -2,7 +2,7 @@ import React from 'react'
 import {
   Home, TrendingUp, Building2, MapPin, Activity, Scale, Shield, Warehouse,
   DollarSign, Landmark, CheckCircle, RefreshCw, Layers, BarChart2,
-  Database, Eye, Zap,
+  Database, Eye, Zap, AlertTriangle, GitBranch, Megaphone, PieChart, FileText,
 } from 'lucide-react'
 import PortalLayout from './PortalLayout'
 
@@ -28,6 +28,12 @@ const NAV = [
   { label: 'Sentiment Engine',    to: '/admin/sentiment',           icon: Activity },
   { label: 'Composition Engine',  to: '/admin/composition',         icon: BarChart2 },
   { label: 'Pricing Engine',      to: '/admin/pricing-engine',      icon: Zap },
+  { divider: 'Override Layer' },
+  { label: 'Override Control',    to: '/admin/trader-override',     icon: AlertTriangle },
+  { label: 'Override Queue',      to: '/admin/override-queue',      icon: GitBranch },
+  { label: 'Campaigns',           to: '/admin/campaigns',           icon: Megaphone },
+  { label: 'Exposure Dashboard',  to: '/admin/exposure',            icon: PieChart },
+  { label: 'Audit Trail',         to: '/admin/audit',               icon: FileText },
   { divider: 'Network' },
   { label: 'Station Network',     to: '/admin/stations',            icon: MapPin },
   { label: 'Partners',            to: '/admin/partners',            icon: Building2 },

@@ -60,6 +60,11 @@ import CompetitorIntelligence from './pages/admin/CompetitorIntelligence'
 import SentimentEngine      from './pages/admin/SentimentEngine'
 import MaterialComposition  from './pages/admin/MaterialComposition'
 import DynamicPricing       from './pages/admin/DynamicPricing'
+import TraderOverrideDashboard from './pages/admin/TraderOverrideDashboard'
+import OverrideQueue        from './pages/admin/OverrideQueue'
+import CampaignManager      from './pages/admin/CampaignManager'
+import ExposureDashboard    from './pages/admin/ExposureDashboard'
+import AuditViewer          from './pages/admin/AuditViewer'
 
 export default function App() {
   return (
@@ -131,6 +136,11 @@ export default function App() {
           <Route path="sentiment"           element={<SentimentEngine />} />
           <Route path="composition"         element={<MaterialComposition />} />
           <Route path="pricing-engine"      element={<DynamicPricing />} />
+          <Route path="trader-override"     element={<TraderOverrideDashboard />} />
+          <Route path="override-queue"      element={<OverrideQueue />} />
+          <Route path="campaigns"           element={<CampaignManager />} />
+          <Route path="exposure"            element={<ExposureDashboard />} />
+          <Route path="audit"               element={<AuditViewer />} />
           <Route path="stations"            element={<AdminStations />} />
           <Route path="pricing"             element={<CommodityPricing />} />
           <Route path="partners"            element={<AdminPartners />} />
