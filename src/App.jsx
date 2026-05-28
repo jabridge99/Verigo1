@@ -48,6 +48,11 @@ import Weighbridge          from './pages/admin/Weighbridge'
 import ChainOfCustody       from './pages/admin/ChainOfCustody'
 import WarehouseInventory   from './pages/admin/WarehouseInventory'
 import RecyclerSettlement   from './pages/admin/RecyclerSettlement'
+import TreasuryDashboard    from './pages/admin/TreasuryDashboard'
+import Ledger               from './pages/admin/Ledger'
+import PayoutApprovals      from './pages/admin/PayoutApprovals'
+import ReconciliationEngine from './pages/admin/ReconciliationEngine'
+import SettlementBatching   from './pages/admin/SettlementBatching'
 
 export default function App() {
   return (
@@ -107,10 +112,14 @@ export default function App() {
           <Route path="custody"             element={<ChainOfCustody />} />
           <Route path="warehouse"           element={<WarehouseInventory />} />
           <Route path="recycler-settlement" element={<RecyclerSettlement />} />
+          <Route path="treasury"            element={<TreasuryDashboard />} />
+          <Route path="ledger"              element={<Ledger />} />
+          <Route path="payout-approvals"   element={<PayoutApprovals />} />
+          <Route path="reconciliation"      element={<ReconciliationEngine />} />
+          <Route path="settlement"          element={<SettlementBatching />} />
           <Route path="stations"            element={<AdminStations />} />
           <Route path="pricing"             element={<CommodityPricing />} />
           <Route path="partners"            element={<AdminPartners />} />
-          <Route path="settlement"          element={<AdminSettlement />} />
         </Route>
       </Routes>
     </BrowserRouter>
