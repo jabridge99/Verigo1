@@ -75,6 +75,11 @@ import ElasticityModel       from './pages/admin/ElasticityModel'
 import MarketTwin            from './pages/admin/MarketTwin'
 import ScenarioSimulator     from './pages/admin/ScenarioSimulator'
 import GradualRollout        from './pages/admin/GradualRollout'
+import FraudDashboard        from './pages/admin/FraudDashboard'
+import FraudAlerts           from './pages/admin/FraudAlerts'
+import FraudCaseViewer       from './pages/admin/FraudCaseViewer'
+import RiskRules             from './pages/admin/RiskRules'
+import RiskScorecard         from './pages/admin/RiskScorecard'
 import MarketplaceAdmin      from './pages/admin/MarketplaceAdmin'
 
 import MerchantDashboard     from './pages/merchant/Dashboard'
@@ -176,6 +181,11 @@ export default function App() {
           <Route path="market-twin"         element={<MarketTwin />} />
           <Route path="scenarios"           element={<ScenarioSimulator />} />
           <Route path="rollout"             element={<GradualRollout />} />
+          <Route path="fraud"               element={<FraudDashboard />} />
+          <Route path="fraud-alerts"        element={<FraudAlerts />} />
+          <Route path="fraud-cases"         element={<FraudCaseViewer />} />
+          <Route path="risk-rules"          element={<RiskRules />} />
+          <Route path="risk-scorecard"      element={<RiskScorecard />} />
           <Route path="marketplace"         element={<MarketplaceAdmin />} />
           <Route path="stations"            element={<AdminStations />} />
           <Route path="pricing"             element={<CommodityPricing />} />

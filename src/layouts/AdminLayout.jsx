@@ -4,6 +4,7 @@ import {
   DollarSign, Landmark, CheckCircle, RefreshCw, Layers, BarChart2,
   Database, Eye, Zap, AlertTriangle, GitBranch, Megaphone, PieChart, FileText,
   FlaskConical, Globe, BarChart, ShoppingBag,
+  ShieldAlert, Bell, FolderOpen, SlidersHorizontal, UserX,
 } from 'lucide-react'
 import PortalLayout from './PortalLayout'
 
@@ -42,6 +43,12 @@ const NAV = [
   { label: 'Market Twin',         to: '/admin/market-twin',         icon: Globe },
   { label: 'Scenario Simulator',  to: '/admin/scenarios',           icon: BarChart2 },
   { label: 'Gradual Rollout',     to: '/admin/rollout',             icon: Zap },
+  { divider: 'Fraud & Risk' },
+  { label: 'Fraud Overview',      to: '/admin/fraud',               icon: ShieldAlert },
+  { label: 'Alert Queue',         to: '/admin/fraud-alerts',        icon: Bell },
+  { label: 'Case Viewer',         to: '/admin/fraud-cases',         icon: FolderOpen },
+  { label: 'Risk Rules',          to: '/admin/risk-rules',          icon: SlidersHorizontal },
+  { label: 'Risk Scorecard',      to: '/admin/risk-scorecard',      icon: UserX },
   { divider: 'Marketplace' },
   { label: 'Marketplace Admin',   to: '/admin/marketplace',         icon: ShoppingBag },
   { divider: 'Network' },
