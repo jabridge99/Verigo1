@@ -2,6 +2,7 @@ import React from 'react'
 import {
   Home, MapPin, Calendar, QrCode, Wallet, TrendingUp,
   List, Gift, Users, GitBranch, Bell, Shield, HelpCircle,
+  ShoppingBag, Star, Crown,
 } from 'lucide-react'
 import PortalLayout from './PortalLayout'
 
@@ -19,6 +20,10 @@ const NAV = [
   { label: 'Household Circle', to: '/consumer/circle',       icon: Users },
   { label: 'Eco Rewards',      to: '/consumer/rewards',      icon: Gift },
   { label: 'Referral',         to: '/consumer/referral',     icon: GitBranch },
+  { divider: 'Marketplace' },
+  { label: 'Marketplace',      to: '/consumer/marketplace',    icon: ShoppingBag },
+  { label: 'Group Rewards',    to: '/consumer/group-rewards',  icon: Users },
+  { label: 'Member Offers',    to: '/consumer/member-offers',  icon: Crown },
   { divider: 'Account' },
   { label: 'Notifications',    to: '/consumer/notifications', icon: Bell },
   { label: 'KYC & Identity',   to: '/consumer/kyc',          icon: Shield },

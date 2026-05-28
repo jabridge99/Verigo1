@@ -7,6 +7,7 @@ import ConsumerLayout     from './layouts/ConsumerLayout'
 import OperatorLayout     from './layouts/OperatorLayout'
 import LogisticsLayout    from './layouts/LogisticsLayout'
 import AdminLayout        from './layouts/AdminLayout'
+import MerchantLayout     from './layouts/MerchantLayout'
 
 import Landing            from './pages/Landing'
 import Onboarding         from './pages/Onboarding'
@@ -25,6 +26,9 @@ import Transactions       from './pages/consumer/Transactions'
 import Notifications      from './pages/consumer/Notifications'
 import Support            from './pages/consumer/Support'
 import KYC               from './pages/consumer/KYC'
+import ConsumerMarketplace from './pages/consumer/Marketplace'
+import GroupRewards       from './pages/consumer/GroupRewards'
+import MemberOffers       from './pages/consumer/MemberOffers'
 
 import OperatorDashboard  from './pages/operator/Dashboard'
 import OperatorStations   from './pages/operator/Stations'
@@ -71,6 +75,13 @@ import ElasticityModel       from './pages/admin/ElasticityModel'
 import MarketTwin            from './pages/admin/MarketTwin'
 import ScenarioSimulator     from './pages/admin/ScenarioSimulator'
 import GradualRollout        from './pages/admin/GradualRollout'
+import MarketplaceAdmin      from './pages/admin/MarketplaceAdmin'
+
+import MerchantDashboard     from './pages/merchant/Dashboard'
+import MerchantProducts      from './pages/merchant/Products'
+import MerchantCampaigns     from './pages/merchant/Campaigns'
+import MerchantOnboarding    from './pages/merchant/Onboarding'
+import MerchantAnalytics     from './pages/merchant/Analytics'
 
 export default function App() {
   return (
@@ -102,6 +113,18 @@ export default function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="support"       element={<Support />} />
           <Route path="kyc"           element={<KYC />} />
+          <Route path="marketplace"   element={<ConsumerMarketplace />} />
+          <Route path="group-rewards" element={<GroupRewards />} />
+          <Route path="member-offers" element={<MemberOffers />} />
+        </Route>
+
+        {/* Merchant portal */}
+        <Route path="/merchant" element={<MerchantLayout />}>
+          <Route index element={<MerchantDashboard />} />
+          <Route path="products"   element={<MerchantProducts />} />
+          <Route path="campaigns"  element={<MerchantCampaigns />} />
+          <Route path="analytics"  element={<MerchantAnalytics />} />
+          <Route path="onboarding" element={<MerchantOnboarding />} />
         </Route>
 
         {/* Operator portal */}
@@ -153,6 +176,7 @@ export default function App() {
           <Route path="market-twin"         element={<MarketTwin />} />
           <Route path="scenarios"           element={<ScenarioSimulator />} />
           <Route path="rollout"             element={<GradualRollout />} />
+          <Route path="marketplace"         element={<MarketplaceAdmin />} />
           <Route path="stations"            element={<AdminStations />} />
           <Route path="pricing"             element={<CommodityPricing />} />
           <Route path="partners"            element={<AdminPartners />} />
