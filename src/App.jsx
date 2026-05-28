@@ -77,6 +77,7 @@ import ScenarioSimulator     from './pages/admin/ScenarioSimulator'
 import GradualRollout        from './pages/admin/GradualRollout'
 import ExecutiveCommandCenter  from './pages/admin/ExecutiveCommandCenter'
 import EngineeringDashboard    from './pages/admin/EngineeringDashboard'
+import RoadmapDashboard        from './pages/admin/RoadmapDashboard'
 import FraudDashboard        from './pages/admin/FraudDashboard'
 import FraudAlerts           from './pages/admin/FraudAlerts'
 import FraudCaseViewer       from './pages/admin/FraudCaseViewer'
@@ -157,6 +158,7 @@ export default function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="command-center"      element={<ExecutiveCommandCenter />} />
           <Route path="engineering"         element={<EngineeringDashboard />} />
+          <Route path="roadmap"             element={<RoadmapDashboard />} />
           <Route path="woms"                element={<WomsDashboard />} />
           <Route path="weighbridge"         element={<Weighbridge />} />
           <Route path="custody"             element={<ChainOfCustody />} />

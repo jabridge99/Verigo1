@@ -14,6 +14,7 @@ const NAV = [
   { label: 'Dashboard',           to: '/admin',                     icon: Home,        end: true },
   { divider: 'Engineering' },
   { label: 'Engineering',         to: '/admin/engineering',         icon: Cpu },
+  { label: 'Roadmap & Finance',   to: '/admin/roadmap',             icon: TrendingUp },
   { divider: 'WOMS' },
   { label: 'Operations',          to: '/admin/woms',                icon: Activity },
   { label: 'Weighbridge',         to: '/admin/weighbridge',         icon: Scale },
