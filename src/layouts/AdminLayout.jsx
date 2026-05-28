@@ -1,5 +1,9 @@
 import React from 'react'
-import { Home, TrendingUp, Building2, CreditCard, MapPin, Activity, Scale, Shield, Warehouse, DollarSign, Landmark, CheckCircle, RefreshCw, Layers } from 'lucide-react'
+import {
+  Home, TrendingUp, Building2, MapPin, Activity, Scale, Shield, Warehouse,
+  DollarSign, Landmark, CheckCircle, RefreshCw, Layers, BarChart2,
+  Database, Eye, Zap,
+} from 'lucide-react'
 import PortalLayout from './PortalLayout'
 
 const NAV = [
@@ -13,12 +17,19 @@ const NAV = [
   { divider: 'Finance' },
   { label: 'Treasury',            to: '/admin/treasury',            icon: Landmark },
   { label: 'Ledger',              to: '/admin/ledger',              icon: TrendingUp },
-  { label: 'Payout Approvals',    to: '/admin/payout-approvals',   icon: CheckCircle },
+  { label: 'Payout Approvals',    to: '/admin/payout-approvals',    icon: CheckCircle },
   { label: 'Reconciliation',      to: '/admin/reconciliation',      icon: RefreshCw },
-  { label: 'Settlement Batching', to: '/admin/settlement',         icon: Layers },
+  { label: 'Settlement Batching', to: '/admin/settlement',          icon: Layers },
+  { divider: 'Pricing Intelligence' },
+  { label: 'Trader Dashboard',    to: '/admin/trader',              icon: BarChart2 },
+  { label: 'Market Ingestion',    to: '/admin/market-ingestion',    icon: Database },
+  { label: 'Scrap Pricing',       to: '/admin/scrap-pricing',       icon: Layers },
+  { label: 'Competitor Intel',    to: '/admin/competitor-intel',    icon: Eye },
+  { label: 'Sentiment Engine',    to: '/admin/sentiment',           icon: Activity },
+  { label: 'Composition Engine',  to: '/admin/composition',         icon: BarChart2 },
+  { label: 'Pricing Engine',      to: '/admin/pricing-engine',      icon: Zap },
   { divider: 'Network' },
   { label: 'Station Network',     to: '/admin/stations',            icon: MapPin },
-  { label: 'Commodity Pricing',   to: '/admin/pricing',             icon: TrendingUp },
   { label: 'Partners',            to: '/admin/partners',            icon: Building2 },
 ]
 

@@ -53,6 +53,13 @@ import Ledger               from './pages/admin/Ledger'
 import PayoutApprovals      from './pages/admin/PayoutApprovals'
 import ReconciliationEngine from './pages/admin/ReconciliationEngine'
 import SettlementBatching   from './pages/admin/SettlementBatching'
+import TraderDashboard      from './pages/admin/TraderDashboard'
+import MarketIngestion      from './pages/admin/MarketIngestion'
+import ScrapPricing         from './pages/admin/ScrapPricing'
+import CompetitorIntelligence from './pages/admin/CompetitorIntelligence'
+import SentimentEngine      from './pages/admin/SentimentEngine'
+import MaterialComposition  from './pages/admin/MaterialComposition'
+import DynamicPricing       from './pages/admin/DynamicPricing'
 
 export default function App() {
   return (
@@ -117,6 +124,13 @@ export default function App() {
           <Route path="payout-approvals"   element={<PayoutApprovals />} />
           <Route path="reconciliation"      element={<ReconciliationEngine />} />
           <Route path="settlement"          element={<SettlementBatching />} />
+          <Route path="trader"              element={<TraderDashboard />} />
+          <Route path="market-ingestion"    element={<MarketIngestion />} />
+          <Route path="scrap-pricing"       element={<ScrapPricing />} />
+          <Route path="competitor-intel"    element={<CompetitorIntelligence />} />
+          <Route path="sentiment"           element={<SentimentEngine />} />
+          <Route path="composition"         element={<MaterialComposition />} />
+          <Route path="pricing-engine"      element={<DynamicPricing />} />
           <Route path="stations"            element={<AdminStations />} />
           <Route path="pricing"             element={<CommodityPricing />} />
           <Route path="partners"            element={<AdminPartners />} />
