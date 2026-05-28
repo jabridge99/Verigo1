@@ -75,6 +75,7 @@ import ElasticityModel       from './pages/admin/ElasticityModel'
 import MarketTwin            from './pages/admin/MarketTwin'
 import ScenarioSimulator     from './pages/admin/ScenarioSimulator'
 import GradualRollout        from './pages/admin/GradualRollout'
+import ExecutiveCommandCenter from './pages/admin/ExecutiveCommandCenter'
 import FraudDashboard        from './pages/admin/FraudDashboard'
 import FraudAlerts           from './pages/admin/FraudAlerts'
 import FraudCaseViewer       from './pages/admin/FraudCaseViewer'
@@ -153,6 +154,7 @@ export default function App() {
         {/* Admin portal — WOMS + network */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
+          <Route path="command-center"      element={<ExecutiveCommandCenter />} />
           <Route path="woms"                element={<WomsDashboard />} />
           <Route path="weighbridge"         element={<Weighbridge />} />
           <Route path="custody"             element={<ChainOfCustody />} />
