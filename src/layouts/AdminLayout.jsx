@@ -3,6 +3,7 @@ import {
   Home, TrendingUp, Building2, MapPin, Activity, Scale, Shield, Warehouse,
   DollarSign, Landmark, CheckCircle, RefreshCw, Layers, BarChart2,
   Database, Eye, Zap, AlertTriangle, GitBranch, Megaphone, PieChart, FileText,
+  FlaskConical, Globe, BarChart,
 } from 'lucide-react'
 import PortalLayout from './PortalLayout'
 
@@ -34,6 +35,13 @@ const NAV = [
   { label: 'Campaigns',           to: '/admin/campaigns',           icon: Megaphone },
   { label: 'Exposure Dashboard',  to: '/admin/exposure',            icon: PieChart },
   { label: 'Audit Trail',         to: '/admin/audit',               icon: FileText },
+  { divider: 'Shadow Lab' },
+  { label: 'Innovation Lab',      to: '/admin/shadow-lab',          icon: FlaskConical },
+  { label: 'A/B Tests',           to: '/admin/ab-tests',            icon: GitBranch },
+  { label: 'Elasticity Model',    to: '/admin/elasticity',          icon: BarChart },
+  { label: 'Market Twin',         to: '/admin/market-twin',         icon: Globe },
+  { label: 'Scenario Simulator',  to: '/admin/scenarios',           icon: BarChart2 },
+  { label: 'Gradual Rollout',     to: '/admin/rollout',             icon: Zap },
   { divider: 'Network' },
   { label: 'Station Network',     to: '/admin/stations',            icon: MapPin },
   { label: 'Partners',            to: '/admin/partners',            icon: Building2 },

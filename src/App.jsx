@@ -65,6 +65,12 @@ import OverrideQueue        from './pages/admin/OverrideQueue'
 import CampaignManager      from './pages/admin/CampaignManager'
 import ExposureDashboard    from './pages/admin/ExposureDashboard'
 import AuditViewer          from './pages/admin/AuditViewer'
+import ShadowPricingLab     from './pages/admin/ShadowPricingLab'
+import ABPricingTests        from './pages/admin/ABPricingTests'
+import ElasticityModel       from './pages/admin/ElasticityModel'
+import MarketTwin            from './pages/admin/MarketTwin'
+import ScenarioSimulator     from './pages/admin/ScenarioSimulator'
+import GradualRollout        from './pages/admin/GradualRollout'
 
 export default function App() {
   return (
@@ -141,6 +147,12 @@ export default function App() {
           <Route path="campaigns"           element={<CampaignManager />} />
           <Route path="exposure"            element={<ExposureDashboard />} />
           <Route path="audit"               element={<AuditViewer />} />
+          <Route path="shadow-lab"          element={<ShadowPricingLab />} />
+          <Route path="ab-tests"            element={<ABPricingTests />} />
+          <Route path="elasticity"          element={<ElasticityModel />} />
+          <Route path="market-twin"         element={<MarketTwin />} />
+          <Route path="scenarios"           element={<ScenarioSimulator />} />
+          <Route path="rollout"             element={<GradualRollout />} />
           <Route path="stations"            element={<AdminStations />} />
           <Route path="pricing"             element={<CommodityPricing />} />
           <Route path="partners"            element={<AdminPartners />} />
