@@ -5,13 +5,15 @@ import {
   Database, Eye, Zap, AlertTriangle, GitBranch, Megaphone, PieChart, FileText,
   FlaskConical, Globe, BarChart, ShoppingBag,
   ShieldAlert, Bell, FolderOpen, SlidersHorizontal, UserX,
-  LayoutDashboard,
+  LayoutDashboard, Cpu,
 } from 'lucide-react'
 import PortalLayout from './PortalLayout'
 
 const NAV = [
   { label: 'Command Center',      to: '/admin/command-center',      icon: LayoutDashboard, end: true },
   { label: 'Dashboard',           to: '/admin',                     icon: Home,        end: true },
+  { divider: 'Engineering' },
+  { label: 'Engineering',         to: '/admin/engineering',         icon: Cpu },
   { divider: 'WOMS' },
   { label: 'Operations',          to: '/admin/woms',                icon: Activity },
   { label: 'Weighbridge',         to: '/admin/weighbridge',         icon: Scale },
