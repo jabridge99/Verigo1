@@ -3,82 +3,71 @@ import {
   RefreshCw, CheckCircle, AlertTriangle, XCircle, Wrench,
   Search, Clock, ChevronDown, ChevronUp, CheckCheck,
 } from 'lucide-react'
+import { ledger, ACCOUNT_TYPE } from '../../lib/ledger'
 
-const STATUS_CARDS = [
-  {
-    key: 'ledger',
-    label: 'Ledger Balance',
-    value: '$2,847,391.20',
-    status: 'pass',
-    detail: 'Internal ledger matches float pool',
-  },
-  {
-    key: 'settlement',
-    label: 'Settlement Totals',
-    value: '$184,203.00',
-    status: 'pass',
-    detail: 'MTD settlements reconciled',
-  },
-  {
-    key: 'wallet',
-    label: 'Wallet Pool',
-    value: '$43,872.55',
-    status: 'pass',
-    detail: 'All operator wallets accounted for',
-  },
-  {
-    key: 'float',
-    label: 'Float Reserve',
-    value: '$8,120.00',
-    status: 'warn',
-    detail: 'Reserve 2.1% below minimum threshold',
-  },
-  {
-    key: 'fraud',
-    label: 'Fraud Hold Pool',
-    value: '$1,450.00',
-    status: 'pass',
-    detail: '3 holds active, all within SLA',
-  },
-]
+function fmt(n) {
+  return '$' + n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
-const DISCREPANCIES = [
-  {
-    account: 'Operator Wallet – GreenCycle NSW',
-    expected: 4820.5,
-    actual: 4817.3,
-    variance: -3.2,
-    autoFixable: true,
-  },
-  {
-    account: 'Float Reserve – Main Pool',
-    expected: 10000.0,
-    actual: 8120.0,
-    variance: -1880.0,
-    autoFixable: false,
-  },
-  {
-    account: 'Settlement Batch SB-20240511',
-    expected: 22450.0,
-    actual: 22450.0,
-    variance: 0,
-    autoFixable: true,
-  },
-  {
-    account: 'Fraud Hold – TXN-88821',
-    expected: 150.0,
-    actual: 152.5,
-    variance: 2.5,
-    autoFixable: true,
-  },
-  {
-    account: 'Recycler Payout – ScrapMetal Co.',
-    expected: 7300.0,
-    actual: 7294.15,
-    variance: -5.85,
-    autoFixable: false,
-  },
-]
+function buildStatusCards(recon) {
+  if (!recon) return []
+  const tb = recon.trial_balance
+  const floatBal   = ledger.balance('float_reserve')
+  const walletBal  = ledger.balance('wallet_pool')
+  const fraudBal   = ledger.balance('fraud_hold')
+  const opBal      = ledger.balance('operator_payable')
+  const floatIssue = recon.issues.find(i => i.code === 'NEGATIVE_FLOAT')
+  const walletDrift= recon.issues.find(i => i.code === 'WALLET_POOL_DRIFT')
+  return [
+    {
+      key: 'ledger',
+      label: 'Trial Balance',
+      value: tb.balanced ? 'Balanced' : `Δ ${fmt(Math.abs(tb.totalDebit - tb.totalCredit))}`,
+      status: tb.balanced ? 'pass' : 'fail',
+      detail: tb.balanced ? `${tb.rows.length} accounts, debits = credits` : 'Trial balance mismatch detected',
+    },
+    {
+      key: 'float',
+      label: 'Float Reserve',
+      value: fmt(floatBal),
+      status: floatIssue ? 'fail' : 'pass',
+      detail: floatIssue ? floatIssue.detail : 'Float reserve positive',
+    },
+    {
+      key: 'wallet',
+      label: 'Wallet Pool',
+      value: fmt(walletBal),
+      status: walletDrift ? 'warn' : 'pass',
+      detail: walletDrift ? walletDrift.detail : 'Wallet pool reconciled',
+    },
+    {
+      key: 'operator',
+      label: 'Operator Payable',
+      value: fmt(opBal),
+      status: 'pass',
+      detail: 'Operator payable balance',
+    },
+    {
+      key: 'fraud',
+      label: 'Fraud Holds',
+      value: fmt(fraudBal),
+      status: 'pass',
+      detail: 'Active fraud hold pool',
+    },
+  ]
+}
+
+function buildDiscrepancies(recon) {
+  if (!recon) return []
+  return recon.issues.map(issue => ({
+    account: issue.code.replace(/_/g, ' '),
+    expected: issue.variance ?? 0,
+    actual: 0,
+    variance: issue.variance ?? 0,
+    autoFixable: issue.autoFixable,
+    detail: issue.detail,
+  }))
+}
 
 const RUN_HISTORY = [
   { ts: '2024-05-14 08:00', duration: 1243, passed: 5, warned: 0, failed: 0, trigger: 'scheduled', status: 'clean' },
@@ -129,11 +118,14 @@ function RunStatusBadge({ status }) {
 }
 
 export default function ReconciliationEngine() {
-  const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [toast, setToast] = useState(null)
-  const [expandedFix, setExpandedFix] = useState(null)
-  const lastRun = '2024-05-14 08:00:43 AEST'
+  const [running, setRunning]     = useState(false)
+  const [progress, setProgress]   = useState(0)
+  const [toast, setToast]         = useState(null)
+  const [reconResult, setReconResult] = useState(null)
+  const [lastRun, setLastRun]     = useState('Not yet run')
+
+  const statusCards  = buildStatusCards(reconResult)
+  const discrepancies = buildDiscrepancies(reconResult)
 
   function handleRunNow() {
     if (running) return
@@ -145,15 +137,26 @@ export default function ReconciliationEngine() {
       setTimeout(() => {
         setProgress(p)
         if (p === 100) {
+          const result = ledger.reconcile()
+          setReconResult(result)
+          setLastRun(new Date().toLocaleString('en-AU') + ' AEST')
           setRunning(false)
-          setToast({ type: 'warning', msg: '4/5 passed — 1 warning (Float Reserve below threshold)' })
-          setTimeout(() => setToast(null), 5000)
+          const critical = result.issues.filter(x => x.severity === 'critical').length
+          const warnings = result.issues.filter(x => x.severity === 'warning').length
+          if (critical > 0) {
+            setToast({ type: 'error', msg: `${critical} critical issue${critical > 1 ? 's' : ''} found — immediate action required` })
+          } else if (warnings > 0) {
+            setToast({ type: 'warning', msg: `${5 - warnings}/5 passed — ${warnings} warning${warnings > 1 ? 's' : ''}` })
+          } else {
+            setToast({ type: 'success', msg: 'All 5 checks passed — ledger is clean' })
+          }
+          setTimeout(() => setToast(null), 6000)
         }
       }, (i + 1) * 400)
     })
   }
 
-  const checkLabels = ['Ledger Balance', 'Settlement Totals', 'Wallet Pool', 'Float Reserve', 'Fraud Hold Pool']
+  const checkLabels = ['Trial Balance', 'Float Reserve', 'Wallet Pool', 'Operator Payable', 'Fraud Hold Pool']
 
   return (
     <div className="space-y-6">
@@ -207,73 +210,74 @@ export default function ReconciliationEngine() {
       {/* Toast */}
       {toast && (
         <div className={`rounded-2xl border px-5 py-4 flex items-center gap-3 ${
-          toast.type === 'warning'
-            ? 'bg-amber-50 border-amber-200 text-amber-800'
-            : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          toast.type === 'error'   ? 'bg-red-50 border-red-200 text-red-800' :
+          toast.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                   : 'bg-emerald-50 border-emerald-200 text-emerald-800'
         }`}>
-          {toast.type === 'warning'
-            ? <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
-            : <CheckCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />}
+          {toast.type === 'error'   ? <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+          : toast.type === 'warning' ? <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+          : <CheckCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />}
           <p className="text-sm font-semibold">{toast.msg}</p>
         </div>
       )}
 
       {/* Status grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {STATUS_CARDS.map(card => <StatusCard key={card.key} card={card} />)}
+        {statusCards.length > 0
+          ? statusCards.map(card => <StatusCard key={card.key} card={card} />)
+          : <div className="col-span-5 text-center py-8 text-slate-400 text-sm">Run reconciliation to see live results.</div>
+        }
       </div>
 
       {/* Discrepancy table */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
         <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
           <h2 className="font-bold text-slate-900">Discrepancy Report</h2>
-          <span className="text-xs text-slate-400">{DISCREPANCIES.filter(d => d.variance !== 0).length} discrepancies found</span>
+          <span className="text-xs text-slate-400">
+            {reconResult
+              ? `${discrepancies.filter(d => d.variance !== 0).length} issue${discrepancies.length !== 1 ? 's' : ''} found`
+              : 'Run reconciliation to populate'
+            }
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-50">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Account</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Expected (AUD)</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Actual (AUD)</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Issue</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Detail</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Variance</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Auto-fixable</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {DISCREPANCIES.map((d, i) => (
-                <tr key={i} className={`hover:bg-slate-50 transition-colors ${d.variance !== 0 ? '' : 'opacity-60'}`}>
+              {discrepancies.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-center py-8 text-slate-400 text-sm">
+                    {reconResult ? 'No discrepancies found — ledger is balanced.' : 'Run reconciliation to see results.'}
+                  </td>
+                </tr>
+              )}
+              {discrepancies.map((d, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-colors">
                   <td className="px-5 py-3.5">
-                    <span className="font-medium text-slate-800 text-xs">{d.account}</span>
+                    <span className="font-mono text-xs font-semibold text-slate-800">{d.account}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-600">
-                    ${d.expected.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-600">
-                    ${d.actual.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
+                  <td className="px-4 py-3.5 text-xs text-slate-500 max-w-xs truncate">{d.detail}</td>
                   <td className="px-4 py-3.5 text-right">
-                    <span className={`font-mono text-xs font-semibold ${
-                      d.variance === 0 ? 'text-emerald-600' :
-                      d.variance < 0 ? 'text-red-600' : 'text-amber-600'
-                    }`}>
-                      {d.variance === 0 ? '—' : (d.variance > 0 ? '+' : '') + d.variance.toFixed(2)}
+                    <span className={`font-mono text-xs font-semibold ${d.variance < 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                      {d.variance > 0 ? '+' : ''}{d.variance.toFixed(2)}
                     </span>
                   </td>
                   <td className="px-4 py-3.5 text-center">
-                    {d.variance === 0 ? (
-                      <span className="text-slate-300 text-xs">—</span>
-                    ) : d.autoFixable ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-slate-300 mx-auto" />
-                    )}
+                    {d.autoFixable
+                      ? <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />
+                      : <XCircle className="w-4 h-4 text-slate-300 mx-auto" />
+                    }
                   </td>
                   <td className="px-4 py-3.5 text-center">
-                    {d.variance === 0 ? (
-                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Balanced</span>
-                    ) : d.autoFixable ? (
+                    {d.autoFixable ? (
                       <button className="text-[10px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-2.5 py-1 rounded-lg transition-colors inline-flex items-center gap-1">
                         <Wrench className="w-3 h-3" /> Fix
                       </button>

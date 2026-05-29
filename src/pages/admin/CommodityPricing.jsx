@@ -1,38 +1,49 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
   TrendingUp, TrendingDown, RefreshCw, Download, Edit3, Save,
   CheckCircle, Zap, Bell, ToggleLeft, ToggleRight, AlertCircle,
   ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react'
+import { marketFeed, COMMODITIES, PLATFORM_MARGIN } from '../../lib/marketFeed'
 
-// ─── Static data ─────────────────────────────────────────────────────────────
+// Map marketFeed materials to display IDs (stable keys for React)
+const MATERIAL_IDS = Object.keys(COMMODITIES)
 
-const INITIAL_PRICES = [
-  { id: 1, material: 'Aluminium',     grade: 'UBC Scrap',     spot: 2180, change: +2.4, consumerRate: 1.85, margin: 0.152 },
-  { id: 2, material: 'PET Plastic',   grade: 'Clear Baled',   spot: 320,  change: -0.8, consumerRate: 0.24, margin: 0.250 },
-  { id: 3, material: 'HDPE',          grade: 'Natural Baled', spot: 280,  change: +1.2, consumerRate: 0.21, margin: 0.250 },
-  { id: 4, material: 'Clear Glass',   grade: 'Cullet',        spot: 45,   change:  0.0, consumerRate: 0.02, margin: 0.556 },
-  { id: 5, material: 'Steel Cans',    grade: 'No.1 Shredded', spot: 195,  change: +3.1, consumerRate: 0.14, margin: 0.282 },
-  { id: 6, material: 'Paperboard',    grade: 'OCC Grade',     spot: 85,   change: -1.5, consumerRate: 0.06, margin: 0.294 },
-  { id: 7, material: 'Mixed Plastic', grade: 'Commingled',    spot: 55,   change: -0.3, consumerRate: 0.04, margin: 0.273 },
-]
+function feedToRow(record, id) {
+  return {
+    id,
+    key: record.material,
+    material: record.label,
+    grade: record.grade,
+    exchange: record.exchange,
+    spot: record.spot,
+    change: record.change_pct,
+    consumerRate: record.consumer_rate,
+    margin: record.platform_margin,
+  }
+}
 
-// 12 months of history — alum & PET
-const MONTHS = ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
-const HISTORY = [
-  { month: 'Jun', alum: 1980, pet: 275 },
-  { month: 'Jul', alum: 2020, pet: 283 },
-  { month: 'Aug', alum: 2005, pet: 278 },
-  { month: 'Sep', alum: 2060, pet: 290 },
-  { month: 'Oct', alum: 2095, pet: 298 },
-  { month: 'Nov', alum: 2110, pet: 302 },
-  { month: 'Dec', alum: 2085, pet: 295 },
-  { month: 'Jan', alum: 2050, pet: 290 },
-  { month: 'Feb', alum: 2090, pet: 305 },
-  { month: 'Mar', alum: 2140, pet: 310 },
-  { month: 'Apr', alum: 2130, pet: 323 },
-  { month: 'May', alum: 2180, pet: 320, current: true },
-]
+function buildInitialPrices() {
+  return marketFeed.snapshot().map((rec, i) => feedToRow(rec, i + 1))
+}
+
+// Build 12-month history for aluminium + PET from feed history
+function buildHistory() {
+  const alumHist = marketFeed.getHistory('aluminium', 90)
+  const petHist  = marketFeed.getHistory('pet_plastic', 90)
+  // Sample monthly (every ~7 data points from the last 90 days = ~12 months at daily resolution)
+  const step = Math.max(1, Math.floor(alumHist.length / 12))
+  const months = ['Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May']
+  return months.map((month, i) => {
+    const idx = Math.min(i * step, alumHist.length - 1)
+    return {
+      month,
+      alum: alumHist[idx]?.price ?? 2180,
+      pet:  petHist[idx]?.price  ?? 320,
+      current: i === 11,
+    }
+  })
+}
 
 const AUTO_RULES = [
   {
@@ -70,13 +81,6 @@ const ALERT_LOG = [
 
 const TARGET_MARGIN = 0.25
 
-const avgMargin = INITIAL_PRICES.reduce((a, p) => a + p.margin, 0) / INITIAL_PRICES.length
-
-const weightedChangePct = (() => {
-  const nonZero = INITIAL_PRICES.filter(p => p.change !== 0)
-  return nonZero.reduce((a, p) => a + p.change, 0) / nonZero.length
-})()
-
 // SVG chart helpers
 const CHART_W = 600
 const CHART_H = 160
@@ -85,8 +89,8 @@ const CHART_PAD_R = 12
 const CHART_PAD_T = 12
 const CHART_PAD_B = 28
 
-function scaleX(i) {
-  return CHART_PAD_L + (i / (HISTORY.length - 1)) * (CHART_W - CHART_PAD_L - CHART_PAD_R)
+function scaleX(i, total) {
+  return CHART_PAD_L + (i / (total - 1)) * (CHART_W - CHART_PAD_L - CHART_PAD_R)
 }
 
 function scaleY(val, min, max) {
@@ -94,13 +98,8 @@ function scaleY(val, min, max) {
 }
 
 function polyline(data, key, min, max) {
-  return data.map((d, i) => `${scaleX(i)},${scaleY(d[key], min, max)}`).join(' ')
+  return data.map((d, i) => `${scaleX(i, data.length)},${scaleY(d[key], min, max)}`).join(' ')
 }
-
-const alumMin = Math.min(...HISTORY.map(h => h.alum)) - 50
-const alumMax = Math.max(...HISTORY.map(h => h.alum)) + 50
-const petMin  = Math.min(...HISTORY.map(h => h.pet))  - 20
-const petMax  = Math.max(...HISTORY.map(h => h.pet))  + 20
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
 
@@ -119,13 +118,35 @@ function SavedToast({ visible }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CommodityPricing() {
-  const [prices, setPrices]           = useState(INITIAL_PRICES)
+  const [prices, setPrices]           = useState(buildInitialPrices)
+  const [history, setHistory]         = useState(buildHistory)
   const [editId, setEditId]           = useState(null)
   const [draftRate, setDraftRate]     = useState('')
   const [savedId, setSavedId]         = useState(null)
   const [rules, setRules]             = useState(AUTO_RULES)
   const [refreshing, setRefreshing]   = useState(false)
-  const [lastRefresh, setLastRefresh] = useState('27 May 2025, 06:00 AEST')
+  const [lastRefresh, setLastRefresh] = useState(() => new Date().toLocaleString('en-AU'))
+  const overridesRef = useRef({})   // materialKey → override consumerRate
+
+  // Subscribe to live market feed
+  useEffect(() => {
+    marketFeed.start()
+    const unsub = marketFeed.subscribe(null, record => {
+      setPrices(prev => prev.map(p => {
+        if (p.key !== record.material) return p
+        const override = overridesRef.current[record.material]
+        return {
+          ...p,
+          spot: record.spot,
+          change: record.change_pct,
+          consumerRate: override ?? record.consumer_rate,
+          margin: record.platform_margin,
+        }
+      }))
+      setLastRefresh(new Date().toLocaleTimeString('en-AU'))
+    })
+    return unsub
+  }, [])
 
   const startEdit = useCallback((p) => {
     setEditId(p.id)
@@ -138,9 +159,9 @@ export default function CommodityPricing() {
     if (isNaN(val) || val <= 0) return
     setPrices(prev => prev.map(p => {
       if (p.id !== id) return p
-      const derivedKg = val
       const spotKg = p.spot / 1000
-      const newMargin = spotKg > 0 ? Math.max(0, (spotKg - derivedKg) / spotKg) : p.margin
+      const newMargin = spotKg > 0 ? Math.max(0, (spotKg - val) / spotKg) : p.margin
+      overridesRef.current[p.key] = val
       return { ...p, consumerRate: val, margin: newMargin }
     }))
     setEditId(null)
@@ -156,20 +177,23 @@ export default function CommodityPricing() {
     setRefreshing(true)
     setTimeout(() => {
       setRefreshing(false)
-      const now = new Date()
-      setLastRefresh(
-        `${now.getDate()} May 2025, ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} AEST`
-      )
-    }, 1200)
+      setHistory(buildHistory())
+      setLastRefresh(new Date().toLocaleTimeString('en-AU'))
+    }, 800)
   }
 
+  const avgMargin = prices.reduce((a, p) => a + p.margin, 0) / prices.length
+  const nonZero = prices.filter(p => p.change !== 0)
+  const weightedChangePct = nonZero.length
+    ? nonZero.reduce((a, p) => a + p.change, 0) / nonZero.length
+    : 0
   const bestMaterial = prices.reduce((a, b) => (b.change > a.change ? b : a), prices[0])
 
   const SUMMARY_CARDS = [
     {
       label: 'Best Performing',
       value: bestMaterial.material,
-      sub: `+${bestMaterial.change}% today`,
+      sub: `${bestMaterial.change >= 0 ? '+' : ''}${bestMaterial.change.toFixed(2)}% today`,
       icon: TrendingUp,
       color: 'text-emerald-700',
       bg: 'bg-emerald-50',
@@ -183,9 +207,9 @@ export default function CommodityPricing() {
       bg: avgMargin >= TARGET_MARGIN ? 'bg-violet-50' : 'bg-red-50',
     },
     {
-      label: 'Rate Updates Today',
-      value: '7',
-      sub: 'Auto-synced at 06:00',
+      label: 'Live Feed',
+      value: marketFeed.isRunning ? 'Active' : 'Paused',
+      sub: `Last tick: ${lastRefresh}`,
       icon: RefreshCw,
       color: 'text-blue-700',
       bg: 'bg-blue-50',
@@ -391,19 +415,23 @@ export default function CommodityPricing() {
               style={{ minWidth: 320 }}
               preserveAspectRatio="none"
             >
-              {/* Y grid lines */}
-              {[0, 0.25, 0.5, 0.75, 1].map(t => {
-                const y = CHART_PAD_T + t * (CHART_H - CHART_PAD_T - CHART_PAD_B)
-                const alumVal = alumMax - t * (alumMax - alumMin)
-                return (
-                  <g key={t}>
-                    <line x1={CHART_PAD_L} y1={y} x2={CHART_W - CHART_PAD_R} y2={y} stroke="#f1f5f9" strokeWidth="1" />
-                    <text x={CHART_PAD_L - 4} y={y + 4} textAnchor="end" fill="#94a3b8" fontSize="9">
-                      ${Math.round(alumVal / 100) * 100}
-                    </text>
-                  </g>
-                )
-              })}
+              {/* Y grid lines (use live history range) */}
+              {(() => {
+                const aMin = Math.min(...history.map(h => h.alum)) - 50
+                const aMax = Math.max(...history.map(h => h.alum)) + 50
+                return [0, 0.25, 0.5, 0.75, 1].map(t => {
+                  const y = CHART_PAD_T + t * (CHART_H - CHART_PAD_T - CHART_PAD_B)
+                  const alumVal = aMax - t * (aMax - aMin)
+                  return (
+                    <g key={t}>
+                      <line x1={CHART_PAD_L} y1={y} x2={CHART_W - CHART_PAD_R} y2={y} stroke="#f1f5f9" strokeWidth="1" />
+                      <text x={CHART_PAD_L - 4} y={y + 4} textAnchor="end" fill="#94a3b8" fontSize="9">
+                        ${Math.round(alumVal / 100) * 100}
+                      </text>
+                    </g>
+                  )
+                })
+              })()}
 
               {/* Aluminium fill */}
               <defs>
@@ -417,66 +445,49 @@ export default function CommodityPricing() {
                 </linearGradient>
               </defs>
 
-              {/* Area fills */}
-              <polygon
-                points={`${scaleX(0)},${CHART_H - CHART_PAD_B} ${HISTORY.map((d, i) => `${scaleX(i)},${scaleY(d.alum, alumMin, alumMax)}`).join(' ')} ${scaleX(HISTORY.length - 1)},${CHART_H - CHART_PAD_B}`}
-                fill="url(#alumGrad)"
-              />
-
-              {/* Aluminium line */}
-              <polyline
-                points={polyline(HISTORY, 'alum', alumMin, alumMax)}
-                fill="none"
-                stroke="#7c3aed"
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
-
-              {/* PET line (scaled to alum axis using petMax/petMin mapped to alum range) */}
-              <polyline
-                points={HISTORY.map((d, i) => {
-                  // map PET onto the alum scale so both lines are visible
-                  const pct = (d.pet - petMin) / (petMax - petMin)
-                  const alumMapped = alumMin + pct * (alumMax - alumMin)
-                  return `${scaleX(i)},${scaleY(alumMapped, alumMin, alumMax)}`
-                }).join(' ')}
-                fill="none"
-                stroke="#f59e0b"
-                strokeWidth="1.5"
-                strokeDasharray="5 3"
-                strokeLinejoin="round"
-              />
-
-              {/* Current month dot */}
+              {/* Chart uses history state (live OU data) */}
               {(() => {
-                const last = HISTORY[HISTORY.length - 1]
-                const i = HISTORY.length - 1
+                const alumMin = Math.min(...history.map(h => h.alum)) - 50
+                const alumMax = Math.max(...history.map(h => h.alum)) + 50
+                const petMin  = Math.min(...history.map(h => h.pet))  - 20
+                const petMax  = Math.max(...history.map(h => h.pet))  + 20
                 return (
-                  <circle
-                    cx={scaleX(i)}
-                    cy={scaleY(last.alum, alumMin, alumMax)}
-                    r="4"
-                    fill="#7c3aed"
-                    stroke="white"
-                    strokeWidth="2"
-                  />
+                  <>
+                    {/* Area fill */}
+                    <polygon
+                      points={`${scaleX(0, history.length)},${CHART_H - CHART_PAD_B} ${history.map((d, i) => `${scaleX(i, history.length)},${scaleY(d.alum, alumMin, alumMax)}`).join(' ')} ${scaleX(history.length - 1, history.length)},${CHART_H - CHART_PAD_B}`}
+                      fill="url(#alumGrad)"
+                    />
+                    {/* Aluminium line */}
+                    <polyline
+                      points={history.map((d, i) => `${scaleX(i, history.length)},${scaleY(d.alum, alumMin, alumMax)}`).join(' ')}
+                      fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinejoin="round"
+                    />
+                    {/* PET line scaled onto alum axis */}
+                    <polyline
+                      points={history.map((d, i) => {
+                        const pct = (d.pet - petMin) / (petMax - petMin)
+                        const alumMapped = alumMin + pct * (alumMax - alumMin)
+                        return `${scaleX(i, history.length)},${scaleY(alumMapped, alumMin, alumMax)}`
+                      }).join(' ')}
+                      fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="5 3" strokeLinejoin="round"
+                    />
+                    {/* Current month dot */}
+                    <circle
+                      cx={scaleX(history.length - 1, history.length)}
+                      cy={scaleY(history[history.length - 1]?.alum ?? alumMax, alumMin, alumMax)}
+                      r="4" fill="#7c3aed" stroke="white" strokeWidth="2"
+                    />
+                    {/* X labels */}
+                    {history.map((d, i) => (
+                      <text key={i} x={scaleX(i, history.length)} y={CHART_H - 4} textAnchor="middle"
+                        fill={d.current ? '#7c3aed' : '#94a3b8'} fontSize="9" fontWeight={d.current ? 700 : 400}>
+                        {d.month}
+                      </text>
+                    ))}
+                  </>
                 )
               })()}
-
-              {/* X axis labels */}
-              {HISTORY.map((d, i) => (
-                <text
-                  key={i}
-                  x={scaleX(i)}
-                  y={CHART_H - 4}
-                  textAnchor="middle"
-                  fill={d.current ? '#7c3aed' : '#94a3b8'}
-                  fontSize="9"
-                  fontWeight={d.current ? 700 : 400}
-                >
-                  {d.month}
-                </text>
-              ))}
             </svg>
           </div>
 

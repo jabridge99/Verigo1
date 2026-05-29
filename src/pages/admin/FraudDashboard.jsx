@@ -1,9 +1,10 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { ShieldAlert, DollarSign, TrendingUp, Zap } from 'lucide-react'
 import {
-  FRAUD_STATS, PAYOUT_HOLDS, RISK_ENTITIES, ALERT_QUEUE, SIGNAL_TYPES,
+  FRAUD_STATS, PAYOUT_HOLDS, SIGNAL_TYPES,
   RISK_THRESHOLDS, riskLevel, ACTION_META,
 } from '../../data/fraudRisk'
+import { fraudEngine, SIGNAL, getRiskLevel, getAction } from '../../lib/fraudEngine'
 
 export function RiskScoreBadge({ score, size = 'sm' }) {
   const level = riskLevel(score)
@@ -213,9 +214,31 @@ function EntityCard({ entity }) {
 }
 
 export default function FraudDashboard() {
-  const sortedEntities = [...RISK_ENTITIES]
-    .sort((a, b) => b.risk_score - a.risk_score)
+  const [liveAlerts, setLiveAlerts] = useState(() => fraudEngine.getAllAlerts(0))
+
+  // Refresh live alerts every 10s so newly added signals surface
+  useEffect(() => {
+    const id = setInterval(() => setLiveAlerts(fraudEngine.getAllAlerts(0)), 10000)
+    return () => clearInterval(id)
+  }, [])
+
+  const openCases = liveAlerts.filter(a => a.score >= 25)
+  const criticalOpen = liveAlerts.filter(a => a.score >= 75).length
+  const highOpen = liveAlerts.filter(a => a.score >= 50 && a.score < 75).length
+
+  // Build entity cards from live engine
+  const sortedEntities = liveAlerts
+    .sort((a, b) => b.score - a.score)
     .slice(0, 6)
+    .map(r => ({
+      id: r.entityId,
+      name: r.entityId,
+      ref: r.entityId,
+      risk_score: r.score,
+      type: r.entityId.startsWith('OPR') ? 'operator' : 'consumer',
+      status: r.action === 'suspend' ? 'suspended' : r.action === 'manual_review' ? 'review' : 'active',
+      held_payout_aud: 0,
+    }))
 
   return (
     <div className="space-y-6">
@@ -226,9 +249,9 @@ export default function FraudDashboard() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Open Cases"
-          value={FRAUD_STATS.total_cases_open}
-          sub={`${FRAUD_STATS.critical_open} critical · ${FRAUD_STATS.high_open} high`}
+          label="Active Risk Entities"
+          value={openCases.length}
+          sub={`${criticalOpen} critical · ${highOpen} high`}
           icon={ShieldAlert}
           iconColor="bg-red-100 text-red-600"
           subColor="text-red-500"
@@ -248,9 +271,9 @@ export default function FraudDashboard() {
           iconColor="bg-eco-100 text-eco-600"
         />
         <KpiCard
-          label="Auto-Actioned (30d)"
-          value={FRAUD_STATS.auto_actioned_30d}
-          sub="alerts auto-resolved"
+          label="Live Signals"
+          value={liveAlerts.reduce((s, a) => s + a.signals.length, 0)}
+          sub={`across ${liveAlerts.length} entities`}
           icon={Zap}
           iconColor="bg-violet-100 text-violet-600"
         />
