@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
   DollarSign, Leaf, Package, TrendingUp, TrendingDown,
-  Award, Download, Tree, Wind, Droplets, ChevronRight,
+  Award, Download, ChevronRight,
   Minus, Star
 } from 'lucide-react'
 
