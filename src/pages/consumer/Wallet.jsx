@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Star, Clock, DollarSign, Shield, Zap, Landmark, CreditCard,
   ArrowRight, X, AlertTriangle, CheckCircle, Lock,
 } from 'lucide-react'
 import { CONSUMER_WALLET } from '../../data/finance'
+import { ledger } from '../../lib/ledger'
 
 const RAIL_META = {
   payid: { label: 'PayID (Instant)',    icon: Zap,       color: 'bg-eco-100 text-eco-700',       fee: 'Free',          time: 'Instant' },
@@ -267,7 +268,31 @@ function WithdrawModal({ wallet, onClose }) {
 
 export default function Wallet() {
   const [withdrawOpen, setWithdrawOpen] = useState(false)
-  const { wallets, withdrawal_history } = CONSUMER_WALLET
+  const [liveBalance, setLiveBalance] = useState(null)
+  const [liveHold, setLiveHold] = useState(null)
+
+  useEffect(() => {
+    try { setLiveBalance(ledger.balance('consumer_payable')) } catch { /* ok */ }
+    try { setLiveHold(ledger.balance('fraud_hold')) } catch { /* ok */ }
+    const id = setInterval(() => {
+      try { setLiveBalance(ledger.balance('consumer_payable')) } catch {}
+      try { setLiveHold(ledger.balance('fraud_hold')) } catch {}
+    }, 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  const { wallets: staticWallets, withdrawal_history } = CONSUMER_WALLET
+  const wallets = {
+    ...staticWallets,
+    available: {
+      ...staticWallets.available,
+      balance_aud: liveBalance ?? staticWallets.available.balance_aud,
+    },
+    reserve: {
+      ...staticWallets.reserve,
+      balance_aud: liveHold ?? staticWallets.reserve.balance_aud,
+    },
+  }
 
   const totalCash = wallets.available.balance_aud + wallets.pending.balance_aud + wallets.reserve.balance_aud
   const pointsAud = (wallets.points.balance_pts * wallets.points.rate_aud).toFixed(2)

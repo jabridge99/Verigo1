@@ -8,6 +8,28 @@ import { marketFeed } from '../../lib/marketFeed'
 import { ledger } from '../../lib/ledger'
 import { audit, AUDIT_ACTIONS } from '../../lib/audit'
 
+// ── Camera / BarcodeDetector helpers live outside the component so they
+//    don't get re-created on every render, yet still close over the refs
+//    that are passed in by value each call.
+function buildScanLoop(videoRef, rafRef, onDetected) {
+  const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
+  async function scan() {
+    if (!videoRef.current || videoRef.current.readyState < 2) {
+      rafRef.current = requestAnimationFrame(scan)
+      return
+    }
+    try {
+      const codes = await detector.detect(videoRef.current)
+      if (codes.length > 0) {
+        onDetected(codes[0].rawValue)
+        return
+      }
+    } catch { /* no code in this frame */ }
+    rafRef.current = requestAnimationFrame(scan)
+  }
+  rafRef.current = requestAnimationFrame(scan)
+}
+
 // ── Station code map: QR code prefix → stationId ─────────────────────────────
 const CODE_MAP = {
   'CZ-001': 'ST-001', 'CZ-002': 'ST-002', 'CZ-003': 'ST-003',
@@ -202,6 +224,53 @@ export default function Scan() {
     { code: 'CZ-002-B', stationId: 'ST-002', name: 'Redfern Node',    date: '13 May', payout: '$8.80' },
   ])
 
+  // ── Camera state ─────────────────────────────────────────────────────────────
+  const videoRef  = useRef(null)
+  const streamRef = useRef(null)
+  const rafRef    = useRef(null)
+  const [camState, setCamState] = useState('idle') // 'idle'|'starting'|'active'|'error'|'unsupported'
+  const [camError, setCamError] = useState('')
+
+  async function startCamera() {
+    if (!('mediaDevices' in navigator)) { setCamState('unsupported'); setCamError('Camera API not available on this device.'); return }
+    if (!('BarcodeDetector' in window)) { setCamState('unsupported'); setCamError('QR scanning not supported on this browser. Use manual entry.'); return }
+    setCamState('starting')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      setCamState('active')
+      buildScanLoop(videoRef, rafRef, rawValue => {
+        stopCamera()
+        verifyCode(rawValue)
+      })
+    } catch (err) {
+      setCamState('error')
+      setCamError(
+        err.name === 'NotAllowedError'
+          ? 'Camera permission denied. Allow camera access and try again.'
+          : `Camera error: ${err.message}`
+      )
+    }
+  }
+
+  function stopCamera() {
+    cancelAnimationFrame(rafRef.current)
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+    setCamState('idle')
+  }
+
+  // Stop camera when leaving camera mode
+  useEffect(() => {
+    if (mode !== 'camera') stopCamera()
+  }, [mode])
+
   useEffect(() => {
     iotStream.connect()
     const unsub = iotStream.subscribe(null, st => {
@@ -211,7 +280,11 @@ export default function Scan() {
     const unsubMarket = marketFeed.subscribe(null, rec => {
       setPrices(prev => ({ ...prev, [rec.material]: { spot: rec.spot, label: rec.label } }))
     })
-    return () => { unsub(); unsubMarket() }
+    return () => {
+      stopCamera()
+      unsub()
+      unsubMarket()
+    }
   }, [])
 
   function verifyCode(raw) {
@@ -269,60 +342,129 @@ export default function Scan() {
 
       {mode === 'camera' ? (
         <div className="space-y-4">
-          <div className="relative bg-slate-800 rounded-2xl overflow-hidden aspect-square max-w-sm mx-auto flex items-center justify-center">
-            {/* Corner markers */}
-            {['top-6 left-6', 'top-6 right-6', 'bottom-6 left-6', 'bottom-6 right-6'].map((pos, i) => (
-              <div key={i} className={`absolute ${pos} w-10 h-10`}>
-                <div className={`absolute top-0 left-0 w-full h-1 bg-eco-400 ${i > 1 ? 'top-auto bottom-0' : ''}`} />
-                <div className={`absolute top-0 left-0 h-full w-1 bg-eco-400 ${i % 2 ? 'left-auto right-0' : ''}`} />
+          {/* Camera viewfinder */}
+          <div className="relative bg-slate-900 rounded-2xl overflow-hidden aspect-square max-w-sm mx-auto">
+            {/* Corner markers — always visible */}
+            {['top-4 left-4', 'top-4 right-4', 'bottom-4 left-4', 'bottom-4 right-4'].map((pos, i) => (
+              <div key={i} className={`absolute ${pos} w-10 h-10 pointer-events-none`}>
+                <div className={`absolute top-0 left-0 w-full h-1 bg-eco-400 ${i >= 2 ? 'top-auto bottom-0' : ''}`} />
+                <div className={`absolute top-0 left-0 h-full w-1 bg-eco-400 ${i % 2 === 1 ? 'left-auto right-0' : ''}`} />
               </div>
             ))}
-            <div className="absolute left-8 right-8 h-0.5 bg-eco-400/70 animate-bounce" style={{ top: '50%' }} />
-            <div className="text-center z-10">
-              <QrCode className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-              <p className="text-slate-300 text-sm font-medium">Camera access required</p>
-              <p className="text-slate-500 text-xs mt-1">Point at a station QR code</p>
-            </div>
-          </div>
-          <p className="text-center text-xs text-slate-400">
-            Camera activates on a real device.{' '}
-            <button onClick={() => setMode('manual')} className="text-eco-700 font-semibold hover:underline">
-              Enter code manually →
-            </button>
-          </p>
-          {/* Quick-scan demo buttons */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Demo — tap to scan</p>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(STATION_REGISTRY).slice(0, 4).map(([sid, cfg]) => {
-                const live = stationLive[sid]
-                const fill = live?.fill_pct ?? null
-                const offline = live?.status === 'offline'
-                const qrCode = Object.entries(CODE_MAP).find(([, v]) => v === sid)?.[0]
-                return (
-                  <button
-                    key={sid}
-                    onClick={() => { setCode(qrCode + '-A'); verifyCode(qrCode + '-A') }}
-                    disabled={offline}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      offline ? 'border-slate-100 opacity-50 cursor-not-allowed' : 'border-slate-200 hover:border-eco-300 hover:bg-eco-50/30'
-                    }`}
-                  >
-                    <div className="text-[10px] font-mono text-slate-400 mb-0.5">{qrCode}</div>
-                    <div className="text-xs font-semibold text-slate-800 leading-tight">{cfg.name}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                      {offline
-                        ? <><WifiOff className="w-2.5 h-2.5 text-red-400" /> Offline</>
-                        : fill !== null
-                          ? <>{fill}% full</>
-                          : 'Loading…'
-                      }
+
+            {/* Video element — always in DOM so ref is stable */}
+            <video
+              ref={videoRef}
+              className={`absolute inset-0 w-full h-full object-cover ${camState === 'active' ? 'opacity-100' : 'opacity-0'}`}
+              playsInline
+              muted
+              autoPlay
+            />
+
+            {/* Scanning line animation when active */}
+            {camState === 'active' && (
+              <div
+                className="absolute left-8 right-8 h-0.5 bg-eco-400/80 animate-bounce pointer-events-none"
+                style={{ top: '50%' }}
+              />
+            )}
+
+            {/* Overlay when not active */}
+            {camState !== 'active' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
+                {camState === 'starting' && (
+                  <>
+                    <div className="w-10 h-10 border-2 border-eco-400 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-slate-300 text-sm">Starting camera…</p>
+                  </>
+                )}
+                {camState === 'idle' && (
+                  <>
+                    <QrCode className="w-12 h-12 text-slate-400" />
+                    <p className="text-slate-300 text-sm font-medium">Tap to start camera</p>
+                  </>
+                )}
+                {(camState === 'error' || camState === 'unsupported') && (
+                  <>
+                    <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-red-400" />
                     </div>
-                  </button>
-                )
-              })}
-            </div>
+                    <p className="text-red-300 text-xs text-center px-6">{camError}</p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Tap-to-start overlay (when idle) */}
+            {camState === 'idle' && (
+              <button className="absolute inset-0 z-20" onClick={startCamera} aria-label="Start camera" />
+            )}
+
+            {/* Stop camera button (when active) */}
+            {camState === 'active' && (
+              <button
+                onClick={stopCamera}
+                className="absolute top-3 right-3 z-20 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center"
+              >
+                <X className="w-4 h-4 text-white" />
+              </button>
+            )}
           </div>
+
+          {/* Start button when idle */}
+          {camState === 'idle' && (
+            <button
+              onClick={startCamera}
+              className="w-full max-w-sm mx-auto flex items-center justify-center gap-2 bg-eco-700 hover:bg-eco-800 text-white font-semibold py-3 rounded-xl transition-colors"
+            >
+              <QrCode className="w-5 h-5" /> Open Camera
+            </button>
+          )}
+
+          {/* Error fallback suggestion */}
+          {(camState === 'error' || camState === 'unsupported') && (
+            <p className="text-center text-xs text-slate-400">
+              <button onClick={() => setMode('manual')} className="text-eco-700 font-semibold hover:underline">
+                Enter code manually →
+              </button>
+            </p>
+          )}
+
+          {/* Quick-scan demo buttons — only when camera not active */}
+          {camState !== 'active' && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Demo — tap to scan</p>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(STATION_REGISTRY).slice(0, 4).map(([sid, cfg]) => {
+                  const live = stationLive[sid]
+                  const fill = live?.fill_pct ?? null
+                  const offline = live?.status === 'offline'
+                  const qrCode = Object.entries(CODE_MAP).find(([, v]) => v === sid)?.[0]
+                  return (
+                    <button
+                      key={sid}
+                      onClick={() => { setCode(qrCode + '-A'); verifyCode(qrCode + '-A') }}
+                      disabled={offline}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        offline ? 'border-slate-100 opacity-50 cursor-not-allowed' : 'border-slate-200 hover:border-eco-300 hover:bg-eco-50/30'
+                      }`}
+                    >
+                      <div className="text-[10px] font-mono text-slate-400 mb-0.5">{qrCode}</div>
+                      <div className="text-xs font-semibold text-slate-800 leading-tight">{cfg.name}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        {offline
+                          ? <><WifiOff className="w-2.5 h-2.5 text-red-400" /> Offline</>
+                          : fill !== null
+                            ? <>{fill}% full</>
+                            : 'Loading…'
+                        }
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <form onSubmit={handleManualSubmit} className="space-y-4">

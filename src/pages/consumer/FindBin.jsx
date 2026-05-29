@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   MapPin, Search, Navigation, QrCode, Wifi, WifiOff, Battery,
   AlertTriangle, CheckCircle, Clock, ChevronRight, X, Map, List,
   Zap, Activity, Shield, Cpu, Radio, Camera, TrendingUp,
 } from 'lucide-react'
 import { STATIONS, latLngToPercent } from '../../data/stations'
+import { iotStream } from '../../lib/iotStream'
 
 const STATUS_COLOR = {
   Active:      { pin: 'bg-eco-600', ring: 'ring-eco-300', badge: 'bg-eco-100 text-eco-700' },
@@ -428,6 +429,61 @@ export default function FindBin() {
   const [sort, setSort] = useState('distance')
   const [selected, setSelected] = useState(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [liveStations, setLiveStations] = useState([])
+
+  useEffect(() => {
+    iotStream.connect()
+    const normalize = () => {
+      const all = iotStream.getAllStations()
+      setLiveStations(all.map(s => ({
+        station_id: s.stationId,
+        name: s.name,
+        suburb: s.suburb,
+        address: `${s.name}, ${s.suburb}`,
+        operator: s.name,
+        operator_id: 'live',
+        status: s.status === 'online' ? 'Active' : 'Offline',
+        fill_level: s.fill_pct,
+        estimated_value: +(s.weight_today_kg * 1.42).toFixed(2),
+        contamination_risk: s.fill_pct > 80 ? 'High' : s.fill_pct > 60 ? 'Medium' : 'Low',
+        activity_level: s.deposits_today > 15 ? 'High' : s.deposits_today > 8 ? 'Medium' : 'Low',
+        last_collection: s.updated_at,
+        stats: { monthly_deposits: s.deposits_today, weekly_volume: 'Live' },
+        alerts: s.alerts?.map(a => a.msg) ?? [],
+        // StationCard / StationDetail fields
+        bin_type: `${s.capacity_l}L Wheelie Bin`,
+        qr_code: `CZ-${s.stationId.replace('ST-', '')}`,
+        gps: { lat: s.lat, lng: s.lng },
+        distance: '—',
+        distance_m: 999999,
+        hours: '24/7',
+        materials: ['Aluminium', 'PET Plastic', 'Glass', 'Cardboard', 'Steel'],
+        collection_schedule: {
+          frequency: 'As needed',
+          next_collection: s.updated_at,
+          days: [],
+          contractor: 'Live',
+          eta_hours: null,
+        },
+        iot: {
+          fill_sensor: 'online',
+          connectivity: s.wifi_rssi > -80 ? 'online' : 'degraded',
+          rfid: 'enabled',
+          rfid_last_scan: 'Live',
+          tamper_sensor: 'ok',
+          camera: true,
+          camera_last_capture: 'Live',
+          firmware: 'live',
+          last_ping: 'Live',
+          battery: s.battery_pct,
+          signal_strength: Math.min(100, Math.round(((s.wifi_rssi + 95) / 55) * 100)),
+        },
+      })))
+    }
+    normalize()
+    const unsub = iotStream.subscribe(null, normalize)
+    return () => { unsub(); iotStream.disconnect() }
+  }, [])
 
   function openDetail(station) {
     setSelected(station)
@@ -438,8 +494,10 @@ export default function FindBin() {
     setDetailOpen(false)
   }
 
+  const stationSource = liveStations.length > 0 ? liveStations : STATIONS
+
   const stations = useMemo(() => {
-    let list = STATIONS.filter(s => {
+    let list = stationSource.filter(s => {
       const matchQuery =
         s.name.toLowerCase().includes(query.toLowerCase()) ||
         s.address.toLowerCase().includes(query.toLowerCase()) ||
@@ -457,9 +515,9 @@ export default function FindBin() {
     else if (sort === 'value') list = [...list].sort((a, b) => b.estimated_value - a.estimated_value)
 
     return list
-  }, [query, filter, sort])
+  }, [query, filter, sort, stationSource])
 
-  const activeCount = STATIONS.filter(s => s.status === 'Active').length
+  const activeCount = stationSource.filter(s => s.status === 'Active').length
 
   return (
     <div className="space-y-5">

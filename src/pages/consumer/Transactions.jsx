@@ -1,13 +1,39 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Gift,
   Search, Download, Filter, X, ChevronDown, Clock,
   Banknote, RefreshCw, Zap, Home, Shield
 } from 'lucide-react'
+import { ledger } from '../../lib/ledger'
 
-// ─── Transaction data (25 transactions across ~3 months) ─────────────────────
+function normalizeLedgerEntry(e) {
+  const isCredit = e.lineSide === 'credit'
+  const amount = isCredit ? e.lineAmount : -e.lineAmount
+  const desc = e.description || e.reference || e.id
+  const lower = desc.toLowerCase()
+  let category = isCredit ? 'deposit' : 'withdrawal'
+  if (lower.includes('referral')) category = 'referral'
+  else if (lower.includes('reward') || lower.includes('bonus') || lower.includes('tier')) category = 'reward'
+  else if (lower.includes('transfer')) category = 'transfer'
+  else if (lower.includes('hold') || lower.includes('fraud')) category = 'hold'
+  else if (lower.includes('fee')) category = 'fee'
+  const d = new Date(e.timestamp)
+  return {
+    id: e.id,
+    date: d.toISOString().slice(0, 10),
+    type: isCredit ? 'credit' : 'debit',
+    category,
+    desc,
+    amount,
+    pts: isCredit ? Math.round(e.lineAmount * 10) : 0,
+    balance: e.balance,
+    note: (typeof e.meta === 'object' && e.meta?.note) ? e.meta.note : (e.reference || ''),
+  }
+}
 
-const ALL_TXN = [
+// ─── Fallback transaction data ─────────────────────────────────────────────────
+
+const FALLBACK_TXN = [
   // May 2025
   {
     id: 'TXN-0041', date: '2025-05-27', type: 'credit', category: 'deposit',
@@ -161,7 +187,7 @@ function parseDate(str) {
 }
 
 function groupLabel(dateStr) {
-  const now = new Date('2025-05-29')
+  const now = new Date()
   const d = parseDate(dateStr)
   const diff = Math.floor((now - d) / 86400000)
   if (diff === 0) return 'Today'
@@ -244,18 +270,34 @@ export default function Transactions() {
   const [search, setSearch]         = useState('')
   const [showFilter, setShowFilter] = useState(false)
   const [page, setPage]             = useState(1)
+  const [liveTxns, setLiveTxns]     = useState([])
   const { toast, show }             = useToast()
 
-  const now = new Date('2025-05-29')
+  useEffect(() => {
+    function load() {
+      try {
+        const entries = ledger.statement('consumer_payable', 50)
+        if (entries.length > 0) {
+          setLiveTxns([...entries].reverse().map(normalizeLedgerEntry))
+        }
+      } catch { /* ledger not ready yet */ }
+    }
+    load()
+    const id = setInterval(load, 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  const ALL_TXN = liveTxns.length > 0 ? liveTxns : FALLBACK_TXN
 
   // Filter by period
   const periodFiltered = useMemo(() => {
     const days = PERIOD_DAYS[periodKey]
+    const now = new Date()
     return ALL_TXN.filter(t => {
       const diff = Math.floor((now - parseDate(t.date)) / 86400000)
       return diff <= days
     })
-  }, [periodKey])
+  }, [periodKey, liveTxns])
 
   // Stats for summary bar
   const stats = useMemo(() => {
