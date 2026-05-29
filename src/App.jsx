@@ -35,6 +35,7 @@ import OperatorStations   from './pages/operator/Stations'
 import OperatorLogistics  from './pages/operator/Logistics'
 import OperatorPricing    from './pages/operator/Pricing'
 import OperatorEarnings   from './pages/operator/Earnings'
+import OperatorFranchise  from './pages/operator/Franchise'
 
 import LogisticsDashboard        from './pages/logistics/Dashboard'
 import LogisticsRoutes            from './pages/logistics/Routes'
@@ -142,8 +143,9 @@ export default function App() {
           <Route index element={<OperatorDashboard />} />
           <Route path="stations"  element={<OperatorStations />} />
           <Route path="logistics" element={<OperatorLogistics />} />
-          <Route path="pricing"   element={<OperatorPricing />} />
-          <Route path="earnings"  element={<OperatorEarnings />} />
+          <Route path="pricing"    element={<OperatorPricing />} />
+          <Route path="earnings"   element={<OperatorEarnings />} />
+          <Route path="franchise"  element={<OperatorFranchise />} />
         </Route>
 
         {/* Logistics portal — Recovery Logistics Network */}
