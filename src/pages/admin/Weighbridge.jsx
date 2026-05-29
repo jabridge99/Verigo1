@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Scale, CheckCircle, Clock, AlertTriangle, X, Shield,
   FileText, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { WEIGHBRIDGE, JOBS } from '../../data/woms'
+import { iotStream, STATION_REGISTRY } from '../../lib/iotStream'
 
 const STATUS_STYLE = {
   Verified: 'bg-eco-100 text-eco-700',
@@ -166,10 +167,44 @@ export default function Weighbridge() {
   const [filter, setFilter] = useState('all')
   const [expanded, setExpanded] = useState(null)
   const [verifyTarget, setVerifyTarget] = useState(null)
+  const [liveTickets, setLiveTickets] = useState([])
+  const [stations, setStations] = useState([])
 
-  const filtered = WEIGHBRIDGE.filter(t => filter === 'all' || t.status === filter)
-  const pending = WEIGHBRIDGE.filter(t => t.status === 'Pending').length
-  const totalNet = WEIGHBRIDGE.filter(t => t.status === 'Verified').reduce((a, t) => a + t.net_weight_kg, 0)
+  useEffect(() => {
+    iotStream.connect()
+    setStations(iotStream.getAllStations())
+    const unsub = iotStream.subscribe(null, s => {
+      setStations(iotStream.getAllStations())
+      if (s.last_deposit) {
+        const d = s.last_deposit
+        setLiveTickets(prev => [{
+          ticket_id: `WB-LIVE-${s.stationId}-${Date.now()}`,
+          station_name: s.name,
+          station_id: s.stationId,
+          gross_weight_kg: d.weight_kg,
+          tare_weight_kg: +(d.weight_kg * 0.1).toFixed(2),
+          net_weight_kg: +(d.weight_kg * 0.9).toFixed(2),
+          contamination_pct: Math.round(Math.random() * 8),
+          classification: { [d.material]: +(d.weight_kg * 0.9).toFixed(2) },
+          operator_id: 'live',
+          vehicle_plate: '—',
+          driver: d.user_id,
+          status: 'Pending',
+          created_at: d.timestamp,
+          verified_at: null,
+          verified_by: null,
+        }, ...prev].slice(0, 50))
+      }
+    })
+    return () => { unsub(); iotStream.disconnect() }
+  }, [])
+
+  const ticketSource = liveTickets.length > 0 ? liveTickets : WEIGHBRIDGE
+  const filtered = ticketSource.filter(t => filter === 'all' || t.status === filter)
+  const pending = ticketSource.filter(t => t.status === 'Pending').length
+  const totalNet = ticketSource.filter(t => t.status === 'Verified').reduce((a, t) => a + t.net_weight_kg, 0)
+  const totalWeightToday = stations.reduce((a, s) => a + s.weight_today_kg, 0)
+  const totalDepositsToday = stations.reduce((a, s) => a + s.deposits_today, 0)
 
   return (
     <div className="space-y-6">
@@ -181,10 +216,10 @@ export default function Weighbridge() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Tickets', value: WEIGHBRIDGE.length, color: 'text-slate-800' },
+          { label: 'Total Tickets', value: ticketSource.length, color: 'text-slate-800' },
           { label: 'Pending Verification', value: pending, color: pending > 0 ? 'text-amber-600' : 'text-slate-400' },
           { label: 'Net Weight Verified', value: `${totalNet} kg`, color: 'text-eco-700' },
-          { label: 'High Contamination', value: WEIGHBRIDGE.filter(t => t.contamination_pct > 10).length, color: 'text-red-600' },
+          { label: 'High Contamination', value: ticketSource.filter(t => t.contamination_pct > 10).length, color: 'text-red-600' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -192,6 +227,28 @@ export default function Weighbridge() {
           </div>
         ))}
       </div>
+
+      {/* Live network summary */}
+      {stations.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+            <h2 className="text-sm font-bold text-slate-700">Live Station Network</h2>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Active Stations', value: stations.filter(s => s.status === 'online').length },
+              { label: 'Deposits Today', value: totalDepositsToday },
+              { label: 'Weight Today', value: `${totalWeightToday.toFixed(1)}kg` },
+            ].map(s => (
+              <div key={s.label} className="bg-slate-50 rounded-xl p-3 text-center">
+                <p className="text-xl font-bold text-eco-700">{s.value}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filter */}
       <div className="flex gap-2">

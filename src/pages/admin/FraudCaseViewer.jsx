@@ -1,11 +1,29 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
-  Shield, AlertTriangle, CheckCircle, Clock, MapPin, DollarSign,
-  GitBranch, Scale, Package, ScanLine, ChevronRight, FileText,
-  ExternalLink, Wallet,
+  Shield, AlertTriangle, CheckCircle, Clock, DollarSign,
+  ChevronRight, FileText,
 } from 'lucide-react'
-import { FRAUD_CASES, SIGNAL_TYPES, RISK_THRESHOLDS, riskLevel, ACTION_META } from '../../data/fraudRisk'
+import { RISK_THRESHOLDS, riskLevel, ACTION_META } from '../../data/fraudRisk'
+import { fraudEngine, SIGNAL, getRiskLevel, getAction } from '../../lib/fraudEngine'
 import { RiskScoreBadge } from './FraudDashboard'
+
+function normalizeCase(a) {
+  return {
+    id: a.entityId,
+    entity_id: a.entityId,
+    entity_name: a.entityId,
+    entity_type: a.entityId.startsWith('OPR') ? 'operator' : 'consumer',
+    entity_ref: a.entityId,
+    risk_score: a.score,
+    primary_signal: a.signals[0]?.signalType?.toLowerCase() || 'suspicious_operator',
+    status: a.action === 'suspend' ? 'suspended' : 'open',
+    priority: a.score >= 75 ? 'critical' : a.score >= 50 ? 'high' : 'medium',
+    description: `${a.signals.length} active signal(s) — action: ${a.action.replace(/_/g, ' ')}`,
+    amount_at_risk_aud: 0,
+    opened_at: a.signals[0]?.created_at || new Date().toISOString(),
+    signals: a.signals,
+  }
+}
 
 // ─── Signal / severity maps ──────────────────────────────────────────────────
 
@@ -27,13 +45,6 @@ const SIGNAL_BAR = {
   referral_abuse:      'bg-violet-400',
   payout_abuse:        'bg-red-400',
   suspicious_operator: 'bg-red-600',
-}
-
-const SEVERITY_BADGE = {
-  critical: 'bg-red-100 text-red-700',
-  high:     'bg-orange-100 text-orange-700',
-  medium:   'bg-amber-100 text-amber-700',
-  low:      'bg-slate-100 text-slate-500',
 }
 
 const PRIORITY_COLORS = {
@@ -100,19 +111,28 @@ function RiskGauge({ score }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function FraudCaseViewer() {
-  const [selectedId, setSelectedId]     = useState(FRAUD_CASES[0].id)
+  const [alerts, setAlerts] = useState(() => fraudEngine.getAllAlerts(0).map(normalizeCase))
+  const [selectedId, setSelectedId] = useState(() => {
+    const all = fraudEngine.getAllAlerts(0)
+    return all.length > 0 ? all[0].entityId : null
+  })
   const [statusFilter, setStatusFilter] = useState('all')
   const [priorityFilter, setPriorityFilter] = useState('all')
-  const [actionReason, setActionReason]  = useState('')
+  const [actionReason, setActionReason] = useState('')
   const [pendingAction, setPendingAction] = useState(null)
 
-  const filteredCases = FRAUD_CASES.filter(c => {
+  useEffect(() => {
+    const id = setInterval(() => setAlerts(fraudEngine.getAllAlerts(0).map(normalizeCase)), 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  const filteredCases = alerts.filter(c => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false
     if (priorityFilter !== 'all' && c.priority !== priorityFilter) return false
     return true
   })
 
-  const selected = FRAUD_CASES.find(c => c.id === selectedId) || null
+  const selected = alerts.find(c => c.id === selectedId) || null
 
   const STATUS_TABS = [
     { key: 'all', label: 'All' },
@@ -121,15 +141,36 @@ export default function FraudCaseViewer() {
     { key: 'resolved', label: 'Resolved' },
   ]
 
-  // Signal breakdown: total weight of triggered signals → per-signal bar width
+  // Signal breakdown: compute per-signal weight share from live signals
   function getSignalBreakdown(kase) {
-    const signals = kase.signals_triggered
-    const totalWeight = signals.reduce((sum, s) => sum + (SIGNAL_TYPES[s]?.default_weight ?? 0), 0)
-    return signals.map(s => {
-      const sig = SIGNAL_TYPES[s]
-      const pct = totalWeight > 0 ? Math.round((sig.default_weight / totalWeight) * 100) : 0
-      return { ...sig, pct }
-    })
+    const totalWeight = kase.signals.reduce((sum, s) => sum + (s.weight ?? 0), 0)
+    // Aggregate by signalType
+    const byType = {}
+    for (const s of kase.signals) {
+      const key = s.signalType.toLowerCase()
+      byType[key] = (byType[key] || 0) + (s.weight ?? 0)
+    }
+    return Object.entries(byType).map(([key, w]) => ({
+      id: key,
+      label: SIGNAL[key.toUpperCase()]?.label || key,
+      pct: totalWeight > 0 ? Math.round((w / totalWeight) * 100) : 0,
+    }))
+  }
+
+  function handleOpenCase() {
+    if (!selected) return
+    fraudEngine.openCase(selected.entity_id, 'admin')
+    setAlerts(fraudEngine.getAllAlerts(0).map(normalizeCase))
+  }
+
+  function handleConfirmAction() {
+    if (!pendingAction || !selected || actionReason.length < 10) return
+    if (pendingAction === 'resolve') {
+      fraudEngine.resolveCase(selected.id, actionReason, 'admin')
+    }
+    setPendingAction(null)
+    setActionReason('')
+    setAlerts(fraudEngine.getAllAlerts(0).map(normalizeCase))
   }
 
   return (
@@ -185,7 +226,7 @@ export default function FraudCaseViewer() {
           )}
           {filteredCases.map(c => {
             const isSelected = c.id === selectedId
-            const primarySig = SIGNAL_TYPES[c.primary_signal]
+            const primarySigLabel = SIGNAL[c.primary_signal?.toUpperCase()]?.label ?? c.primary_signal
             return (
               <div
                 key={c.id}
@@ -212,16 +253,12 @@ export default function FraudCaseViewer() {
                 </div>
                 {/* Line 3 */}
                 <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[11px] text-slate-500 truncate">{primarySig?.label ?? c.primary_signal}</span>
+                  <span className="text-[11px] text-slate-500 truncate">{primarySigLabel}</span>
                   <RiskScoreBadge score={c.risk_score} size="sm" />
                 </div>
                 {/* Line 4 */}
                 <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                  {c.amount_at_risk_aud > 0 && (
-                    <span>${c.amount_at_risk_aud.toLocaleString()} AUD</span>
-                  )}
-                  {c.amount_at_risk_aud > 0 && <span>·</span>}
-                  <span>{formatDate(c.opened)}</span>
+                  <span>{formatDate(c.opened_at)}</span>
                 </div>
               </div>
             )
@@ -258,7 +295,7 @@ export default function FraudCaseViewer() {
                   <h2 className="text-xl font-bold text-slate-900 leading-tight">{selected.entity_name}</h2>
                   <p className="font-mono text-xs text-slate-400 mb-2">{selected.entity_ref}</p>
                   <p className="text-xs text-slate-500 mb-3">
-                    Assigned to <span className="font-semibold text-slate-700">{selected.assigned_to}</span>
+                    Entity ID: <span className="font-semibold text-slate-700 font-mono">{selected.entity_id}</span>
                   </p>
                   <div className="flex items-center flex-wrap gap-2">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[selected.status] ?? 'bg-slate-100 text-slate-500'}`}>
@@ -267,12 +304,6 @@ export default function FraudCaseViewer() {
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PRIORITY_COLORS[selected.priority]}`}>
                       {selected.priority} priority
                     </span>
-                    {selected.amount_at_risk_aud > 0 && (
-                      <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                        <DollarSign className="w-3 h-3" />
-                        ${selected.amount_at_risk_aud.toLocaleString()} AUD at risk
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -280,11 +311,11 @@ export default function FraudCaseViewer() {
                 <div className="flex-shrink-0 text-right space-y-1">
                   <div className="flex items-center gap-1.5 justify-end text-[11px] text-slate-400">
                     <Clock className="w-3 h-3" />
-                    <span>Opened {formatDate(selected.opened)}</span>
+                    <span>Opened {formatDate(selected.opened_at)}</span>
                   </div>
                   <div className="flex items-center gap-1.5 justify-end text-[11px] text-slate-400">
                     <FileText className="w-3 h-3" />
-                    <span>Updated {formatDate(selected.last_updated)}</span>
+                    <span>{selected.signals.length} signal{selected.signals.length !== 1 ? 's' : ''}</span>
                   </div>
                 </div>
               </div>
@@ -303,136 +334,67 @@ export default function FraudCaseViewer() {
                   <div key={sig.id}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SIGNAL_DOT[sig.id]}`} />
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SIGNAL_DOT[sig.id] ?? 'bg-slate-400'}`} />
                         <span className="text-xs font-semibold text-slate-700">{sig.label}</span>
                       </div>
                       <span className="text-[11px] font-bold text-slate-500">{sig.pct}%</span>
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${SIGNAL_BAR[sig.id]} transition-all duration-500`}
+                        className={`h-full rounded-full ${SIGNAL_BAR[sig.id] ?? 'bg-slate-400'} transition-all duration-500`}
                         style={{ width: `${sig.pct}%` }}
                       />
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{sig.description}</p>
                   </div>
                 ))}
+                {getSignalBreakdown(selected).length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-2">No signals</p>
+                )}
               </div>
             </div>
 
-            {/* ── Evidence Timeline ── */}
+            {/* ── Live Signals Timeline ── */}
             <div className="bg-white border border-slate-100 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-sm font-bold text-slate-900">Evidence Timeline</h3>
+                <h3 className="text-sm font-bold text-slate-900">Live Signals</h3>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                  {selected.evidence.length}
+                  {selected.signals.length}
                 </span>
               </div>
 
               <div className="space-y-0">
-                {[...selected.evidence]
-                  .sort((a, b) => new Date(a.ts) - new Date(b.ts))
-                  .map((item, idx, arr) => {
-                    const sig = SIGNAL_TYPES[item.type]
+                {[...selected.signals]
+                  .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                  .map((sig, idx, arr) => {
+                    const sigKey = sig.signalType.toLowerCase()
+                    const sigLabel = SIGNAL[sig.signalType.toUpperCase()]?.label || sig.signalType
                     const isLast = idx === arr.length - 1
                     return (
                       <div key={idx} className="flex gap-3">
                         {/* Timeline spine */}
                         <div className="flex flex-col items-center flex-shrink-0 w-4">
-                          <span className={`w-3 h-3 rounded-full flex-shrink-0 ${SIGNAL_DOT[item.type] ?? 'bg-slate-400'} mt-0.5`} />
+                          <span className={`w-3 h-3 rounded-full flex-shrink-0 ${SIGNAL_DOT[sigKey] ?? 'bg-slate-400'} mt-0.5`} />
                           {!isLast && <div className="w-px flex-1 bg-slate-100 mt-1 mb-1" />}
                         </div>
-
                         {/* Content */}
-                        <div className={`flex-1 pb-4 ${isLast ? '' : ''}`}>
+                        <div className="flex-1 pb-4">
                           <div className="flex items-center flex-wrap gap-2 mb-0.5">
-                            <span className="text-xs font-semibold text-slate-700">
-                              {sig?.label ?? item.type}
+                            <span className="text-xs font-semibold text-slate-700">{sigLabel}</span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                              weight: {sig.weight}
                             </span>
-                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${SEVERITY_BADGE[item.severity] ?? SEVERITY_BADGE.low}`}>
-                              {item.severity}
-                            </span>
-                            <span className="text-[10px] text-slate-400 ml-auto">{formatTs(item.ts)}</span>
+                            <span className="text-[10px] text-slate-400 ml-auto">{formatTs(sig.created_at)}</span>
                           </div>
-                          <p className="text-xs text-slate-500">{item.detail}</p>
+                          {sig.actor && (
+                            <p className="text-xs text-slate-500">Actor: {sig.actor}</p>
+                          )}
                         </div>
                       </div>
                     )
                   })}
-              </div>
-            </div>
-
-            {/* ── Integration References ── */}
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                <h3 className="text-sm font-bold text-slate-900">Integration References</h3>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {/* Wallet */}
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Wallet className="w-3 h-3 text-violet-500" />
-                    <span className="text-[11px] font-bold text-violet-700 uppercase tracking-wide">Wallet</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {selected.integration_refs.wallet.length > 0
-                      ? selected.integration_refs.wallet.map(ref => (
-                          <span key={ref} className="font-mono text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">{ref}</span>
-                        ))
-                      : <span className="text-[10px] text-slate-400">None</span>
-                    }
-                  </div>
-                </div>
-
-                {/* Operations */}
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Package className="w-3 h-3 text-amber-500" />
-                    <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wide">Operations</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {selected.integration_refs.operations.length > 0
-                      ? selected.integration_refs.operations.map(ref => (
-                          <span key={ref} className="font-mono text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{ref}</span>
-                        ))
-                      : <span className="text-[10px] text-slate-400">None</span>
-                    }
-                  </div>
-                </div>
-
-                {/* Settlement */}
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Scale className="w-3 h-3 text-eco-500" />
-                    <span className="text-[11px] font-bold text-eco-700 uppercase tracking-wide">Settlement</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {selected.integration_refs.settlement.length > 0
-                      ? selected.integration_refs.settlement.map(ref => (
-                          <span key={ref} className="font-mono text-[10px] bg-eco-100 text-eco-700 px-1.5 py-0.5 rounded">{ref}</span>
-                        ))
-                      : <span className="text-[10px] text-slate-400">None</span>
-                    }
-                  </div>
-                </div>
-
-                {/* Pricing */}
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <GitBranch className="w-3 h-3 text-indigo-500" />
-                    <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wide">Pricing</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {selected.integration_refs.pricing.length > 0
-                      ? selected.integration_refs.pricing.map(ref => (
-                          <span key={ref} className="font-mono text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">{ref}</span>
-                        ))
-                      : <span className="text-[10px] text-slate-400">None</span>
-                    }
-                  </div>
-                </div>
+                {selected.signals.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-4">No signals recorded</p>
+                )}
               </div>
             </div>
 
@@ -462,13 +424,19 @@ export default function FraudCaseViewer() {
                         {meta.label}
                       </button>
                     ))}
+                    <button
+                      onClick={handleOpenCase}
+                      className="text-xs font-semibold px-3 py-2.5 rounded-xl transition-colors bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                    >
+                      Open Case
+                    </button>
                   </div>
 
                   {pendingAction && (
                     <div className="space-y-3 border-t border-slate-50 pt-3">
                       <div>
                         <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                          Reason for <span className="text-violet-700">{ACTION_META[pendingAction].label}</span>
+                          Reason for <span className="text-violet-700">{ACTION_META[pendingAction]?.label ?? pendingAction}</span>
                           <span className="text-slate-400 font-normal ml-1">(min 10 characters)</span>
                         </label>
                         <textarea
@@ -483,9 +451,10 @@ export default function FraudCaseViewer() {
                       <div className="flex items-center gap-2">
                         <button
                           disabled={actionReason.length < 10}
+                          onClick={handleConfirmAction}
                           className="text-xs font-semibold px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          Confirm {ACTION_META[pendingAction].label}
+                          Confirm {ACTION_META[pendingAction]?.label ?? pendingAction}
                         </button>
                         <button
                           onClick={() => { setPendingAction(null); setActionReason('') }}
@@ -497,38 +466,6 @@ export default function FraudCaseViewer() {
                     </div>
                   )}
                 </>
-              )}
-            </div>
-
-            {/* ── Action History ── */}
-            <div className="bg-white border border-slate-100 rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                <h3 className="text-sm font-bold text-slate-900">Action History</h3>
-              </div>
-
-              {selected.actions_taken.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4">No actions taken yet</p>
-              ) : (
-                <div className="space-y-3">
-                  {selected.actions_taken.map((a, idx) => {
-                    const meta = ACTION_META[a.action]
-                    return (
-                      <div key={idx} className="flex items-start gap-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${meta?.bg ?? 'bg-slate-100'} ${meta?.text ?? 'text-slate-600'}`}>
-                          {meta?.label ?? a.action}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-xs font-semibold text-slate-700">{a.actor}</span>
-                            <span className="text-[10px] text-slate-400">{formatTs(a.ts)}</span>
-                          </div>
-                          <p className="text-xs text-slate-500">{a.note}</p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
               )}
             </div>
 

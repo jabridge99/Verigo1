@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { RISK_RULES, SIGNAL_TYPES } from '../../data/fraudRisk'
+import { RISK_RULES } from '../../data/fraudRisk'
 import {
   SlidersHorizontal, Shield, ToggleLeft, ToggleRight,
   AlertTriangle, Edit2, CheckCircle, X,

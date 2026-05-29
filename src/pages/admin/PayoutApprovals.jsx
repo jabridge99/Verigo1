@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   CheckCircle, X, AlertTriangle, Clock, Shield, Filter,
   ChevronDown, User, Building2, Gift, Ban, RotateCcw,
   Pause, ChevronRight, DollarSign,
 } from 'lucide-react'
+import { fraudEngine } from '../../lib/fraudEngine'
+import { ledger } from '../../lib/ledger'
 
 // ── Static data ───────────────────────────────────────────────────────────────
 
@@ -259,6 +261,19 @@ export default function PayoutApprovals() {
   const [filterRisk,    setFilterRisk]    = useState('all')
   const [filterMinAmt,  setFilterMinAmt]  = useState('')
   const [showFilters,   setShowFilters]   = useState(false)
+  const [liveHolds,     setLiveHolds]     = useState([])
+  const [ledgerBals,    setLedgerBals]    = useState(null)
+
+  useEffect(() => {
+    const refresh = () => {
+      const alerts = fraudEngine.getAllAlerts(25)
+      setLiveHolds(alerts.filter(a => ['hold_payout', 'reject', 'suspend'].includes(a.action)))
+      setLedgerBals({ consumerPayable: ledger.balance('consumer_payable'), fraudHold: ledger.balance('fraud_hold') })
+    }
+    refresh()
+    const id = setInterval(refresh, 5000)
+    return () => clearInterval(id)
+  }, [])
 
   const approve = (id) => {
     setQueue(q => q.map(p => p.id === id
@@ -340,6 +355,54 @@ export default function PayoutApprovals() {
           </div>
         ))}
       </div>
+
+      {/* ── Live Risk Holds ── */}
+      {liveHolds.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-2">
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <h2 className="font-bold text-slate-900">Live Risk-Flagged Holds</h2>
+            <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full ml-auto">{liveHolds.length} active</span>
+          </div>
+          {ledgerBals && (
+            <div className="grid grid-cols-2 gap-3 px-5 py-3 border-b border-slate-50">
+              <div className="bg-amber-50 rounded-xl p-3">
+                <p className="text-lg font-bold text-amber-700">${ledgerBals.consumerPayable.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
+                <p className="text-[11px] text-slate-400">Consumer Payable</p>
+              </div>
+              <div className="bg-red-50 rounded-xl p-3">
+                <p className="text-lg font-bold text-red-700">${ledgerBals.fraudHold.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
+                <p className="text-[11px] text-slate-400">Fraud Hold Balance</p>
+              </div>
+            </div>
+          )}
+          <div className="divide-y divide-slate-50">
+            {liveHolds.map(hold => {
+              const action = hold.action
+              const actionStyle = action === 'suspend' ? 'bg-red-100 text-red-700' : action === 'reject' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'
+              return (
+                <div key={hold.entityId} className="px-5 py-4 flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-900">{hold.entityId}</p>
+                    <p className="text-xs text-slate-400">{hold.signals.length} signal(s) · score: {hold.score}</p>
+                  </div>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${actionStyle}`}>{action.replace(/_/g,' ')}</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { fraudEngine.resolveCase(hold.entityId, 'approved', 'admin') }}
+                      className="px-3 py-1.5 text-xs font-bold bg-eco-600 hover:bg-eco-700 text-white rounded-lg transition-colors"
+                    >Approve</button>
+                    <button
+                      onClick={() => { fraudEngine.resolveCase(hold.entityId, 'rejected', 'admin') }}
+                      className="px-3 py-1.5 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                    >Reject</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Filters ── */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-3">

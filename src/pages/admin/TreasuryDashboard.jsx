@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   DollarSign, Shield, TrendingUp, AlertTriangle, CheckCircle,
   Zap, Building2, Landmark, CreditCard, Activity,
 } from 'lucide-react'
 import { TREASURY_SUMMARY, PAYMENT_RAILS, SETTLEMENT_BATCHES, WEBHOOKS } from '../../data/finance'
+import { ledger } from '../../lib/ledger'
 
 const RAIL_ICON = { stripe: CreditCard, airwallex: Zap, payid: Zap, bank: Landmark, crypto: Shield }
 const RAIL_COLOR = { stripe: 'text-violet-600 bg-violet-50', airwallex: 'text-blue-600 bg-blue-50', payid: 'text-eco-600 bg-eco-50', bank: 'text-slate-600 bg-slate-100', crypto: 'text-slate-400 bg-slate-50' }
@@ -50,6 +51,14 @@ function MiniBar({ values, color = 'bg-violet-500' }) {
 }
 
 export default function TreasuryDashboard() {
+  const [trialBal, setTrialBal] = useState(null)
+
+  useEffect(() => {
+    setTrialBal(ledger.trialBalance())
+    const id = setInterval(() => setTrialBal(ledger.trialBalance()), 5000)
+    return () => clearInterval(id)
+  }, [])
+
   const t = TREASURY_SUMMARY
   const activeBatch = SETTLEMENT_BATCHES.find(b => b.status === 'Executing')
   const pendingBatch = SETTLEMENT_BATCHES.find(b => b.status === 'Approved')
@@ -77,20 +86,26 @@ export default function TreasuryDashboard() {
 
       {/* Float Position — primary panel */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="px-5 py-4 border-b border-slate-50">
-          <h2 className="font-bold text-slate-900">Float Position</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Total bank assets must exceed total consumer liabilities</p>
+        <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-3">
+          <div>
+            <h2 className="font-bold text-slate-900">Float Position</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Total bank assets must exceed total consumer liabilities</p>
+          </div>
+          <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-eco-700 bg-eco-50 px-2.5 py-1 rounded-full border border-eco-100">
+            <span className="w-1.5 h-1.5 bg-eco-500 rounded-full animate-pulse" />
+            Live
+          </span>
         </div>
         <div className="px-5 py-5 grid md:grid-cols-2 gap-8">
-          <FloatGauge ratio={t.float_ratio} />
+          <FloatGauge ratio={trialBal ? ((trialBal.totalAssets / trialBal.totalLiabilities) || t.float_ratio) : t.float_ratio} />
           <div className="space-y-3">
             <div className="flex justify-between items-center text-sm">
               <span className="text-slate-500">Total Bank Assets</span>
-              <span className="font-bold text-slate-900">${t.total_bank_assets.toLocaleString()}</span>
+              <span className="font-bold text-slate-900">${(trialBal?.totalAssets ?? t.total_bank_assets).toLocaleString()}</span>
             </div>
             <div className="flex justify-between items-center text-sm">
               <span className="text-slate-500">Consumer Liabilities</span>
-              <span className="font-semibold text-red-600">−${t.total_consumer_liabilities.toLocaleString()}</span>
+              <span className="font-semibold text-red-600">−${(trialBal ? ((trialBal.accounts?.consumer_payable?.balance ?? 0) + (trialBal.accounts?.fraud_hold?.balance ?? 0)) : t.total_consumer_liabilities).toLocaleString()}</span>
             </div>
             <div className="flex justify-between items-center border-t border-slate-100 pt-3 text-sm font-bold">
               <span className="text-slate-800">Float Buffer</span>
@@ -117,10 +132,10 @@ export default function TreasuryDashboard() {
       {/* KPI bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Revenue MTD',    value: `$${(t.platform_revenue_mtd / 1000).toFixed(1)}k`, color: 'text-eco-700',   trend: '+12%' },
+          { label: 'Revenue MTD',    value: `$${((trialBal?.accounts?.platform_fee?.balance ?? t.platform_revenue_mtd) / 1000).toFixed(1)}k`, color: 'text-eco-700',   trend: '+12%' },
           { label: 'Net Revenue',    value: `$${(t.net_revenue_mtd / 1000).toFixed(1)}k`,     color: 'text-eco-700',   trend: '+11%' },
-          { label: 'Operator Payable', value: `$${t.operator_payable.toLocaleString()}`,      color: 'text-amber-600', trend: null },
-          { label: 'Recycler Payable', value: `$${t.recycler_payable.toLocaleString()}`,      color: 'text-amber-600', trend: null },
+          { label: 'Operator Payable', value: `$${(trialBal?.accounts?.operator_payable?.balance ?? t.operator_payable).toLocaleString()}`,      color: 'text-amber-600', trend: null },
+          { label: 'Recycler Payable', value: `$${(trialBal?.accounts?.merchant_payable?.balance ?? t.recycler_payable).toLocaleString()}`,      color: 'text-amber-600', trend: null },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>

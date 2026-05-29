@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   FileText, X, CheckCircle, Eye, DollarSign,
   MapPin, Package, TrendingUp, Calendar,
 } from 'lucide-react'
+import { slaEngine } from '../../lib/slaEngine'
 
 const RECYCLERS = [
   {
@@ -218,6 +219,11 @@ function SettlementModal({ recycler, onClose }) {
 
 export default function RecyclerSettlement() {
   const [selectedRecycler, setSelectedRecycler] = useState(null)
+  const [leaderboard, setLeaderboard] = useState([])
+
+  useEffect(() => {
+    setLeaderboard(slaEngine.getLeaderboard())
+  }, [])
 
   const totalPayable = RECYCLERS.reduce((s, r) => s + calcNet(r), 0)
   const totalWeight  = RECYCLERS.reduce((s, r) => s + r.weight, 0)
@@ -252,6 +258,32 @@ export default function RecyclerSettlement() {
           </div>
         ))}
       </div>
+
+      {/* Live SLA Leaderboard */}
+      {leaderboard.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-2">
+            <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+            <h2 className="font-bold text-slate-900">Live Operator SLA Leaderboard</h2>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {leaderboard.map((op, i) => (
+              <div key={op.id} className="px-5 py-4 flex items-center gap-4">
+                <span className="text-sm font-bold text-slate-400 w-6">#{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-900">{op.name}</p>
+                  <p className="text-xs text-slate-400">{op.collections} collections · {op.kg.toLocaleString()} kg</p>
+                </div>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${op.bg} ${op.color}`}>{op.label}</span>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-eco-700">${op.totalAud.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
+                  <p className="text-[10px] text-slate-400">{op.multiplier}× rate</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recycler table */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">

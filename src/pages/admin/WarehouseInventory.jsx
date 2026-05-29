@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Warehouse, Package, TrendingUp, CheckCircle, Clock,
   ArrowUpRight, Filter,
 } from 'lucide-react'
 import { WAREHOUSE } from '../../data/woms'
+import { iotStream } from '../../lib/iotStream'
 
 const RECYCLER_COLOR = {
   'Visy Industries': 'bg-blue-100 text-blue-700',
@@ -27,7 +28,17 @@ function MaterialGauge({ quantity_t, capacity_t = 10, color }) {
 
 export default function WarehouseInventory() {
   const [filter, setFilter] = useState('all')
+  const [stations, setStations] = useState([])
   const w = WAREHOUSE
+
+  useEffect(() => {
+    iotStream.connect()
+    setStations(iotStream.getAllStations())
+    const unsub = iotStream.subscribe(null, () => {
+      setStations(iotStream.getAllStations())
+    })
+    return () => { unsub(); iotStream.disconnect() }
+  }, [])
 
   const totalTonnes = w.materials.reduce((a, m) => a + m.quantity_t, 0)
   const totalValue = w.materials.reduce((a, m) => a + m.total_value, 0)
@@ -89,6 +100,30 @@ export default function WarehouseInventory() {
           ))}
         </div>
       </div>
+
+      {/* Live EcoBin Station Network */}
+      {stations.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+            <h2 className="text-sm font-bold text-slate-700">Live Station Fill Levels</h2>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {stations.map(s => (
+              <div key={s.stationId} className={`rounded-xl border p-3 ${s.fill_pct >= 75 ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
+                <p className="text-[11px] font-semibold text-slate-600 truncate">{s.name}</p>
+                <div className="mt-1.5 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${s.fill_pct >= 90 ? 'bg-red-500' : s.fill_pct >= 75 ? 'bg-amber-400' : 'bg-eco-500'}`} style={{ width: `${s.fill_pct}%` }} />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-[10px] text-slate-400">{s.fill_pct}% full</span>
+                  <span className="text-[10px] font-semibold text-slate-600">{s.weight_today_kg.toFixed(1)}kg</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filter */}
       <div className="flex gap-2 flex-wrap">

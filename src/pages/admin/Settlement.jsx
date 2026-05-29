@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   DollarSign, Clock, CheckCircle, Download, Calendar, Play,
   AlertTriangle, X, ChevronRight, RefreshCw, Eye, Ban,
   Building2, Layers, ArrowRight, Filter, ExternalLink,
 } from 'lucide-react'
+import { ledger } from '../../lib/ledger'
 
 // ─── Static data ────────────────────────────────────────────────────────────
 
@@ -352,6 +353,18 @@ export default function AdminSettlement() {
   const [showRunModal, setShowRunModal]           = useState(false)
   const [activeDetail, setActiveDetail]           = useState(null)
   const [retryId, setRetryId]                     = useState(null)
+  const [ledgerKpis, setLedgerKpis]               = useState(null)
+  const [recentEntries, setRecentEntries]         = useState([])
+
+  useEffect(() => {
+    setLedgerKpis({ opPayable: ledger.balance('operator_payable'), platformFee: ledger.balance('platform_fee'), entryCount: ledger.entryCount })
+    setRecentEntries(ledger.statement('operator_payable', 20))
+    const id = setInterval(() => {
+      setLedgerKpis({ opPayable: ledger.balance('operator_payable'), platformFee: ledger.balance('platform_fee'), entryCount: ledger.entryCount })
+      setRecentEntries(ledger.statement('operator_payable', 20))
+    }, 5000)
+    return () => clearInterval(id)
+  }, [])
 
   const pipelineMax = PIPELINE[0].count
 
@@ -375,20 +388,47 @@ export default function AdminSettlement() {
 
       {/* ── KPI strip ── */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {KPI.map(k => {
+        {KPI.map((k, idx) => {
           const Icon = k.icon
+          let displayValue = k.value
+          if (idx === 0 && ledgerKpis) displayValue = '$' + ledgerKpis.opPayable.toLocaleString('en-AU', { maximumFractionDigits: 0 })
+          if (idx === 1 && ledgerKpis) displayValue = '$' + ledgerKpis.platformFee.toLocaleString('en-AU', { maximumFractionDigits: 0 })
           return (
             <div key={k.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
               <div className={`w-9 h-9 ${k.bg} rounded-xl flex items-center justify-center mb-3`}>
                 <Icon className={`w-4.5 h-4.5 ${k.color}`} style={{ width: 18, height: 18 }} />
               </div>
-              <div className={`text-2xl font-bold ${k.color}`}>{k.value}</div>
-              <div className="text-xs font-semibold text-slate-600 mt-0.5">{k.label}</div>
+              <div className={`text-2xl font-bold ${k.color}`}>{displayValue}</div>
+              <div className="text-xs font-semibold text-slate-600 mt-0.5">{idx === 0 ? 'Operator Payable' : idx === 1 ? 'Platform Revenue' : k.label}</div>
               <div className="text-[11px] text-slate-400">{k.sub}</div>
             </div>
           )
         })}
       </div>
+
+      {/* ── Live Ledger Entries ── */}
+      {recentEntries.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-2">
+            <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+            <h2 className="font-bold text-slate-900">Live Operator Ledger</h2>
+            <span className="text-xs text-slate-400 ml-auto">{ledgerKpis?.entryCount ?? 0} total entries</span>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {recentEntries.slice(0, 10).map(entry => (
+              <div key={entry.id} className="px-5 py-3 flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{entry.description}</p>
+                  <p className="text-[11px] text-slate-400">{new Date(entry.ts).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' })} · {entry.actor}</p>
+                </div>
+                <p className="font-bold text-slate-900 flex-shrink-0">
+                  ${Math.abs(entry.lines.find(l => l.account === 'operator_payable')?.amount ?? 0).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Settlement pipeline ── */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">

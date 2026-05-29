@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { ShieldAlert, DollarSign, TrendingUp, Zap } from 'lucide-react'
 import {
-  FRAUD_STATS, PAYOUT_HOLDS, SIGNAL_TYPES,
+  FRAUD_STATS, SIGNAL_TYPES,
   RISK_THRESHOLDS, riskLevel, ACTION_META,
 } from '../../data/fraudRisk'
 import { fraudEngine, SIGNAL, getRiskLevel, getAction } from '../../lib/fraudEngine'
@@ -67,49 +67,53 @@ function BarChart({ data }) {
   )
 }
 
-function PayoutHoldsCard() {
-  const total = PAYOUT_HOLDS.reduce((s, h) => s + h.amount_aud, 0)
+function PayoutHoldsCard({ liveAlerts }) {
+  const holds = liveAlerts.filter(a => ['hold_payout', 'reject', 'suspend'].includes(getAction(a.score)))
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-50">
         <h3 className="text-sm font-bold text-slate-800">Payout Holds</h3>
       </div>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-slate-50">
-            <th className="px-5 py-2 text-left font-semibold text-slate-400">Entity</th>
-            <th className="px-3 py-2 text-right font-semibold text-slate-400">Amount</th>
-            <th className="px-3 py-2 text-left font-semibold text-slate-400">Since</th>
-            <th className="px-5 py-2 text-left font-semibold text-slate-400">Case</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
-          {PAYOUT_HOLDS.map(h => (
-            <tr key={h.id} className="hover:bg-slate-50 transition-colors">
-              <td className="px-5 py-2.5">
-                <p className="font-semibold text-slate-800 leading-none">{h.entity_name}</p>
-                <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${ENTITY_TYPE_BADGE[h.entity_type]}`}>
-                  {h.entity_type}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-right font-bold text-slate-900">
-                ${h.amount_aud.toLocaleString()}
-              </td>
-              <td className="px-3 py-2.5 text-slate-400">{h.held_since}</td>
-              <td className="px-5 py-2.5 font-mono text-violet-600">{h.case_id}</td>
+      {holds.length === 0 ? (
+        <p className="px-5 py-4 text-xs text-slate-400 text-center">No payout holds</p>
+      ) : (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-slate-50">
+              <th className="px-5 py-2 text-left font-semibold text-slate-400">Entity</th>
+              <th className="px-3 py-2 text-right font-semibold text-slate-400">Amount</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-400">Signals</th>
+              <th className="px-5 py-2 text-left font-semibold text-slate-400">Action</th>
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="bg-amber-50">
-            <td className="px-5 py-2.5 font-bold text-slate-700">Total</td>
-            <td className="px-3 py-2.5 text-right font-bold text-amber-700">
-              ${total.toLocaleString()}
-            </td>
-            <td colSpan={2} />
-          </tr>
-        </tfoot>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {holds.map(h => {
+              const entityType = h.entityId.startsWith('OPR') ? 'operator' : 'consumer'
+              const actionLabel = ACTION_META[h.action]?.label ?? h.action
+              return (
+                <tr key={h.entityId} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-5 py-2.5">
+                    <p className="font-semibold text-slate-800 leading-none">{h.entityId}</p>
+                    <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${ENTITY_TYPE_BADGE[entityType]}`}>
+                      {entityType}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-bold text-slate-900">—</td>
+                  <td className="px-3 py-2.5 text-slate-400">{h.signals.length} signal{h.signals.length !== 1 ? 's' : ''}</td>
+                  <td className="px-5 py-2.5 font-semibold text-violet-600">{actionLabel}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="bg-amber-50">
+              <td className="px-5 py-2.5 font-bold text-slate-700">Total</td>
+              <td className="px-3 py-2.5 text-right font-bold text-amber-700">—</td>
+              <td colSpan={2} />
+            </tr>
+          </tfoot>
+        </table>
+      )}
     </div>
   )
 }
@@ -305,7 +309,7 @@ export default function FraudDashboard() {
         </div>
 
         <div className="space-y-4">
-          <PayoutHoldsCard />
+          <PayoutHoldsCard liveAlerts={liveAlerts} />
           <IntegrationPanel />
         </div>
       </div>

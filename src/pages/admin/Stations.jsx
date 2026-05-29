@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   MapPin, Search, AlertTriangle, CheckCircle, WifiOff, Wifi,
   Building2, Activity, Cpu, TrendingUp, Users, Filter, X,
   Battery, Radio, Shield, Zap, Camera, RefreshCw,
 } from 'lucide-react'
-import { STATIONS, OPERATORS } from '../../data/stations'
+import { OPERATORS } from '../../data/stations'
+import { iotStream, STATION_REGISTRY } from '../../lib/iotStream'
 
 const STATUS_STYLE = {
   Active:      'bg-eco-100 text-eco-700',
@@ -18,13 +19,14 @@ const RISK_STYLE = {
   High:   'bg-red-100 text-red-700',
 }
 
-function ioAlerts(iot) {
+function ioAlerts(iot, alerts_live = []) {
   return [
     iot.fill_sensor !== 'online' ? 'Fill sensor fault' : null,
     iot.connectivity === 'offline' ? 'Connectivity offline' : null,
     iot.tamper_sensor === 'triggered' ? 'Tamper triggered' : null,
     iot.tamper_sensor === 'fault' ? 'Tamper sensor fault' : null,
     iot.battery < 20 ? `Low battery (${iot.battery}%)` : null,
+    ...alerts_live.map(a => a.msg),
   ].filter(Boolean)
 }
 
@@ -41,7 +43,7 @@ function CapacityBar({ pct }) {
 }
 
 function AlertPanel({ station, onClose }) {
-  const alerts = ioAlerts(station.iot)
+  const alerts = ioAlerts(station.iot, station.alerts_live)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -118,37 +120,80 @@ export default function AdminStations() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [alertsOnly, setAlertsOnly] = useState(false)
   const [alertStation, setAlertStation] = useState(null)
+  const [stationStates, setStationStates] = useState({})
+
+  useEffect(() => {
+    iotStream.connect()
+    // Initial state
+    const initial = {}
+    for (const s of iotStream.getAllStations()) {
+      initial[s.stationId] = s
+    }
+    setStationStates(initial)
+    // Subscribe
+    const unsub = iotStream.subscribe(null, s => {
+      setStationStates(prev => ({ ...prev, [s.stationId]: s }))
+    })
+    return () => { unsub(); iotStream.disconnect() }
+  }, [])
+
+  const stations = useMemo(() => Object.values(stationStates).map(s => ({
+    station_id: s.stationId,
+    name: s.name,
+    suburb: s.suburb,
+    address: `${s.name}, ${s.suburb}`,
+    operator: STATION_REGISTRY[s.stationId]?.name || s.name,
+    operator_id: 'live',
+    status: s.status === 'online' ? 'Active' : 'Offline',
+    fill_level: s.fill_pct,
+    estimated_value: +(s.weight_today_kg * 1.42).toFixed(2),
+    contamination_risk: s.fill_pct > 80 ? 'High' : s.fill_pct > 60 ? 'Medium' : 'Low',
+    activity_level: s.deposits_today > 15 ? 'High' : s.deposits_today > 8 ? 'Medium' : 'Low',
+    last_collection: s.last_deposit ? new Date(s.last_deposit.timestamp).toLocaleDateString('en-AU') : 'Today',
+    stats: { monthly_deposits: s.deposits_today },
+    iot: {
+      fill_sensor: 'online',
+      connectivity: s.wifi_rssi > -80 ? 'online' : 'degraded',
+      rfid: 'enabled',
+      tamper_sensor: s.alerts.some(a => a.code === 'TEMP_HIGH') ? 'fault' : 'ok',
+      camera: true,
+      battery: s.battery_pct,
+      signal_strength: Math.round(((s.wifi_rssi + 95) / 55) * 100),
+    },
+    last_deposit: s.last_deposit,
+    alerts_live: s.alerts,
+  })), [stationStates])
 
   const filtered = useMemo(() => {
-    return STATIONS.filter(s => {
-      const matchOp = operatorFilter === 'all' || s.operator_id === operatorFilter
+    return stations.filter(s => {
+      const matchOp = operatorFilter === 'all' || s.operator === OPERATORS.find(o => o.id === operatorFilter)?.name
       const matchStatus = statusFilter === 'all' || s.status.toLowerCase() === statusFilter
       const matchQuery =
         s.name.toLowerCase().includes(query.toLowerCase()) ||
         s.station_id.toLowerCase().includes(query.toLowerCase()) ||
         s.suburb.toLowerCase().includes(query.toLowerCase()) ||
         s.operator.toLowerCase().includes(query.toLowerCase())
-      const matchAlerts = !alertsOnly || ioAlerts(s.iot).length > 0
+      const matchAlerts = !alertsOnly || ioAlerts(s.iot, s.alerts_live).length > 0
       return matchOp && matchStatus && matchQuery && matchAlerts
     })
-  }, [query, operatorFilter, statusFilter, alertsOnly])
+  }, [query, operatorFilter, statusFilter, alertsOnly, stations])
 
   // Network-wide stats
-  const totalActive = STATIONS.filter(s => s.status === 'Active').length
-  const totalOffline = STATIONS.filter(s => s.status === 'Offline').length
-  const totalAlerts = STATIONS.filter(s => ioAlerts(s.iot).length > 0).length
-  const avgFill = Math.round(STATIONS.reduce((a, s) => a + s.fill_level, 0) / STATIONS.length)
-  const totalValue = STATIONS.reduce((a, s) => a + s.estimated_value, 0)
-  const totalMonthlyDeposits = STATIONS.reduce((a, s) => a + s.stats.monthly_deposits, 0)
+  const totalActive = stations.filter(s => s.status === 'Active').length
+  const totalOffline = stations.filter(s => s.status === 'Offline').length
+  const totalAlerts = stations.filter(s => ioAlerts(s.iot, s.alerts_live).length > 0).length
+  const avgFill = stations.length ? Math.round(stations.reduce((a, s) => a + s.fill_level, 0) / stations.length) : 0
+  const totalValue = stations.reduce((a, s) => a + s.estimated_value, 0)
+  const totalMonthlyDeposits = stations.reduce((a, s) => a + s.stats.monthly_deposits, 0)
 
   // Per-operator breakdown
   const operatorStats = OPERATORS.map(op => {
-    const sts = STATIONS.filter(s => s.operator_id === op.id)
+    const sts = stations.filter(s => s.operator === op.name)
     return {
       ...op,
       total: sts.length,
       active: sts.filter(s => s.status === 'Active').length,
-      alerts: sts.filter(s => ioAlerts(s.iot).length > 0).length,
+      alerts: sts.filter(s => ioAlerts(s.iot, s.alerts_live).length > 0).length,
       avgFill: sts.length ? Math.round(sts.reduce((a, s) => a + s.fill_level, 0) / sts.length) : 0,
     }
   })
@@ -165,7 +210,7 @@ export default function AdminStations() {
       {/* Network stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: 'Total Stations', value: STATIONS.length, color: 'text-slate-800' },
+          { label: 'Total Stations', value: stations.length, color: 'text-slate-800' },
           { label: 'Active',         value: totalActive,     color: 'text-eco-700' },
           { label: 'Offline',        value: totalOffline,    color: totalOffline > 0 ? 'text-red-600' : 'text-slate-400' },
           { label: 'IoT Alerts',     value: totalAlerts,     color: totalAlerts > 0 ? 'text-amber-600' : 'text-slate-400' },
@@ -270,38 +315,38 @@ export default function AdminStations() {
             {
               icon: Activity,
               label: 'Fill Sensors',
-              ok: STATIONS.filter(s => s.iot.fill_sensor === 'online').length,
-              fault: STATIONS.filter(s => s.iot.fill_sensor !== 'online').length,
+              ok: stations.filter(s => s.iot.fill_sensor === 'online').length,
+              fault: stations.filter(s => s.iot.fill_sensor !== 'online').length,
             },
             {
               icon: Radio,
               label: 'Connectivity',
-              ok: STATIONS.filter(s => s.iot.connectivity !== 'offline').length,
-              fault: STATIONS.filter(s => s.iot.connectivity === 'offline').length,
+              ok: stations.filter(s => s.iot.connectivity !== 'offline').length,
+              fault: stations.filter(s => s.iot.connectivity === 'offline').length,
             },
             {
               icon: Zap,
               label: 'RFID',
-              ok: STATIONS.filter(s => s.iot.rfid === 'enabled').length,
-              fault: STATIONS.filter(s => s.iot.rfid !== 'enabled').length,
+              ok: stations.filter(s => s.iot.rfid === 'enabled').length,
+              fault: stations.filter(s => s.iot.rfid !== 'enabled').length,
             },
             {
               icon: Shield,
               label: 'Tamper',
-              ok: STATIONS.filter(s => s.iot.tamper_sensor === 'ok').length,
-              fault: STATIONS.filter(s => s.iot.tamper_sensor !== 'ok').length,
+              ok: stations.filter(s => s.iot.tamper_sensor === 'ok').length,
+              fault: stations.filter(s => s.iot.tamper_sensor !== 'ok').length,
             },
             {
               icon: Camera,
               label: 'Cameras',
-              ok: STATIONS.filter(s => s.iot.camera).length,
-              fault: STATIONS.filter(s => !s.iot.camera).length,
+              ok: stations.filter(s => s.iot.camera).length,
+              fault: stations.filter(s => !s.iot.camera).length,
             },
             {
               icon: Battery,
               label: 'Battery',
-              ok: STATIONS.filter(s => s.iot.battery >= 20).length,
-              fault: STATIONS.filter(s => s.iot.battery < 20).length,
+              ok: stations.filter(s => s.iot.battery >= 20).length,
+              fault: stations.filter(s => s.iot.battery < 20).length,
             },
           ].map(({ icon: Icon, label, ok, fault }) => (
             <div key={label} className={`rounded-xl p-3 border ${fault > 0 ? 'border-amber-100 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
@@ -338,7 +383,7 @@ export default function AdminStations() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filtered.map(st => {
-                const alerts = ioAlerts(st.iot)
+                const alerts = ioAlerts(st.iot, st.alerts_live)
                 return (
                   <tr
                     key={st.station_id}

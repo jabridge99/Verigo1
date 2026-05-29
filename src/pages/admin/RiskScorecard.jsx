@@ -1,6 +1,32 @@
-import React, { useState } from 'react'
-import { RISK_ENTITIES, FRAUD_CASES, PAYOUT_HOLDS, SIGNAL_TYPES, RISK_THRESHOLDS, riskLevel, ACTION_META } from '../../data/fraudRisk'
+import React, { useState, useEffect } from 'react'
+import { RISK_THRESHOLDS, riskLevel, ACTION_META } from '../../data/fraudRisk'
+import { fraudEngine, SIGNAL, getRiskLevel, getAction } from '../../lib/fraudEngine'
 import { UserX, Search, Users, Building2, Store, AlertTriangle, Shield, DollarSign, Clock, ChevronRight } from 'lucide-react'
+
+function normalizeEntity(a) {
+  const signalsMap = {}
+  for (const s of a.signals) {
+    const key = s.signalType.toLowerCase()
+    signalsMap[key] = Math.min(100, (signalsMap[key] || 0) + s.weight)
+  }
+  return {
+    id: a.entityId,
+    name: a.entityId,
+    ref: a.entityId,
+    type: a.entityId.startsWith('OPR') ? 'operator' : 'consumer',
+    status: a.action === 'suspend' ? 'suspended' : a.action === 'manual_review' || a.action === 'hold_payout' ? 'review' : 'active',
+    risk_score: a.score,
+    held_payout_aud: 0,
+    active_cases: a.action !== 'allow' ? 1 : 0,
+    flagged_deposits: a.signals.length,
+    total_deposits: a.signals.length,
+    total_payout_aud: 0,
+    location: 'Australia',
+    joined: a.signals[0]?.created_at || new Date().toISOString(),
+    last_activity: a.evaluated_at || new Date().toISOString(),
+    signals: signalsMap,
+  }
+}
 
 const GAUGE_COLORS = { low: '#22c55e', medium: '#f59e0b', high: '#f97316', critical: '#ef4444' }
 
@@ -66,12 +92,18 @@ function formatDate(str) {
 }
 
 export default function RiskScorecard() {
+  const [liveEntities, setLiveEntities] = useState(() => fraudEngine.getAllAlerts(0).map(normalizeEntity))
   const [typeFilter, setTypeFilter] = useState('all')
   const [sortBy, setSortBy] = useState('risk_score')
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
 
-  const filtered = RISK_ENTITIES
+  useEffect(() => {
+    const id = setInterval(() => setLiveEntities(fraudEngine.getAllAlerts(0).map(normalizeEntity)), 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  const filtered = liveEntities
     .filter(e => {
       if (typeFilter !== 'all' && e.type !== typeFilter) return false
       if (search) {
@@ -94,9 +126,8 @@ export default function RiskScorecard() {
     { key: 'merchant', label: 'Merchant', Icon: Store },
   ]
 
-  const selectedEntity = selectedId ? RISK_ENTITIES.find(e => e.id === selectedId) : null
-  const entityCases = selectedEntity ? FRAUD_CASES.filter(c => c.entity_id === selectedId) : []
-  const entityHolds = selectedEntity ? PAYOUT_HOLDS.filter(h => h.entity_ref === selectedEntity.ref) : []
+  const selectedEntity = selectedId ? liveEntities.find(e => e.id === selectedId) : null
+  const activeCase = selectedEntity && selectedEntity.active_cases > 0
 
   return (
     <div className="flex gap-6 h-full">
@@ -246,11 +277,6 @@ export default function RiskScorecard() {
                     &nbsp;·&nbsp;
                     Last active: {formatDate(selectedEntity.last_activity)}
                   </p>
-                  {selectedEntity.held_payout_aud > 0 && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mt-2 text-xs font-semibold text-amber-800">
-                      ${selectedEntity.held_payout_aud.toLocaleString()} payout on hold
-                    </div>
-                  )}
                 </div>
 
                 {/* Right stats */}
@@ -277,9 +303,9 @@ export default function RiskScorecard() {
             <div className="bg-white border border-slate-100 rounded-2xl p-4">
               <h3 className="text-sm font-bold text-slate-900 mb-4">Signal Profile</h3>
               <div className="space-y-3">
-                {Object.keys(SIGNAL_TYPES).map(key => {
-                  const sig = SIGNAL_TYPES[key]
-                  const val = selectedEntity.signals[key] ?? 0
+                {Object.keys(SIGNAL).map(key => {
+                  const sig = SIGNAL[key]
+                  const val = selectedEntity.signals[key.toLowerCase()] ?? 0
                   return (
                     <div key={key} className="flex items-center gap-3">
                       <span className="text-xs font-semibold text-slate-700 w-32 flex-shrink-0 truncate">{sig.label}</span>
@@ -303,41 +329,33 @@ export default function RiskScorecard() {
               <div className="flex items-center gap-2 mb-4">
                 <h3 className="text-sm font-bold text-slate-900">Open Cases</h3>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                  {entityCases.length}
+                  {activeCase ? 1 : 0}
                 </span>
               </div>
-              {entityCases.length === 0 ? (
+              {!activeCase ? (
                 <p className="text-xs text-slate-400 text-center py-3">No active cases</p>
               ) : (
                 <div className="space-y-3">
-                  {entityCases.map(c => (
-                    <div key={c.id} className="border border-slate-100 rounded-xl p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono text-xs text-slate-500">{c.id}</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize ${PRIORITY_BADGE[c.priority]}`}>
-                            {c.priority}
-                          </span>
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize ${CASE_STATUS_BADGE[c.status] ?? 'bg-slate-100 text-slate-500'}`}>
-                            {c.status}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-semibold text-slate-700">
-                          {SIGNAL_TYPES[c.primary_signal]?.label ?? c.primary_signal}
+                  <div className="border border-slate-100 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-mono text-xs text-slate-500">{selectedEntity.id}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize ${PRIORITY_BADGE[selectedEntity.risk_score >= 75 ? 'critical' : selectedEntity.risk_score >= 50 ? 'high' : 'medium']}`}>
+                          {selectedEntity.risk_score >= 75 ? 'critical' : selectedEntity.risk_score >= 50 ? 'high' : 'medium'}
                         </span>
-                        <RiskBadge score={c.risk_score} />
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize ${CASE_STATUS_BADGE['open']}`}>
+                          open
+                        </span>
                       </div>
-                      <p className="text-xs text-slate-500 line-clamp-1 mb-1">{c.description}</p>
-                      {c.amount_at_risk_aud > 0 && (
-                        <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-700">
-                          <DollarSign className="w-3 h-3" />
-                          ${c.amount_at_risk_aud.toLocaleString()} at risk
-                        </div>
-                      )}
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold text-slate-700">
+                        {selectedEntity.flagged_deposits} flagged signal{selectedEntity.flagged_deposits !== 1 ? 's' : ''}
+                      </span>
+                      <RiskBadge score={selectedEntity.risk_score} />
+                    </div>
+                    <p className="text-xs text-slate-500 line-clamp-1">Action: {getAction(selectedEntity.risk_score).replace(/_/g, ' ')}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -346,42 +364,8 @@ export default function RiskScorecard() {
             <div className="bg-white border border-slate-100 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <h3 className="text-sm font-bold text-slate-900">Payout Holds</h3>
-                {entityHolds.length > 0 && (
-                  <span className="text-xs font-bold text-amber-600">
-                    ${entityHolds.reduce((s, h) => s + h.amount_aud, 0).toLocaleString()} AUD
-                  </span>
-                )}
               </div>
-              {entityHolds.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-3">No payout holds</p>
-              ) : (
-                <div className="space-y-3">
-                  {entityHolds.map(hold => (
-                    <div key={hold.id} className="border border-slate-100 rounded-xl p-3">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="min-w-0">
-                          <span className="font-mono text-[10px] text-slate-400 block mb-0.5">{hold.id}</span>
-                          <span className="text-xs font-semibold text-slate-700">
-                            {SIGNAL_TYPES[hold.reason]?.label ?? hold.reason}
-                          </span>
-                        </div>
-                        <span className="text-sm font-bold text-slate-900 flex-shrink-0">
-                          ${hold.amount_aud.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                        <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                          <Clock className="w-3 h-3" />
-                          Held since {formatDate(hold.held_since)}
-                        </div>
-                        <span className="font-mono text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">
-                          {hold.case_id}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <p className="text-xs text-slate-400 text-center py-3">No payout holds</p>
             </div>
 
             {/* ── Section 5: Activity Summary ── */}
@@ -401,9 +385,7 @@ export default function RiskScorecard() {
                   <p className="text-[11px] text-slate-400">Total Payout AUD</p>
                 </div>
                 <div className="text-center">
-                  <p className={`text-lg font-bold ${selectedEntity.held_payout_aud > 0 ? 'text-amber-600' : 'text-slate-900'}`}>
-                    ${selectedEntity.held_payout_aud.toLocaleString()}
-                  </p>
+                  <p className="text-lg font-bold text-slate-900">$0</p>
                   <p className="text-[11px] text-slate-400">Held Payout AUD</p>
                 </div>
               </div>

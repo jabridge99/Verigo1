@@ -1,9 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Shield, CheckCircle, Clock, FileText, Package,
   Scale, Warehouse, DollarSign, Search, X,
 } from 'lucide-react'
 import { CUSTODY, JOBS } from '../../data/woms'
+import { iotStream } from '../../lib/iotStream'
+import { queue } from '../../lib/queue'
 
 const ALL_STAGES = ['Collected', 'Weighed', 'Classified', 'Warehouse Intake', 'Settlement']
 
@@ -133,6 +135,31 @@ function RecordModal({ record, job, onClose }) {
 export default function ChainOfCustody() {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(null)
+  const [liveEvents, setLiveEvents] = useState([])
+  const [queueStatus, setQueueStatus] = useState(null)
+
+  useEffect(() => {
+    iotStream.connect()
+    const unsub = iotStream.subscribe(null, s => {
+      if (s.last_deposit) {
+        const d = s.last_deposit
+        setLiveEvents(prev => [{
+          id: `${s.stationId}-${Date.now()}`,
+          job_ref: `LIVE-${s.stationId}`,
+          station: s.name,
+          collected_by: d.user_id,
+          material: d.material,
+          weight_kg: d.weight_kg,
+          timestamp: d.timestamp,
+          stage: 'Collected',
+          events: [{ stage: 'Collected', actor: d.user_id, timestamp: d.timestamp, location: s.name, notes: null }],
+        }, ...prev].slice(0, 30))
+      }
+    })
+    const qid = setInterval(() => setQueueStatus(queue.status()), 3000)
+    setQueueStatus(queue.status())
+    return () => { unsub(); iotStream.disconnect(); clearInterval(qid) }
+  }, [])
 
   const records = CUSTODY.filter(r =>
     r.station_name.toLowerCase().includes(query.toLowerCase()) ||
@@ -192,6 +219,46 @@ export default function ChainOfCustody() {
           })}
         </div>
       </div>
+
+      {/* Live Custody Events */}
+      {liveEvents.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+            <h2 className="text-sm font-bold text-slate-700">Live Custody Events</h2>
+          </div>
+          <div className="space-y-2">
+            {liveEvents.slice(0, 8).map(ev => (
+              <div key={ev.id} className="flex items-center gap-3 bg-eco-50 rounded-xl px-4 py-2.5 text-xs">
+                <span className="font-mono font-semibold text-slate-500">{ev.job_ref}</span>
+                <span className="font-semibold text-slate-800 flex-1 truncate">{ev.station}</span>
+                <span className="text-slate-500">{ev.material} · {ev.weight_kg}kg</span>
+                <span className="text-eco-600 font-semibold">Collected</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Queue Status */}
+      {queueStatus && (
+        <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4">
+          <p className="text-xs font-bold text-slate-500 mb-2">Job Queue Status</p>
+          <div className="grid grid-cols-4 gap-3 text-center">
+            {[
+              { label: 'Pending', value: queueStatus.pending },
+              { label: 'Processing', value: queueStatus.processing },
+              { label: 'Completed', value: queueStatus.completed },
+              { label: 'Failed', value: queueStatus.failed },
+            ].map(s => (
+              <div key={s.label}>
+                <p className="text-xl font-bold text-slate-800">{s.value}</p>
+                <p className="text-[11px] text-slate-400">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">

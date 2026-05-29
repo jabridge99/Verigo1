@@ -1,12 +1,31 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   ScanLine, Package, Scale, MapPin, GitBranch, DollarSign,
   AlertTriangle, CheckCircle2, Bell, Filter, ChevronDown,
 } from 'lucide-react'
 import {
-  ALERT_QUEUE, SIGNAL_TYPES, RISK_THRESHOLDS, riskLevel, ACTION_META,
+  RISK_THRESHOLDS, riskLevel, ACTION_META,
 } from '../../data/fraudRisk'
+import { fraudEngine, SIGNAL, getRiskLevel, getAction } from '../../lib/fraudEngine'
 import { RiskScoreBadge } from './FraudDashboard'
+
+function normalizeAlert(a) {
+  const sigType = a.signals[0]?.signalType?.toLowerCase() || 'suspicious_operator'
+  return {
+    id: a.entityId,
+    entity_name: a.entityId,
+    entity_ref: a.entityId,
+    entity_type: a.entityId.startsWith('OPR') ? 'operator' : 'consumer',
+    signal: sigType,
+    risk_score: a.score,
+    recommended_action: a.action,
+    status: 'new',
+    ts: a.signals[0]?.created_at || a.evaluated_at || new Date().toISOString(),
+    location: null,
+    message: `${a.signals.length} signal(s): ${a.signals.map(s => s.signalType.toLowerCase().replace(/_/g, ' ')).join(', ')}`,
+    auto_actioned: false,
+  }
+}
 
 const SIGNAL_ICON = {
   duplicate_scan:      { Icon: ScanLine,      bg: 'bg-indigo-100', text: 'text-indigo-600' },
@@ -64,7 +83,7 @@ function StatusIndicator({ status }) {
 function AlertCard({ alert }) {
   const sigIcon = SIGNAL_ICON[alert.signal] || SIGNAL_ICON.suspicious_operator
   const { Icon } = sigIcon
-  const sigLabel = SIGNAL_TYPES[alert.signal]?.label || alert.signal
+  const sigLabel = SIGNAL[alert.signal?.toUpperCase()]?.label || alert.signal
   const action = ACTION_META[alert.recommended_action]
   const muted = alert.status === 'actioned' || alert.status === 'dismissed'
 
@@ -131,16 +150,22 @@ export default function FraudAlerts() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [signalFilter, setSignalFilter] = useState('all')
   const [typeFilter, setTypeFilter]     = useState('all')
+  const [alerts, setAlerts] = useState(() => fraudEngine.getAllAlerts(0).map(normalizeAlert))
 
-  const filtered = ALERT_QUEUE.filter(a => {
+  useEffect(() => {
+    const id = setInterval(() => setAlerts(fraudEngine.getAllAlerts(0).map(normalizeAlert)), 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  const filtered = alerts.filter(a => {
     if (statusFilter !== 'all' && a.status !== statusFilter) return false
     if (signalFilter !== 'all' && a.signal !== signalFilter) return false
     if (typeFilter !== 'all' && a.entity_type !== typeFilter) return false
     return true
   })
 
-  const newCount     = ALERT_QUEUE.filter(a => a.status === 'new').length
-  const autoActioned = ALERT_QUEUE.filter(a => a.auto_actioned).length
+  const newCount     = alerts.filter(a => a.status === 'new').length
+  const autoActioned = 0
 
   const STATUS_TABS = [
     { key: 'all',       label: 'All'       },
@@ -194,8 +219,8 @@ export default function FraudAlerts() {
               className="appearance-none text-xs font-semibold bg-white border border-slate-200 rounded-lg pl-3 pr-7 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-300"
             >
               <option value="all">All Signals</option>
-              {Object.values(SIGNAL_TYPES).map(s => (
-                <option key={s.id} value={s.id}>{s.label}</option>
+              {Object.entries(SIGNAL).map(([key, sig]) => (
+                <option key={key} value={key.toLowerCase()}>{sig.label}</option>
               ))}
             </select>
             <ChevronDown className="w-3 h-3 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />

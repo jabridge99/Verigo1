@@ -1,10 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Truck, Scale, Warehouse, DollarSign, AlertTriangle, CheckCircle,
   TrendingUp, TrendingDown, Activity, Users, Package, Clock,
   ArrowRight, Zap,
 } from 'lucide-react'
 import { JOBS, OPS_KPIS, ACTIVITY_LOG, WEIGHBRIDGE } from '../../data/woms'
+import { iotStream } from '../../lib/iotStream'
+import { queue } from '../../lib/queue'
 
 const PIPELINE = [
   { key: 'Pending',     label: 'Pickup Queued',   color: 'bg-slate-400',   text: 'text-slate-600' },
@@ -69,7 +71,37 @@ function KpiCard({ label, value, sub, icon: Icon, color, trend }) {
 
 export default function WomsDashboard() {
   const [selectedStage, setSelectedStage] = useState(null)
+  const [stations, setStations] = useState([])
+  const [queueStatus, setQueueStatus] = useState(null)
+  const [liveActivity, setLiveActivity] = useState([])
   const k = OPS_KPIS
+
+  useEffect(() => {
+    iotStream.connect()
+    setStations(iotStream.getAllStations())
+    const unsub = iotStream.subscribe(null, s => {
+      setStations(iotStream.getAllStations())
+      if (s.last_deposit) {
+        setLiveActivity(prev => [{
+          id: `${s.stationId}-${Date.now()}`,
+          type: 'info',
+          message: `${s.name}: ${s.last_deposit.material} deposit ${s.last_deposit.weight_kg}kg by ${s.last_deposit.user_id}`,
+          time: new Date(s.last_deposit.timestamp).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+        }, ...prev].slice(0, 20))
+      }
+    })
+    return () => { unsub(); iotStream.disconnect() }
+  }, [])
+
+  useEffect(() => {
+    setQueueStatus(queue.status())
+    const id = setInterval(() => setQueueStatus(queue.status()), 3000)
+    return () => clearInterval(id)
+  }, [])
+
+  const onlineCount = stations.filter(s => s.status === 'online').length
+  const totalDepositsToday = stations.reduce((a, s) => a + s.deposits_today, 0)
+  const totalWeightToday = stations.reduce((a, s) => a + s.weight_today_kg, 0)
 
   const stageJobs = selectedStage
     ? JOBS.filter(j => j.status === selectedStage)
@@ -92,9 +124,30 @@ export default function WomsDashboard() {
         <p className="text-sm text-slate-500 mt-0.5">27 May 2026 · Live operational view — WOMS</p>
       </div>
 
+      {/* Live Station Network */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+          <h2 className="text-sm font-bold text-slate-700">Live Station Network</h2>
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { label: 'Stations', value: stations.length },
+            { label: 'Online', value: onlineCount },
+            { label: 'Deposits Today', value: totalDepositsToday },
+            { label: 'Weight Today', value: `${totalWeightToday.toFixed(1)}kg` },
+          ].map(s => (
+            <div key={s.label} className="bg-slate-50 rounded-xl p-3 text-center">
+              <p className="text-xl font-bold text-eco-700">{s.value}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Jobs Today" value={k.jobs_today} sub={`${k.jobs_completed_today} completed`} icon={Package} color="bg-amber-500" trend={12} />
+        <KpiCard label="Jobs Today" value={queueStatus ? queueStatus.pending + queueStatus.processing + queueStatus.completed : k.jobs_today} sub={`${k.jobs_completed_today} completed`} icon={Package} color="bg-amber-500" trend={12} />
         <KpiCard label="Tonnes MTD" value={`${k.tonnes_mtd}t`} sub={`of ${k.tonnes_target_mtd}t target`} icon={Scale} color="bg-blue-500" trend={8} />
         <KpiCard label="Logistics Revenue MTD" value={`$${(k.logistics_revenue_mtd / 1000).toFixed(1)}K`} sub="Recovery Logistics Network" icon={TrendingUp} color="bg-eco-600" trend={14} />
         <KpiCard label="Gross Margin" value={`${margin}%`} sub={`Cost $${(k.logistics_cost_mtd / 1000).toFixed(1)}K MTD`} icon={DollarSign} color="bg-violet-600" trend={3} />
@@ -221,8 +274,8 @@ export default function WomsDashboard() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <h2 className="text-sm font-bold text-slate-700 mb-3">Activity Feed</h2>
             <div className="space-y-3">
-              {ACTIVITY_LOG.slice(0, 6).map(a => {
-                const s = ACTIVITY_ICON_STYLE[a.type]
+              {(liveActivity.length > 0 ? liveActivity : ACTIVITY_LOG.slice(0, 6)).map(a => {
+                const s = ACTIVITY_ICON_STYLE[a.type] || ACTIVITY_ICON_STYLE['info']
                 const Icon = s.icon
                 return (
                   <div key={a.id} className="flex items-start gap-2.5">

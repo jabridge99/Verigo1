@@ -1,9 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Plus, ChevronRight, ChevronDown, ChevronUp,
   CheckCircle, Clock, Zap, Landmark, AlertTriangle,
   Download, X, ArrowRight, Loader,
 } from 'lucide-react'
+import { ledger } from '../../lib/ledger'
+import { queue } from '../../lib/queue'
 
 const PIPELINE_STAGES = [
   { key: 'draft',      label: 'Draft',      color: 'bg-slate-400',    ring: 'ring-slate-200',    count: 2 },
@@ -408,6 +410,19 @@ function BatchRow({ batch }) {
 
 export default function SettlementBatching() {
   const [showWizard, setShowWizard] = useState(false)
+  const [ledgerSummary, setLedgerSummary] = useState(null)
+  const [queueStatus, setQueueStatus] = useState(null)
+
+  useEffect(() => {
+    const refresh = () => {
+      const tb = ledger.trialBalance()
+      setLedgerSummary({ operatorPayable: tb.accounts?.operator_payable?.balance ?? 0, platformFee: tb.accounts?.platform_fee?.balance ?? 0 })
+      setQueueStatus(queue.status())
+    }
+    refresh()
+    const id = setInterval(refresh, 5000)
+    return () => clearInterval(id)
+  }, [])
 
   const totalVolume = BATCH_HISTORY.reduce((s, b) => s + b.total, 0)
   const disbursedCount = BATCH_HISTORY.filter(b => b.status === 'Disbursed').length
@@ -429,6 +444,26 @@ export default function SettlementBatching() {
           <Plus className="w-4 h-4" /> New Batch
         </button>
       </div>
+
+      {/* Live Batch KPIs */}
+      {(ledgerSummary || queueStatus) && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Operator Payable', value: ledgerSummary ? '$' + ledgerSummary.operatorPayable.toLocaleString('en-AU', { maximumFractionDigits: 0 }) : '—', color: 'text-amber-700', bg: 'bg-amber-50' },
+            { label: 'Platform Revenue', value: ledgerSummary ? '$' + ledgerSummary.platformFee.toLocaleString('en-AU', { maximumFractionDigits: 0 }) : '—', color: 'text-eco-700', bg: 'bg-eco-50' },
+            { label: 'Queue Pending', value: queueStatus?.pending ?? '—', color: 'text-violet-700', bg: 'bg-violet-50' },
+            { label: 'Queue Completed', value: queueStatus?.completed ?? '—', color: 'text-slate-700', bg: 'bg-slate-50' },
+          ].map(s => (
+            <div key={s.label} className={`${s.bg} rounded-2xl border border-slate-100 shadow-sm p-4`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="w-1.5 h-1.5 bg-eco-500 rounded-full animate-pulse" />
+              </div>
+              <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

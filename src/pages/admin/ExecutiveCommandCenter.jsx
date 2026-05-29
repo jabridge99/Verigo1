@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Activity, DollarSign, TrendingUp, Shield, Users, MapPin, Zap,
   ShieldAlert, AlertTriangle, Package, BarChart2, Building2,
@@ -9,6 +9,11 @@ import {
   RISK_SUMMARY, GROWTH_METRICS, FORECASTS, REVENUE_HISTORY_30D,
   DEPOSITS_HISTORY_30D, ALERTS_HISTORY_7D, EXEC_SUMMARY_ALERTS,
 } from '../../data/executive'
+import { marketFeed, COMMODITIES } from '../../lib/marketFeed'
+import { pricingEngine } from '../../lib/pricingEngine'
+import { ledger } from '../../lib/ledger'
+import { fraudEngine } from '../../lib/fraudEngine'
+import { carbonEngine } from '../../lib/carbonEngine'
 
 function Sparkline({ data, color = '#22c55e', width = 64, height = 24 }) {
   if (!data || data.length < 2) return null
@@ -66,6 +71,40 @@ function ProgressBar({ value, max = 100, color = 'bg-eco-500', height = 'h-1.5' 
 export default function ExecutiveCommandCenter() {
   const [forecastPeriod, setForecastPeriod] = useState('7d')
   const [alertsExpanded, setAlertsExpanded] = useState(false)
+  const [liveKpis,  setLiveKpis]  = useState(null)
+  const [liveRates, setLiveRates] = useState({})
+
+  useEffect(() => {
+    marketFeed.start()
+    pricingEngine.start()
+
+    const refreshKpis = () => {
+      const exp = pricingEngine.getExposureSummary()
+      const carbonSummary = carbonEngine.getMonthlySummary()
+      const totalCO2 = carbonSummary.reduce((s, m) => s + m.totalKgCO2, 0)
+      setLiveKpis({
+        platformRevenue: ledger.balance('platform_fee'),
+        marginPct: exp.weightedMarginPct ?? 0,
+        riskAlerts: fraudEngine.getAllAlerts(25).length,
+        co2Saved: Math.round(totalCO2),
+      })
+    }
+    refreshKpis()
+
+    const pricingSub = () => refreshKpis()
+    pricingEngine.subscribe(pricingSub)
+
+    const mfUnsub = marketFeed.subscribe(null, r => {
+      setLiveRates(prev => ({ ...prev, [r.material]: r }))
+    })
+
+    return () => {
+      pricingEngine.unsubscribe(pricingSub)
+      mfUnsub()
+      marketFeed.stop()
+      pricingEngine.stop()
+    }
+  }, [])
 
   const f = FORECASTS[forecastPeriod]
   const confidence = f.confidence
@@ -151,13 +190,34 @@ export default function ExecutiveCommandCenter() {
         </div>
       </div>
 
+      {/* Live Market Rates */}
+      {Object.keys(liveRates).length > 0 && (
+        <div className="bg-slate-900 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Live Recyclable Spot Rates</span>
+          </div>
+          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+            {Object.entries(liveRates).map(([key, r]) => (
+              <div key={key} className="text-center">
+                <p className="text-[10px] text-slate-400 truncate">{COMMODITIES[key]?.label || key}</p>
+                <p className="text-sm font-bold text-white">${r.consumer_rate.toFixed(3)}</p>
+                <p className="text-[9px] text-slate-500">/kg</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 2. Hero KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
 
         {/* Card 1: Revenue */}
         <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-5">
-          <p className="text-[10px] uppercase text-slate-400 font-bold mb-1">Revenue — 30 Days</p>
-          <p className="text-3xl font-black text-slate-900">${FINANCIAL_METRICS.revenue_30d_aud.toLocaleString()}</p>
+          <p className="text-[10px] uppercase text-slate-400 font-bold mb-1">Platform Revenue (Live)</p>
+          <p className="text-3xl font-black text-slate-900">
+            {liveKpis ? '$' + liveKpis.platformRevenue.toLocaleString('en-AU', { maximumFractionDigits: 0 }) : '$' + FINANCIAL_METRICS.revenue_30d_aud.toLocaleString()}
+          </p>
           <div className="flex items-center gap-1.5 mt-1">
             <Delta value={+8.4} />
             <span className="text-slate-400 text-xs">vs prior 30d</span>
@@ -204,13 +264,18 @@ export default function ExecutiveCommandCenter() {
           <div className="flex items-center justify-between">
             <RiskScore score={RISK_SUMMARY.platform_risk_score} />
             <div className="text-right">
-              <p className="text-xs text-slate-400">{RISK_SUMMARY.fraud_alerts.total_open} open cases</p>
+              <p className="text-xs text-slate-400">{liveKpis ? liveKpis.riskAlerts : RISK_SUMMARY.fraud_alerts.total_open} open cases</p>
               <p className="text-xs text-slate-400">{RISK_SUMMARY.payout_holds.count} holds</p>
             </div>
           </div>
           <div className="flex gap-1.5 mt-3 flex-wrap">
             <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-bold">1 Critical</span>
             <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded font-bold">3 High</span>
+            {liveKpis && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-bold">
+                {liveKpis.co2Saved.toLocaleString()} kg CO₂
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -378,12 +443,14 @@ export default function ExecutiveCommandCenter() {
             <div className="flex justify-between items-baseline mb-1">
               <span className="text-sm font-semibold text-slate-700">Realised Margin</span>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-bold text-violet-700">{PRICING_METRICS.realised_margin.pct}%</span>
+                <span className="text-sm font-bold text-violet-700">
+                  {liveKpis ? liveKpis.marginPct.toFixed(1) + '%' : PRICING_METRICS.realised_margin.pct + '%'}
+                </span>
                 <Delta value={PRICING_METRICS.realised_margin.change_7d} inverse />
                 <span className="text-[10px] text-slate-400">Target {PRICING_METRICS.realised_margin.target_pct}%</span>
               </div>
             </div>
-            <ProgressBar value={PRICING_METRICS.realised_margin.pct} max={30} color="bg-violet-500" />
+            <ProgressBar value={liveKpis ? liveKpis.marginPct : PRICING_METRICS.realised_margin.pct} max={30} color="bg-violet-500" />
           </div>
 
           {/* Pricing Exposure */}
