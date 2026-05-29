@@ -84,6 +84,8 @@ import FraudCaseViewer       from './pages/admin/FraudCaseViewer'
 import RiskRules             from './pages/admin/RiskRules'
 import RiskScorecard         from './pages/admin/RiskScorecard'
 import MarketplaceAdmin      from './pages/admin/MarketplaceAdmin'
+import CarbonTracking        from './pages/admin/CarbonTracking'
+import SustainabilityReport  from './pages/admin/SustainabilityReport'
 
 import MerchantDashboard     from './pages/merchant/Dashboard'
 import MerchantProducts      from './pages/merchant/Products'
@@ -196,6 +198,8 @@ export default function App() {
           <Route path="stations"            element={<AdminStations />} />
           <Route path="pricing"             element={<CommodityPricing />} />
           <Route path="partners"            element={<AdminPartners />} />
+          <Route path="carbon"              element={<CarbonTracking />} />
+          <Route path="sustainability"      element={<SustainabilityReport />} />
         </Route>
       </Routes>
     </BrowserRouter>

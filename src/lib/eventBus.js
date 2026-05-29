@@ -18,6 +18,8 @@ const VALID_EVENTS = new Set([
   'station.online', 'station.offline', 'pickup.assigned', 'pickup.completed',
   // Marketplace
   'marketplace.redemption.completed', 'marketplace.offer.expired',
+  // SLA
+  'sla.tier.upgraded',
   // Platform
   'platform.health.degraded', 'platform.audit.inconsistency',
 ])
