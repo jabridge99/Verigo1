@@ -38,6 +38,11 @@ export const AUDIT_ACTIONS = {
   RULE_UPDATED:           'rule.updated',
   DATA_EXPORT:            'data.export',
   SELF_AUDIT_RUN:         'self_audit.run',
+  // Ledger
+  LEDGER_POSTED:          'ledger.posted',
+  // Risk / Fraud (extended)
+  RISK_SIGNAL_RAISED:     'risk.signal.raised',
+  FRAUD_CASE_RESOLVED:    'fraud.case.resolved',
 }
 
 class AuditLog {
