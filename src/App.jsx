@@ -1,0 +1,209 @@
+import React from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+
+import MarketingLayout    from './layouts/MarketingLayout'
+import OnboardingLayout   from './layouts/OnboardingLayout'
+import ConsumerLayout     from './layouts/ConsumerLayout'
+import OperatorLayout     from './layouts/OperatorLayout'
+import LogisticsLayout    from './layouts/LogisticsLayout'
+import AdminLayout        from './layouts/AdminLayout'
+import MerchantLayout     from './layouts/MerchantLayout'
+
+import Landing            from './pages/Landing'
+import Onboarding         from './pages/Onboarding'
+import OperatorEOI        from './pages/marketing/OperatorEOI'
+
+import ConsumerDashboard  from './pages/consumer/Dashboard'
+import FindBin            from './pages/consumer/FindBin'
+import BookPickup         from './pages/consumer/BookPickup'
+import Scan               from './pages/consumer/Scan'
+import Wallet             from './pages/consumer/Wallet'
+import EcoRewards         from './pages/consumer/EcoRewards'
+import Earnings           from './pages/consumer/Earnings'
+import HouseholdCircle    from './pages/consumer/HouseholdCircle'
+import Referral           from './pages/consumer/Referral'
+import Transactions       from './pages/consumer/Transactions'
+import Notifications      from './pages/consumer/Notifications'
+import Support            from './pages/consumer/Support'
+import KYC               from './pages/consumer/KYC'
+import ConsumerMarketplace from './pages/consumer/Marketplace'
+import GroupRewards       from './pages/consumer/GroupRewards'
+import MemberOffers       from './pages/consumer/MemberOffers'
+
+import OperatorDashboard  from './pages/operator/Dashboard'
+import OperatorStations   from './pages/operator/Stations'
+import OperatorLogistics  from './pages/operator/Logistics'
+import OperatorPricing    from './pages/operator/Pricing'
+import OperatorEarnings   from './pages/operator/Earnings'
+import OperatorFranchise  from './pages/operator/Franchise'
+
+import LogisticsDashboard        from './pages/logistics/Dashboard'
+import LogisticsRoutes            from './pages/logistics/Routes'
+import LogisticsJobs              from './pages/logistics/Jobs'
+import ContractorMarketplace      from './pages/logistics/ContractorMarketplace'
+import PickupProof                from './pages/logistics/PickupProof'
+
+import AdminDashboard       from './pages/admin/Dashboard'
+import CommodityPricing     from './pages/admin/CommodityPricing'
+import AdminPartners        from './pages/admin/Partners'
+import AdminSettlement      from './pages/admin/Settlement'
+import AdminStations        from './pages/admin/Stations'
+import WomsDashboard        from './pages/admin/WomsDashboard'
+import Weighbridge          from './pages/admin/Weighbridge'
+import ChainOfCustody       from './pages/admin/ChainOfCustody'
+import WarehouseInventory   from './pages/admin/WarehouseInventory'
+import RecyclerSettlement   from './pages/admin/RecyclerSettlement'
+import TreasuryDashboard    from './pages/admin/TreasuryDashboard'
+import Ledger               from './pages/admin/Ledger'
+import PayoutApprovals      from './pages/admin/PayoutApprovals'
+import ReconciliationEngine from './pages/admin/ReconciliationEngine'
+import SettlementBatching   from './pages/admin/SettlementBatching'
+import TraderDashboard      from './pages/admin/TraderDashboard'
+import MarketIngestion      from './pages/admin/MarketIngestion'
+import ScrapPricing         from './pages/admin/ScrapPricing'
+import CompetitorIntelligence from './pages/admin/CompetitorIntelligence'
+import SentimentEngine      from './pages/admin/SentimentEngine'
+import MaterialComposition  from './pages/admin/MaterialComposition'
+import DynamicPricing       from './pages/admin/DynamicPricing'
+import TraderOverrideDashboard from './pages/admin/TraderOverrideDashboard'
+import OverrideQueue        from './pages/admin/OverrideQueue'
+import CampaignManager      from './pages/admin/CampaignManager'
+import ExposureDashboard    from './pages/admin/ExposureDashboard'
+import AuditViewer          from './pages/admin/AuditViewer'
+import ShadowPricingLab     from './pages/admin/ShadowPricingLab'
+import ABPricingTests        from './pages/admin/ABPricingTests'
+import ElasticityModel       from './pages/admin/ElasticityModel'
+import MarketTwin            from './pages/admin/MarketTwin'
+import ScenarioSimulator     from './pages/admin/ScenarioSimulator'
+import GradualRollout        from './pages/admin/GradualRollout'
+import ExecutiveCommandCenter  from './pages/admin/ExecutiveCommandCenter'
+import EngineeringDashboard    from './pages/admin/EngineeringDashboard'
+import RoadmapDashboard        from './pages/admin/RoadmapDashboard'
+import FraudDashboard        from './pages/admin/FraudDashboard'
+import FraudAlerts           from './pages/admin/FraudAlerts'
+import FraudCaseViewer       from './pages/admin/FraudCaseViewer'
+import RiskRules             from './pages/admin/RiskRules'
+import RiskScorecard         from './pages/admin/RiskScorecard'
+import MarketplaceAdmin      from './pages/admin/MarketplaceAdmin'
+import CarbonTracking        from './pages/admin/CarbonTracking'
+import SustainabilityReport  from './pages/admin/SustainabilityReport'
+
+import MerchantDashboard     from './pages/merchant/Dashboard'
+import MerchantProducts      from './pages/merchant/Products'
+import MerchantCampaigns     from './pages/merchant/Campaigns'
+import MerchantOnboarding    from './pages/merchant/Onboarding'
+import MerchantAnalytics     from './pages/merchant/Analytics'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Marketing */}
+        <Route element={<MarketingLayout />}>
+          <Route path="/"            element={<Landing />} />
+          <Route path="/partner/eoi" element={<OperatorEOI />} />
+        </Route>
+
+        {/* Onboarding (full-screen, no sidebar) */}
+        <Route element={<OnboardingLayout />}>
+          <Route path="/onboarding" element={<Onboarding />} />
+        </Route>
+
+        {/* Consumer portal */}
+        <Route path="/consumer" element={<ConsumerLayout />}>
+          <Route index element={<ConsumerDashboard />} />
+          <Route path="find"          element={<FindBin />} />
+          <Route path="book"          element={<BookPickup />} />
+          <Route path="scan"          element={<Scan />} />
+          <Route path="wallet"        element={<Wallet />} />
+          <Route path="rewards"       element={<EcoRewards />} />
+          <Route path="earnings"      element={<Earnings />} />
+          <Route path="circle"        element={<HouseholdCircle />} />
+          <Route path="referral"      element={<Referral />} />
+          <Route path="transactions"  element={<Transactions />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="support"       element={<Support />} />
+          <Route path="kyc"           element={<KYC />} />
+          <Route path="marketplace"   element={<ConsumerMarketplace />} />
+          <Route path="group-rewards" element={<GroupRewards />} />
+          <Route path="member-offers" element={<MemberOffers />} />
+        </Route>
+
+        {/* Merchant portal */}
+        <Route path="/merchant" element={<MerchantLayout />}>
+          <Route index element={<MerchantDashboard />} />
+          <Route path="products"   element={<MerchantProducts />} />
+          <Route path="campaigns"  element={<MerchantCampaigns />} />
+          <Route path="analytics"  element={<MerchantAnalytics />} />
+          <Route path="onboarding" element={<MerchantOnboarding />} />
+        </Route>
+
+        {/* Operator portal */}
+        <Route path="/operator" element={<OperatorLayout />}>
+          <Route index element={<OperatorDashboard />} />
+          <Route path="stations"  element={<OperatorStations />} />
+          <Route path="logistics" element={<OperatorLogistics />} />
+          <Route path="pricing"    element={<OperatorPricing />} />
+          <Route path="earnings"   element={<OperatorEarnings />} />
+          <Route path="franchise"  element={<OperatorFranchise />} />
+        </Route>
+
+        {/* Logistics portal — Recovery Logistics Network */}
+        <Route path="/logistics" element={<LogisticsLayout />}>
+          <Route index element={<LogisticsDashboard />} />
+          <Route path="jobs"         element={<LogisticsJobs />} />
+          <Route path="routes"       element={<LogisticsRoutes />} />
+          <Route path="proof"        element={<PickupProof />} />
+          <Route path="contractors"  element={<ContractorMarketplace />} />
+        </Route>
+
+        {/* Admin portal — WOMS + network */}
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="command-center"      element={<ExecutiveCommandCenter />} />
+          <Route path="engineering"         element={<EngineeringDashboard />} />
+          <Route path="roadmap"             element={<RoadmapDashboard />} />
+          <Route path="woms"                element={<WomsDashboard />} />
+          <Route path="weighbridge"         element={<Weighbridge />} />
+          <Route path="custody"             element={<ChainOfCustody />} />
+          <Route path="warehouse"           element={<WarehouseInventory />} />
+          <Route path="recycler-settlement" element={<RecyclerSettlement />} />
+          <Route path="treasury"            element={<TreasuryDashboard />} />
+          <Route path="ledger"              element={<Ledger />} />
+          <Route path="payout-approvals"   element={<PayoutApprovals />} />
+          <Route path="reconciliation"      element={<ReconciliationEngine />} />
+          <Route path="settlement"          element={<SettlementBatching />} />
+          <Route path="trader"              element={<TraderDashboard />} />
+          <Route path="market-ingestion"    element={<MarketIngestion />} />
+          <Route path="scrap-pricing"       element={<ScrapPricing />} />
+          <Route path="competitor-intel"    element={<CompetitorIntelligence />} />
+          <Route path="sentiment"           element={<SentimentEngine />} />
+          <Route path="composition"         element={<MaterialComposition />} />
+          <Route path="pricing-engine"      element={<DynamicPricing />} />
+          <Route path="trader-override"     element={<TraderOverrideDashboard />} />
+          <Route path="override-queue"      element={<OverrideQueue />} />
+          <Route path="campaigns"           element={<CampaignManager />} />
+          <Route path="exposure"            element={<ExposureDashboard />} />
+          <Route path="audit"               element={<AuditViewer />} />
+          <Route path="shadow-lab"          element={<ShadowPricingLab />} />
+          <Route path="ab-tests"            element={<ABPricingTests />} />
+          <Route path="elasticity"          element={<ElasticityModel />} />
+          <Route path="market-twin"         element={<MarketTwin />} />
+          <Route path="scenarios"           element={<ScenarioSimulator />} />
+          <Route path="rollout"             element={<GradualRollout />} />
+          <Route path="fraud"               element={<FraudDashboard />} />
+          <Route path="fraud-alerts"        element={<FraudAlerts />} />
+          <Route path="fraud-cases"         element={<FraudCaseViewer />} />
+          <Route path="risk-rules"          element={<RiskRules />} />
+          <Route path="risk-scorecard"      element={<RiskScorecard />} />
+          <Route path="marketplace"         element={<MarketplaceAdmin />} />
+          <Route path="stations"            element={<AdminStations />} />
+          <Route path="pricing"             element={<CommodityPricing />} />
+          <Route path="partners"            element={<AdminPartners />} />
+          <Route path="carbon"              element={<CarbonTracking />} />
+          <Route path="sustainability"      element={<SustainabilityReport />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  )
+}
