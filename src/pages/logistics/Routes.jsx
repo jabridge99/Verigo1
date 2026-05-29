@@ -1,8 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Map, Clock, CheckCircle, Truck, Package, ChevronDown, ChevronUp,
   Navigation, X, User, Plus, Zap, Calendar, AlertTriangle, Weight,
 } from 'lucide-react'
+import { optimizeRoute, buildTimeline, SYDNEY_DEPOT, totalEstimatedKg } from '../../lib/routeOptimizer'
+import { iotStream, STATION_REGISTRY } from '../../lib/iotStream'
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 
@@ -128,8 +130,18 @@ function CreateRouteModal({ onClose, onConfirm }) {
     setSelected(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
   }
 
-  const estDistance = (selected.length * 3.8).toFixed(1)
-  const estWeight = selected.length * 142
+  // Real route preview using optimizer
+  const previewRoute = (() => {
+    if (selected.length === 0) return { totalKm: 0, totalKg: 0, stops: [] }
+    const stops = selected.map(name => {
+      const reg = Object.entries(STATION_REGISTRY).find(([, v]) => v.name === name)
+      return { name, lat: reg?.[1].lat ?? -33.88, lng: reg?.[1].lng ?? 151.21, expected_kg: 142 }
+    })
+    const { stops: ordered, totalKm } = optimizeRoute(SYDNEY_DEPOT, stops)
+    return { totalKm, totalKg: ordered.length * 142, stops: ordered }
+  })()
+  const estDistance = previewRoute.totalKm.toFixed(1)
+  const estWeight = previewRoute.totalKg
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -227,10 +239,11 @@ function CreateRouteModal({ onClose, onConfirm }) {
               </div>
               {preview && (
                 <ol className="mt-3 space-y-1">
-                  {selected.map((s, i) => (
-                    <li key={s} className="flex items-center gap-2 text-xs text-amber-700">
+                  {previewRoute.stops.map((s, i) => (
+                    <li key={s.name} className="flex items-center gap-2 text-xs text-amber-700">
                       <span className="w-5 h-5 bg-amber-200 rounded-full flex items-center justify-center font-bold text-[10px] flex-shrink-0">{i + 1}</span>
-                      {s}
+                      {s.name}
+                      {s.distFromPrevKm > 0 && <span className="text-amber-500">+{s.distFromPrevKm}km</span>}
                     </li>
                   ))}
                   <li className="flex items-center gap-2 text-xs text-amber-700 opacity-60">
@@ -400,20 +413,50 @@ export default function Routes() {
   const totalKm = routes.filter(r => r.status === 'Active').reduce((a, r) => a + r.distance_km, 0)
 
   function handleCreateRoute(data) {
+    // Map station names to registry lat/lng for route optimization
+    const stationStops = data.stations.map(name => {
+      const reg = Object.entries(STATION_REGISTRY).find(([, v]) => v.name === name)
+      const live = iotStream.getAllStations().find(s => s.name === name)
+      return {
+        name,
+        lat:  reg?.[1].lat  ?? -33.88,
+        lng:  reg?.[1].lng  ?? 151.21,
+        fill_level: live?.fill_pct ?? 55,
+        expected_kg: live ? Math.round(live.weight_today_kg * 1.1) : 142,
+      }
+    })
+
+    const [h, m] = data.startTime.split(':').map(Number)
+    const startDate = new Date()
+    startDate.setHours(h, m, 0, 0)
+
+    const { stops, totalKm } = optimizeRoute(SYDNEY_DEPOT, stationStops)
+    const timeline = buildTimeline(startDate, stops)
+
     const newRoute = {
       route_id: `RTE-${100 + routes.length}`,
       name: `${data.contractor.split(' ')[0]} Route`,
       contractor: data.contractor,
       start_time: data.startTime,
       status: 'Planning',
-      distance_km: parseFloat((data.stations.length * 3.8).toFixed(1)),
-      est_weight_kg: data.stations.length * 142,
+      distance_km: totalKm,
+      est_weight_kg: Math.round(totalEstimatedKg(stationStops)),
       stops: [
-        ...data.stations.map((s, i) => ({
-          order: i + 1, station: s, address: 'Sydney NSW',
-          arrival: null, fill_level: 55, expected_kg: 142,
+        ...timeline.map((s, i) => ({
+          order: i + 1,
+          station: s.name,
+          address: 'Sydney NSW',
+          arrival: s.etaFormatted,
+          fill_level: s.fill_level ?? 55,
+          expected_kg: s.expected_kg ?? 142,
+          distFromPrevKm: s.distFromPrevKm,
         })),
-        { order: data.stations.length + 1, station: 'Alexandria Depot Drop', address: '88 Botany Rd, Alexandria', arrival: null, fill_level: null, expected_kg: null, is_depot: true },
+        {
+          order: timeline.length + 1,
+          station: 'Alexandria Depot Drop',
+          address: '88 Botany Rd, Alexandria',
+          arrival: null, fill_level: null, expected_kg: null, is_depot: true,
+        },
       ],
     }
     setRoutes(prev => [newRoute, ...prev])

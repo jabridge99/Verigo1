@@ -1,12 +1,13 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Building2, Search, Plus, MoreHorizontal, X, Cpu, Wifi, WifiOff,
   AlertTriangle, CheckCircle, Activity, Radio, Camera, Zap, Shield,
   Battery, Clock, TrendingUp, Calendar, MapPin, QrCode, RefreshCw,
 } from 'lucide-react'
 import { STATIONS } from '../../data/stations'
+import { iotStream } from '../../lib/iotStream'
 
-const MY_STATIONS = STATIONS.filter(s => s.operator_id === 'OP-001')
+const MY_STATIONS_BASE = STATIONS.filter(s => s.operator_id === 'OP-001')
 
 const STATUS_STYLE = {
   Active:      'bg-eco-100 text-eco-700',
@@ -308,6 +309,34 @@ export default function OperatorStations() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [selectedStation, setSelectedStation] = useState(null)
+  const [liveData, setLiveData] = useState({}) // name → iotStream state
+
+  // Subscribe to live IoT stream and merge into station list
+  useEffect(() => {
+    iotStream.connect()
+    const unsub = iotStream.subscribe(null, state => {
+      setLiveData(prev => ({ ...prev, [state.name]: state }))
+    })
+    return unsub
+  }, [])
+
+  // Merge live IoT data into static station records
+  const MY_STATIONS = useMemo(() => MY_STATIONS_BASE.map(s => {
+    const live = liveData[s.name]
+    if (!live) return s
+    return {
+      ...s,
+      fill_level: Math.round(live.fill_pct),
+      status: live.status === 'offline' ? 'Offline' : s.status,
+      iot: {
+        ...s.iot,
+        battery: Math.round(live.battery_pct),
+        signal_strength: Math.round(Math.abs(live.wifi_rssi) < 60 ? 90 : Math.abs(live.wifi_rssi) < 75 ? 65 : 40),
+        connectivity: live.status === 'offline' ? 'offline' : s.iot.connectivity,
+      },
+      _live: live,
+    }
+  }), [liveData])
 
   const filtered = useMemo(() => {
     return MY_STATIONS.filter(s =>
@@ -316,7 +345,7 @@ export default function OperatorStations() {
         s.suburb.toLowerCase().includes(query.toLowerCase()) ||
         s.station_id.toLowerCase().includes(query.toLowerCase()))
     )
-  }, [query, filter])
+  }, [MY_STATIONS, query, filter])
 
   const activeCount = MY_STATIONS.filter(s => s.status === 'Active').length
   const alertCount = MY_STATIONS.filter(s => ioHealth(s.iot).label !== 'Healthy').length
