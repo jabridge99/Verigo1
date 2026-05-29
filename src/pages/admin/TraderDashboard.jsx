@@ -1,304 +1,95 @@
-import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState, useEffect, useRef } from 'react'
 import {
-  TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle,
-  Activity, RefreshCw, Database, Eye, BarChart2, Layers, Zap,
-  DollarSign, ShieldAlert, Clock, ArrowUpRight, ArrowDownRight,
-  BookOpen, ChevronsUpDown, Gauge,
+  TrendingUp, TrendingDown, AlertTriangle, Zap, RefreshCw,
+  Shield, DollarSign, Activity, CheckCircle, XCircle, Clock,
+  ChevronDown,
 } from 'lucide-react'
-import {
-  COMMODITIES, PRICING_BOOK, FEED_STATUS, MARKET_ALERTS, PRICING_ENGINE_CONFIG,
-} from '../../data/pie'
+import { marketFeed, COMMODITIES } from '../../lib/marketFeed'
+import { overrideQueue } from '../../lib/overrideQueue'
+import { pricingEngine } from '../../lib/pricingEngine'
 
-// ─── static trading data ─────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
-const TICKER_DATA = [
-  { sym: 'CU',  name: 'Copper',    price: 9842.50,  chg: +1.24,  unit: 'USD/t' },
-  { sym: 'AL',  name: 'Aluminium', price: 2318.00,  chg: -0.47,  unit: 'USD/t' },
-  { sym: 'NI',  name: 'Nickel',    price: 17640.00, chg: +2.11,  unit: 'USD/t' },
-  { sym: 'SN',  name: 'Tin',       price: 31250.00, chg: -0.83,  unit: 'USD/t' },
-  { sym: 'ZN',  name: 'Zinc',      price: 2765.00,  chg: +0.32,  unit: 'USD/t' },
-  { sym: 'AU',  name: 'Gold',      price: 2341.80,  chg: +0.61,  unit: 'USD/ozt' },
-  { sym: 'AG',  name: 'Silver',    price: 29.42,    chg: -0.19,  unit: 'USD/ozt' },
-  { sym: 'PD',  name: 'Palladium', price: 1042.00,  chg: +1.88,  unit: 'USD/ozt' },
-  { sym: 'AUD', name: 'AUD/USD',   price: 0.6385,   chg: +0.19,  unit: 'FX' },
-  { sym: 'LME', name: 'LME Index', price: 3821.4,   chg: +0.74,  unit: 'Index' },
-]
+const fmtSpot = (n) => n == null ? '—' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+const fmtRate = (n) => n == null ? '—' : `$${Number(n).toFixed(4)}`
+const fmtPct  = (n) => n == null ? '—' : `${n >= 0 ? '+' : ''}${Number(n).toFixed(2)}%`
 
-const POSITION_BOOK = [
-  { commodity: 'Copper',    position: 42.8,  avgBuy: 9710,   market: 9842, limit: 120, currency: 'USD/t' },
-  { commodity: 'Aluminium', position: 118.4, avgBuy: 2290,   market: 2318, limit: 300, currency: 'USD/t' },
-  { commodity: 'Nickel',    position: 18.2,  avgBuy: 17100,  market: 17640, limit: 60, currency: 'USD/t' },
-  { commodity: 'Tin',       position: 8.6,   avgBuy: 31800,  market: 31250, limit: 30, currency: 'USD/t' },
-  { commodity: 'Gold',      position: 0.42,  avgBuy: 2295,   market: 2341, limit: 2,  currency: 'USD/ozt' },
-  { commodity: 'Silver',    position: 12.4,  avgBuy: 28.90,  market: 29.42, limit: 40, currency: 'USD/ozt' },
-]
-
-const TRADE_HISTORY = [
-  { id: 'T-2094', ts: '09:42:18', commodity: 'Copper',    action: 'BUY',  tonnes: 4.2,  price: 9838,   total: 41320 },
-  { id: 'T-2093', ts: '09:31:05', commodity: 'Aluminium', action: 'SELL', tonnes: 12.0, price: 2324,   total: 27888 },
-  { id: 'T-2092', ts: '09:18:44', commodity: 'Nickel',    action: 'BUY',  tonnes: 2.5,  price: 17580,  total: 43950 },
-  { id: 'T-2091', ts: '08:55:11', commodity: 'Tin',       price: 31200,   action: 'SELL', tonnes: 1.8, total: 56160 },
-  { id: 'T-2090', ts: '08:47:30', commodity: 'Copper',    action: 'BUY',  tonnes: 6.0,  price: 9795,   total: 58770 },
-  { id: 'T-2089', ts: '08:33:22', commodity: 'Gold',      action: 'SELL', tonnes: 0.08, price: 2338,   total: 18704 },
-  { id: 'T-2088', ts: '08:20:47', commodity: 'Silver',    action: 'BUY',  tonnes: 3.2,  price: 28.95,  total: 92640 },
-  { id: 'T-2087', ts: '07:58:14', commodity: 'Aluminium', action: 'BUY',  tonnes: 24.0, price: 2298,   total: 55152 },
-  { id: 'T-2086', ts: '07:41:09', commodity: 'Nickel',    action: 'SELL', tonnes: 3.0,  price: 17420,  total: 52260 },
-  { id: 'T-2085', ts: '07:30:00', commodity: 'Copper',    action: 'BUY',  tonnes: 8.0,  price: 9680,   total: 77440 },
-]
-
-const DEPTH_DATA = [
-  { commodity: 'Copper',    bid: 9839.50, ask: 9843.00, bidVol: 84,  askVol: 61  },
-  { commodity: 'Aluminium', bid: 2316.50, ask: 2319.00, bidVol: 220, askVol: 195 },
-  { commodity: 'Nickel',    bid: 17632,   ask: 17648,   bidVol: 32,  askVol: 28  },
-  { commodity: 'Tin',       bid: 31235,   ask: 31265,   bidVol: 18,  askVol: 14  },
-  { commodity: 'Gold',      bid: 2340.90, ask: 2342.40, bidVol: 12,  askVol: 9   },
-  { commodity: 'Silver',    bid: 29.38,   ask: 29.46,   bidVol: 310, askVol: 290 },
-]
-
-const PNL_DATA = {
-  realized_today: 18420,
-  unrealized: 24810,
-  pnl_24h: 6280,
-  pnl_24h_pct: 1.84,
-  pnl_mtd: 142600,
-  pnl_mtd_pct: 4.21,
-  total_exposure: 892400,
-  margin_used: 284000,
+function StatusBadge({ status }) {
+  if (status === 'pending')  return <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock className="w-2.5 h-2.5" />Pending</span>
+  if (status === 'approved') return <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><CheckCircle className="w-2.5 h-2.5" />Approved</span>
+  if (status === 'rejected') return <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700"><XCircle className="w-2.5 h-2.5" />Rejected</span>
+  return <span className="text-[10px] text-slate-400">{status}</span>
 }
 
-const RISK_LIMITS = [
-  { commodity: 'Copper',    exposure: 421300, limit: 800000 },
-  { commodity: 'Aluminium', exposure: 274200, limit: 600000 },
-  { commodity: 'Nickel',    exposure: 321000, limit: 400000 },
-  { commodity: 'Tin',       exposure: 268700, limit: 300000 },
-  { commodity: 'Gold',      exposure: 981000, limit: 1000000 },
-  { commodity: 'Silver',    position: 12.4,   exposure: 365000, limit: 500000 },
-]
+// ── Live Market Prices Panel ──────────────────────────────────────────────────
 
-// ─── helper components ────────────────────────────────────────────────────────
-
-const METAL_COLORS = {
-  copper: 'text-orange-500', aluminium: 'text-slate-400', tin: 'text-sky-400',
-  nickel: 'text-lime-500', gold: 'text-amber-400', silver: 'text-slate-300',
-  palladium: 'text-violet-400',
-}
-
-function TrendIcon({ trend, className = 'w-3.5 h-3.5' }) {
-  if (trend === 'up')   return <TrendingUp   className={`${className} text-eco-500`} />
-  if (trend === 'down') return <TrendingDown className={`${className} text-red-400`} />
-  return <Minus className={`${className} text-slate-400`} />
-}
-
-// ─── Animated Ticker Strip ────────────────────────────────────────────────────
-
-function LiveTickerStrip() {
-  const [tick, setTick] = useState(0)
-  const [offsets, setOffsets] = useState(() => TICKER_DATA.map(() => 0))
+function MarketPricesPanel() {
+  const [prices, setPrices] = useState({})
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setTick(t => t + 1)
-      setOffsets(prev => prev.map(o => o + (Math.random() - 0.51) * 0.04))
-    }, 1800)
-    return () => clearInterval(id)
+    const unsub = marketFeed.subscribe(null, record => {
+      setPrices(prev => ({ ...prev, [record.material]: record }))
+    })
+    return unsub
   }, [])
 
-  const doubles = [...TICKER_DATA, ...TICKER_DATA]
+  const materials = Object.keys(COMMODITIES)
 
-  return (
-    <div className="bg-slate-900 rounded-2xl px-0 py-0 overflow-hidden relative">
-      <div className="flex items-center">
-        <div className="flex-shrink-0 bg-amber-500 text-slate-900 text-[10px] font-black px-3 py-3.5 tracking-widest uppercase z-10 select-none">
-          LIVE
-        </div>
-        <div className="overflow-hidden flex-1">
-          <div
-            className="flex gap-0 transition-transform"
-            style={{ transform: `translateX(-${(tick % TICKER_DATA.length) * (100 / TICKER_DATA.length)}%)`, width: `${doubles.length * 160}px` }}
-          >
-            {doubles.map((t, i) => {
-              const adj = offsets[i % TICKER_DATA.length] || 0
-              const displayChg = (t.chg + adj).toFixed(2)
-              const isPos = parseFloat(displayChg) >= 0
-              return (
-                <div key={i} className="w-40 flex-shrink-0 flex items-center gap-2 px-4 py-3 border-r border-slate-800">
-                  <span className="text-[11px] font-black text-white tracking-wide">{t.sym}</span>
-                  <span className="text-xs font-bold text-slate-200">{t.price.toLocaleString(undefined, { minimumFractionDigits: t.price < 100 ? 2 : 0 })}</span>
-                  <span className={`text-[10px] font-bold ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {isPos ? '+' : ''}{displayChg}%
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-        <div className="flex-shrink-0 flex items-center gap-2 px-4 border-l border-slate-700">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-[10px] text-slate-400 font-semibold">LME · CME · LBMA</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Portfolio P&L Card ───────────────────────────────────────────────────────
-
-function PnLCard() {
-  const d = PNL_DATA
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-50 flex items-center gap-2 bg-slate-900">
-        <DollarSign className="w-4 h-4 text-amber-400" />
-        <h2 className="font-bold text-white text-sm">Portfolio P&amp;L</h2>
-        <span className="ml-auto text-[10px] text-slate-400">AUD · Today 09:42 AEST</span>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-50">
-        {[
-          { label: 'Realized Today',   value: `+$${d.realized_today.toLocaleString()}`, color: 'text-emerald-600' },
-          { label: 'Unrealized',        value: `+$${d.unrealized.toLocaleString()}`,     color: 'text-emerald-600' },
-          { label: '24h P&L',           value: `+$${d.pnl_24h.toLocaleString()}`,        sub: `+${d.pnl_24h_pct}%`, color: 'text-emerald-600' },
-          { label: 'MTD P&L',           value: `+$${d.pnl_mtd.toLocaleString()}`,        sub: `+${d.pnl_mtd_pct}%`, color: 'text-emerald-600' },
-        ].map(item => (
-          <div key={item.label} className="px-5 py-4">
-            <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
-            {item.sub && <p className="text-[11px] text-emerald-500 font-semibold">{item.sub}</p>}
-            <p className="text-[11px] text-slate-400 mt-0.5">{item.label}</p>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 divide-x divide-slate-50 border-t border-slate-50">
-        <div className="px-5 py-3 flex items-center justify-between">
-          <span className="text-xs text-slate-500">Total Exposure</span>
-          <span className="text-sm font-bold text-slate-800">${d.total_exposure.toLocaleString()}</span>
-        </div>
-        <div className="px-5 py-3 flex items-center justify-between">
-          <span className="text-xs text-slate-500">Margin Used</span>
-          <span className="text-sm font-bold text-amber-700">${d.margin_used.toLocaleString()}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Position Book Table ──────────────────────────────────────────────────────
-
-function PositionBook() {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-50 flex items-center justify-between bg-slate-900">
+      <div className="px-5 py-4 border-b border-slate-50 bg-slate-900 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <BookOpen className="w-4 h-4 text-amber-400" />
-          <h2 className="font-bold text-white text-sm">Position Book</h2>
+          <Activity className="w-4 h-4 text-amber-400" />
+          <h2 className="font-bold text-white text-sm">Live Market Prices</h2>
         </div>
-        <span className="text-[10px] text-slate-400">Live · as of 09:42 AEST</span>
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] text-slate-400 font-semibold">Auto-refreshes every 8s with market tick</span>
+        </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-50 bg-slate-50">
-              <th className="text-left px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Commodity</th>
-              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Position (t)</th>
-              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Avg Buy</th>
-              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Market</th>
-              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Unreal. P&L</th>
-              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Exp. Limit</th>
-              <th className="text-right px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Utilization</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {POSITION_BOOK.map(row => {
-              const pnl = (row.market - row.avgBuy) * row.position
-              const exposure = row.market * row.position
-              const util = Math.round((exposure / (row.limit * 1000)) * 100)
-              const utilColor = util >= 85 ? 'text-red-600' : util >= 65 ? 'text-amber-600' : 'text-emerald-600'
-              return (
-                <tr key={row.commodity} className="hover:bg-slate-50">
-                  <td className="px-5 py-3.5">
-                    <p className="text-sm font-semibold text-slate-900">{row.commodity}</p>
-                    <p className="text-[10px] text-slate-400">{row.currency}</p>
-                  </td>
-                  <td className="px-3 py-3.5 text-right">
-                    <span className="text-sm font-bold text-slate-800">{row.position.toFixed(1)}</span>
-                  </td>
-                  <td className="px-3 py-3.5 text-right text-xs text-slate-600 font-mono">
-                    {row.avgBuy.toLocaleString()}
-                  </td>
-                  <td className="px-3 py-3.5 text-right text-xs font-mono font-bold text-slate-800">
-                    {row.market.toLocaleString()}
-                  </td>
-                  <td className="px-3 py-3.5 text-right">
-                    <span className={`text-xs font-bold ${pnl >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {pnl >= 0 ? '+' : ''}${Math.round(pnl).toLocaleString()}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3.5 text-right text-xs text-slate-500 font-mono">
-                    ${(row.limit * 1000).toLocaleString()}
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end gap-2">
-                      <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${util >= 85 ? 'bg-red-400' : util >= 65 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                          style={{ width: `${Math.min(util, 100)}%` }}
-                        />
-                      </div>
-                      <span className={`text-[11px] font-bold w-8 text-right ${utilColor}`}>{util}%</span>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-// ─── Market Depth Indicator ───────────────────────────────────────────────────
-
-function MarketDepth() {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-50 flex items-center gap-2">
-        <ChevronsUpDown className="w-4 h-4 text-violet-500" />
-        <h2 className="font-bold text-slate-900 text-sm">Market Depth — Bid/Ask Spread</h2>
-      </div>
-      <div className="divide-y divide-slate-50">
-        {DEPTH_DATA.map(row => {
-          const spread = row.ask - row.bid
-          const spreadPct = ((spread / row.bid) * 100).toFixed(3)
-          const totalVol = row.bidVol + row.askVol
-          const bidPct = Math.round((row.bidVol / totalVol) * 100)
-          const askPct = 100 - bidPct
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-0 divide-y sm:divide-y-0 sm:divide-x divide-slate-50">
+        {materials.slice(0, 4).map(mat => {
+          const p = prices[mat]
+          const chgPct = p?.change_pct ?? 0
           return (
-            <div key={row.commodity} className="px-5 py-3 flex items-center gap-4">
-              <span className="text-xs font-bold text-slate-800 w-20 flex-shrink-0">{row.commodity}</span>
-              <div className="flex-1 flex items-center gap-1">
-                {/* Bid bar */}
-                <div className="flex items-center gap-1 flex-1 justify-end">
-                  <span className="text-[10px] text-emerald-600 font-semibold font-mono">{row.bid.toLocaleString()}</span>
-                  <div className="h-5 bg-emerald-100 rounded-l" style={{ width: `${bidPct * 0.7}%`, minWidth: '8px' }} title={`${row.bidVol}t`} />
+            <div key={mat} className="px-4 py-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500">{COMMODITIES[mat]?.label ?? mat}</p>
+                  <p className="text-lg font-bold text-slate-900 mt-0.5">{p ? fmtSpot(p.spot) : '—'}<span className="text-xs font-normal text-slate-400">/t</span></p>
                 </div>
-                {/* Spread label */}
-                <div className="flex-shrink-0 px-2 text-center">
-                  <p className="text-[9px] font-bold text-slate-500">{spreadPct}%</p>
-                  <p className="text-[8px] text-slate-400">spread</p>
-                </div>
-                {/* Ask bar */}
-                <div className="flex items-center gap-1 flex-1">
-                  <div className="h-5 bg-red-100 rounded-r" style={{ width: `${askPct * 0.7}%`, minWidth: '8px' }} title={`${row.askVol}t`} />
-                  <span className="text-[10px] text-red-500 font-semibold font-mono">{row.ask.toLocaleString()}</span>
-                </div>
+                {chgPct >= 0
+                  ? <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  : <TrendingDown className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                }
               </div>
-              <div className="flex-shrink-0 text-right">
-                <p className="text-[10px] text-slate-400">
-                  <span className="text-emerald-600 font-semibold">{row.bidVol}t</span>
-                  {' / '}
-                  <span className="text-red-500 font-semibold">{row.askVol}t</span>
-                </p>
-                <p className="text-[9px] text-slate-400">bid / ask vol</p>
+              <div className="flex items-center justify-between mt-2 text-xs">
+                <span className="text-slate-500">Consumer: <span className="font-mono font-semibold text-slate-700">{p ? fmtRate(p.consumer_rate) : '—'}/kg</span></span>
+                <span className={`font-bold ${chgPct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtPct(chgPct)} 24h</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0 divide-y sm:divide-y-0 sm:divide-x divide-slate-50 border-t border-slate-50">
+        {materials.slice(4).map(mat => {
+          const p = prices[mat]
+          const chgPct = p?.change_pct ?? 0
+          return (
+            <div key={mat} className="px-4 py-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500">{COMMODITIES[mat]?.label ?? mat}</p>
+                  <p className="text-lg font-bold text-slate-900 mt-0.5">{p ? fmtSpot(p.spot) : '—'}<span className="text-xs font-normal text-slate-400">/t</span></p>
+                </div>
+                {chgPct >= 0
+                  ? <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  : <TrendingDown className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                }
+              </div>
+              <div className="flex items-center justify-between mt-2 text-xs">
+                <span className="text-slate-500">Consumer: <span className="font-mono font-semibold text-slate-700">{p ? fmtRate(p.consumer_rate) : '—'}/kg</span></span>
+                <span className={`font-bold ${chgPct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtPct(chgPct)} 24h</span>
               </div>
             </div>
           )
@@ -308,50 +99,350 @@ function MarketDepth() {
   )
 }
 
-// ─── Trade History ────────────────────────────────────────────────────────────
+// ── Override Request Form ─────────────────────────────────────────────────────
 
-function TradeHistory() {
+function OverrideRequestForm({ onSubmitted }) {
+  const [material, setMaterial]   = useState('')
+  const [rate, setRate]           = useState('')
+  const [rationale, setRationale] = useState('')
+  const [error, setError]         = useState('')
+  const [success, setSuccess]     = useState('')
+  const [currentRate, setCurrentRate] = useState(null)
+
+  const materials = Object.keys(COMMODITIES)
+
+  useEffect(() => {
+    if (!material) { setCurrentRate(null); return }
+    const p = marketFeed.getPrice(material)
+    setCurrentRate(p?.consumer_rate ?? null)
+  }, [material])
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    const rateNum = parseFloat(rate)
+    if (!material) { setError('Please select a material.'); return }
+    if (!rate || isNaN(rateNum) || rateNum <= 0) { setError('Proposed rate must be a positive number.'); return }
+    if (currentRate != null && Math.abs(rateNum - currentRate) < 0.0001) {
+      setError('Proposed rate must differ from the current consumer rate.')
+      return
+    }
+    if (!rationale.trim()) { setError('Please provide a rationale.'); return }
+    const id = overrideQueue.submit(material, rateNum, rationale.trim(), 'trader')
+    setSuccess(`Override request ${id} submitted and awaiting approval.`)
+    setMaterial('')
+    setRate('')
+    setRationale('')
+    setCurrentRate(null)
+    if (onSubmitted) onSubmitted()
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-50 flex items-center justify-between bg-slate-900">
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-amber-400" />
-          <h2 className="font-bold text-white text-sm">Recent Trades</h2>
+      <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-2">
+        <Zap className="w-4 h-4 text-violet-600" />
+        <h2 className="font-bold text-slate-900 text-sm">Submit Override Request</h2>
+      </div>
+      <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {error && (
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700">
+            <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            {success}
+          </div>
+        )}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Material</label>
+            <div className="relative">
+              <select
+                value={material}
+                onChange={e => { setMaterial(e.target.value); setSuccess(''); setError('') }}
+                className="w-full appearance-none border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 pr-8"
+              >
+                <option value="">Select material…</option>
+                {materials.map(m => {
+                  const p = marketFeed.getPrice(m)
+                  return (
+                    <option key={m} value={m}>
+                      {COMMODITIES[m].label} {p ? `(current: $${p.consumer_rate.toFixed(4)}/kg)` : ''}
+                    </option>
+                  )
+                })}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+            {currentRate != null && (
+              <p className="text-[11px] text-slate-400 mt-1">
+                Current rate: <span className="font-mono font-semibold text-violet-600">${currentRate.toFixed(4)}/kg</span>
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Proposed Rate ($/kg)</label>
+            <input
+              type="number"
+              step="0.0001"
+              min="0.0001"
+              value={rate}
+              onChange={e => { setRate(e.target.value); setSuccess(''); setError('') }}
+              placeholder="e.g. 1.8500"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+            />
+          </div>
         </div>
-        <span className="text-[10px] text-slate-400">Last 10 · Thu 29 May</span>
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">Rationale</label>
+          <textarea
+            value={rationale}
+            onChange={e => { setRationale(e.target.value); setSuccess(''); setError('') }}
+            placeholder="Explain why this override is needed (e.g. market dislocation, hedging need, client negotiation)…"
+            rows={3}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 resize-none"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-400">Override requests require admin approval before taking effect.</p>
+          <button
+            type="submit"
+            className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Submit Request
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// ── Pending Approvals Table ───────────────────────────────────────────────────
+
+function PendingApprovalsTable({ queue, onAction }) {
+  const [rejectReasons, setRejectReasons] = useState({})
+  const [showReject, setShowReject] = useState({})
+
+  const handleApprove = (id) => {
+    try {
+      overrideQueue.approve(id, 'admin')
+      if (onAction) onAction()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleReject = (id) => {
+    try {
+      overrideQueue.reject(id, 'admin', rejectReasons[id] || '')
+      setShowReject(prev => ({ ...prev, [id]: false }))
+      setRejectReasons(prev => { const n = { ...prev }; delete n[id]; return n })
+      if (onAction) onAction()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  if (queue.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-2">
+          <Clock className="w-4 h-4 text-amber-500" />
+          <h2 className="font-bold text-slate-900 text-sm">Pending Approvals</h2>
+          <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full ml-auto">0</span>
+        </div>
+        <div className="px-5 py-10 text-center">
+          <CheckCircle className="w-8 h-8 text-emerald-200 mx-auto mb-2" />
+          <p className="text-sm text-slate-400 font-semibold">No pending requests</p>
+          <p className="text-xs text-slate-300 mt-1">All override requests have been resolved</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-2 bg-amber-50">
+        <Clock className="w-4 h-4 text-amber-600" />
+        <h2 className="font-bold text-amber-900 text-sm">Pending Approvals</h2>
+        <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-200 text-amber-800 rounded-full ml-auto">{queue.length}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-50 bg-slate-50">
-              <th className="text-left px-5 py-2.5 text-[11px] text-slate-400 font-semibold uppercase">Trade ID</th>
-              <th className="text-left px-3 py-2.5 text-[11px] text-slate-400 font-semibold uppercase">Time</th>
-              <th className="text-left px-3 py-2.5 text-[11px] text-slate-400 font-semibold uppercase">Commodity</th>
-              <th className="text-center px-3 py-2.5 text-[11px] text-slate-400 font-semibold uppercase">Side</th>
-              <th className="text-right px-3 py-2.5 text-[11px] text-slate-400 font-semibold uppercase">Tonnes</th>
-              <th className="text-right px-3 py-2.5 text-[11px] text-slate-400 font-semibold uppercase">Price</th>
-              <th className="text-right px-5 py-2.5 text-[11px] text-slate-400 font-semibold uppercase">Total USD</th>
+              <th className="text-left px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">ID</th>
+              <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Material</th>
+              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Current</th>
+              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Proposed</th>
+              <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden lg:table-cell">Rationale</th>
+              <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden md:table-cell">Trader</th>
+              <th className="text-center px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {TRADE_HISTORY.map(t => (
-              <tr key={t.id} className="hover:bg-slate-50">
-                <td className="px-5 py-2.5">
-                  <span className="text-[11px] font-mono font-semibold text-violet-700">{t.id}</span>
+            {queue.map(req => {
+              const diff = req.proposedRate - req.currentRate
+              const diffPct = req.currentRate > 0 ? (diff / req.currentRate) * 100 : 0
+              return (
+                <React.Fragment key={req.id}>
+                  <tr className="hover:bg-amber-50/30">
+                    <td className="px-5 py-3.5">
+                      <span className="text-[11px] font-mono font-bold text-violet-700">{req.id}</span>
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <p className="text-xs font-semibold text-slate-800">{COMMODITIES[req.material]?.label ?? req.material}</p>
+                      <p className="text-[10px] text-slate-400 font-mono">{req.material}</p>
+                    </td>
+                    <td className="px-3 py-3.5 text-right font-mono text-xs text-slate-600">
+                      {fmtRate(req.currentRate)}/kg
+                    </td>
+                    <td className="px-3 py-3.5 text-right">
+                      <p className={`font-mono text-xs font-bold ${diff >= 0 ? 'text-amber-700' : 'text-red-600'}`}>
+                        {fmtRate(req.proposedRate)}/kg
+                      </p>
+                      <p className={`text-[10px] ${diff >= 0 ? 'text-amber-600' : 'text-red-500'}`}>
+                        {diff >= 0 ? '+' : ''}{diffPct.toFixed(2)}%
+                      </p>
+                    </td>
+                    <td className="px-3 py-3.5 hidden lg:table-cell">
+                      <p className="text-xs text-slate-600 max-w-xs truncate" title={req.rationale}>{req.rationale || '—'}</p>
+                    </td>
+                    <td className="px-3 py-3.5 hidden md:table-cell">
+                      <span className="text-xs text-slate-600">{req.trader}</span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleApprove(req.id)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold rounded-lg transition-colors border border-emerald-200"
+                        >
+                          <CheckCircle className="w-3 h-3" />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => setShowReject(prev => ({ ...prev, [req.id]: !prev[req.id] }))}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-bold rounded-lg transition-colors border border-red-200"
+                        >
+                          <XCircle className="w-3 h-3" />
+                          Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {showReject[req.id] && (
+                    <tr className="bg-red-50/50">
+                      <td colSpan={7} className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="text"
+                            placeholder="Rejection reason (optional)…"
+                            value={rejectReasons[req.id] || ''}
+                            onChange={e => setRejectReasons(prev => ({ ...prev, [req.id]: e.target.value }))}
+                            className="flex-1 border border-red-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
+                          />
+                          <button
+                            onClick={() => handleReject(req.id)}
+                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors"
+                          >
+                            Confirm Reject
+                          </button>
+                          <button
+                            onClick={() => setShowReject(prev => ({ ...prev, [req.id]: false }))}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Override History Table ────────────────────────────────────────────────────
+
+function OverrideHistoryTable({ history }) {
+  if (history.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-2">
+          <Shield className="w-4 h-4 text-slate-400" />
+          <h2 className="font-bold text-slate-900 text-sm">Override History</h2>
+        </div>
+        <div className="px-5 py-8 text-center">
+          <p className="text-sm text-slate-400">No resolved requests yet.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Shield className="w-4 h-4 text-violet-600" />
+          <h2 className="font-bold text-slate-900 text-sm">Override History</h2>
+          <span className="text-[10px] text-slate-400 font-semibold">Last {history.length} resolved</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-50 bg-slate-50">
+              <th className="text-left px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">ID</th>
+              <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Material</th>
+              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Current</th>
+              <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Proposed</th>
+              <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden md:table-cell">Trader</th>
+              <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden lg:table-cell">Approver</th>
+              <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden lg:table-cell">Reason</th>
+              <th className="text-center px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {history.map(req => (
+              <tr key={req.id} className={req.status === 'approved' ? 'bg-emerald-50/20' : 'bg-red-50/20'}>
+                <td className="px-5 py-3">
+                  <span className="text-[11px] font-mono font-bold text-violet-700">{req.id}</span>
+                  <p className="text-[9px] text-slate-400 font-mono mt-0.5">
+                    {req.resolvedAt ? new Date(req.resolvedAt).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                  </p>
                 </td>
-                <td className="px-3 py-2.5 text-[11px] font-mono text-slate-500">{t.ts}</td>
-                <td className="px-3 py-2.5 text-xs font-semibold text-slate-800">{t.commodity}</td>
-                <td className="px-3 py-2.5 text-center">
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                    t.action === 'BUY'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-red-100 text-red-700'
-                  }`}>{t.action}</span>
+                <td className="px-3 py-3">
+                  <p className="text-xs font-semibold text-slate-800">{COMMODITIES[req.material]?.label ?? req.material}</p>
                 </td>
-                <td className="px-3 py-2.5 text-right text-xs font-mono text-slate-700">{t.tonnes}</td>
-                <td className="px-3 py-2.5 text-right text-xs font-mono text-slate-700">{t.price.toLocaleString()}</td>
-                <td className="px-5 py-2.5 text-right text-xs font-bold text-slate-900">
-                  ${t.total.toLocaleString()}
+                <td className="px-3 py-3 text-right font-mono text-xs text-slate-500">
+                  {fmtRate(req.currentRate)}/kg
+                </td>
+                <td className="px-3 py-3 text-right font-mono text-xs font-bold text-slate-800">
+                  {fmtRate(req.proposedRate)}/kg
+                </td>
+                <td className="px-3 py-3 hidden md:table-cell">
+                  <span className="text-xs text-slate-600">{req.trader}</span>
+                </td>
+                <td className="px-3 py-3 hidden lg:table-cell">
+                  <span className="text-xs text-slate-600">{req.approver ?? '—'}</span>
+                </td>
+                <td className="px-3 py-3 hidden lg:table-cell">
+                  <span className="text-xs text-slate-500 truncate max-w-xs block" title={req.rejectReason}>
+                    {req.rejectReason || '—'}
+                  </span>
+                </td>
+                <td className="px-5 py-3 text-center">
+                  <StatusBadge status={req.status} />
                 </td>
               </tr>
             ))}
@@ -362,287 +453,122 @@ function TradeHistory() {
   )
 }
 
-// ─── Risk Limits Panel ────────────────────────────────────────────────────────
-
-function RiskLimits() {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-50 flex items-center gap-2">
-        <ShieldAlert className="w-4 h-4 text-violet-600" />
-        <h2 className="font-bold text-slate-900 text-sm">Risk Exposure Limits</h2>
-      </div>
-      <div className="divide-y divide-slate-50">
-        {RISK_LIMITS.map(row => {
-          const pct = Math.round((row.exposure / row.limit) * 100)
-          const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-500'
-          const textColor = pct >= 90 ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'
-          const badge = pct >= 90 ? 'BREACH RISK' : pct >= 70 ? 'ELEVATED' : 'NORMAL'
-          const badgeBg = pct >= 90 ? 'bg-red-100 text-red-700' : pct >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-          return (
-            <div key={row.commodity} className="px-5 py-3.5">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-slate-800">{row.commodity}</span>
-                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${badgeBg}`}>{badge}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-slate-400">
-                    ${row.exposure.toLocaleString()} / ${row.limit.toLocaleString()}
-                  </span>
-                  <span className={`text-xs font-bold ${textColor}`}>{pct}%</span>
-                </div>
-              </div>
-              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${barColor}`}
-                  style={{ width: `${Math.min(pct, 100)}%` }}
-                />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div className="px-5 py-3 border-t border-slate-50 bg-slate-50 flex items-center gap-4 text-[11px] text-slate-400">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Normal &lt;70%</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Elevated 70–89%</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Breach Risk ≥90%</span>
-      </div>
-    </div>
-  )
-}
-
-// ─── legacy sub-components (from original) ───────────────────────────────────
-
-function FeedHealthChips() {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {FEED_STATUS.map(feed => (
-        <div key={feed.id} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold ${
-          feed.status === 'Live'  ? 'border-eco-200 bg-eco-50 text-eco-700' :
-          feed.status === 'Stale' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-          'border-red-200 bg-red-50 text-red-700'
-        }`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${
-            feed.status === 'Live' ? 'bg-eco-500' :
-            feed.status === 'Stale' ? 'bg-amber-500' : 'bg-red-500'
-          }`} />
-          {feed.label}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function AlertPanel() {
-  const alertColor = {
-    high:   'border-red-100 bg-red-50 text-red-700',
-    medium: 'border-amber-100 bg-amber-50 text-amber-700',
-    low:    'border-eco-100 bg-eco-50 text-eco-700',
-  }
-  return (
-    <div className="space-y-2">
-      {MARKET_ALERTS.map(a => (
-        <div key={a.id} className={`flex items-start gap-2.5 border rounded-xl px-3 py-2.5 ${alertColor[a.severity]}`}>
-          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-          <p className="text-xs leading-relaxed">{a.message}</p>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TraderDashboard() {
-  const cfg = PRICING_ENGINE_CONFIG
-  const marginHealthColor = cfg.margin_status === 'Healthy'
-    ? 'text-eco-700 bg-eco-100'
-    : cfg.margin_status === 'Compressed'
-    ? 'text-amber-700 bg-amber-100'
-    : 'text-red-700 bg-red-100'
+  const [allQueue, setAllQueue] = useState([])
+  const [isLive, setIsLive]     = useState(true)
 
-  const validUntil  = new Date(cfg.valid_until).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
-  const nextReprice = new Date(cfg.next_reprice).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+  const refreshQueue = () => {
+    setAllQueue(overrideQueue.getQueue())
+  }
+
+  useEffect(() => {
+    refreshQueue()
+    // Poll every 2s (overrideQueue doesn't emit React state changes)
+    const id = setInterval(refreshQueue, 2000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Track market feed liveness
+  useEffect(() => {
+    const unsub = marketFeed.subscribe(null, () => setIsLive(true))
+    return unsub
+  }, [])
+
+  const pending  = allQueue.filter(r => r.status === 'pending')
+  const resolved = allQueue.filter(r => r.status !== 'pending').slice(-20).reverse()
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <div className="w-5 h-5 bg-violet-600 rounded flex items-center justify-center">
-              <BarChart2 className="w-3 h-3 text-white" />
+              <Activity className="w-3 h-3 text-white" />
             </div>
-            <span className="text-xs font-bold text-violet-600 uppercase tracking-wider">Pricing Intelligence Engine</span>
+            <span className="text-xs font-bold text-violet-600 uppercase tracking-wider">Commodity Desk</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900">Trader Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Live pricing book · Metal markets · Recovery intelligence</p>
+          <p className="text-sm text-slate-500 mt-0.5">Live market prices · Override requests · Approval queue</p>
         </div>
-        <div className="text-right text-xs text-slate-400 space-y-0.5">
-          <p className="font-semibold text-slate-600">Thu 29 May 2026 · AEST</p>
-          <p>Valid until <span className="text-slate-700 font-semibold">{validUntil}</span></p>
-          <p>Next reprice <span className="text-slate-700 font-semibold">{nextReprice}</span></p>
-        </div>
-      </div>
-
-      {/* Live Ticker Strip */}
-      <LiveTickerStrip />
-
-      {/* Status strip */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <FeedHealthChips />
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400">Margin Health</span>
-          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${marginHealthColor}`}>
-            {cfg.margin_status}
-          </span>
-          <button className="flex items-center gap-1.5 text-xs text-violet-600 font-semibold hover:underline">
-            <RefreshCw className="w-3.5 h-3.5" /> Reprice Now
-          </button>
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold ${
+            isLive
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              : 'bg-slate-50 border-slate-200 text-slate-500'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+            {isLive ? 'Market Live' : 'Connecting…'}
+          </div>
+          {pending.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border bg-amber-50 border-amber-200 text-xs font-semibold text-amber-700">
+              <Clock className="w-3.5 h-3.5" />
+              {pending.length} pending
+            </div>
+          )}
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* ── Live Market Prices ── */}
+      <MarketPricesPanel />
+
+      {/* ── Summary KPIs ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Live Offer Lines', value: PRICING_BOOK.length,          color: 'text-slate-800' },
-          { label: 'Feeds Active',     value: `${FEED_STATUS.filter(f => f.status === 'Live').length}/${FEED_STATUS.length}`, color: 'text-eco-700' },
-          { label: 'Alerts Open',      value: MARKET_ALERTS.length,          color: MARKET_ALERTS.some(a => a.severity === 'high') ? 'text-red-600' : 'text-amber-600' },
-          { label: 'Blended FX Rate',  value: 'AUD/USD 0.6385',              color: 'text-slate-800' },
+          {
+            label: 'Active Overrides',
+            value: pricingEngine.overrideCount,
+            icon: Shield,
+            color: pricingEngine.overrideCount > 0 ? 'text-violet-700' : 'text-slate-500',
+            bg: pricingEngine.overrideCount > 0 ? 'bg-violet-50' : 'bg-slate-50',
+          },
+          {
+            label: 'Pending Requests',
+            value: pending.length,
+            icon: Clock,
+            color: pending.length > 0 ? 'text-amber-700' : 'text-slate-500',
+            bg: pending.length > 0 ? 'bg-amber-50' : 'bg-slate-50',
+          },
+          {
+            label: 'Approved (All Time)',
+            value: allQueue.filter(r => r.status === 'approved').length,
+            icon: CheckCircle,
+            color: 'text-emerald-700',
+            bg: 'bg-emerald-50',
+          },
+          {
+            label: 'Rejected (All Time)',
+            value: allQueue.filter(r => r.status === 'rejected').length,
+            icon: XCircle,
+            color: 'text-red-600',
+            bg: 'bg-red-50',
+          },
         ].map(s => (
-          <div key={s.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-[11px] text-slate-400 font-medium mt-0.5">{s.label}</p>
+          <div key={s.label} className={`${s.bg} rounded-2xl border border-slate-100 shadow-sm p-4`}>
+            <div className="flex items-center justify-between">
+              <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+              <s.icon className={`w-4 h-4 ${s.color}`} />
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium mt-1">{s.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Portfolio P&L */}
-      <PnLCard />
+      {/* ── Override Request Form ── */}
+      <OverrideRequestForm onSubmitted={refreshQueue} />
 
-      {/* Position Book */}
-      <PositionBook />
+      {/* ── Pending Approvals ── */}
+      <PendingApprovalsTable queue={pending} onAction={refreshQueue} />
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Live Pricing Book */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between bg-slate-900">
-            <h2 className="font-bold text-white">Live Pricing Book</h2>
-            <span className="text-[11px] text-slate-400">No internal margins shown — admin pricing view</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-50 bg-slate-50">
-                  <th className="text-left px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Device Category</th>
-                  <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden sm:table-cell">Composition</th>
-                  <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Offer (AUD)</th>
-                  <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">24h Δ</th>
-                  <th className="text-center px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Trend</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {PRICING_BOOK.map(row => (
-                  <tr key={row.device} className="hover:bg-slate-50">
-                    <td className="px-5 py-3.5">
-                      <p className="text-sm font-semibold text-slate-900">{row.label}</p>
-                      <p className="text-[11px] text-slate-400">{row.unit}</p>
-                    </td>
-                    <td className="px-3 py-3.5 hidden sm:table-cell">
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-violet-50 text-violet-600 rounded-full">{row.characterisation}</span>
-                    </td>
-                    <td className="px-3 py-3.5 text-right">
-                      <p className="text-base font-bold text-slate-900">${row.offer_aud.toFixed(2)}</p>
-                    </td>
-                    <td className="px-3 py-3.5 text-right">
-                      <span className={`text-xs font-bold ${
-                        row.change_aud > 0 ? 'text-eco-600' :
-                        row.change_aud < 0 ? 'text-red-500' : 'text-slate-400'
-                      }`}>
-                        {row.change_aud > 0 ? '+' : ''}{row.change_aud !== 0 ? `$${row.change_aud.toFixed(2)}` : '—'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-center">
-                      <div className="flex justify-center">
-                        <TrendIcon trend={row.trend} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-3 border-t border-slate-50 bg-slate-50">
-            <p className="text-[11px] text-slate-400">Prices valid until {validUntil} · Repriced daily at 09:00 AEST from LME, CME, FX, scrap feeds</p>
-          </div>
-        </div>
+      {/* ── Override History ── */}
+      <OverrideHistoryTable history={resolved} />
 
-        {/* Right column */}
-        <div className="space-y-4">
-          {/* Metal snapshot */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-            <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
-              <h2 className="font-bold text-slate-900">Metal Snapshot</h2>
-              <Link to="/admin/market-ingestion" className="text-xs text-violet-600 font-semibold hover:underline">Detail →</Link>
-            </div>
-            <div className="divide-y divide-slate-50">
-              {Object.values(COMMODITIES).map(m => (
-                <div key={m.symbol} className="flex items-center gap-3 px-5 py-3">
-                  <span className={`w-6 text-xs font-bold ${METAL_COLORS[m.name.toLowerCase()] || 'text-slate-400'}`}>{m.symbol}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-slate-700">{m.name}</p>
-                    <p className="text-[10px] text-slate-400">{m.exchange} · {m.unit}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-xs font-bold text-slate-800">${m.spot_usd.toLocaleString()}</p>
-                    <p className={`text-[10px] font-semibold ${m.change_24h_pct >= 0 ? 'text-eco-600' : 'text-red-500'}`}>
-                      {m.change_24h_pct >= 0 ? '+' : ''}{m.change_24h_pct.toFixed(2)}%
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Alerts */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-            <div className="px-5 py-4 border-b border-slate-50">
-              <h2 className="font-bold text-slate-900">Market Alerts</h2>
-            </div>
-            <div className="p-4">
-              <AlertPanel />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Market Depth */}
-      <MarketDepth />
-
-      {/* Trade History */}
-      <TradeHistory />
-
-      {/* Risk Limits */}
-      <RiskLimits />
-
-      {/* PIE module quick links */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {[
-          { to: '/admin/market-ingestion', label: 'Market Ingestion',  icon: Database,  color: 'bg-violet-600' },
-          { to: '/admin/scrap-pricing',    label: 'Scrap Pricing',     icon: Layers,    color: 'bg-slate-700' },
-          { to: '/admin/competitor-intel', label: 'Competitor Intel',  icon: Eye,       color: 'bg-blue-600' },
-          { to: '/admin/sentiment',        label: 'Sentiment Engine',  icon: Activity,  color: 'bg-amber-600' },
-          { to: '/admin/composition',      label: 'Composition',       icon: BarChart2, color: 'bg-eco-600' },
-          { to: '/admin/pricing-engine',   label: 'Pricing Engine',    icon: Zap,       color: 'bg-red-600' },
-        ].map(l => (
-          <Link key={l.to} to={l.to}
-            className="flex items-center gap-2 bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 hover:border-violet-200 hover:shadow-md transition-all group">
-            <div className={`w-7 h-7 ${l.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
-              <l.icon className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">{l.label}</span>
-          </Link>
-        ))}
+      {/* ── Footer note ── */}
+      <div className="flex items-center justify-center gap-2 py-2">
+        <RefreshCw className="w-3 h-3 text-slate-300" />
+        <p className="text-[11px] text-slate-400">Auto-refreshes every 8s with market tick · Queue polling every 2s</p>
       </div>
     </div>
   )

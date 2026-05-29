@@ -1,243 +1,363 @@
-import React, { useState } from 'react'
-import { TrendingUp, TrendingDown, Minus, Activity, AlertTriangle } from 'lucide-react'
-import { OVERRIDES, VOLATILITY_ALERTS, BOOK_VERSIONS } from '../../data/override'
-import { COMMODITIES, PRICING_ENGINE_CONFIG } from '../../data/pie'
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  TrendingUp, TrendingDown, AlertTriangle, Zap, RefreshCw,
+  Shield, DollarSign, Activity, X,
+} from 'lucide-react'
+import { pricingEngine } from '../../lib/pricingEngine'
+import { marketFeed } from '../../lib/marketFeed'
+import { overrideQueue } from '../../lib/overrideQueue'
 
-const DEVICE_LABELS = {
-  smartphone: 'Smartphone', laptop: 'Laptop', desktop: 'Desktop PC',
-  tablet: 'Tablet', tv_monitor: 'TV / Monitor', large_appliance: 'Large Appliance',
-  mixed_ewaste: 'Mixed E-Waste',
-}
+// ── Sparkline component ───────────────────────────────────────────────────────
 
-// Current live book (BK-0088) — merges AI book with active overrides
-const CURRENT_BOOK = BOOK_VERSIONS[0].book
-const AI_BOOK_CLEAN = BOOK_VERSIONS[2].book  // BK-0086 — pure AI, no overrides
-
-function TrendIcon({ pct }) {
-  if (pct > 0.5)  return <TrendingUp   className="w-3.5 h-3.5 text-eco-500 flex-shrink-0" />
-  if (pct < -0.5) return <TrendingDown className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-  return <Minus className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
-}
-
-function VolatilityRisk({ metal }) {
-  const comm = COMMODITIES[metal]
-  if (!comm) return null
-  const vol7d = Math.abs(comm.change_7d_pct)
-  const risk = vol7d >= 5 ? 'High' : vol7d >= 2 ? 'Medium' : 'Low'
-  const color = vol7d >= 5 ? 'text-red-600 bg-red-50' : vol7d >= 2 ? 'text-amber-600 bg-amber-50' : 'text-eco-600 bg-eco-50'
-  const barColor = vol7d >= 5 ? 'bg-red-500' : vol7d >= 2 ? 'bg-amber-500' : 'bg-eco-500'
+function Sparkline({ material }) {
+  const points = marketFeed.getHistory(material, 30)
+  if (!points || points.length < 2) {
+    return <svg width={60} height={24} className="opacity-30"><line x1={0} y1={12} x2={60} y2={12} stroke="#94a3b8" strokeWidth={1} /></svg>
+  }
+  const prices = points.map(p => p.price)
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  const range = max - min || 1
+  const w = 60
+  const h = 24
+  const pad = 2
+  const coords = prices.map((p, i) => {
+    const x = pad + (i / (prices.length - 1)) * (w - pad * 2)
+    const y = pad + (1 - (p - min) / range) * (h - pad * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  const polyline = coords.join(' ')
+  const first = prices[0]
+  const last  = prices[prices.length - 1]
+  const color = last >= first ? '#10b981' : '#ef4444'
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, vol7d * 10)}%` }} />
+    <svg width={w} height={h} className="flex-shrink-0">
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// ── KPI Card ──────────────────────────────────────────────────────────────────
+
+function KpiCard({ label, value, sub, icon: Icon, iconColor, bgColor, borderColor }) {
+  return (
+    <div className={`${bgColor ?? 'bg-white'} rounded-2xl border ${borderColor ?? 'border-slate-100'} shadow-sm p-5`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`text-2xl font-bold ${iconColor ?? 'text-slate-900'} leading-tight truncate`}>{value}</p>
+          {sub && <p className="text-xs font-semibold text-slate-400 mt-0.5">{sub}</p>}
+          <p className="text-[11px] text-slate-400 font-medium mt-1.5 leading-snug">{label}</p>
+        </div>
+        {Icon && (
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${bgColor ?? 'bg-violet-50'}`}>
+            <Icon className={`w-4.5 h-4.5 ${iconColor ?? 'text-violet-600'}`} />
+          </div>
+        )}
       </div>
-      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${color}`}>{risk}</span>
     </div>
   )
 }
 
+// ── Risk badge ────────────────────────────────────────────────────────────────
+
+function RiskBadge({ flag }) {
+  return flag
+    ? <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700"><AlertTriangle className="w-2.5 h-2.5" />Risk</span>
+    : <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700"><Shield className="w-2.5 h-2.5" />OK</span>
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function ExposureDashboard() {
-  const [view, setView] = useState('pricing')
+  const [summary, setSummary]   = useState(null)
+  const [updatedAt, setUpdatedAt] = useState(null)
+  const [overrides, setOverrides] = useState({})
 
-  const activeOverrides = OVERRIDES.filter(o => o.status === 'active')
-  const openAlerts = VOLATILITY_ALERTS.filter(a => a.status === 'open')
+  const refresh = useCallback(() => {
+    const s = pricingEngine.getExposureSummary()
+    setSummary(s)
+    setUpdatedAt(new Date())
+    setOverrides(pricingEngine.getOverrides())
+  }, [])
 
-  // Compute exposure: sum of (proposed_value - ai_value) × volume_estimate per active override
-  const totalPositiveExposure = activeOverrides
-    .filter(o => o.proposed_value > o.ai_value)
-    .reduce((s, o) => s + (o.proposed_value - o.ai_value) * o.volume_estimate, 0)
-  const totalNegativeExposure = activeOverrides
-    .filter(o => o.proposed_value < o.ai_value)
-    .reduce((s, o) => s + (o.ai_value - o.proposed_value) * o.volume_estimate, 0)
+  useEffect(() => {
+    pricingEngine.start()
+    const unsub = pricingEngine.subscribe(s => {
+      setSummary(s)
+      setUpdatedAt(new Date())
+      setOverrides(pricingEngine.getOverrides())
+    })
+    return unsub
+  }, [])
 
-  // Pricing book comparison
-  const bookComparison = CURRENT_BOOK.map(row => {
-    const aiRow = AI_BOOK_CLEAN.find(r => r.device === row.device)
-    const override = activeOverrides.find(o => o.device === row.device)
-    const aiPure = aiRow?.offer || row.offer
-    const diff = row.offer - aiPure
-    const diffPct = aiPure > 0 ? (diff / aiPure) * 100 : 0
-    const pieCfgRow = PRICING_ENGINE_CONFIG.book.find(b => b.device === row.device)
-    return {
-      device: row.device,
-      label: DEVICE_LABELS[row.device] || row.device,
-      live_offer: row.offer,
-      ai_pure: aiPure,
-      diff,
-      diff_pct: diffPct,
-      has_override: !!override,
-      override_id: override?.id,
-      margin_pct: pieCfgRow?.margin_pct || null,
-      net_recovery: pieCfgRow?.net_recovery || null,
-    }
-  })
+  const handleClearOverride = (material) => {
+    pricingEngine.clearOverride(material, 'admin')
+    refresh()
+  }
 
-  const metals = ['copper', 'aluminium', 'tin', 'gold', 'silver', 'palladium', 'nickel']
+  const fmtAud = (n) => n == null ? '—' : `$${Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const fmtPct = (n) => n == null ? '—' : `${n.toFixed(2)}%`
+
+  const activeOverrideEntries = Object.entries(overrides)
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Exposure Dashboard</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Pricing book delta · Override exposure · Metal volatility risk</p>
-      </div>
-
-      {/* KPI bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Lines with Overrides', value: activeOverrides.length, color: 'text-violet-700', bg: 'bg-violet-50' },
-          { label: 'Upside Exposure (wk)', value: `+$${totalPositiveExposure.toLocaleString()}`, color: 'text-eco-700', bg: 'bg-eco-50' },
-          { label: 'Downside Exposure (wk)', value: totalNegativeExposure > 0 ? `-$${totalNegativeExposure.toLocaleString()}` : '$0', color: totalNegativeExposure > 0 ? 'text-red-600' : 'text-slate-400', bg: totalNegativeExposure > 0 ? 'bg-red-50' : 'bg-slate-50' },
-          { label: 'Open Volatility Alerts', value: openAlerts.length, color: openAlerts.length ? 'text-red-600' : 'text-slate-400', bg: openAlerts.length ? 'bg-red-50' : 'bg-slate-50' },
-        ].map(s => (
-          <div key={s.label} className={`${s.bg} rounded-2xl border border-slate-100 shadow-sm p-4`}>
-            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-[11px] text-slate-400 font-medium mt-0.5">{s.label}</p>
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 bg-emerald-500 text-white rounded-full uppercase tracking-wider">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              Live
+            </span>
+            <span className="text-xs text-slate-400 font-semibold">
+              {updatedAt ? updatedAt.toLocaleTimeString('en-AU') : '—'}
+            </span>
           </div>
-        ))}
+          <h1 className="text-2xl font-bold text-slate-900">Exposure Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Daily notional · Margin health · Override positions</p>
+        </div>
+        <button
+          onClick={refresh}
+          className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition-colors self-start sm:self-auto"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Refresh
+        </button>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-2 border-b border-slate-100">
-        {[
-          { id: 'pricing',    label: 'Pricing Book Delta' },
-          { id: 'volatility', label: 'Metal Volatility Risk' },
-        ].map(tab => (
-          <button key={tab.id} onClick={() => setView(tab.id)}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
-              view === tab.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}>{tab.label}</button>
-        ))}
+      {/* ── KPI Cards ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          label="Total Notional AUD"
+          value={summary ? fmtAud(summary.totalNotionalAud) : '—'}
+          sub="Daily gross"
+          icon={DollarSign}
+          iconColor="text-violet-600"
+          bgColor="bg-violet-50"
+          borderColor="border-violet-100"
+        />
+        <KpiCard
+          label="Total Margin AUD"
+          value={summary ? fmtAud(summary.totalMarginAud) : '—'}
+          sub="Daily P&L"
+          icon={TrendingUp}
+          iconColor={summary && summary.totalMarginAud >= 0 ? 'text-emerald-600' : 'text-red-600'}
+          bgColor={summary && summary.totalMarginAud >= 0 ? 'bg-emerald-50' : 'bg-red-50'}
+          borderColor={summary && summary.totalMarginAud >= 0 ? 'border-emerald-100' : 'border-red-100'}
+        />
+        <KpiCard
+          label="Weighted Avg Margin %"
+          value={summary ? fmtPct(summary.weightedMarginPct) : '—'}
+          sub="Across all materials"
+          icon={Activity}
+          iconColor={
+            summary
+              ? summary.weightedMarginPct >= 20 ? 'text-emerald-600'
+              : summary.weightedMarginPct >= 15 ? 'text-amber-600'
+              : 'text-red-600'
+              : 'text-slate-500'
+          }
+          bgColor="bg-white"
+          borderColor="border-slate-100"
+        />
+        <KpiCard
+          label="At-Risk Materials"
+          value={summary ? summary.atRiskCount : '—'}
+          sub={summary ? `of ${summary.rows.length} materials` : ''}
+          icon={AlertTriangle}
+          iconColor={summary && summary.atRiskCount > 0 ? 'text-red-600' : 'text-emerald-600'}
+          bgColor={summary && summary.atRiskCount > 0 ? 'bg-red-50' : 'bg-emerald-50'}
+          borderColor={summary && summary.atRiskCount > 0 ? 'border-red-100' : 'border-emerald-100'}
+        />
       </div>
 
-      {view === 'pricing' && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-50 bg-slate-900">
-            <h2 className="font-bold text-white">Live Book vs Pure AI — Pricing Delta</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">Comparing BK-0088 (current) against PIE pure AI output (BK-0086 baseline)</p>
+      {/* ── Exposure Table ── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-50 bg-slate-900 flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-white">Per-Material Exposure</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">Live spot · Consumer rate · Daily volume estimates</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-50 bg-slate-50">
-                  <th className="text-left px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Device</th>
-                  <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">AI Pure</th>
-                  <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Live Offer</th>
-                  <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Delta</th>
-                  <th className="text-left px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden md:table-cell">Override</th>
-                  <th className="text-center px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Trend</th>
+          <Zap className="w-4 h-4 text-amber-400" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-50 bg-slate-50">
+                <th className="text-left px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Material</th>
+                <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Spot (AUD/t)</th>
+                <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Consumer Rate ($/kg)</th>
+                <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase">Margin %</th>
+                <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden md:table-cell">Daily Vol (kg)</th>
+                <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden md:table-cell">Daily Notional</th>
+                <th className="text-right px-3 py-3 text-[11px] text-slate-400 font-semibold uppercase hidden lg:table-cell">Daily P&L</th>
+                <th className="text-center px-5 py-3 text-[11px] text-slate-400 font-semibold uppercase">Risk</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {summary ? summary.rows.map(row => (
+                <tr key={row.material} className={row.riskFlag ? 'bg-red-50/40' : row.hasOverride ? 'bg-violet-50/30' : ''}>
+                  <td className="px-5 py-3.5">
+                    <p className="text-sm font-semibold text-slate-900">{row.label}</p>
+                    <p className="text-[10px] text-slate-400 font-mono">{row.material}</p>
+                    {row.hasOverride && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded-full">OVERRIDE</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3.5 text-right font-mono text-sm text-slate-700">
+                    ${row.spot.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </td>
+                  <td className="px-3 py-3.5 text-right font-mono text-sm font-semibold text-slate-800">
+                    ${row.consumerRate.toFixed(4)}
+                  </td>
+                  <td className="px-3 py-3.5 text-right">
+                    <span className={`text-sm font-bold ${
+                      row.marginPct >= 20 ? 'text-emerald-600'
+                      : row.marginPct >= 15 ? 'text-amber-600'
+                      : 'text-red-600'
+                    }`}>
+                      {row.marginPct.toFixed(2)}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-3.5 text-right text-sm text-slate-600 hidden md:table-cell font-mono">
+                    {row.volumeKg.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-3.5 text-right text-sm text-slate-700 hidden md:table-cell font-mono">
+                    {fmtAud(row.grossAud)}
+                  </td>
+                  <td className="px-3 py-3.5 text-right text-sm hidden lg:table-cell font-mono">
+                    <span className={row.marginAud >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
+                      {row.marginAud >= 0 ? '+' : ''}{fmtAud(row.marginAud)}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-center">
+                    <RiskBadge flag={row.riskFlag} />
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {bookComparison.map(row => (
-                  <tr key={row.device} className={row.has_override ? 'bg-violet-50/30' : ''}>
-                    <td className="px-5 py-3.5">
-                      <p className="text-sm font-semibold text-slate-900">{row.label}</p>
-                      {row.has_override && <span className="text-[10px] font-semibold text-violet-600">Override: {row.override_id}</span>}
-                    </td>
-                    <td className="px-3 py-3.5 text-right text-sm text-slate-500">${row.ai_pure.toFixed(2)}</td>
-                    <td className="px-3 py-3.5 text-right">
-                      <p className={`text-sm font-bold ${row.diff > 0 ? 'text-eco-700' : row.diff < 0 ? 'text-red-600' : 'text-slate-700'}`}>
-                        ${row.live_offer.toFixed(2)}
-                      </p>
-                    </td>
-                    <td className="px-3 py-3.5 text-right">
-                      {row.diff !== 0 ? (
-                        <div>
-                          <p className={`text-xs font-bold ${row.diff > 0 ? 'text-eco-700' : 'text-red-600'}`}>
-                            {row.diff > 0 ? '+' : ''}${row.diff.toFixed(2)}
-                          </p>
-                          <p className={`text-[10px] ${row.diff > 0 ? 'text-eco-600' : 'text-red-500'}`}>
-                            {row.diff_pct > 0 ? '+' : ''}{row.diff_pct.toFixed(1)}%
-                          </p>
-                        </div>
-                      ) : <span className="text-xs text-slate-400">—</span>}
-                    </td>
-                    <td className="px-3 py-3.5 hidden md:table-cell">
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${row.has_override ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-400'}`}>
-                        {row.has_override ? 'Overridden' : 'AI Only'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-center">
-                      <div className="flex justify-center"><TrendIcon pct={row.diff_pct} /></div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-3 border-t border-slate-50 bg-slate-50">
-            <p className="text-[11px] text-slate-400">
-              Baseline: BK-0086 (pure AI, no overrides, no campaigns) · Live: BK-0088 (with {activeOverrides.length} overrides + Copper Week campaign)
-            </p>
-          </div>
+              )) : (
+                <tr>
+                  <td colSpan={8} className="px-5 py-8 text-center text-slate-400 text-sm">Loading market data…</td>
+                </tr>
+              )}
+            </tbody>
+            {summary && (
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50">
+                  <td className="px-5 py-3 text-sm font-bold text-slate-700">Totals</td>
+                  <td colSpan={3} />
+                  <td className="px-3 py-3 text-right text-sm font-bold text-slate-700 hidden md:table-cell font-mono">
+                    {Object.values(summary.rows).reduce((a, r) => a + r.volumeKg, 0).toLocaleString()} kg
+                  </td>
+                  <td className="px-3 py-3 text-right text-sm font-bold text-violet-700 hidden md:table-cell font-mono">
+                    {fmtAud(summary.totalNotionalAud)}
+                  </td>
+                  <td className="px-3 py-3 text-right text-sm font-bold hidden lg:table-cell font-mono">
+                    <span className={summary.totalMarginAud >= 0 ? 'text-emerald-700' : 'text-red-700'}>
+                      {summary.totalMarginAud >= 0 ? '+' : ''}{fmtAud(summary.totalMarginAud)}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-center text-[11px] text-slate-500 font-semibold">
+                    {summary.atRiskCount} at risk
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
         </div>
-      )}
+      </div>
 
-      {view === 'volatility' && (
-        <div className="space-y-4">
-          {/* Open alerts */}
-          {openAlerts.length > 0 && (
-            <div className="space-y-2">
-              <h2 className="text-sm font-bold text-red-600 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" /> Open Alerts Requiring Action
-              </h2>
-              {openAlerts.map(a => (
-                <div key={a.id} className="flex items-start gap-3 border border-red-200 bg-red-50 rounded-2xl px-4 py-3.5">
-                  <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-1.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-red-900">{a.headline}</p>
-                    <p className="text-xs text-red-700 mt-0.5">{a.recommendation}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {a.affected_devices.map(d => (
-                        <span key={d} className="text-[10px] font-semibold px-1.5 py-0.5 bg-red-100 text-red-700 rounded">{DEVICE_LABELS[d]}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-1 bg-red-200 text-red-800 rounded-full flex-shrink-0 uppercase">{a.action_required.replace('_', ' ')}</span>
-                </div>
-              ))}
+      {/* ── Sparklines ── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-50">
+          <h2 className="font-bold text-slate-900">Margin Sparklines — Last 30 Price Points</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Intraday price history per material · Green = up, Red = down</p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 divide-x divide-y divide-slate-50">
+          {summary ? summary.rows.map(row => (
+            <div key={row.material} className="px-4 py-4 flex flex-col items-center gap-2">
+              <p className="text-[11px] font-bold text-slate-700 text-center leading-tight">{row.label}</p>
+              <Sparkline material={row.material} />
+              <p className="text-[10px] font-mono text-slate-500">
+                ${row.spot.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </p>
             </div>
+          )) : (
+            <div className="col-span-7 px-5 py-6 text-center text-slate-400 text-sm">Loading…</div>
           )}
+        </div>
+      </div>
 
-          {/* Metal volatility grid */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-            <div className="px-5 py-4 border-b border-slate-50">
-              <h2 className="font-bold text-slate-900">Metal Volatility Risk</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Based on 7-day price movements vs thresholds</p>
-            </div>
-            <div className="divide-y divide-slate-50">
-              {metals.map(m => {
-                const comm = COMMODITIES[m]
-                if (!comm) return null
-                const alert = VOLATILITY_ALERTS.find(a => a.metal === m)
-                return (
-                  <div key={m} className="px-5 py-4">
-                    <div className="flex items-center justify-between gap-4 mb-2">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-slate-800 capitalize w-20">{m}</span>
-                        <span className="text-xs text-slate-400">{comm.exchange} · {comm.unit}</span>
-                        {alert && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                            alert.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                            alert.severity === 'high' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
-                          }`}>{alert.severity}</span>
-                        )}
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className={`text-sm font-bold ${comm.change_7d_pct >= 0 ? 'text-eco-600' : 'text-red-500'}`}>
-                          {comm.change_7d_pct > 0 ? '+' : ''}{comm.change_7d_pct.toFixed(2)}% 7d
-                        </p>
-                        <p className="text-[11px] text-slate-400">${comm.spot_usd.toLocaleString()} {comm.unit}</p>
-                      </div>
-                    </div>
-                    <VolatilityRisk metal={m} />
-                  </div>
-                )
-              })}
-            </div>
+      {/* ── Active Overrides Panel ── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-violet-600" />
+              Active Rate Overrides
+              {activeOverrideEntries.length > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full ml-1">
+                  {activeOverrideEntries.length}
+                </span>
+              )}
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Manual rate overrides currently applied to the pricing engine</p>
           </div>
         </div>
-      )}
+        {activeOverrideEntries.length === 0 ? (
+          <div className="px-5 py-10 text-center">
+            <Shield className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+            <p className="text-sm text-slate-400 font-semibold">No active overrides</p>
+            <p className="text-xs text-slate-300 mt-1">All materials are using market-derived rates</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-50">
+            {activeOverrideEntries.map(([material, ov]) => {
+              const row = summary?.rows.find(r => r.material === material)
+              return (
+                <div key={material} className="px-5 py-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-2 h-2 bg-violet-500 rounded-full flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">{row?.label ?? material}</p>
+                      <p className="text-[10px] font-mono text-slate-400">{material}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6 text-right flex-shrink-0">
+                    <div>
+                      <p className="text-sm font-bold text-violet-700 font-mono">${ov.ratePerKg.toFixed(4)}/kg</p>
+                      <p className="text-[10px] text-slate-400">Override rate</p>
+                    </div>
+                    <div className="hidden sm:block">
+                      <p className="text-xs font-semibold text-slate-700">{ov.actor}</p>
+                      <p className="text-[10px] text-slate-400">Set by</p>
+                    </div>
+                    <div className="hidden md:block">
+                      <p className="text-xs font-mono text-slate-500">
+                        {new Date(ov.appliedAt).toLocaleTimeString('en-AU')}
+                      </p>
+                      <p className="text-[10px] text-slate-400">Applied at</p>
+                    </div>
+                    <button
+                      onClick={() => handleClearOverride(material)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg transition-colors border border-red-100"
+                    >
+                      <X className="w-3 h-3" />
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div className="px-5 py-3 border-t border-slate-50 bg-slate-50">
+          <p className="text-[11px] text-slate-400">
+            Clearing an override returns the material to market-derived consumer rates.
+            Override actions are written to the audit log.
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
