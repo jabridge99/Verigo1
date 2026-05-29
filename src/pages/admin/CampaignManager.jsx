@@ -1,9 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Megaphone, CheckCircle, Clock, X, Play, Calendar,
   TrendingUp, BarChart2, AlertTriangle,
 } from 'lucide-react'
 import { CAMPAIGNS, ROLES_CONFIG } from '../../data/override'
+import { queue, JOB_TYPES } from '../../lib/queue'
+import { ledger } from '../../lib/ledger'
+import { marketFeed, COMMODITIES } from '../../lib/marketFeed'
 
 const STATUS_STYLE = {
   active:           { badge: 'bg-eco-100 text-eco-700',     card: 'border-eco-200' },
@@ -40,7 +43,7 @@ const TEMPLATE_OPTIONS = [
   },
 ]
 
-function CreateCampaignModal({ onClose }) {
+function CreateCampaignModal({ onClose, onSubmit }) {
   const [step, setStep] = useState(1)
   const [template, setTemplate] = useState(null)
   const [name, setName] = useState('')
@@ -178,7 +181,7 @@ function CreateCampaignModal({ onClose }) {
                   className="flex-1 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
                   Continue
                 </button>
-              : <button onClick={onClose}
+              : <button onClick={() => { onSubmit?.({ name, template, uplift, description, startDate, endDate }); onClose() }}
                   className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
                   <Play className="w-3.5 h-3.5" /> Submit for Approval
                 </button>
@@ -193,6 +196,30 @@ function CreateCampaignModal({ onClose }) {
 export default function CampaignManager() {
   const [showCreate, setShowCreate] = useState(false)
   const [currentRole, setCurrentRole] = useState('commercial_director')
+  const [queueStatus, setQueueStatus] = useState(null)
+  const [float, setFloat] = useState(null)
+  const [liveRates, setLiveRates] = useState({})
+
+  useEffect(() => {
+    marketFeed.start()
+    const unsub = marketFeed.subscribe(null, r => setLiveRates(prev => ({ ...prev, [r.material]: r })))
+    const id = setInterval(() => {
+      setQueueStatus(queue.status())
+      try { setFloat(ledger.balance('float_reserve')) } catch { /* not seeded yet */ }
+    }, 3000)
+    setQueueStatus(queue.status())
+    try { setFloat(ledger.balance('float_reserve')) } catch { /* not seeded yet */ }
+    return () => { unsub(); clearInterval(id); marketFeed.stop() }
+  }, [])
+
+  const handleSubmitCampaign = ({ name, template, uplift }) => {
+    queue.enqueue(JOB_TYPES.WEBHOOK_DISPATCH, {
+      entityId: `CAMP-${Date.now()}`,
+      payload: { name, template, uplift, submittedBy: currentRole },
+    })
+    setQueueStatus(queue.status())
+  }
+
   const roleConfig = ROLES_CONFIG[currentRole]
   const canCreate = roleConfig.can.includes('create_campaign')
 
@@ -221,6 +248,39 @@ export default function CampaignManager() {
           )}
         </div>
       </div>
+
+      {/* Live platform status */}
+      {(queueStatus != null || float != null || Object.keys(liveRates).length > 0) && (
+        <div className="flex flex-wrap items-center gap-3">
+          {queueStatus != null && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl">
+              <div className="w-2 h-2 bg-eco-400 rounded-full animate-pulse" />
+              <span className="text-xs font-semibold text-slate-700">Queue:</span>
+              <span className="text-xs text-amber-600 font-bold">{queueStatus.pending} pending</span>
+              <span className="text-xs text-violet-600 font-bold">{queueStatus.processing} processing</span>
+            </div>
+          )}
+          {float != null && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-eco-50 border border-eco-100 rounded-xl">
+              <span className="text-xs font-semibold text-slate-700">Float Reserve:</span>
+              <span className="text-xs font-bold text-eco-700">${float.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          )}
+          {Object.keys(liveRates).length > 0 && (
+            <div className="flex items-center gap-3 px-3 py-1.5 bg-slate-900 rounded-xl">
+              <div className="w-2 h-2 bg-eco-400 rounded-full animate-pulse" />
+              {Object.entries(liveRates).slice(0, 4).map(([k, r]) => {
+                const mat = COMMODITIES[k]
+                return mat ? (
+                  <span key={k} className="text-[10px] text-slate-300 font-semibold">
+                    {mat.label} <span className="text-eco-400">${r.spot?.toFixed(2)}</span>
+                  </span>
+                ) : null
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KPI */}
       <div className="grid grid-cols-4 gap-3">
@@ -285,6 +345,20 @@ export default function CampaignManager() {
                       </span>
                     ))}
                   </div>
+                  {cam.status === 'active' && Object.keys(liveRates).length > 0 && (
+                    <div className="px-5 pb-3 flex items-center gap-3 border-t border-slate-50 pt-2">
+                      <div className="w-2 h-2 bg-eco-400 rounded-full animate-pulse flex-shrink-0" />
+                      <span className="text-[10px] text-slate-400 font-semibold">Live market:</span>
+                      {Object.entries(liveRates).slice(0, 4).map(([k, r]) => {
+                        const mat = COMMODITIES[k]
+                        return mat ? (
+                          <span key={k} className="text-[10px] text-slate-600 font-semibold">
+                            {mat.label} <span className="text-eco-600 font-bold">${r.spot?.toFixed(2)}</span>
+                          </span>
+                        ) : null
+                      })}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -292,7 +366,12 @@ export default function CampaignManager() {
         </div>
       ))}
 
-      {showCreate && <CreateCampaignModal onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateCampaignModal
+          onClose={() => setShowCreate(false)}
+          onSubmit={handleSubmitCampaign}
+        />
+      )}
     </div>
   )
 }

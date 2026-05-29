@@ -1,6 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { GitBranch, CheckCircle, XCircle, Clock, TrendingUp, TrendingDown, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { AB_TESTS, SHADOW_MODELS } from '../../data/shadowLab'
+import { pricingEngine } from '../../lib/pricingEngine'
+import { marketFeed, COMMODITIES } from '../../lib/marketFeed'
+import { queue, JOB_TYPES } from '../../lib/queue'
 
 const STATUS_META = {
   active:    { label: 'Active',    color: 'bg-eco-100 text-eco-700',     dot: 'bg-eco-500 animate-pulse' },
@@ -46,12 +49,15 @@ function MetricDelta({ control, variant, label, invert = false, fmt = v => v.toF
   )
 }
 
-function TestCard({ test }) {
+function TestCard({ test, liveExp }) {
   const [expanded, setExpanded] = useState(false)
   const statusMeta = STATUS_META[test.status]
   const decisionMeta = test.decision ? DECISION_META[test.decision] : null
   const model = SHADOW_MODELS.find(m => m.id === test.variant_model)
   const revDelta = ((test.variant_metrics.revenue_aud - test.control_metrics.revenue_aud) / test.control_metrics.revenue_aud * 100)
+
+  const liveControlMargin = (test.status === 'active' && liveExp) ? liveExp.weightedMarginPct : null
+  const controlMargin = liveControlMargin ?? test.control_metrics.margin_pct
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -77,8 +83,8 @@ function TestCard({ test }) {
 
             {/* Quick metrics row */}
             <div className="grid grid-cols-4 gap-3 mt-3">
-              <MetricDelta control={test.control_metrics.margin_pct} variant={test.variant_metrics.margin_pct}
-                label="Margin %" fmt={v => v.toFixed(1) + '%'} />
+              <MetricDelta control={controlMargin} variant={test.variant_metrics.margin_pct}
+                label={liveControlMargin != null ? "Margin % (live ctrl)" : "Margin %"} fmt={v => v.toFixed(1) + '%'} />
               <MetricDelta control={test.control_metrics.volume_units} variant={test.variant_metrics.volume_units}
                 label="Volume" fmt={v => v.toLocaleString()} />
               <MetricDelta control={test.control_metrics.fraud_rate_pct} variant={test.variant_metrics.fraud_rate_pct}
@@ -109,7 +115,12 @@ function TestCard({ test }) {
             <div>
               <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Control (Production)</p>
               <p className="font-bold text-slate-700">MDL-001 — AI Default</p>
-              <p className="text-slate-500 mt-1">Revenue: ${test.control_metrics.revenue_aud.toLocaleString()}</p>
+              <p className="text-slate-500 mt-1">
+                {liveControlMargin != null
+                  ? <span className="text-eco-600 font-semibold">Live margin: {liveControlMargin.toFixed(1)}%</span>
+                  : `Revenue: $${test.control_metrics.revenue_aud.toLocaleString()}`
+                }
+              </p>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Variant (Shadow)</p>
@@ -144,10 +155,14 @@ function TestCard({ test }) {
           {/* Actions */}
           {test.status === 'active' && (
             <div className="flex gap-2">
-              <button className="flex-1 text-xs font-bold py-2 bg-eco-600 text-white rounded-xl hover:bg-eco-700 transition-colors">
+              <button
+                onClick={() => queue.enqueue(JOB_TYPES.PRICING_RECALCULATE, { testId: test.id, variantModel: test.variant_model, action: 'promote' })}
+                className="flex-1 text-xs font-bold py-2 bg-eco-600 text-white rounded-xl hover:bg-eco-700 transition-colors">
                 Promote Variant to Rollout
               </button>
-              <button className="text-xs font-bold px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors">
+              <button
+                onClick={() => queue.enqueue(JOB_TYPES.PRICING_RECALCULATE, { testId: test.id, action: 'end' })}
+                className="text-xs font-bold px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors">
                 End Test
               </button>
             </div>
@@ -160,6 +175,19 @@ function TestCard({ test }) {
 
 export default function ABPricingTests() {
   const [filter, setFilter] = useState('all')
+  const [liveExp, setLiveExp] = useState(null)
+  const [liveRates, setLiveRates] = useState({})
+  const [queueStatus, setQueueStatus] = useState(null)
+
+  useEffect(() => {
+    pricingEngine.start()
+    marketFeed.start()
+    const unsubP = pricingEngine.subscribe(s => setLiveExp(s))
+    const unsubM = marketFeed.subscribe(null, r => setLiveRates(prev => ({ ...prev, [r.material]: r })))
+    const id = setInterval(() => setQueueStatus(queue.status()), 3000)
+    setQueueStatus(queue.status())
+    return () => { unsubP(); unsubM(); clearInterval(id); pricingEngine.stop(); marketFeed.stop() }
+  }, [])
 
   const filtered = filter === 'all' ? AB_TESTS : AB_TESTS.filter(t => t.status === filter)
 
@@ -185,6 +213,43 @@ export default function ABPricingTests() {
         ))}
       </div>
 
+      {/* Live platform context strip */}
+      {(liveExp || Object.keys(liveRates).length > 0) && (
+        <div className="bg-slate-900 rounded-2xl px-5 py-3 flex items-center gap-5 overflow-x-auto">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-2 h-2 bg-eco-400 rounded-full animate-pulse" />
+            <span className="text-[10px] font-bold text-eco-400 uppercase tracking-wide">Live Platform</span>
+          </div>
+          {liveExp && (
+            <>
+              <div className="flex-shrink-0 text-center">
+                <p className="text-[10px] text-slate-400">Prod Margin</p>
+                <p className="text-xs font-bold text-white">{liveExp.weightedMarginPct?.toFixed(1) ?? '—'}%</p>
+              </div>
+              <div className="flex-shrink-0 text-center">
+                <p className="text-[10px] text-slate-400">At-Risk Items</p>
+                <p className="text-xs font-bold text-amber-400">{liveExp.atRiskCount ?? '—'}</p>
+              </div>
+              <div className="flex-shrink-0 text-center">
+                <p className="text-[10px] text-slate-400">Notional AUD</p>
+                <p className="text-xs font-bold text-white">${liveExp.totalNotionalAud != null ? (liveExp.totalNotionalAud / 1000).toFixed(0) + 'k' : '—'}</p>
+              </div>
+            </>
+          )}
+          {Object.entries(liveRates).slice(0, 4).map(([k, r]) => {
+            const mat = COMMODITIES[k]
+            if (!mat) return null
+            return (
+              <div key={k} className="flex-shrink-0 text-center border-l border-slate-700 pl-4">
+                <p className="text-[10px] text-slate-400">{mat.label}</p>
+                <p className="text-xs font-bold text-white">${r.spot?.toFixed(2) ?? '—'}</p>
+                <p className="text-[10px] text-eco-400">${r.consumer_rate?.toFixed(2) ?? '—'} paid</p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Filter tabs */}
       <div className="flex gap-2 border-b border-slate-100">
         {[
@@ -201,7 +266,7 @@ export default function ABPricingTests() {
 
       {/* Test cards */}
       <div className="space-y-4">
-        {filtered.map(t => <TestCard key={t.id} test={t} />)}
+        {filtered.map(t => <TestCard key={t.id} test={t} liveExp={liveExp} />)}
       </div>
     </div>
   )

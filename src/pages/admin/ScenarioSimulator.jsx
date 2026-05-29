@@ -1,6 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { FlaskConical, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { SHADOW_MODELS, PERFORMANCE_METRICS } from '../../data/shadowLab'
+import { pricingEngine } from '../../lib/pricingEngine'
+import { marketFeed, COMMODITIES } from '../../lib/marketFeed'
 
 const PERIODS = ['7d', '30d', '90d', '180d']
 const PERIOD_LABELS = { '7d': '7 Days', '30d': '30 Days', '90d': '90 Days', '180d': '180 Days' }
@@ -57,6 +59,16 @@ export default function ScenarioSimulator() {
   const [period, setPeriod] = useState('30d')
   const [selectedModels, setSelectedModels] = useState(['MDL-001', 'MDL-002', 'MDL-003', 'MDL-005'])
   const [highlightMetric, setHighlightMetric] = useState('revenue_aud')
+  const [liveExp, setLiveExp] = useState(null)
+  const [liveRates, setLiveRates] = useState({})
+
+  useEffect(() => {
+    pricingEngine.start()
+    marketFeed.start()
+    const unsubP = pricingEngine.subscribe(s => setLiveExp(s))
+    const unsubM = marketFeed.subscribe(null, r => setLiveRates(prev => ({ ...prev, [r.material]: r })))
+    return () => { unsubP(); unsubM(); pricingEngine.stop(); marketFeed.stop() }
+  }, [])
 
   const toggleModel = id => {
     setSelectedModels(prev =>
@@ -66,10 +78,20 @@ export default function ScenarioSimulator() {
 
   const visibleModels = SHADOW_MODELS.filter(m => selectedModels.includes(m.id))
 
+  const getPerfMetrics = (modelId, p) => {
+    const base = PERFORMANCE_METRICS[modelId][p]
+    if (modelId !== 'MDL-001' || !liveExp) return base
+    return {
+      ...base,
+      margin_pct: liveExp.weightedMarginPct ?? base.margin_pct,
+      revenue_aud: liveExp.totalMarginAud != null ? Math.round(liveExp.totalMarginAud * 52) : base.revenue_aud,
+    }
+  }
+
   // Winners per metric
   const winners = {}
   METRICS_CONFIG.forEach(({ key, higherIsBetter }) => {
-    const vals = visibleModels.map(m => ({ id: m.id, v: PERFORMANCE_METRICS[m.id][period][key] }))
+    const vals = visibleModels.map(m => ({ id: m.id, v: getPerfMetrics(m.id, period)[key] }))
     const winner = vals.reduce((best, cur) => {
       return higherIsBetter ? (cur.v > best.v ? cur : best) : (cur.v < best.v ? cur : best)
     }, vals[0])
@@ -77,12 +99,19 @@ export default function ScenarioSimulator() {
   })
 
   // Trend data (across all periods for sparkline)
-  const sparkData = id => PERIODS.map(p => PERFORMANCE_METRICS[id][p][highlightMetric])
+  const sparkData = id => PERIODS.map(p => {
+    const base = PERFORMANCE_METRICS[id][p][highlightMetric]
+    if (id === 'MDL-001' && liveExp) {
+      if (highlightMetric === 'margin_pct') return liveExp.weightedMarginPct ?? base
+      if (highlightMetric === 'revenue_aud') return liveExp.totalMarginAud != null ? Math.round(liveExp.totalMarginAud * 52) : base
+    }
+    return base
+  })
 
   // Max values for bar scaling
   const maxVals = {}
   METRICS_CONFIG.forEach(({ key }) => {
-    maxVals[key] = Math.max(...SHADOW_MODELS.map(m => PERFORMANCE_METRICS[m.id][period][key]))
+    maxVals[key] = Math.max(...SHADOW_MODELS.map(m => getPerfMetrics(m.id, period)[key]))
   })
 
   const highlightCfg = METRICS_CONFIG.find(m => m.key === highlightMetric)
@@ -104,6 +133,33 @@ export default function ScenarioSimulator() {
         ))}
       </div>
 
+      {/* Live market context strip */}
+      {Object.keys(liveRates).length > 0 && (
+        <div className="bg-slate-900 rounded-2xl px-5 py-3 flex items-center gap-5 overflow-x-auto">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-2 h-2 bg-eco-400 rounded-full animate-pulse" />
+            <span className="text-[10px] font-bold text-eco-400 uppercase tracking-wide">Live Spot Rates</span>
+          </div>
+          {Object.entries(liveRates).map(([k, r]) => {
+            const mat = COMMODITIES[k]
+            if (!mat) return null
+            return (
+              <div key={k} className="flex-shrink-0 text-center">
+                <p className="text-[10px] text-slate-400">{mat.label}</p>
+                <p className="text-xs font-bold text-white">${r.spot?.toFixed(2) ?? '—'}/{mat.unit}</p>
+                <p className="text-[10px] text-eco-400">${r.consumer_rate?.toFixed(2) ?? '—'} paid</p>
+              </div>
+            )
+          })}
+          {liveExp && (
+            <div className="ml-auto flex-shrink-0 border-l border-slate-700 pl-4">
+              <p className="text-[10px] text-slate-400">Prod Margin</p>
+              <p className="text-xs font-bold text-eco-400">{liveExp.weightedMarginPct?.toFixed(1) ?? '—'}%</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Model toggles */}
       <div className="flex flex-wrap gap-2 items-center">
         <span className="text-xs font-semibold text-slate-500">Compare:</span>
@@ -117,6 +173,7 @@ export default function ScenarioSimulator() {
               }`}>
               <div className={`w-2 h-2 rounded-full ${active ? colors.dot : 'bg-slate-300'}`} />
               {m.name}
+              {m.id === 'MDL-001' && liveExp && <span className="text-[9px] text-eco-600 font-bold">LIVE</span>}
               {m.status === 'production' && <span className="text-[9px] bg-eco-100 text-eco-600 font-bold px-1 rounded">PROD</span>}
             </button>
           )
@@ -147,7 +204,7 @@ export default function ScenarioSimulator() {
                 <div className="flex-1">
                   <p className="text-[11px] font-bold text-white mb-0.5">{m.name}</p>
                   <p className={`text-xs font-mono ${colors.text.replace('text-', 'text-')}`}>
-                    {highlightCfg?.fmt(PERFORMANCE_METRICS[m.id][period][highlightMetric])}
+                    {highlightCfg?.fmt(getPerfMetrics(m.id, period)[highlightMetric])}
                   </p>
                 </div>
                 <Sparkline values={vals} color={sparkColor} />
@@ -188,9 +245,9 @@ export default function ScenarioSimulator() {
                       <p className="text-[10px] text-slate-400">{higherIsBetter ? 'Higher is better' : 'Lower is better'}</p>
                     </td>
                     {visibleModels.map(m => {
-                      const value = PERFORMANCE_METRICS[m.id][period][key]
+                      const value = getPerfMetrics(m.id, period)[key]
                       const isWinner = winners[key] === m.id
-                      const prodValue = PERFORMANCE_METRICS['MDL-001'][period][key]
+                      const prodValue = getPerfMetrics('MDL-001', period)[key]
                       const delta = ((value - prodValue) / prodValue * 100)
                       const deltaPositive = higherIsBetter ? delta > 0 : delta < 0
                       return (
@@ -246,7 +303,7 @@ export default function ScenarioSimulator() {
         </div>
         <div className="px-5 py-4 space-y-3">
           {visibleModels.map(m => {
-            const met = PERFORMANCE_METRICS[m.id][period]
+            const met = getPerfMetrics(m.id, period)
             const low = met.margin_pct - met.ci_margin
             const high = met.margin_pct + met.ci_margin
             const colors = MODEL_COLORS[m.id]

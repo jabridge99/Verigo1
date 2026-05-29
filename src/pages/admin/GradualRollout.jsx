@@ -1,6 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Zap, CheckCircle, XCircle, AlertTriangle, RotateCcw, ChevronRight, Clock, Shield } from 'lucide-react'
 import { ACTIVE_ROLLOUT, ROLLOUT_STAGES, ROLLOUT_HEALTH_GATES, ROLLOUT_HISTORY, SHADOW_MODELS } from '../../data/shadowLab'
+import { pricingEngine } from '../../lib/pricingEngine'
+import { fraudEngine } from '../../lib/fraudEngine'
+import { queue, JOB_TYPES } from '../../lib/queue'
 
 const GATE_META = {
   margin:    { label: 'Margin floor',   floor_key: 'margin_floor_pct',       fmt: v => v.toFixed(1) + '%',   metric_key: 'margin_pct',      higherNeeded: true },
@@ -79,9 +82,45 @@ function RollbackModal({ onClose, modelName }) {
 
 export default function GradualRollout() {
   const [showRollback, setShowRollback] = useState(false)
+  const [liveMarginPct, setLiveMarginPct] = useState(null)
+  const [fraudAlerts, setFraudAlerts] = useState(0)
+  const [queueStatus, setQueueStatus] = useState(null)
+
+  useEffect(() => {
+    pricingEngine.start()
+    const unsub = pricingEngine.subscribe(s => setLiveMarginPct(s.weightedMarginPct ?? null))
+    return () => { unsub(); pricingEngine.stop() }
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      setFraudAlerts(fraudEngine.getAllAlerts(50).length)
+      setQueueStatus(queue.status())
+    }
+    refresh()
+    const id = setInterval(refresh, 5000)
+    return () => clearInterval(id)
+  }, [])
+
   const model = SHADOW_MODELS.find(m => m.id === ACTIVE_ROLLOUT.model_id)
   const currentStage = ROLLOUT_STAGES[ACTIVE_ROLLOUT.current_stage - 1]
   const nextStage = ROLLOUT_STAGES[ACTIVE_ROLLOUT.current_stage] || null
+
+  const liveMetrics = {
+    margin_pct: liveMarginPct ?? ACTIVE_ROLLOUT.current_metrics.margin_pct,
+    fraud_rate_pct: ACTIVE_ROLLOUT.current_metrics.fraud_rate_pct,
+    volume_units: ACTIVE_ROLLOUT.current_metrics.volume_units,
+    logistics_load: ACTIVE_ROLLOUT.current_metrics.logistics_load,
+  }
+
+  const liveGateStatus = {
+    margin: liveMarginPct != null
+      ? (liveMarginPct >= ROLLOUT_HEALTH_GATES.margin_floor_pct ? 'pass' : 'fail')
+      : ACTIVE_ROLLOUT.gate_status.margin,
+    fraud: ACTIVE_ROLLOUT.gate_status.fraud,
+    volume: ACTIVE_ROLLOUT.gate_status.volume,
+    logistics: ACTIVE_ROLLOUT.gate_status.logistics,
+  }
 
   return (
     <div className="space-y-6">
@@ -169,30 +208,35 @@ export default function GradualRollout() {
             <div className="flex items-center gap-2 mb-3">
               <Shield className="w-4 h-4 text-slate-400" />
               <p className="text-xs font-bold text-slate-600">Health Gates</p>
-              <span className="text-[10px] font-semibold px-2 py-0.5 bg-eco-100 text-eco-700 rounded-full">All passing</span>
+              {Object.values(liveGateStatus).every(s => s === 'pass')
+                ? <span className="text-[10px] font-semibold px-2 py-0.5 bg-eco-100 text-eco-700 rounded-full">All passing</span>
+                : <span className="text-[10px] font-semibold px-2 py-0.5 bg-red-100 text-red-700 rounded-full">Gates failing</span>
+              }
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <GateIndicator gate="margin" status={ACTIVE_ROLLOUT.gate_status.margin}
-                current={ACTIVE_ROLLOUT.current_metrics.margin_pct}
+              <GateIndicator gate="margin" status={liveGateStatus.margin}
+                current={liveMetrics.margin_pct}
                 limit={ROLLOUT_HEALTH_GATES.margin_floor_pct}
                 higherNeeded={true} fmt={v => v.toFixed(1) + '%'} />
-              <GateIndicator gate="fraud" status={ACTIVE_ROLLOUT.gate_status.fraud}
-                current={ACTIVE_ROLLOUT.current_metrics.fraud_rate_pct}
+              <GateIndicator gate="fraud" status={liveGateStatus.fraud}
+                current={liveMetrics.fraud_rate_pct}
                 limit={ROLLOUT_HEALTH_GATES.fraud_ceiling_pct}
                 higherNeeded={false} fmt={v => v.toFixed(2) + '%'} />
-              <GateIndicator gate="volume" status={ACTIVE_ROLLOUT.gate_status.volume}
-                current={ACTIVE_ROLLOUT.current_metrics.volume_units}
+              <GateIndicator gate="volume" status={liveGateStatus.volume}
+                current={liveMetrics.volume_units}
                 limit={ROLLOUT_HEALTH_GATES.volume_floor_units_wk}
                 higherNeeded={true} fmt={v => v.toLocaleString()} />
-              <GateIndicator gate="logistics" status={ACTIVE_ROLLOUT.gate_status.logistics}
-                current={ACTIVE_ROLLOUT.current_metrics.logistics_load}
+              <GateIndicator gate="logistics" status={liveGateStatus.logistics}
+                current={liveMetrics.logistics_load}
                 limit={ROLLOUT_HEALTH_GATES.logistics_ceiling_load}
                 higherNeeded={false} fmt={v => v.toFixed(1)} />
             </div>
           </div>
 
           <div className="flex gap-3 mt-4">
-            <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 transition-colors">
+            <button
+              onClick={() => queue.enqueue(JOB_TYPES.PRICING_RECALCULATE, { modelId: ACTIVE_ROLLOUT.model_id, stage: ACTIVE_ROLLOUT.current_stage + 1 })}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 transition-colors">
               <ChevronRight className="w-4 h-4" />
               Advance to Stage {ACTIVE_ROLLOUT.current_stage + 1} ({nextStage?.allocation_pct}%)
             </button>
@@ -244,6 +288,41 @@ export default function GradualRollout() {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Live Job Queue */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
+          <h2 className="font-bold text-slate-900">Live Job Queue</h2>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 bg-eco-400 rounded-full animate-pulse" />
+            <span className="text-[10px] font-bold text-eco-500 uppercase">Live</span>
+          </div>
+        </div>
+        <div className="px-5 py-4">
+          {queueStatus ? (
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: 'Pending', value: queueStatus.pending, color: 'text-amber-600', bg: 'bg-amber-50' },
+                { label: 'Processing', value: queueStatus.processing, color: 'text-violet-600', bg: 'bg-violet-50' },
+                { label: 'Dead Letter', value: queueStatus.deadLetter, color: 'text-red-600', bg: 'bg-red-50' },
+              ].map(s => (
+                <div key={s.label} className={`${s.bg} rounded-xl px-4 py-3 text-center`}>
+                  <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Loading queue status…</p>
+          )}
+          {fraudAlerts > 0 && (
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-xl">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <p className="text-xs text-red-700 font-semibold">{fraudAlerts} high-risk fraud alert{fraudAlerts !== 1 ? 's' : ''} active — review before advancing</p>
+            </div>
+          )}
         </div>
       </div>
 
