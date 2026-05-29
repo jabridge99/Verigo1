@@ -87,7 +87,7 @@ export default function ExposureDashboard() {
       setUpdatedAt(new Date())
       setOverrides(pricingEngine.getOverrides())
     })
-    return unsub
+    return () => { unsub(); pricingEngine.stop() }
   }, [])
 
   const handleClearOverride = (material) => {

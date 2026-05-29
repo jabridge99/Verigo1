@@ -27,23 +27,27 @@ describe('computeExposure()', () => {
   it('computes correctly for a normal aluminium case', () => {
     // aluminium: PLATFORM_MARGIN = 0.15, spot = 2000 AUD/t
     // spotPerKg = 2.0, consumerRate = 2.0 * (1 - 0.15) = 1.7
-    // grossAud = 1.7 * 1000 = 1700, costAud = 2.0 * 1000 = 2000
-    // marginAud = 1700 - 2000 = -300, marginPct ≈ -17.65%
+    // grossAud (revenue from scrap) = 2.0 * 1000 = 2000
+    // netAud (cost paid to consumers) = 1.7 * 1000 = 1700
+    // marginAud = 2000 - 1700 = 300, marginPct = 300/2000 * 100 = 15%
     const result = computeExposure('aluminium', 2000, 1000)
     expect(result.consumerRate).toBeCloseTo(1.7, 3)
-    expect(result.grossAud).toBeCloseTo(1700, 1)
-    expect(result.netAud).toBeCloseTo(2000, 1)
-    expect(result.marginAud).toBeCloseTo(-300, 1)
-    expect(result.marginPct).toBeLessThan(0)
-    // margin is below 15% → riskFlag should be true
-    expect(result.riskFlag).toBe(true)
+    expect(result.grossAud).toBeCloseTo(2000, 1)
+    expect(result.netAud).toBeCloseTo(1700, 1)
+    expect(result.marginAud).toBeCloseTo(300, 1)
+    expect(result.marginPct).toBeCloseTo(15, 0)
+    // marginPct = 15 is NOT < 15, consumerRate 1.7 is NOT > spotPerKg 2.0 → no risk
+    expect(result.riskFlag).toBe(false)
   })
 
   it('uses overrideRatePerKg when provided', () => {
     const overrideRate = 3.0
     const result = computeExposure('aluminium', 2000, 1000, overrideRate)
     expect(result.consumerRate).toBe(overrideRate)
-    expect(result.grossAud).toBeCloseTo(3000, 1)
+    // grossAud is always revenue from scrap (spotPerKg × vol), not affected by override
+    expect(result.grossAud).toBeCloseTo(2000, 1)
+    // netAud is cost paid to consumers (overrideRate × vol)
+    expect(result.netAud).toBeCloseTo(3000, 1)
   })
 
   it('sets riskFlag when override rate is above spot/kg (platform loses money)', () => {
@@ -59,23 +63,13 @@ describe('computeExposure()', () => {
   })
 
   it('has no riskFlag when margin is comfortably above 15% and rate is below spot', () => {
-    // Glass has 55% platform margin — consumer gets 45% of spot price
-    // spot = 1000 AUD/t → spotPerKg = 1.0, consumerRate = 0.45
-    // gross = 0.45 * 100 = 45, cost = 1.0 * 100 = 100
-    // margin = 45 - 100 = -55, marginPct = -55/45 * 100 = -122% → riskFlag = true
-    // Use a high override that gives good margin:
-    // override rate = 0.9/kg (just below spot), vol = 100kg
-    // gross = 90, cost = 100, margin = -10 → still negative, riskFlag
-    // Let's test the condition directly by checking a case with riskFlag = false
-    // That requires marginPct >= 15 AND consumerRate <= spotPerKg
-    // consumerRate < spotPerKg and marginPct >= 15 are contradictory:
-    // gross = rate * vol, cost = spotPerKg * vol
-    // margin = (rate - spotPerKg) * vol < 0 since rate < spotPerKg
-    // So actually for recycling commodities (consumer receives less than spot), margin is always negative
-    // The riskFlag test for "no risk" is when: marginPct >= 15 and consumerRate <= spotPerKg
-    // In practice marginPct will be negative, so we just verify the flag logic
-    const result = computeExposure('aluminium', 2000, 1000)
-    expect(typeof result.riskFlag).toBe('boolean')
+    // Glass has PLATFORM_MARGIN = 0.55 (55%): consumer gets 45% of spot
+    // gross = spotPerKg × vol, net = 0.45 × spotPerKg × vol → marginPct ≈ 55%, well above 15%
+    // consumerRate < spotPerKg → no override risk condition triggered
+    const result = computeExposure('glass', 1000, 100)
+    expect(result.riskFlag).toBe(false)
+    expect(result.marginPct).toBeGreaterThan(15)
+    expect(result.consumerRate).toBeLessThan(1.0) // spotPerKg = 1000/1000 = 1.0
   })
 })
 

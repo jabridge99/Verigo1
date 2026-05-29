@@ -7,6 +7,7 @@ import {
 import { marketFeed, COMMODITIES } from '../../lib/marketFeed'
 import { overrideQueue } from '../../lib/overrideQueue'
 import { pricingEngine } from '../../lib/pricingEngine'
+import { auditLog, AUDIT_ACTIONS } from '../../lib/audit'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -455,24 +456,104 @@ function OverrideHistoryTable({ history }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+const PRICING_ACTIONS = new Set([
+  AUDIT_ACTIONS.PRICE_OVERRIDE_APPLIED,
+  AUDIT_ACTIONS.PRICE_OVERRIDE_CLEARED,
+  AUDIT_ACTIONS.PRICE_OVERRIDE,
+  AUDIT_ACTIONS.PRICE_FREEZE,
+  AUDIT_ACTIONS.SHADOW_PROMOTED,
+])
+
+function AuditTrailPanel() {
+  const [entries, setEntries] = useState(() =>
+    auditLog.query({ limit: 200 }).filter(e => PRICING_ACTIONS.has(e.action)).slice(0, 10)
+  )
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setEntries(auditLog.query({ limit: 200 }).filter(e => PRICING_ACTIONS.has(e.action)).slice(0, 10))
+    }, 3000)
+    return () => clearInterval(id)
+  }, [])
+
+  const actionLabel = (action) => {
+    if (action === AUDIT_ACTIONS.PRICE_OVERRIDE_APPLIED) return 'Override Applied'
+    if (action === AUDIT_ACTIONS.PRICE_OVERRIDE_CLEARED) return 'Override Cleared'
+    if (action === AUDIT_ACTIONS.PRICE_OVERRIDE) return 'Price Override'
+    if (action === AUDIT_ACTIONS.PRICE_FREEZE) return 'Price Freeze'
+    if (action === AUDIT_ACTIONS.SHADOW_PROMOTED) return 'Shadow Promoted'
+    return action
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
+        <div>
+          <h2 className="font-bold text-slate-900">Pricing Audit Trail</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Last 10 pricing actions · immutable hash chain</p>
+        </div>
+        <span className="text-[10px] font-semibold px-2 py-1 bg-violet-50 text-violet-600 rounded-full">
+          {auditLog.length} total entries
+        </span>
+      </div>
+      {entries.length === 0 ? (
+        <div className="px-5 py-8 text-center text-slate-400 text-sm">
+          No pricing audit events yet — submit or approve an override to see entries here.
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-50">
+          {entries.map(e => (
+            <div key={e.id} className="px-5 py-3 flex items-start gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-800">{actionLabel(e.action)}</span>
+                  {e.entityId && (
+                    <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                      {e.entityId}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-slate-400">by {e.actor}</span>
+                </div>
+                {e.after && (
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {typeof e.after === 'object' ? Object.entries(e.after).map(([k, v]) => `${k}: ${v}`).join(' · ') : String(e.after)}
+                  </p>
+                )}
+              </div>
+              <span className="text-[10px] font-mono text-slate-300 flex-shrink-0">
+                {new Date(e.ts).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TraderDashboard() {
-  const [allQueue, setAllQueue] = useState([])
-  const [isLive, setIsLive]     = useState(true)
+  const [allQueue, setAllQueue]       = useState([])
+  const [isLive, setIsLive]           = useState(true)
+  const [overrideCount, setOverrideCount] = useState(pricingEngine.overrideCount)
 
   const refreshQueue = () => {
     setAllQueue(overrideQueue.getQueue())
+    setOverrideCount(pricingEngine.overrideCount)
   }
 
   useEffect(() => {
     refreshQueue()
-    // Poll every 2s (overrideQueue doesn't emit React state changes)
     const id = setInterval(refreshQueue, 2000)
     return () => clearInterval(id)
   }, [])
 
-  // Track market feed liveness
+  // Track market feed liveness + sync override count on each tick
   useEffect(() => {
-    const unsub = marketFeed.subscribe(null, () => setIsLive(true))
+    const unsub = marketFeed.subscribe(null, () => {
+      setIsLive(true)
+      setOverrideCount(pricingEngine.overrideCount)
+    })
     return unsub
   }, [])
 

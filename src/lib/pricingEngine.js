@@ -33,11 +33,12 @@ export function computeExposure(material, spotAudPerTonne, volumeKg, overrideRat
   const margin      = PLATFORM_MARGIN[material] ?? 0.25
   const spotPerKg   = spotAudPerTonne / 1000
   const consumerRate = overrideRatePerKg != null ? overrideRatePerKg : spotToConsumerRate(spotAudPerTonne, margin)
-  const grossAud    = Math.round(consumerRate * volumeKg * 100) / 100
-  const costAud     = Math.round(spotPerKg   * volumeKg * 100) / 100
+  // Platform sells recyclables to scrap dealers at spot; pays consumers at consumerRate
+  const grossAud    = Math.round(spotPerKg    * volumeKg * 100) / 100  // revenue from scrap dealers
+  const costAud     = Math.round(consumerRate * volumeKg * 100) / 100  // paid to consumers
   const marginAud   = Math.round((grossAud - costAud) * 100) / 100
   const marginPct   = grossAud > 0 ? Math.round((marginAud / grossAud) * 10000) / 100 : 0
-  // Risk: margin below 15% OR consumer rate above ask price (platform paying more than spot)
+  // Risk: margin below 15% OR consumer override rate exceeds spot (platform at a loss)
   const riskFlag    = marginPct < 15 || consumerRate > spotPerKg
   return { grossAud, netAud: costAud, marginAud, marginPct, consumerRate, riskFlag }
 }
