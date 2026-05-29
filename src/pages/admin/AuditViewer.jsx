@@ -1,6 +1,27 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Shield, ChevronDown, ChevronRight, Download, Lock, Hash, Filter, X } from 'lucide-react'
 import { AUDIT_LOG, ROLES_CONFIG } from '../../data/override'
+import { auditLog } from '../../lib/audit'
+
+function normalizeLiveEntry(e) {
+  return {
+    id:          String(e.id),
+    ts:          e.ts,
+    actor:       e.actor ?? 'system',
+    role:        'system',
+    action:      e.action,
+    entity_type: e.entityType ?? 'pricing',
+    entity_id:   e.entityId ?? null,
+    summary:     e.after?.rationale ?? e.after?.reason ?? e.action,
+    ip:          '—',
+    hash:        e.hash ?? '',
+    before:      e.before ?? null,
+    after:       e.after ?? null,
+    note:        null,
+    flag:        null,
+    _live:       true,
+  }
+}
 
 const ACTION_COLORS = {
   propose_override:    'bg-violet-100 text-violet-700',
@@ -171,31 +192,54 @@ function exportJSON(entries) {
 }
 
 export default function AuditViewer() {
-  const [role, setRole] = useState('commercial_director')
-  const [filterActor, setFilterActor] = useState('')
-  const [filterRole, setFilterRole] = useState('')
-  const [filterAction, setFilterAction] = useState('')
-  const [filterEntity, setFilterEntity] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
+  const [role, setRole]           = useState('commercial_director')
+  const [filterActor, setFA]      = useState('')
+  const [filterRole, setFR]       = useState('')
+  const [filterAction, setFAct]   = useState('')
+  const [filterEntity, setFE]     = useState('')
+  const [showFilters, setFilters] = useState(false)
+  const [liveEntries, setLive]    = useState([])
+
+  useEffect(() => {
+    function refresh() {
+      const raw = auditLog.query({ limit: 200 })
+      setLive(raw.map(normalizeLiveEntry))
+    }
+    refresh()
+    const id = setInterval(refresh, 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  const merged = useMemo(() => {
+    const combined = [...liveEntries, ...AUDIT_LOG]
+    combined.sort((a, b) => (b.ts > a.ts ? 1 : -1))
+    return combined
+  }, [liveEntries])
 
   const roleConfig = ROLES_CONFIG[role]
-  const canExport = roleConfig?.can.includes('export_audit')
+  const canExport  = roleConfig?.can.includes('export_audit')
+  const totalCount = auditLog.length + AUDIT_LOG.length
 
-  const uniqueActors  = useMemo(() => [...new Set(AUDIT_LOG.map(e => e.actor))], [])
-  const uniqueRoles   = useMemo(() => [...new Set(AUDIT_LOG.map(e => e.role))], [])
-  const uniqueActions = useMemo(() => [...new Set(AUDIT_LOG.map(e => e.action))], [])
+  const uniqueActors  = useMemo(() => [...new Set(merged.map(e => e.actor))], [merged])
+  const uniqueRoles   = useMemo(() => [...new Set(merged.map(e => e.role))],  [merged])
+  const uniqueActions = useMemo(() => [...new Set(merged.map(e => e.action))],[merged])
 
   const filtered = useMemo(() => {
-    return AUDIT_LOG.filter(e => {
+    return merged.filter(e => {
       if (filterActor  && e.actor  !== filterActor)  return false
       if (filterRole   && e.role   !== filterRole)   return false
       if (filterAction && e.action !== filterAction) return false
       if (filterEntity && !e.entity_id?.toLowerCase().includes(filterEntity.toLowerCase())) return false
       return true
     })
-  }, [filterActor, filterRole, filterAction, filterEntity])
+  }, [merged, filterActor, filterRole, filterAction, filterEntity])
 
   const hasFilters = filterActor || filterRole || filterAction || filterEntity
+  const setFilterActor  = setFA
+  const setFilterRole   = setFR
+  const setFilterAction = setFAct
+  const setFilterEntity = setFE
+  const setShowFilters  = setFilters
 
   return (
     <div className="space-y-6">
@@ -227,18 +271,21 @@ export default function AuditViewer() {
           </p>
         </div>
         <div className="ml-auto text-right flex-shrink-0">
-          <p className="text-xl font-bold text-eco-400">{AUDIT_LOG.length}</p>
+          <p className="text-xl font-bold text-eco-400">{totalCount}</p>
           <p className="text-[10px] text-slate-400">Total entries</p>
+          {auditLog.length > 0 && (
+            <p className="text-[9px] text-eco-400 mt-0.5">{auditLog.length} live</p>
+          )}
         </div>
       </div>
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Overrides Proposed',  value: AUDIT_LOG.filter(e => e.action === 'propose_override').length,  color: 'text-violet-700', bg: 'bg-violet-50' },
-          { label: 'Overrides Approved',  value: AUDIT_LOG.filter(e => e.action === 'approve_override').length,  color: 'text-eco-700',    bg: 'bg-eco-50' },
-          { label: 'Overrides Rejected',  value: AUDIT_LOG.filter(e => e.action === 'reject_override').length,   color: 'text-red-600',    bg: 'bg-red-50' },
-          { label: 'Emergency Freezes',   value: AUDIT_LOG.filter(e => e.action === 'emergency_freeze').length,  color: 'text-red-700',    bg: 'bg-red-50' },
+          { label: 'Overrides Proposed',  value: merged.filter(e => e.action === 'propose_override' || e.action === 'pricing.override.applied').length,  color: 'text-violet-700', bg: 'bg-violet-50' },
+          { label: 'Overrides Approved',  value: merged.filter(e => e.action === 'approve_override' || e.action === 'pricing.override.applied').length,  color: 'text-eco-700',    bg: 'bg-eco-50' },
+          { label: 'Overrides Rejected',  value: merged.filter(e => e.action === 'reject_override'  || e.action === 'pricing.override.cleared').length,  color: 'text-red-600',    bg: 'bg-red-50' },
+          { label: 'Emergency Freezes',   value: merged.filter(e => e.action === 'emergency_freeze').length,                                              color: 'text-red-700',    bg: 'bg-red-50' },
         ].map(s => (
           <div key={s.label} className={`${s.bg} rounded-2xl border border-slate-100 shadow-sm p-4`}>
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -344,7 +391,7 @@ export default function AuditViewer() {
           <div>
             <h2 className="font-bold text-white">Audit Log</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              {filtered.length} of {AUDIT_LOG.length} entries — sorted newest first
+              {filtered.length} of {totalCount} entries — sorted newest first
             </p>
           </div>
           <div className="flex items-center gap-1.5">

@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Minus, Zap, AlertTriangle, CheckCircle, Play } from 'lucide-react'
 import { PRICING_ENGINE_CONFIG, DEVICE_COMPOSITIONS, COMMODITIES, MARGIN_HISTORY } from '../../data/pie'
+import { pricingEngine } from '../../lib/pricingEngine'
 
 // ADMIN-ONLY PAGE — internal margin logic visible here intentionally
 // Never expose this page or PRICING_ENGINE_CONFIG to consumers or operators.
@@ -67,11 +68,19 @@ function WeeklyMarginChart({ data }) {
 
 export default function DynamicPricing() {
   const cfg = PRICING_ENGINE_CONFIG
-  const [marginMin, setMarginMin] = useState(cfg.target_margin_min_pct)
-  const [marginMax, setMarginMax] = useState(cfg.target_margin_max_pct)
-  const [published, setPublished] = useState(false)
+  const [marginMin, setMarginMin]   = useState(cfg.target_margin_min_pct)
+  const [marginMax, setMarginMax]   = useState(cfg.target_margin_max_pct)
+  const [published, setPublished]   = useState(false)
+  const [liveExp, setLiveExp]       = useState(null)
 
-  const overallInBand = cfg.book.every(b => b.margin_pct >= marginMin && b.margin_pct <= marginMax)
+  useEffect(() => {
+    pricingEngine.start()
+    const unsub = pricingEngine.subscribe(summary => setLiveExp(summary))
+    return () => { unsub(); pricingEngine.stop() }
+  }, [])
+
+  const overallInBand    = cfg.book.every(b => b.margin_pct >= marginMin && b.margin_pct <= marginMax)
+  const liveMarginPct    = liveExp ? (liveExp.weightedMarginPct ?? liveExp.avgMarginPct ?? cfg.current_margin_pct) : cfg.current_margin_pct
   const outOfBandItems = cfg.book.filter(b => b.margin_pct < marginMin || b.margin_pct > marginMax)
 
   return (
@@ -84,6 +93,30 @@ export default function DynamicPricing() {
           Do NOT share, screenshot, or expose to consumers, operators, or external parties. Margin data is commercially sensitive.
         </div>
       </div>
+
+      {/* Live Platform Exposure — wired to pricingEngine */}
+      {liveExp && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+            <h2 className="text-sm font-bold text-slate-700">Live Platform Exposure</h2>
+            <span className="text-[10px] text-slate-400 ml-auto">Refreshes on market tick</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Notional',    value: `$${(liveExp.totalNotionalAud / 1000).toFixed(1)}k`,  color: 'text-slate-800', bg: 'bg-slate-50' },
+              { label: 'Total Margin',      value: `$${(liveExp.totalMarginAud / 1000).toFixed(1)}k`,    color: 'text-eco-700',   bg: 'bg-eco-50'  },
+              { label: 'Weighted Margin %', value: `${liveExp.weightedMarginPct?.toFixed(1) ?? liveExp.avgMarginPct?.toFixed(1) ?? '—'}%`, color: liveExp.weightedMarginPct < marginMin ? 'text-amber-600' : 'text-eco-700', bg: 'bg-eco-50' },
+              { label: 'At-Risk Materials', value: liveExp.atRiskCount,                                  color: liveExp.atRiskCount > 0 ? 'text-red-600' : 'text-slate-400', bg: liveExp.atRiskCount > 0 ? 'bg-red-50' : 'bg-slate-50' },
+            ].map(s => (
+              <div key={s.label} className={`${s.bg} rounded-xl border border-slate-100 p-3`}>
+                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -149,7 +182,11 @@ export default function DynamicPricing() {
           {/* Current blended margin */}
           <div>
             <p className="text-xs font-semibold text-slate-500 mb-3">Blended Realised Margin</p>
-            <p className="text-3xl font-bold text-slate-900">{cfg.current_margin_pct}%</p>
+            <p className="text-3xl font-bold text-slate-900">
+              {liveExp
+                ? `${(liveExp.weightedMarginPct ?? liveExp.avgMarginPct ?? 0).toFixed(1)}%`
+                : `${cfg.current_margin_pct}%`}
+            </p>
             <p className="text-[11px] text-slate-400 mt-0.5">Target: {marginMin}% – {marginMax}%</p>
             <div className="mt-2">
               <MarginBar pct={cfg.current_margin_pct} min={marginMin} max={marginMax} />
@@ -226,7 +263,7 @@ export default function DynamicPricing() {
                 <td className="px-5 py-3 text-xs font-bold text-slate-700" colSpan={4}>Blended</td>
                 <td className="px-3 py-3 text-right">
                   <span className={`text-sm font-bold ${overallInBand ? 'text-eco-700' : 'text-amber-600'}`}>
-                    {cfg.current_margin_pct}%
+                    {liveMarginPct.toFixed(1)}%
                   </span>
                 </td>
                 <td colSpan={2} />

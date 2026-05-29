@@ -1,12 +1,15 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Shield, AlertTriangle, CheckCircle, Clock, X, Activity,
   RotateCcw, Megaphone, Eye, Database, Zap, User,
 } from 'lucide-react'
 import {
-  SYSTEM_STATE, OVERRIDES, CAMPAIGNS, VOLATILITY_ALERTS, ROLES_CONFIG,
+  SYSTEM_STATE, CAMPAIGNS, VOLATILITY_ALERTS, ROLES_CONFIG,
 } from '../../data/override'
+import { overrideQueue } from '../../lib/overrideQueue'
+import { pricingEngine } from '../../lib/pricingEngine'
+import { COMMODITIES } from '../../lib/marketFeed'
 
 const MODE_STYLE = {
   ai_active:       { label: 'AI Engine Active',   bg: 'bg-eco-600',   ring: 'ring-eco-400',   dot: 'bg-eco-300 animate-pulse', text: 'text-eco-700',    card: 'border-eco-200 bg-eco-50' },
@@ -95,28 +98,40 @@ function FreezeModal({ onClose, onFreeze }) {
 }
 
 export default function TraderOverrideDashboard() {
-  const [mode, setMode] = useState(SYSTEM_STATE.mode)
+  const [mode, setMode]             = useState(SYSTEM_STATE.mode)
   const [showFreeze, setShowFreeze] = useState(false)
-  const [currentRole, setCurrentRole] = useState('commercial_director')
-  const [frozenReason, setFrozenReason] = useState(null)
+  const [currentRole, setRole]      = useState('commercial_director')
+  const [frozenReason, setFrozen]   = useState(null)
+  const [livePending, setPending]   = useState([])
+  const [liveOvrs, setLiveOvrs]     = useState({})
 
-  const modeStyle = MODE_STYLE[mode]
-  const roleConfig = ROLES_CONFIG[currentRole]
-  const canFreeze = roleConfig.can.includes('freeze')
+  useEffect(() => {
+    function refresh() {
+      setPending(overrideQueue.getQueue('pending'))
+      setLiveOvrs(pricingEngine.getOverrides())
+    }
+    refresh()
+    const id = setInterval(refresh, 3000)
+    return () => clearInterval(id)
+  }, [])
+
+  const modeStyle    = MODE_STYLE[mode]
+  const roleConfig   = ROLES_CONFIG[currentRole]
+  const canFreeze    = roleConfig.can.includes('freeze')
   const canLiftFreeze = roleConfig.can.includes('lift_freeze')
 
-  const pending = OVERRIDES.filter(o => o.status === 'pending_approval')
-  const activeOverrides = OVERRIDES.filter(o => o.status === 'active')
-  const openAlerts = VOLATILITY_ALERTS.filter(a => a.status === 'open' || a.status === 'acknowledged')
-  const activeCampaign = CAMPAIGNS.find(c => c.status === 'active')
+  const pending         = livePending
+  const activeOverrides = Object.entries(liveOvrs)
+  const openAlerts      = VOLATILITY_ALERTS.filter(a => a.status === 'open' || a.status === 'acknowledged')
+  const activeCampaign  = CAMPAIGNS.find(c => c.status === 'active')
 
   const handleFreeze = (reason) => {
     setMode('frozen')
-    setFrozenReason(reason)
+    setFrozen(reason)
   }
   const handleLiftFreeze = () => {
     setMode(activeOverrides.length ? 'override_active' : 'ai_active')
-    setFrozenReason(null)
+    setFrozen(null)
   }
 
   return (
@@ -138,7 +153,7 @@ export default function TraderOverrideDashboard() {
           <User className="w-4 h-4 text-slate-400" />
           <select
             value={currentRole}
-            onChange={e => setCurrentRole(e.target.value)}
+            onChange={e => setRole(e.target.value)}
             className="text-xs font-semibold border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
           >
             {Object.entries(ROLES_CONFIG).map(([k, v]) => (
@@ -160,8 +175,8 @@ export default function TraderOverrideDashboard() {
               <p className={`text-lg font-bold ${modeStyle.text}`}>{modeStyle.label}</p>
               <p className="text-xs text-slate-500 mt-0.5">
                 {mode === 'frozen'
-                  ? `Frozen — ${frozenReason?.slice(0, 60)}...`
-                  : `Book ${SYSTEM_STATE.last_approved_book} · AI ${SYSTEM_STATE.ai_book_version} · ${activeOverrides.length} active override${activeOverrides.length !== 1 ? 's' : ''}`
+                  ? `Frozen — ${frozenReason?.slice(0, 60) ?? ''}...`
+                  : `Book ${SYSTEM_STATE.last_approved_book} · AI ${SYSTEM_STATE.ai_book_version} · ${activeOverrides.length} active material override${activeOverrides.length !== 1 ? 's' : ''}`
                 }
               </p>
             </div>
@@ -190,7 +205,7 @@ export default function TraderOverrideDashboard() {
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Pending Approvals', value: pending.length,       color: pending.length ? 'text-amber-600' : 'text-slate-400',  bg: pending.length ? 'bg-amber-50' : 'bg-slate-50' },
+          { label: 'Pending Approvals', value: pending.length,        color: pending.length ? 'text-amber-600' : 'text-slate-400',  bg: pending.length ? 'bg-amber-50' : 'bg-slate-50' },
           { label: 'Active Overrides',  value: activeOverrides.length,color: activeOverrides.length ? 'text-violet-700' : 'text-slate-400', bg: activeOverrides.length ? 'bg-violet-50' : 'bg-slate-50' },
           { label: 'Open Alerts',       value: openAlerts.length,    color: openAlerts.some(a => a.severity === 'critical') ? 'text-red-600' : 'text-amber-600', bg: openAlerts.length ? 'bg-amber-50' : 'bg-slate-50' },
           { label: 'Active Campaign',   value: activeCampaign ? activeCampaign.name : 'None', color: activeCampaign ? 'text-violet-700' : 'text-slate-400', bg: activeCampaign ? 'bg-violet-50' : 'bg-slate-50' },
@@ -247,24 +262,24 @@ export default function TraderOverrideDashboard() {
             </div>
           ) : (
             <div className="divide-y divide-slate-50">
-              {pending.map(ovr => (
-                <div key={ovr.id} className="px-5 py-4">
+              {pending.map(req => (
+                <div key={req.id} className="px-5 py-4">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold text-slate-900">{ovr.device_label}</span>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Pending {ovr.requires_approval_from.replace('_', ' ')}</span>
+                        <span className="text-sm font-bold text-slate-900">{COMMODITIES[req.material]?.label ?? req.material}</span>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Pending approval</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{ovr.id} · {ovr.submitted_by} ({ovr.submitted_role})</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{req.id} · {req.trader}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-base font-bold text-slate-800">
-                        ${ovr.ai_value.toFixed(2)} → <span className={ovr.proposed_value > ovr.ai_value ? 'text-eco-700' : 'text-red-600'}>${ovr.proposed_value.toFixed(2)}</span>
+                        ${req.currentRate.toFixed(4)} → <span className={req.proposedRate > req.currentRate ? 'text-eco-700' : 'text-red-600'}>${req.proposedRate.toFixed(4)}</span>
                       </p>
-                      <p className="text-[10px] text-slate-400">{ovr.impact_type.replace('_', ' ')}</p>
+                      <p className="text-[10px] text-slate-400">consumer rate /kg</p>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2 line-clamp-2">{ovr.reason}</p>
+                  <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2 line-clamp-2">{req.rationale || 'No rationale provided.'}</p>
                 </div>
               ))}
             </div>
@@ -280,16 +295,16 @@ export default function TraderOverrideDashboard() {
               <Link to="/admin/override-queue" className="text-xs text-violet-600 font-semibold hover:underline">Manage →</Link>
             </div>
             <div className="divide-y divide-slate-50">
-              {activeOverrides.map(ovr => (
-                <div key={ovr.id} className="flex items-center gap-3 px-5 py-3.5">
+              {activeOverrides.map(([material, ovr]) => (
+                <div key={material} className="flex items-center gap-3 px-5 py-3.5">
                   <div className="w-1.5 h-1.5 bg-eco-500 rounded-full flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-900">{ovr.device_label}</p>
-                    <p className="text-[11px] text-slate-400">{ovr.id} · expires {new Date(ovr.expires_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</p>
+                    <p className="text-sm font-semibold text-slate-900">{COMMODITIES[material]?.label ?? material}</p>
+                    <p className="text-[11px] text-slate-400">by {ovr.actor} · applied {new Date(ovr.appliedAt).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold text-eco-700">${ovr.proposed_value.toFixed(2)}</p>
-                    <p className="text-[10px] text-slate-400">was ${ovr.ai_value.toFixed(2)}</p>
+                    <p className="text-sm font-bold text-eco-700">${ovr.ratePerKg.toFixed(4)}/kg</p>
+                    <p className="text-[10px] text-slate-400">override rate</p>
                   </div>
                 </div>
               ))}
@@ -324,10 +339,10 @@ export default function TraderOverrideDashboard() {
       {/* Module quick links */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { to: '/admin/override-queue', label: 'Override Queue',    icon: Clock,     color: 'bg-amber-600',  count: pending.length },
-          { to: '/admin/campaigns',      label: 'Campaigns',         icon: Megaphone, color: 'bg-violet-600', count: null },
-          { to: '/admin/exposure',       label: 'Exposure Dashboard',icon: Activity,  color: 'bg-blue-600',   count: openAlerts.length },
-          { to: '/admin/audit',          label: 'Audit Trail',       icon: Shield,    color: 'bg-slate-700',  count: null },
+          { to: '/admin/override-queue', label: 'Override Queue',     icon: Clock,     color: 'bg-amber-600',  count: pending.length },
+          { to: '/admin/campaigns',      label: 'Campaigns',          icon: Megaphone, color: 'bg-violet-600', count: null },
+          { to: '/admin/exposure',       label: 'Exposure Dashboard', icon: Activity,  color: 'bg-blue-600',   count: openAlerts.length },
+          { to: '/admin/audit',          label: 'Audit Trail',        icon: Shield,    color: 'bg-slate-700',  count: null },
         ].map(l => (
           <Link key={l.to} to={l.to}
             className="flex items-center gap-2.5 bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3.5 hover:border-violet-200 hover:shadow-md transition-all group">

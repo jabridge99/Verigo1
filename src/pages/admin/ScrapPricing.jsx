@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Star } from 'lucide-react'
 import { SCRAP_FEEDS, COMMODITIES } from '../../data/pie'
+import { marketFeed, COMMODITIES as ECOBIN_MATS } from '../../lib/marketFeed'
 
 const MATERIAL_ORDER = ['copper', 'aluminium', 'tin', 'nickel', 'gold', 'silver', 'palladium']
 const GRADE_COLOR = { A: 'bg-eco-100 text-eco-700', B: 'bg-amber-100 text-amber-700', C: 'bg-red-100 text-red-600' }
@@ -15,7 +16,16 @@ const DEALERS = ['Sims Metal Management', 'Cleanaway Metals', 'Visy Industries',
 
 export default function ScrapPricing() {
   const [selectedMaterial, setSelectedMaterial] = useState('copper')
-  const [selectedGrade, setSelectedGrade] = useState('A')
+  const [selectedGrade, setSelectedGrade]        = useState('A')
+  const [liveRates, setLiveRates]                = useState({})
+
+  useEffect(() => {
+    marketFeed.start()
+    const unsub = marketFeed.subscribe(null, r => {
+      setLiveRates(prev => ({ ...prev, [r.material]: r }))
+    })
+    return () => { unsub(); marketFeed.stop() }
+  }, [])
 
   const filteredFeeds = SCRAP_FEEDS.filter(
     f => f.material === selectedMaterial && f.grade === selectedGrade
@@ -39,6 +49,31 @@ export default function ScrapPricing() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Scrap Pricing Layer</h1>
         <p className="text-sm text-slate-500 mt-0.5">Australian recycler & scrap dealer rates by material and grade</p>
+      </div>
+
+      {/* Live EcoBin Recyclable Spot Rates */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+          <h2 className="text-sm font-bold text-slate-700">Live EcoBin Spot Rates</h2>
+          <span className="text-[10px] text-slate-400 ml-auto">Consumer rate · AUD/kg</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          {Object.entries(ECOBIN_MATS).map(([key, cfg]) => {
+            const r = liveRates[key]
+            return (
+              <div key={key} className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+                <p className="text-[10px] text-slate-500 font-semibold truncate">{cfg.label}</p>
+                <p className="text-base font-bold text-eco-700 mt-1">
+                  {r ? `$${r.consumer_rate.toFixed(4)}` : '—'}
+                </p>
+                <p className="text-[9px] text-slate-400 mt-0.5">
+                  {r ? `$${r.spot.toLocaleString('en-AU', { maximumFractionDigits: 0 })}/t` : 'Loading'}
+                </p>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Material selector */}

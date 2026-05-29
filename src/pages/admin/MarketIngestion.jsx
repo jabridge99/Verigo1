@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Minus, Wifi, WifiOff, Clock, Database, RefreshCw } from 'lucide-react'
 import { COMMODITIES, FX_RATES, FEED_STATUS } from '../../data/pie'
+import { marketFeed, COMMODITIES as ECOBIN_MATS } from '../../lib/marketFeed'
 
 const METAL_ORDER = ['copper', 'aluminium', 'tin', 'nickel', 'gold', 'silver', 'palladium']
 const EXCHANGE_COLOR = { LME: 'bg-blue-100 text-blue-700', CME: 'bg-violet-100 text-violet-700' }
@@ -32,7 +33,16 @@ function BarSparkline({ value, high, low }) {
 }
 
 export default function MarketIngestion() {
-  const [activeTab, setActiveTab] = useState('metals')
+  const [activeTab, setActiveTab]   = useState('metals')
+  const [liveRates, setLiveRates]   = useState({})
+
+  useEffect(() => {
+    marketFeed.start()
+    const unsub = marketFeed.subscribe(null, record => {
+      setLiveRates(prev => ({ ...prev, [record.material]: record }))
+    })
+    return () => { unsub(); marketFeed.stop() }
+  }, [])
   const metals = METAL_ORDER.map(k => COMMODITIES[k])
   const baseMetals     = metals.filter(m => m.exchange === 'LME')
   const preciousMetals = metals.filter(m => m.exchange === 'CME')
@@ -100,16 +110,20 @@ export default function MarketIngestion() {
         {[
           { id: 'metals', label: 'Metal Prices' },
           { id: 'fx',     label: 'FX Rates' },
+          { id: 'ecobin', label: 'EcoBin Live', live: true },
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
               activeTab === tab.id
                 ? 'border-violet-600 text-violet-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
-          >{tab.label}</button>
+          >
+            {tab.live && <span className="w-1.5 h-1.5 bg-eco-500 rounded-full animate-pulse" />}
+            {tab.label}
+          </button>
         ))}
       </div>
 
@@ -195,6 +209,65 @@ export default function MarketIngestion() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'ecobin' && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-3">
+            <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+            <h2 className="font-bold text-slate-900">EcoBin Recyclable Materials — Live</h2>
+            <span className="text-[11px] text-slate-400 ml-auto">Ticks every 8s · Consumer rate = spot × (1 – platform margin)</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50">
+                  <th className="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase">Material</th>
+                  <th className="text-left px-3 py-3 text-[10px] font-semibold text-slate-400 uppercase">Exchange</th>
+                  <th className="text-right px-3 py-3 text-[10px] font-semibold text-slate-400 uppercase">Spot (AUD/t)</th>
+                  <th className="text-right px-3 py-3 text-[10px] font-semibold text-slate-400 uppercase">Consumer Rate</th>
+                  <th className="text-right px-3 py-3 text-[10px] font-semibold text-slate-400 uppercase">Platform Margin</th>
+                  <th className="text-right px-3 py-3 text-[10px] font-semibold text-slate-400 uppercase">24h Change</th>
+                  <th className="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase">Updated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {Object.entries(ECOBIN_MATS).map(([key, cfg]) => {
+                  const r = liveRates[key]
+                  const changePct = r?.change_pct ?? 0
+                  const up = changePct > 0.1
+                  const dn = changePct < -0.1
+                  return (
+                    <tr key={key} className="hover:bg-slate-50/60">
+                      <td className="px-5 py-3.5">
+                        <p className="text-sm font-semibold text-slate-900">{cfg.label}</p>
+                        <p className="text-[10px] text-slate-400">{cfg.grade}</p>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">{cfg.exchange}</span>
+                      </td>
+                      <td className="px-3 py-3.5 text-right font-bold text-slate-800">
+                        {r ? `$${r.spot.toLocaleString('en-AU', { maximumFractionDigits: 0 })}` : '—'}
+                      </td>
+                      <td className="px-3 py-3.5 text-right font-bold text-eco-700">
+                        {r ? `$${r.consumer_rate.toFixed(4)}/kg` : '—'}
+                      </td>
+                      <td className="px-3 py-3.5 text-right text-slate-600">
+                        {Math.round((r?.platform_margin ?? 0) * 100)}%
+                      </td>
+                      <td className={`px-3 py-3.5 text-right font-semibold ${up ? 'text-eco-600' : dn ? 'text-red-500' : 'text-slate-400'}`}>
+                        {r ? `${changePct > 0 ? '+' : ''}${changePct.toFixed(2)}%` : '—'}
+                      </td>
+                      <td className="px-5 py-3.5 text-[11px] text-slate-400">
+                        {r ? new Date(r.timestamp).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Waiting…'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
