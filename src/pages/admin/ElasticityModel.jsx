@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle } from 'lucide-react'
+import { marketFeed } from '../../lib/marketFeed'
 
 const MODEL_VERSION = 'v3.2.1'
 const LAST_CALIBRATED = '22 May 2026'
@@ -13,6 +14,13 @@ const MATERIALS = [
   { id: 'plastics',  name: 'Plastics (PET)', coeff: -0.4,  confidence: 75, lastUpdated: '18 May 2026', trend: 'stable', currentRate: 0.18, optimalRate: 0.18 },
   { id: 'ewaste',    name: 'E-Waste Mixed',  coeff: -1.1,  confidence: 83, lastUpdated: '21 May 2026', trend: 'up',     currentRate: 0.95, optimalRate: 0.99 },
 ]
+
+// Map ElasticityModel material IDs to marketFeed keys where available
+const LIVE_RATE_MAP = {
+  aluminium: 'aluminium',
+  plastics:  'pet_plastic',
+  steel:     'steel',
+}
 
 // Expected volume/revenue at optimal rate
 const OPTIMAL_VOLUME_CHANGE = {
@@ -169,8 +177,24 @@ function MiniBarChart({ data, maxVal }) {
 export default function ElasticityModel() {
   const [selectedMaterial, setSelectedMaterial] = useState('aluminium')
   const [priceChangePct, setPriceChangePct] = useState(0)
+  const [liveRates, setLiveRates] = useState({})
 
-  const mat = MATERIALS.find(m => m.id === selectedMaterial)
+  useEffect(() => {
+    marketFeed.start()
+    const unsub = marketFeed.subscribe(null, r => {
+      setLiveRates(prev => ({ ...prev, [r.material]: r }))
+    })
+    return () => { unsub(); marketFeed.stop() }
+  }, [])
+
+  // Merge live consumer_rate into MATERIALS for the three wired materials
+  const materials = MATERIALS.map(m => {
+    const feedKey = LIVE_RATE_MAP[m.id]
+    const live = feedKey ? liveRates[feedKey] : null
+    return live ? { ...m, currentRate: +live.consumer_rate.toFixed(4), _live: true } : { ...m, _live: false }
+  })
+
+  const mat = materials.find(m => m.id === selectedMaterial)
   const volumeChangePct = +(mat.coeff * priceChangePct).toFixed(1)
   const baseRevenue = mat.currentRate * 1000
   const newPrice = +(mat.currentRate * (1 + priceChangePct / 100)).toFixed(3)
@@ -223,7 +247,7 @@ export default function ElasticityModel() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {MATERIALS.map(mat => {
+              {materials.map(mat => {
                 const cls = classifyElasticity(mat.coeff)
                 return (
                   <tr
@@ -235,6 +259,9 @@ export default function ElasticityModel() {
                   >
                     <td className="px-5 py-3 font-semibold text-slate-800">
                       {mat.name}
+                      {mat._live && (
+                        <span className="ml-2 text-[9px] font-bold text-eco-700 bg-eco-100 px-1.5 py-0.5 rounded-full animate-pulse">Live</span>
+                      )}
                       {selectedMaterial === mat.id && (
                         <span className="ml-2 text-[9px] font-bold text-violet-600 bg-violet-100 px-1.5 py-0.5 rounded-full">Selected</span>
                       )}
@@ -276,7 +303,7 @@ export default function ElasticityModel() {
           </div>
           {/* Material selector */}
           <div className="flex flex-wrap gap-2">
-            {MATERIALS.map(m => (
+            {materials.map(m => (
               <button
                 key={m.id}
                 onClick={() => { setSelectedMaterial(m.id); setPriceChangePct(0) }}
@@ -285,7 +312,7 @@ export default function ElasticityModel() {
                     ? 'bg-violet-600 text-white border-violet-600'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300'
                 }`}
-              >{m.name}</button>
+              >{m.name}{m._live && <span className="ml-1 text-[8px] font-bold opacity-80">●</span>}</button>
             ))}
           </div>
           {/* Slider */}
@@ -378,7 +405,7 @@ export default function ElasticityModel() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {MATERIALS.map(m => {
+              {materials.map(m => {
                 const volChg = OPTIMAL_VOLUME_CHANGE[m.id]
                 const revChg = OPTIMAL_REVENUE_CHANGE[m.id]
                 const hasAction = Math.abs(m.optimalRate - m.currentRate) > 0.005
@@ -386,8 +413,9 @@ export default function ElasticityModel() {
                   <tr key={m.id} className={hasAction ? 'bg-eco-50/30' : ''}>
                     <td className="px-5 py-3 font-semibold text-slate-800">
                       {m.name}
+                      {m._live && <span className="ml-2 text-[9px] font-bold text-eco-700 bg-eco-100 px-1.5 py-0.5 rounded-full animate-pulse">Live</span>}
                       {hasAction && (
-                        <span className="ml-2 text-[9px] font-bold text-eco-700 bg-eco-100 px-1.5 py-0.5 rounded-full">Adjust</span>
+                        <span className="ml-2 text-[9px] font-bold text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded-full">Adjust</span>
                       )}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-slate-600">${m.currentRate.toFixed(2)}/kg</td>

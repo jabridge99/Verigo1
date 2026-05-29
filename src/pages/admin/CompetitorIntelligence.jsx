@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, AlertTriangle, Bell, MapPin, RefreshCw, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react'
 import { COMPETITOR_OFFERS } from '../../data/pie'
+import { marketFeed, COMMODITIES as ECOBIN_MATS } from '../../lib/marketFeed'
 
 // ─── static enrichment data ──────────────────────────────────────────────────
 
@@ -425,6 +426,15 @@ function CompetitorProfiles() {
 
 export default function CompetitorIntelligence() {
   const [selectedDevice, setSelectedDevice] = useState('All')
+  const [liveRates, setLiveRates] = useState({})
+
+  useEffect(() => {
+    marketFeed.start()
+    const unsub = marketFeed.subscribe(null, r => {
+      setLiveRates(prev => ({ ...prev, [r.material]: r }))
+    })
+    return () => { unsub(); marketFeed.stop() }
+  }, [])
 
   const filtered = selectedDevice === 'All'
     ? COMPETITOR_OFFERS
@@ -469,6 +479,32 @@ export default function CompetitorIntelligence() {
             <p className="text-[11px] text-slate-400 font-medium mt-0.5">{s.label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Live EcoBin Material Rates */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-2 h-2 bg-eco-500 rounded-full animate-pulse" />
+          <h2 className="text-sm font-bold text-slate-700">Our Rates — Live EcoBin Recyclables</h2>
+          <span className="text-[9px] font-bold text-eco-700 bg-eco-100 px-1.5 py-0.5 rounded-full ml-1">Live</span>
+          <span className="text-[10px] text-slate-400 ml-auto">Consumer rate · AUD/kg</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          {Object.entries(ECOBIN_MATS).map(([key, cfg]) => {
+            const r = liveRates[key]
+            return (
+              <div key={key} className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+                <p className="text-[10px] text-slate-500 font-semibold truncate">{cfg.label}</p>
+                <p className="text-base font-bold text-eco-700 mt-1">
+                  {r ? `$${r.consumer_rate.toFixed(4)}` : '—'}
+                </p>
+                <p className="text-[9px] text-slate-400 mt-0.5">
+                  {r ? `$${r.spot.toLocaleString('en-AU', { maximumFractionDigits: 0 })}/t` : 'Loading'}
+                </p>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Rate Comparison Table */}
