@@ -8,7 +8,10 @@ const VALID_EVENTS = new Set([
   // Fraud signals
   'fraud.signal.raised', 'fraud.case.opened', 'fraud.case.resolved', 'fraud.entity.suspended',
   // Pricing
-  'pricing.updated', 'pricing.override.applied', 'pricing.shadow.diverged',
+  'pricing.updated', 'pricing.override.applied', 'pricing.override.cleared',
+  'pricing.exposure.updated', 'pricing.shadow.diverged',
+  // Override queue
+  'override.queue.submitted', 'override.queue.approved', 'override.queue.rejected',
   // Settlement
   'settlement.batch.created', 'settlement.batch.processed', 'settlement.batch.failed',
   // Operations

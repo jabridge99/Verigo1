@@ -43,6 +43,9 @@ export const AUDIT_ACTIONS = {
   // Risk / Fraud (extended)
   RISK_SIGNAL_RAISED:     'risk.signal.raised',
   FRAUD_CASE_RESOLVED:    'fraud.case.resolved',
+  // Pricing overrides
+  PRICE_OVERRIDE_APPLIED:  'pricing.override.applied',
+  PRICE_OVERRIDE_CLEARED:  'pricing.override.cleared',
 }
 
 class AuditLog {
