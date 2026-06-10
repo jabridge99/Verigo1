@@ -12,6 +12,7 @@ from app.api.routes import tenants
 from app.api.routes import auth
 from app.api.routes import notifications
 from app.api.routes import api_keys
+from app.api.routes import analytics
 
 # Register all models so SQLAlchemy creates their tables
 import app.models.customer      # noqa: F401
@@ -73,6 +74,7 @@ app.include_router(tenants.router,      prefix="/api/v1")
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(api_keys.router,     prefix="/api/v1")
+app.include_router(analytics.router,   prefix="/api/v1")
 
 
 @app.get("/")
