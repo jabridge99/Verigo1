@@ -1,0 +1,113 @@
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-tvg}
+      POSTGRES_USER:     ${POSTGRES_USER:-tvg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tvg}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  # ── Backend API ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT:    production
+      DATABASE_URL:   postgresql://${POSTGRES_USER:-tvg}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tvg}
+      SECRET_KEY:     ${SECRET_KEY:?SECRET_KEY is required}
+      CORS_ORIGINS:   ${CORS_ORIGINS:-https://app.trustverifygo.com.au}
+      APP_URL:        ${APP_URL:-https://app.trustverifygo.com.au}
+      API_URL:        ${API_URL:-https://api.trustverifygo.com.au}
+      LOG_LEVEL:      ${LOG_LEVEL:-INFO}
+      WORKERS:        ${API_WORKERS:-2}
+      # Email
+      SMTP_HOST:      ${SMTP_HOST:-}
+      SMTP_PORT:      ${SMTP_PORT:-587}
+      SMTP_USER:      ${SMTP_USER:-}
+      SMTP_PASS:      ${SMTP_PASS:-}
+      FROM_EMAIL:     ${FROM_EMAIL:-noreply@trustverifygo.com.au}
+      FROM_NAME:      ${FROM_NAME:-Trust Verify Go}
+      # Stripe
+      STRIPE_SECRET_KEY:         ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET:     ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_STARTER_MONTHLY_ID: ${STRIPE_STARTER_MONTHLY_ID:-}
+      STRIPE_STARTER_ANNUAL_ID:  ${STRIPE_STARTER_ANNUAL_ID:-}
+      STRIPE_PRO_MONTHLY_ID:     ${STRIPE_PRO_MONTHLY_ID:-}
+      STRIPE_PRO_ANNUAL_ID:      ${STRIPE_PRO_ANNUAL_ID:-}
+      STRIPE_ENT_MONTHLY_ID:     ${STRIPE_ENT_MONTHLY_ID:-}
+      STRIPE_ENT_ANNUAL_ID:      ${STRIPE_ENT_ANNUAL_ID:-}
+      # Sentry (optional)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    volumes:
+      - uploads:/data/uploads
+    networks:
+      - internal
+      - public
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL:  ${API_URL:-https://api.trustverifygo.com.au}
+        NEXT_PUBLIC_APP_URL:  ${APP_URL:-https://app.trustverifygo.com.au}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - public
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Nginx reverse proxy ───────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - uploads:/data/uploads:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - public
+
+volumes:
+  pgdata:
+  uploads:
+
+networks:
+  internal:
+  public:
