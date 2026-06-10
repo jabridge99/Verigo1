@@ -1,12 +1,33 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+import MobileNav from '@/components/MobileNav'
+import PWAProvider from '@/components/PWAProvider'
 
 export const metadata: Metadata = {
   title: 'Trust Verify Go | Australian AML/CTF Compliance Platform',
   description: 'The Australian-first Compliance Operating System for regulated businesses. AUSTRAC-aligned KYC, AML transaction monitoring, IFTI/TTR/SMR reporting, sanctions screening and case management.',
   keywords: 'AML, KYC, AUSTRAC, compliance, Australia, digital currency exchange, remittance, Tranche 2, anti-money laundering',
+  manifest: '/manifest.json',
+  applicationName: 'Trust Verify Go',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'TVG Compliance',
+  },
+  icons: {
+    icon: '/favicon.png',
+    apple: '/icons/apple-touch-icon.png',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#060d1a',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -21,6 +42,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Navbar />
         <main className="pt-16">{children}</main>
         <Footer />
+        <MobileNav />
+        <PWAProvider />
       </body>
     </html>
   )
