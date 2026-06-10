@@ -13,6 +13,7 @@ const navLinks = [
   { label: 'Reporting', href: '/reporting' },
   { label: 'ECDD', href: '/ecdd' },
   { label: 'MLRO', href: '/mlro' },
+  { label: 'Audit', href: '/audit' },
   { label: 'Live Demo', href: '/live-demo' },
   { label: 'API & Integrations', href: '/api-integrations' },
   { label: 'Pricing', href: '/pricing' },

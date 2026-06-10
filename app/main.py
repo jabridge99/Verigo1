@@ -7,7 +7,9 @@ from app.db.database import Base, engine, SessionLocal
 from app.api.routes import customers, kyc, transactions, reports, sanctions
 from app.api.routes import packs, rules
 from app.api.routes import onboarding
+from app.api.routes import audit
 
+# Register all models so SQLAlchemy creates their tables
 import app.models.customer      # noqa: F401
 import app.models.kyc           # noqa: F401
 import app.models.transaction   # noqa: F401
@@ -15,6 +17,7 @@ import app.models.report        # noqa: F401
 import app.models.pack          # noqa: F401
 import app.models.rule_builder  # noqa: F401
 import app.models.onboarding    # noqa: F401
+import app.models.audit         # noqa: F401
 
 
 @asynccontextmanager
@@ -57,6 +60,7 @@ app.include_router(kyc.router,          prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 app.include_router(reports.router,      prefix="/api/v1")
 app.include_router(sanctions.router,    prefix="/api/v1")
+app.include_router(audit.router,        prefix="/api/v1")
 
 
 @app.get("/")
@@ -64,7 +68,6 @@ def root():
     return {
         "system": settings.app_name,
         "version": "1.0.0",
-        "phases_complete": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5"],
         "docs": "/docs",
     }
 
