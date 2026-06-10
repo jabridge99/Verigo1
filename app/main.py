@@ -8,6 +8,8 @@ from app.api.routes import customers, kyc, transactions, reports, sanctions
 from app.api.routes import packs, rules
 from app.api.routes import onboarding
 from app.api.routes import audit
+from app.api.routes import tenants
+from app.api.routes import auth
 
 # Register all models so SQLAlchemy creates their tables
 import app.models.customer      # noqa: F401
@@ -18,6 +20,8 @@ import app.models.pack          # noqa: F401
 import app.models.rule_builder  # noqa: F401
 import app.models.onboarding    # noqa: F401
 import app.models.audit         # noqa: F401
+import app.models.tenant        # noqa: F401
+import app.models.user          # noqa: F401
 
 
 @asynccontextmanager
@@ -61,6 +65,8 @@ app.include_router(transactions.router, prefix="/api/v1")
 app.include_router(reports.router,      prefix="/api/v1")
 app.include_router(sanctions.router,    prefix="/api/v1")
 app.include_router(audit.router,        prefix="/api/v1")
+app.include_router(tenants.router,      prefix="/api/v1")
+app.include_router(auth.router,         prefix="/api/v1")
 
 
 @app.get("/")
