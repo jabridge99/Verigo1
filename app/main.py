@@ -11,6 +11,7 @@ from app.api.routes import audit
 from app.api.routes import tenants
 from app.api.routes import auth
 from app.api.routes import notifications
+from app.api.routes import api_keys
 
 # Register all models so SQLAlchemy creates their tables
 import app.models.customer      # noqa: F401
@@ -24,6 +25,7 @@ import app.models.audit         # noqa: F401
 import app.models.tenant        # noqa: F401
 import app.models.user          # noqa: F401
 import app.models.notification  # noqa: F401
+import app.models.api_key      # noqa: F401
 
 
 @asynccontextmanager
@@ -70,6 +72,7 @@ app.include_router(audit.router,        prefix="/api/v1")
 app.include_router(tenants.router,      prefix="/api/v1")
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
+app.include_router(api_keys.router,     prefix="/api/v1")
 
 
 @app.get("/")
