@@ -1,5 +1,17 @@
-"""Authentication service — password hashing, JWT, magic links."""
+"""
+SECURITY-HARDENED Authentication Service.
 
+Changes vs original:
+ - TOKEN_BLACKLIST: in-process set for JWT revocation (upgrade to Redis in prod)
+ - record_security_event(): writes to security_events table
+ - create_magic_link(): tokens now SHA-256 hashed before DB storage
+ - verify_magic_link(): compares hash, not plaintext
+ - build_token_response(): accepts mfa_pending flag
+ - Access token expiry reduced to 4 hours from 8 in production
+"""
+
+import hashlib
+import json
 import uuid
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -15,25 +27,35 @@ from app.models.user import User, MagicLinkToken, UserStatus
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 MAGIC_LINK_EXPIRY_MINUTES = 15
-ACCESS_TOKEN_EXPIRY_MINUTES = 60 * 8   # 8 hours
+ACCESS_TOKEN_EXPIRY_MINUTES = 60 * 4 if settings.is_production else 60 * 8
+
+# In-process JWT blacklist — upgrade to Redis for multi-worker deployments
+TOKEN_BLACKLIST: set[str] = set()
 
 
-# ─── Password ────────────────────────────────────────────────────────────────
+# ── Password ──────────────────────────────────────────────────────────────────
 
 def hash_password(plain: str) -> str:
     return pwd_ctx.hash(plain)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_ctx.verify(plain, hashed)
+    try:
+        return pwd_ctx.verify(plain, hashed)
+    except Exception:
+        return False
 
 
-# ─── JWT ─────────────────────────────────────────────────────────────────────
+# ── JWT ───────────────────────────────────────────────────────────────────────
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None,
+                        mfa_pending: bool = False) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES))
-    to_encode.update({"exp": expire})
+    # mfa_pending tokens have short 10-minute expiry
+    if mfa_pending:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+    to_encode.update({"exp": expire, "jti": uuid.uuid4().hex, "mfa_pending": mfa_pending})
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
@@ -44,13 +66,13 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
-# ─── User CRUD ────────────────────────────────────────────────────────────────
+# ── User CRUD ─────────────────────────────────────────────────────────────────
 
 def create_user(db: Session, email: str, full_name: str, password: str, role: str = "analyst",
-                industry_id: str = None, tenant_id: str = None) -> User:
+                industry_id: Optional[str] = None, tenant_id: Optional[str] = None) -> User:
     user = User(
         user_id=f"USR-{uuid.uuid4().hex[:10].upper()}",
-        email=email,
+        email=email.lower().strip(),
         full_name=full_name,
         hashed_password=hash_password(password),
         role=role,
@@ -64,7 +86,7 @@ def create_user(db: Session, email: str, full_name: str, password: str, role: st
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
-    return db.query(User).filter(User.email == email).first()
+    return db.query(User).filter(User.email == email.lower().strip()).first()
 
 
 def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
@@ -74,6 +96,8 @@ def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     user = get_user_by_email(db, email)
     if not user or not user.hashed_password:
+        # Perform dummy verify to prevent timing attacks
+        pwd_ctx.dummy_verify()
         return None
     if not verify_password(password, user.hashed_password):
         return None
@@ -82,13 +106,16 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     return user
 
 
-def build_token_response(user: User) -> dict:
-    token = create_access_token({
-        "sub": user.user_id,
-        "email": user.email,
-        "role": user.role.value if hasattr(user.role, "value") else user.role,
-        "industry_id": user.industry_id,
-    })
+def build_token_response(user: User, mfa_pending: bool = False) -> dict:
+    token = create_access_token(
+        {
+            "sub": user.user_id,
+            "email": user.email,
+            "role": user.role.value if hasattr(user.role, "value") else user.role,
+            "industry_id": user.industry_id,
+        },
+        mfa_pending=mfa_pending,
+    )
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -97,23 +124,35 @@ def build_token_response(user: User) -> dict:
         "full_name": user.full_name,
         "role": user.role.value if hasattr(user.role, "value") else user.role,
         "industry_id": user.industry_id,
+        "mfa_required": mfa_pending,
     }
 
 
-# ─── Magic links ─────────────────────────────────────────────────────────────
+# ── Magic links (token hashed in DB) ─────────────────────────────────────────
+
+def _hash_ml_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
 
 def create_magic_link(db: Session, email: str) -> str:
-    token = secrets.token_urlsafe(32)
+    plain = secrets.token_urlsafe(32)
+    hashed = _hash_ml_token(plain)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=MAGIC_LINK_EXPIRY_MINUTES)
-    ml = MagicLinkToken(token=token, email=email, expires_at=expires_at)
+    # Invalidate previous unused tokens for this email
+    db.query(MagicLinkToken).filter(
+        MagicLinkToken.email == email.lower(),
+        MagicLinkToken.used == False,
+    ).update({"used": True})
+    ml = MagicLinkToken(token=hashed, email=email.lower(), expires_at=expires_at)
     db.add(ml)
     db.commit()
-    return token
+    return plain   # only the plaintext is returned (sent via email, never stored)
 
 
-def verify_magic_link(db: Session, token: str) -> Optional[str]:
+def verify_magic_link(db: Session, plain_token: str) -> Optional[str]:
+    hashed = _hash_ml_token(plain_token)
     ml = db.query(MagicLinkToken).filter(
-        MagicLinkToken.token == token,
+        MagicLinkToken.token == hashed,
         MagicLinkToken.used == False,
     ).first()
     if not ml:
@@ -125,7 +164,33 @@ def verify_magic_link(db: Session, token: str) -> Optional[str]:
     return ml.email
 
 
-# ─── RBAC helpers ─────────────────────────────────────────────────────────────
+# ── Security event logging ────────────────────────────────────────────────────
+
+def record_security_event(
+    db: Session,
+    event_type: str,
+    user_id: Optional[str],
+    ip: str = "unknown",
+    meta: Optional[dict] = None,
+) -> None:
+    """Write to security_events table; silently swallows errors to never block auth flows."""
+    try:
+        from app.models.security_event import SecurityEvent
+        ev = SecurityEvent(
+            event_id=f"SEC-{uuid.uuid4().hex[:12].upper()}",
+            event_type=event_type,
+            user_id=user_id,
+            ip_address=ip,
+            metadata=json.dumps(meta or {}),
+        )
+        db.add(ev)
+        db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger("tvg.security").warning("Failed to record security event: %s", e)
+
+
+# ── RBAC helpers ──────────────────────────────────────────────────────────────
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "admin":      {"*"},

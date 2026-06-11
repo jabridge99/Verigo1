@@ -21,6 +21,9 @@ from app.api.routes import analytics
 from app.api.routes import documents
 from app.api.routes import branding
 from app.api.routes import billing
+from app.api.routes import connectors
+from app.api.routes import retention
+from app.api.routes import security_monitor
 
 # Register all models so SQLAlchemy creates their tables at startup
 import app.models.customer      # noqa: F401
@@ -37,6 +40,9 @@ import app.models.notification  # noqa: F401
 import app.models.api_key       # noqa: F401
 import app.models.document      # noqa: F401
 import app.models.billing       # noqa: F401
+import app.models.security_event  # noqa: F401
+import app.models.connector      # noqa: F401
+import app.models.retention      # noqa: F401
 
 setup_logging()
 
@@ -132,7 +138,10 @@ app.include_router(api_keys.router,      prefix="/api/v1")
 app.include_router(analytics.router,     prefix="/api/v1")
 app.include_router(documents.router,     prefix="/api/v1")
 app.include_router(branding.router,      prefix="/api/v1")
-app.include_router(billing.router,       prefix="/api/v1")
+app.include_router(billing.router,          prefix="/api/v1")
+app.include_router(connectors.router,       prefix="/api/v1")
+app.include_router(retention.router,        prefix="/api/v1")
+app.include_router(security_monitor.router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

@@ -1,23 +1,55 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List
+"""
+Customers API — SECURITY HARDENED.
+Fixes: authentication required on all endpoints, RBAC on sensitive actions,
+tenant isolation enforced, risk_score/risk_level/is_pep non-user-updatable,
+status changes restricted to privileged roles.
+"""
+
 import uuid
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.customer import Customer, CustomerStatus
+from app.models.user import User, UserRole
 from app.schemas.customer import CustomerCreate, CustomerUpdate, CustomerResponse
 from app.services.risk_scoring import score_customer, score_to_level
 from app.services.sanctions_screening import screen_name
+from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
+# Fields that only compliance/admin/mlro may set
+_PRIVILEGED_FIELDS = {"status", "risk_score", "risk_level", "is_pep"}
+_PRIVILEGED_ROLES = {UserRole.admin, UserRole.mlro, UserRole.compliance}
+
+
+def _assert_tenant(current_user: User, customer_industry_id):
+    if current_user.role == UserRole.admin:
+        return
+    if customer_industry_id and customer_industry_id != current_user.industry_id:
+        raise HTTPException(403, "Cross-tenant access denied")
+
 
 @router.post("/", response_model=CustomerResponse, status_code=201)
-def onboard_customer(payload: CustomerCreate, db: Session = Depends(get_db)):
+def onboard_customer(
+    payload: CustomerCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_roles(
+        UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst
+    )),
+):
     existing = db.query(Customer).filter(Customer.email == payload.email).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Customer with this email already exists")
-    customer = Customer(customer_id=f"CUST-{uuid.uuid4().hex[:10].upper()}", **payload.model_dump())
+        raise HTTPException(400, "Customer with this email already exists")
+
+    customer = Customer(
+        customer_id=f"CUST-{uuid.uuid4().hex[:10].upper()}",
+        industry_id=current_user.industry_id if current_user.role != UserRole.admin else None,
+        **payload.model_dump(),
+    )
     sanctions = screen_name(payload.full_name)
     if sanctions["match_found"]:
         customer.status = CustomerStatus.suspended
@@ -35,8 +67,18 @@ def onboard_customer(payload: CustomerCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[CustomerResponse])
-def list_customers(skip: int = 0, limit: int = 50, status: str = None, risk_level: str = None, db: Session = Depends(get_db)):
+def list_customers(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    status: Optional[str] = None,
+    risk_level: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
     query = db.query(Customer)
+    # Non-admin users only see their own tenant's customers
+    if current_user.role != UserRole.admin:
+        query = query.filter(Customer.industry_id == current_user.industry_id)
     if status:
         query = query.filter(Customer.status == status)
     if risk_level:
@@ -45,20 +87,73 @@ def list_customers(skip: int = 0, limit: int = 50, status: str = None, risk_leve
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
-def get_customer(customer_id: str, db: Session = Depends(get_db)):
+def get_customer(
+    customer_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        raise HTTPException(404, "Customer not found")
+    _assert_tenant(current_user, customer.industry_id)
     return customer
 
 
 @router.patch("/{customer_id}", response_model=CustomerResponse)
-def update_customer(customer_id: str, payload: CustomerUpdate, db: Session = Depends(get_db)):
+def update_customer(
+    customer_id: str,
+    payload: CustomerUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    for field, value in payload.model_dump(exclude_none=True).items():
+        raise HTTPException(404, "Customer not found")
+    _assert_tenant(current_user, customer.industry_id)
+
+    updates = payload.model_dump(exclude_none=True)
+
+    # Prevent unprivileged users from changing status or risk fields
+    attempted_privileged = set(updates.keys()) & _PRIVILEGED_FIELDS
+    if attempted_privileged and current_user.role not in _PRIVILEGED_ROLES:
+        raise HTTPException(403, f"Insufficient role to update: {', '.join(attempted_privileged)}")
+
+    for field, value in updates.items():
         setattr(customer, field, value)
     db.commit()
     db.refresh(customer)
     return customer
+
+
+@router.post("/{customer_id}/rescore")
+def rescore_customer(
+    customer_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_roles(
+        UserRole.admin, UserRole.mlro, UserRole.compliance
+    )),
+):
+    """Re-run risk scoring and sanctions check for a customer."""
+    customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    _assert_tenant(current_user, customer.industry_id)
+
+    sanctions = screen_name(customer.full_name)
+    if sanctions["match_found"]:
+        customer.status = CustomerStatus.suspended
+        customer.risk_score = 100.0
+        customer.risk_level = "critical"
+    else:
+        risk_score = score_customer(customer)
+        customer.risk_score = risk_score
+        customer.risk_level = score_to_level(risk_score)
+    db.commit()
+    db.refresh(customer)
+    return {
+        "customer_id": customer.customer_id,
+        "risk_score": customer.risk_score,
+        "risk_level": customer.risk_level,
+        "status": customer.status,
+        "sanctions_match": sanctions["match_found"],
+    }

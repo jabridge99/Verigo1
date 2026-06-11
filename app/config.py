@@ -53,6 +53,22 @@ class Settings(BaseSettings):
     stripe_ent_monthly_id: str = ""
     stripe_ent_annual_id: str = ""
 
+    # ── Storage backend ───────────────────────────────────────────────────────
+    storage_backend: str = "local"   # local | s3 | azure | gcs
+    # S3 / Backblaze B2 (S3-compatible)
+    s3_bucket: str = ""
+    s3_region: str = "us-east-1"
+    s3_endpoint_url: str = ""        # leave blank for AWS; set for Backblaze/MinIO
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    # Azure Blob
+    azure_account_name: str = ""
+    azure_account_key: str = ""
+    azure_container: str = "documents"
+    # GCS
+    gcs_bucket: str = ""
+    gcs_credentials_json: str = ""   # path to service-account JSON
+
     # ── Sentry (optional) ────────────────────────────────────────────────────
     sentry_dsn: str = ""
 
