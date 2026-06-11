@@ -1,0 +1,408 @@
+"""
+IFTI Report API.
+
+Supports:
+- Creating IFTI-IN and IFTI-OUT records manually or from a transaction
+- Listing/editing draft records
+- Generating AUSTRAC-compatible Excel file (download)
+- Marking records as submitted
+
+All endpoints require authentication. Generation requires compliance+ role.
+"""
+
+import uuid
+from datetime import datetime, timezone
+from typing import Optional, List
+from io import BytesIO
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.models.ifti import IFTIRecord, IFTIDirection, IFTIStatus
+from app.models.user import User, UserRole
+from app.services.ifti_service import generate_ifti_excel, list_ifti, get_ifti
+from app.api.routes.auth import _current_user, _require_roles
+
+router = APIRouter(prefix="/ifti", tags=["IFTI Reports"])
+
+_READER  = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst)
+_WRITER  = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+
+
+# ── Pydantic schemas ──────────────────────────────────────────────────────────
+
+class IFTICreate(BaseModel):
+    direction: IFTIDirection
+    date_received: str            # DD/MM/YYYY
+    date_available: str           # DD/MM/YYYY
+    currency_code: str = "AUD"
+    total_amount: float
+    transfer_type: str = "Money"
+    property_description: Optional[str] = None
+    transaction_reference: Optional[str] = None
+
+    # Ordering customer
+    oc_full_name: Optional[str] = None
+    oc_other_name: Optional[str] = None
+    oc_dob: Optional[str] = None  # DD/MM/YYYY
+    oc_address: Optional[str] = None
+    oc_city: Optional[str] = None
+    oc_state: Optional[str] = None
+    oc_postcode: Optional[str] = None
+    oc_country: Optional[str] = None
+    oc_postal_address: Optional[str] = None
+    oc_postal_city: Optional[str] = None
+    oc_postal_state: Optional[str] = None
+    oc_postal_postcode: Optional[str] = None
+    oc_postal_country: Optional[str] = None
+    oc_phone: Optional[str] = None
+    oc_email: Optional[str] = None
+    oc_occupation: Optional[str] = None
+    oc_abn: Optional[str] = None
+    oc_customer_number: Optional[str] = None
+    oc_account_number: Optional[str] = None
+    oc_business_structure: Optional[str] = None
+    # ID (OUT only)
+    oc_id1_type: Optional[str] = None
+    oc_id1_type_other: Optional[str] = None
+    oc_id1_number: Optional[str] = None
+    oc_id1_issuer: Optional[str] = None
+    oc_id2_type: Optional[str] = None
+    oc_id2_type_other: Optional[str] = None
+    oc_id2_number: Optional[str] = None
+    oc_id2_issuer: Optional[str] = None
+    oc_electronic_source: Optional[str] = None
+
+    # Beneficiary customer
+    bc_full_name: Optional[str] = None
+    bc_dob: Optional[str] = None
+    bc_business_name: Optional[str] = None
+    bc_address: Optional[str] = None
+    bc_city: Optional[str] = None
+    bc_state: Optional[str] = None
+    bc_postcode: Optional[str] = None
+    bc_country: Optional[str] = None
+    bc_postal_address: Optional[str] = None
+    bc_postal_city: Optional[str] = None
+    bc_postal_state: Optional[str] = None
+    bc_postal_postcode: Optional[str] = None
+    bc_postal_country: Optional[str] = None
+    bc_phone: Optional[str] = None
+    bc_email: Optional[str] = None
+    bc_occupation: Optional[str] = None
+    bc_abn: Optional[str] = None
+    bc_business_structure: Optional[str] = None
+    bc_account_number: Optional[str] = None
+    bc_institution_name: Optional[str] = None
+    bc_institution_city: Optional[str] = None
+    bc_institution_country: Optional[str] = None
+
+    # Accept block
+    retail_id_number: Optional[str] = None
+    accept_full_name: Optional[str] = None
+    accept_other_name: Optional[str] = None
+    accept_dob: Optional[str] = None
+    accept_address: Optional[str] = None
+    accept_city: Optional[str] = None
+    accept_state: Optional[str] = None
+    accept_postcode: Optional[str] = None
+    accept_country: Optional[str] = None
+    accept_postal_address: Optional[str] = None
+    accept_postal_city: Optional[str] = None
+    accept_postal_state: Optional[str] = None
+    accept_postal_postcode: Optional[str] = None
+    accept_postal_country: Optional[str] = None
+    accept_phone: Optional[str] = None
+    accept_email: Optional[str] = None
+    accept_occupation: Optional[str] = None
+    accept_abn: Optional[str] = None
+    accept_business_structure: Optional[str] = None
+    is_accepting_money: Optional[str] = "Yes"
+    is_sending_instruction: Optional[str] = "Yes"
+
+    diff_accept_full_name: Optional[str] = None
+    diff_accept_address: Optional[str] = None
+    diff_accept_city: Optional[str] = None
+    diff_accept_state: Optional[str] = None
+    diff_accept_postcode: Optional[str] = None
+    diff_accept_country: Optional[str] = None
+
+    # Send block
+    send_full_name: Optional[str] = None
+    send_other_name: Optional[str] = None
+    send_dob: Optional[str] = None
+    send_address: Optional[str] = None
+    send_city: Optional[str] = None
+    send_state: Optional[str] = None
+    send_postcode: Optional[str] = None
+    send_country: Optional[str] = None
+    send_postal_address: Optional[str] = None
+    send_postal_city: Optional[str] = None
+    send_postal_state: Optional[str] = None
+    send_postal_postcode: Optional[str] = None
+    send_postal_country: Optional[str] = None
+    send_phone: Optional[str] = None
+    send_email: Optional[str] = None
+    send_occupation: Optional[str] = None
+    send_abn: Optional[str] = None
+    send_business_structure: Optional[str] = None
+
+    # Receive block
+    recv_full_name: Optional[str] = None
+    recv_address: Optional[str] = None
+    recv_city: Optional[str] = None
+    recv_state: Optional[str] = None
+    recv_postcode: Optional[str] = None
+    recv_country: Optional[str] = None
+    is_distributing: Optional[str] = "Yes"
+    has_retail_outlet: Optional[str] = "No"
+
+    # Distribute block
+    dist_full_name: Optional[str] = None
+    dist_address: Optional[str] = None
+    dist_city: Optional[str] = None
+    dist_state: Optional[str] = None
+    dist_postcode: Optional[str] = None
+    dist_country: Optional[str] = None
+
+    # Retail outlet
+    retail_full_name: Optional[str] = None
+    retail_address: Optional[str] = None
+    retail_city: Optional[str] = None
+    retail_state: Optional[str] = None
+    retail_postcode: Optional[str] = None
+    retail_country: Optional[str] = None
+
+    # Reason + reporter
+    reason_for_transfer: Optional[str] = None
+    reporter_full_name: Optional[str] = None
+    reporter_job_title: Optional[str] = None
+    reporter_phone: Optional[str] = None
+    reporter_email: Optional[str] = None
+
+
+class IFTIResponse(BaseModel):
+    ifti_id: str
+    direction: IFTIDirection
+    status: IFTIStatus
+    date_received: Optional[str]
+    date_available: Optional[str]
+    currency_code: Optional[str]
+    total_amount: Optional[float]
+    transfer_type: Optional[str]
+    transaction_reference: Optional[str]
+    oc_full_name: Optional[str]
+    bc_full_name: Optional[str]
+    reason_for_transfer: Optional[str]
+    reporter_full_name: Optional[str]
+    reporter_email: Optional[str]
+    industry_id: Optional[str]
+    created_by: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+def _parse_date(val: Optional[str]):
+    if not val:
+        return None
+    from datetime import date as date_type
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(val, fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
+def _apply_fields(record: IFTIRecord, data: IFTICreate):
+    for field, value in data.model_dump(exclude={"direction"}).items():
+        if field in ("date_received", "date_available", "oc_dob", "bc_dob",
+                     "accept_dob", "send_dob"):
+            setattr(record, field, _parse_date(value))
+        else:
+            setattr(record, field, value)
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.get("/", response_model=List[IFTIResponse])
+def list_records(
+    direction: Optional[IFTIDirection] = None,
+    status: Optional[IFTIStatus] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_READER),
+):
+    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    return list_ifti(db, industry_id=industry_id, direction=direction, status=status)
+
+
+@router.post("/", response_model=IFTIResponse, status_code=201)
+def create_record(
+    payload: IFTICreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    record = IFTIRecord(
+        ifti_id=f"IFTI-{uuid.uuid4().hex[:12].upper()}",
+        industry_id=current_user.industry_id,
+        direction=payload.direction,
+        created_by=current_user.user_id,
+    )
+    _apply_fields(record, payload)
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.get("/{ifti_id}", response_model=IFTIResponse)
+def get_record(
+    ifti_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_READER),
+):
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    if current_user.role != UserRole.admin and r.industry_id != current_user.industry_id:
+        raise HTTPException(403, "Access denied")
+    return r
+
+
+@router.patch("/{ifti_id}", response_model=IFTIResponse)
+def update_record(
+    ifti_id: str,
+    payload: IFTICreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    if current_user.role != UserRole.admin and r.industry_id != current_user.industry_id:
+        raise HTTPException(403, "Access denied")
+    if r.status == IFTIStatus.submitted:
+        raise HTTPException(400, "Cannot edit a submitted IFTI record")
+    _apply_fields(r, payload)
+    db.commit()
+    db.refresh(r)
+    return r
+
+
+@router.post("/{ifti_id}/ready")
+def mark_ready(
+    ifti_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    r.status = IFTIStatus.ready
+    db.commit()
+    return {"ifti_id": ifti_id, "status": r.status}
+
+
+@router.post("/{ifti_id}/submitted")
+def mark_submitted(
+    ifti_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
+):
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    r.status = IFTIStatus.submitted
+    r.submitted_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"ifti_id": ifti_id, "status": r.status}
+
+
+@router.delete("/{ifti_id}", status_code=204)
+def delete_record(
+    ifti_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    if r.status == IFTIStatus.submitted:
+        raise HTTPException(400, "Cannot delete a submitted record")
+    if current_user.role != UserRole.admin and r.industry_id != current_user.industry_id:
+        raise HTTPException(403, "Access denied")
+    db.delete(r)
+    db.commit()
+
+
+# ── Excel download ────────────────────────────────────────────────────────────
+
+@router.get("/export/{direction}")
+def export_excel(
+    direction: IFTIDirection,
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    """
+    Generate and download an AUSTRAC-compatible IFTI Excel spreadsheet.
+
+    The downloaded file matches the official AUSTRAC IFTI-DRA IN / OUT template
+    exactly — open it, verify, then copy-paste rows into AUSTRAC Online and submit.
+    """
+    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    records = list_ifti(db, industry_id=industry_id, direction=direction, status=status)
+
+    if not records:
+        raise HTTPException(404, f"No {direction} IFTI records found" + (
+            f" with status={status}" if status else ""
+        ))
+
+    xlsx_bytes = generate_ifti_excel(records, direction=direction)
+    label = "OUT" if direction == IFTIDirection.outgoing else "IN"
+    filename = f"IFTI_DRA_{label}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    return StreamingResponse(
+        BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Record-Count": str(len(records)),
+        },
+    )
+
+
+@router.post("/export/batch")
+def export_selected(
+    ifti_ids: List[str],
+    direction: IFTIDirection,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    """Export a specific selection of IFTI records to Excel."""
+    from app.models.ifti import IFTIRecord as IFTIModel
+    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    q = db.query(IFTIModel).filter(
+        IFTIModel.ifti_id.in_(ifti_ids),
+        IFTIModel.direction == direction,
+    )
+    if industry_id:
+        q = q.filter(IFTIModel.industry_id == industry_id)
+    records = q.all()
+
+    if not records:
+        raise HTTPException(404, "No matching records found")
+
+    xlsx_bytes = generate_ifti_excel(records, direction=direction)
+    label = "OUT" if direction == IFTIDirection.outgoing else "IN"
+    filename = f"IFTI_DRA_{label}_BATCH_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    return StreamingResponse(
+        BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
