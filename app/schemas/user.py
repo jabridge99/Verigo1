@@ -1,0 +1,64 @@
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from datetime import datetime
+from app.models.user import UserRole, UserStatus
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    full_name: str
+    password: str
+    role: UserRole = UserRole.analyst
+    industry_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[UserRole] = None
+    status: Optional[UserStatus] = None
+    industry_id: Optional[str] = None
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class MagicLinkRequest(BaseModel):
+    email: EmailStr
+
+
+class MagicLinkVerify(BaseModel):
+    token: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    email: str
+    full_name: str
+    role: str
+    industry_id: Optional[str] = None
+
+
+class UserResponse(BaseModel):
+    id: int
+    user_id: str
+    email: str
+    full_name: str
+    role: UserRole
+    status: UserStatus
+    industry_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    mfa_enabled: bool
+    last_login_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str

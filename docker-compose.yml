@@ -1,0 +1,140 @@
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-tvg}
+      POSTGRES_USER:     ${POSTGRES_USER:-tvg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tvg}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  # ── Backend API ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT:    production
+      DATABASE_URL:   postgresql://${POSTGRES_USER:-tvg}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tvg}
+      SECRET_KEY:     ${SECRET_KEY:?SECRET_KEY is required}
+      CORS_ORIGINS:   ${CORS_ORIGINS:-https://${APP_DOMAIN:-app.example.com}}
+      APP_URL:        ${APP_URL:-https://${APP_DOMAIN:-app.example.com}}
+      API_URL:        ${API_URL:-https://${API_DOMAIN:-api.example.com}}
+      LOG_LEVEL:      ${LOG_LEVEL:-INFO}
+      WORKERS:        ${API_WORKERS:-2}
+      # Email
+      SMTP_HOST:      ${SMTP_HOST:-}
+      SMTP_PORT:      ${SMTP_PORT:-587}
+      SMTP_USER:      ${SMTP_USER:-}
+      SMTP_PASS:      ${SMTP_PASS:-}
+      FROM_EMAIL:     ${FROM_EMAIL:-noreply@example.com}
+      FROM_NAME:      ${FROM_NAME:-Trust Verify Go}
+      # Storage
+      STORAGE_BACKEND:      ${STORAGE_BACKEND:-local}
+      S3_BUCKET:            ${S3_BUCKET:-}
+      S3_REGION:            ${S3_REGION:-ap-southeast-2}
+      S3_ENDPOINT_URL:      ${S3_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID:    ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AZURE_ACCOUNT_NAME:   ${AZURE_ACCOUNT_NAME:-}
+      AZURE_ACCOUNT_KEY:    ${AZURE_ACCOUNT_KEY:-}
+      AZURE_CONTAINER:      ${AZURE_CONTAINER:-documents}
+      GCS_BUCKET:           ${GCS_BUCKET:-}
+      GCS_CREDENTIALS_JSON: ${GCS_CREDENTIALS_JSON:-}
+      # Stripe
+      STRIPE_SECRET_KEY:         ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET:     ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_STARTER_MONTHLY_ID: ${STRIPE_STARTER_MONTHLY_ID:-}
+      STRIPE_STARTER_ANNUAL_ID:  ${STRIPE_STARTER_ANNUAL_ID:-}
+      STRIPE_PRO_MONTHLY_ID:     ${STRIPE_PRO_MONTHLY_ID:-}
+      STRIPE_PRO_ANNUAL_ID:      ${STRIPE_PRO_ANNUAL_ID:-}
+      STRIPE_ENT_MONTHLY_ID:     ${STRIPE_ENT_MONTHLY_ID:-}
+      STRIPE_ENT_ANNUAL_ID:      ${STRIPE_ENT_ANNUAL_ID:-}
+      # Sentry (optional)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    volumes:
+      - uploads:/data/uploads
+    networks:
+      - internal
+      - public
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL:  ${API_URL:-https://${API_DOMAIN:-api.example.com}}
+        NEXT_PUBLIC_APP_URL:  ${APP_URL:-https://${APP_DOMAIN:-app.example.com}}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - public
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Nginx reverse proxy ───────────────────────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN:       ${APP_DOMAIN:?APP_DOMAIN is required (e.g. app.yourdomain.com)}
+      API_DOMAIN:       ${API_DOMAIN:?API_DOMAIN is required (e.g. api.yourdomain.com)}
+      CERTBOT_EMAIL:    ${CERTBOT_EMAIL:-}
+      CERTBOT_STAGING:  ${CERTBOT_STAGING:-false}
+    volumes:
+      - nginx_certs:/etc/nginx/certs
+      - certbot_webroot:/var/www/certbot
+      - certbot_letsencrypt:/etc/letsencrypt
+    depends_on:
+      - api
+      - web
+    networks:
+      - public
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pgdata:
+  uploads:
+  nginx_certs:
+  certbot_webroot:
+  certbot_letsencrypt:
+
+networks:
+  internal:
+  public:
