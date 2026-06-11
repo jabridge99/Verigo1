@@ -136,7 +136,7 @@ export default function ECDDDashboard() {
       {/* Tabs */}
       <div className="border-b border-navy-800 px-6">
         <div className="max-w-7xl mx-auto flex gap-1">
-          {(["records", "Records", ShieldCheck], ["create", "New Assessment", Plus]) && [
+          {[
             { id: "records" as Tab, label: "Records", Icon: ShieldCheck },
             { id: "create" as Tab, label: "New Assessment", Icon: Plus },
           ].map(({ id, label, Icon }) => (

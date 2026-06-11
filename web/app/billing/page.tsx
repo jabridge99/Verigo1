@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { getStoredUser, getToken } from "@/lib/auth";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -206,7 +207,7 @@ function fmtAUD(n?: number | null) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function BillingPage() {
+function BillingContent() {
   const router = useRouter();
   const params = useSearchParams();
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -615,5 +616,13 @@ function AllSubscriptions() {
         </div>
       ))}
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#060d1a] flex items-center justify-center"><div className="text-slate-400">Loading...</div></div>}>
+      <BillingContent />
+    </Suspense>
   );
 }

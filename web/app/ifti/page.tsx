@@ -79,6 +79,7 @@ interface FormData {
   oc_id2_type: string; oc_id2_number: string; oc_id2_issuer: string;
   bc_full_name: string; bc_dob: string; bc_business_name: string;
   bc_address: string; bc_city: string; bc_state: string; bc_postcode: string; bc_country: string;
+  bc_business_structure: string;
   bc_phone: string; bc_email: string; bc_occupation: string; bc_abn: string;
   bc_account_number: string; bc_institution_name: string; bc_institution_city: string; bc_institution_country: string;
   retail_id_number: string;
@@ -107,6 +108,7 @@ const EMPTY_FORM: FormData = {
   oc_id2_type: "", oc_id2_number: "", oc_id2_issuer: "",
   bc_full_name: "", bc_dob: "", bc_business_name: "", bc_address: "", bc_city: "",
   bc_state: "", bc_postcode: "", bc_country: "",
+  bc_business_structure: "",
   bc_phone: "", bc_email: "", bc_occupation: "", bc_abn: "",
   bc_account_number: "", bc_institution_name: "", bc_institution_city: "", bc_institution_country: "",
   retail_id_number: "",
