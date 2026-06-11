@@ -11,5 +11,5 @@ class SecurityEvent(Base):
     event_type = Column(String(100), nullable=False, index=True)
     user_id    = Column(String(60), index=True)
     ip_address = Column(String(60))
-    metadata   = Column(Text)          # JSON string
+    extra_metadata = Column(Text)          # JSON string
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

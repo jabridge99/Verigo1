@@ -10,7 +10,7 @@ from sqlalchemy import func, case, and_
 from app.models.customer import Customer, RiskLevel, CustomerStatus
 from app.models.kyc import KYCRecord, KYCStatus
 from app.models.transaction import Transaction
-from app.models.report import Report, ReportStatus, ReportType
+from app.models.report import ComplianceReport as Report, ReportStatus, ReportType
 from app.models.audit import AuditLog
 
 

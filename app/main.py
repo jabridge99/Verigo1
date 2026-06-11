@@ -10,7 +10,6 @@ from app.middleware import SecurityHeadersMiddleware, RequestLoggingMiddleware, 
 from app.db.database import Base, engine, SessionLocal
 
 from app.api.routes import customers, kyc, transactions, reports, sanctions
-from app.api.routes import packs, rules
 from app.api.routes import onboarding
 from app.api.routes import audit
 from app.api.routes import tenants
@@ -31,8 +30,6 @@ import app.models.customer      # noqa: F401
 import app.models.kyc           # noqa: F401
 import app.models.transaction   # noqa: F401
 import app.models.report        # noqa: F401
-import app.models.pack          # noqa: F401
-import app.models.rule_builder  # noqa: F401
 import app.models.onboarding    # noqa: F401
 import app.models.audit         # noqa: F401
 import app.models.tenant        # noqa: F401
@@ -58,14 +55,17 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     log.info("Database tables verified")
 
-    from app.services.pack_engine import seed_all_packs
-    db = SessionLocal()
     try:
-        seeded = seed_all_packs(db)
-        if seeded:
-            log.info("Seeded %d compliance packs", seeded)
-    finally:
-        db.close()
+        from app.services.pack_engine import seed_all_packs
+        db = SessionLocal()
+        try:
+            seeded = seed_all_packs(db)
+            if seeded:
+                log.info("Seeded %d compliance packs", seeded)
+        finally:
+            db.close()
+    except ImportError:
+        log.debug("pack_engine not available — skipping pack seeding")
 
     yield
     log.info("Shutdown complete")
@@ -124,8 +124,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
-app.include_router(packs.router,         prefix="/api/v1")
-app.include_router(rules.router,         prefix="/api/v1")
 app.include_router(onboarding.router,    prefix="/api/v1")
 app.include_router(customers.router,     prefix="/api/v1")
 app.include_router(kyc.router,           prefix="/api/v1")

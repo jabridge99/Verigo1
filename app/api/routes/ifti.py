@@ -11,13 +11,13 @@ All endpoints require authentication. Generation requires compliance+ role.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as _date_type
 from typing import Optional, List
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -188,22 +188,25 @@ class IFTIResponse(BaseModel):
     ifti_id: str
     direction: IFTIDirection
     status: IFTIStatus
-    date_received: Optional[str]
-    date_available: Optional[str]
-    currency_code: Optional[str]
-    total_amount: Optional[float]
-    transfer_type: Optional[str]
-    transaction_reference: Optional[str]
-    oc_full_name: Optional[str]
-    bc_full_name: Optional[str]
-    reason_for_transfer: Optional[str]
-    reporter_full_name: Optional[str]
-    reporter_email: Optional[str]
-    industry_id: Optional[str]
-    created_by: Optional[str]
+    date_received: Optional[_date_type] = None
+    date_available: Optional[_date_type] = None
+    currency_code: Optional[str] = None
+    total_amount: Optional[float] = None
+    transfer_type: Optional[str] = None
+    transaction_reference: Optional[str] = None
+    oc_full_name: Optional[str] = None
+    bc_full_name: Optional[str] = None
+    reason_for_transfer: Optional[str] = None
+    reporter_full_name: Optional[str] = None
+    reporter_email: Optional[str] = None
+    industry_id: Optional[str] = None
+    created_by: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
+
+    @field_serializer("date_received", "date_available")
+    def _fmt_date(self, v: Optional[_date_type]) -> Optional[str]:
+        return v.strftime("%d/%m/%Y") if v else None
 
 
 def _parse_date(val: Optional[str]):

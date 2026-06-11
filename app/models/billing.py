@@ -132,7 +132,7 @@ class Subscription(Base):
 
     # Metadata
     notes                 = Column(Text)    # admin notes (VVIP deal terms etc.)
-    metadata              = Column(JSON, default=dict)
+    extra_metadata        = Column(JSON, default=dict)
 
     created_at            = Column(DateTime(timezone=True), server_default=func.now())
     updated_at            = Column(DateTime(timezone=True), onupdate=func.now())

@@ -52,6 +52,7 @@ class Customer(Base):
     risk_level = Column(Enum(RiskLevel), default=RiskLevel.low)
     risk_score = Column(Float, default=0.0)
     is_pep = Column(Integer, default=0)
+    industry_id = Column(String(60), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
