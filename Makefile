@@ -62,9 +62,10 @@ deploy: build ## Build, migrate, restart (zero-downtime with Docker)
 
 certs: ## Generate self-signed certs for local HTTPS testing
 	mkdir -p nginx/certs
+	APP_DOMAIN=$${APP_DOMAIN:-app.localhost} API_DOMAIN=$${API_DOMAIN:-api.localhost} \
 	openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 	  -keyout nginx/certs/app.key -out nginx/certs/app.crt \
-	  -subj "/CN=app.localhost"
+	  -subj "/CN=$$APP_DOMAIN" -addext "subjectAltName=DNS:$$APP_DOMAIN,DNS:$$API_DOMAIN"
 	cp nginx/certs/app.key nginx/certs/api.key
 	cp nginx/certs/app.crt nginx/certs/api.crt
 
