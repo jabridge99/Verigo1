@@ -73,6 +73,31 @@ def revoke_api_key(db: Session, key_id: str, user_id: str) -> Optional[APIKey]:
     return key
 
 
+def _validate_webhook_url(url: str) -> None:
+    """
+    Block SSRF: reject private IPs, localhost, metadata endpoints, and non-HTTPS.
+    """
+    import ipaddress
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Webhook URL must use HTTPS")
+    host = parsed.hostname or ""
+    # Block cloud metadata endpoints
+    _BLOCKED_HOSTS = {"169.254.169.254", "metadata.google.internal", "metadata.internal"}
+    if host.lower() in _BLOCKED_HOSTS or host.lower().endswith(".internal"):
+        raise ValueError(f"Webhook URL host '{host}' is not allowed")
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise ValueError(f"Webhook URL must not target a private/loopback/reserved IP: {host}")
+    except ValueError as e:
+        if "Webhook URL" in str(e):
+            raise
+        pass   # not a raw IP — hostname is fine
+
+
 def authenticate_api_key(db: Session, raw: str) -> Optional[APIKey]:
     key = db.query(APIKey).filter(
         APIKey.key_hash == _hash_key(raw),
@@ -92,6 +117,7 @@ def authenticate_api_key(db: Session, raw: str) -> Optional[APIKey]:
 # ── Webhooks ──────────────────────────────────────────────────────────────────
 
 def create_webhook(db: Session, data: WebhookCreate, user_id: str, industry_id: Optional[str]) -> WebhookEndpoint:
+    _validate_webhook_url(data.url)
     wh = WebhookEndpoint(
         webhook_id=f"WH-{_uid()}",
         name=data.name,
@@ -157,12 +183,28 @@ def _sign_payload(secret: str, body: str) -> str:
     return hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
 
 
+def check_api_key_scope(key: APIKey, required_scope: str) -> bool:
+    """Enforce declared scopes — * grants all, otherwise exact match."""
+    scopes = key.scopes or []
+    if isinstance(scopes, str):
+        import json as _json
+        try:
+            scopes = _json.loads(scopes)
+        except Exception:
+            scopes = [scopes]
+    return "*" in scopes or required_scope in scopes
+
+
 def fire_webhook(db: Session, wh: WebhookEndpoint, event: str, payload: dict) -> WebhookDelivery:
-    body = json.dumps({"event": event, "data": payload})
-    sig = hmac.new(wh.secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+    ts = str(int(datetime.now(timezone.utc).timestamp()))
+    body = json.dumps({"event": event, "data": payload, "timestamp": ts})
+    # Include timestamp in HMAC to prevent replay attacks
+    signed_content = f"{ts}.{body}"
+    sig = hmac.new(wh.secret.encode(), signed_content.encode(), hashlib.sha256).hexdigest()
     headers = {
         "Content-Type": "application/json",
         "X-TVG-Event": event,
+        "X-TVG-Timestamp": ts,
         "X-TVG-Signature": f"sha256={sig}",
         "X-TVG-Webhook-ID": wh.webhook_id,
     }

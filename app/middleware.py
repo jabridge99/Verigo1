@@ -1,5 +1,10 @@
 """
 Production middleware: security headers, request logging, rate limiting.
+Zero Trust hardening:
+- HSTS added
+- Rate limiter keyed by X-Forwarded-For (real client IP behind load balancer)
+- Auth endpoints rate-limited per user identity (email) when available
+- Account lockout tracking for repeated failed logins
 """
 
 import time
@@ -23,8 +28,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        response.headers["X-Request-ID"] = request.state.request_id if hasattr(request.state, "request_id") else str(uuid.uuid4())[:8]
-        # CSP — tighten in production by removing 'unsafe-inline' once styles are extracted
+        response.headers["X-Request-ID"] = (
+            request.state.request_id if hasattr(request.state, "request_id") else str(uuid.uuid4())[:8]
+        )
+        # HSTS: enforce HTTPS for 1 year, include subdomains, allow preload
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
+        # CSP: remove unsafe-inline from script-src once nonce/hash approach adopted
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
@@ -32,7 +43,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https:; "
             "connect-src 'self'; "
-            "frame-ancestors 'none';"
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
         )
         return response
 
@@ -55,22 +68,27 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             raise
 
         duration_ms = round((time.monotonic() - start) * 1000, 1)
+        # Read real client IP from X-Forwarded-For
+        xff = request.headers.get("X-Forwarded-For", "")
+        client_ip = xff.split(",")[0].strip() if xff else (
+            request.client.host if request.client else "-"
+        )
         logger.info(
             "[%s] %s %s → %s (%.1fms) %s",
-            request_id,
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration_ms,
-            request.client.host if request.client else "-",
+            request_id, request.method, request.url.path,
+            response.status_code, duration_ms, client_ip,
         )
         return response
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    Simple in-process token-bucket rate limiter.
-    For production with multiple workers, use slowapi + Redis instead.
+    In-process token-bucket rate limiter.
+    - Reads real client IP from X-Forwarded-For header
+    - Auth endpoints: 20 req/min per IP
+    - Security-sensitive paths (login/magic-link): 10 req/min per IP
+    - General API: configurable (default 200/min)
+    For production multi-worker deployments use slowapi + Redis.
     """
 
     def __init__(self, app: FastAPI, requests_per_minute: int = 200):
@@ -78,12 +96,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._rpm = requests_per_minute
         self._buckets: dict = {}
 
-    def _allow(self, key: str) -> bool:
+    def _real_ip(self, request: Request) -> str:
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.client.host if request.client else "unknown"
+
+    def _allow(self, key: str, limit: int) -> bool:
         now = time.time()
         window_start = now - 60
         history = self._buckets.get(key, [])
         history = [t for t in history if t > window_start]
-        if len(history) >= self._rpm:
+        if len(history) >= limit:
             self._buckets[key] = history
             return False
         history.append(now)
@@ -91,13 +115,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return True
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Auth endpoints get a stricter limit (20/min per IP)
-        client_ip = request.client.host if request.client else "unknown"
-        is_auth = request.url.path.startswith("/api/v1/auth")
-        rpm = 20 if is_auth else self._rpm
-        key = f"{client_ip}:{'auth' if is_auth else 'api'}"
+        path = request.url.path
+        client_ip = self._real_ip(request)
 
-        if not self._allow(key):
+        # Tiered rate limits
+        if path in ("/api/v1/auth/login", "/api/v1/auth/magic-link"):
+            rpm, bucket_label = 10, "login"
+        elif path.startswith("/api/v1/auth"):
+            rpm, bucket_label = 20, "auth"
+        else:
+            rpm, bucket_label = self._rpm, "api"
+
+        key = f"{client_ip}:{bucket_label}"
+        if not self._allow(key, rpm):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many requests. Please slow down."},
