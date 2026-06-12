@@ -13,18 +13,18 @@ SMTP_HOST  = os.getenv("SMTP_HOST", "")
 SMTP_PORT  = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER  = os.getenv("SMTP_USER", "")
 SMTP_PASS  = os.getenv("SMTP_PASS", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@trustverifygo.com.au")
-FROM_NAME  = os.getenv("FROM_NAME",  "Trust Verify Go")
+FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@verigo.com.au")
+FROM_NAME  = os.getenv("FROM_NAME",  "Verigo")
 APP_URL    = os.getenv("APP_URL",    "http://localhost:3000")
 
 _BRAND_HEADER = """
 <div style="background:#1e3a8a;padding:24px 32px;border-radius:12px 12px 0 0;">
-  <span style="color:#fff;font-size:18px;font-weight:700;">Trust<span style="color:#60a5fa"> Verify</span><span style="color:#f59e0b"> Go</span></span>
+  <span style="color:#fff;font-size:18px;font-weight:700;">Veri<span style="color:#60a5fa">go</span></span>
 </div>
 """
 
 _WRAP_OPEN  = '<div style="font-family:Inter,system-ui,sans-serif;max-width:580px;margin:0 auto;background:#0d1526;border-radius:12px;overflow:hidden;">'
-_WRAP_CLOSE = '<p style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Trust Verify Go · Australian Compliance Operating System<br>© 2025 Trust Verify Go Pty Ltd · ABN XX XXX XXX XXX</p></div>'
+_WRAP_CLOSE = '<p style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Verigo · Australian Compliance Operating System<br>© 2025 Verigo Pty Ltd</p></div>'
 _BODY_OPEN  = '<div style="padding:28px 32px;">'
 _BODY_CLOSE = '</div>'
 
@@ -57,12 +57,12 @@ def send_magic_link(to: str, full_name: str, token: str) -> bool:
     html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
 <h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Your sign-in link</h2>
 <p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {full_name},<br><br>
-Click the button below to sign in to your Trust Verify Go workspace. This link expires in <strong style="color:#fff;">15 minutes</strong> and can only be used once.</p>
-<a href="{verify_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Sign In to Trust Verify Go</a>
+Click the button below to sign in to your Verigo workspace. This link expires in <strong style="color:#fff;">15 minutes</strong> and can only be used once.</p>
+<a href="{verify_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Sign In to Verigo</a>
 <p style="color:#64748b;font-size:12px;margin-top:20px;">If you didn't request this link, you can safely ignore this email.<br>
 Token (for reference): <code style="color:#60a5fa;">{token[:12]}…</code></p>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, "Your Trust Verify Go sign-in link", html)
+    return _send(to, "Your Verigo sign-in link", html)
 
 
 def send_report_deadline(to: str, full_name: str, report_type: str, report_id: str, days_remaining: int) -> bool:
@@ -79,7 +79,7 @@ A <strong style="color:#fff;">{report_type}</strong> report (<code style="color:
 <p style="color:#94a3b8;font-size:14px;">Failure to submit on time may constitute a breach of the AML/CTF Act 2006 and may attract civil or criminal penalties.</p>
 <a href="{report_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Review & Submit Report</a>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, f"[{urgency_label}] {report_type} due in {days_remaining} day(s) — Trust Verify Go", html)
+    return _send(to, f"[{urgency_label}] {report_type} due in {days_remaining} day(s) — Verigo", html)
 
 
 def send_case_assignment(to: str, full_name: str, case_id: str, case_title: str, severity: str, assigned_by: str) -> bool:
@@ -99,7 +99,7 @@ def send_case_assignment(to: str, full_name: str, case_id: str, case_title: str,
 </div>
 <a href="{case_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:8px 0;">Open Case</a>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, f"Case assigned: {case_id} — Trust Verify Go", html)
+    return _send(to, f"Case assigned: {case_id} — Verigo", html)
 
 
 def send_report_approved(to: str, full_name: str, report_type: str, report_id: str, approved_by: str) -> bool:
@@ -115,7 +115,7 @@ Your <strong style="color:#fff;">{report_type}</strong> report has been approved
 <p style="color:#94a3b8;font-size:14px;margin-bottom:20px;">Please log in and confirm AUSTRAC submission within the required timeframe.</p>
 <a href="{report_url}" style="display:inline-block;background:#22c55e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Submit to AUSTRAC</a>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, f"Report approved: {report_id} ready for AUSTRAC — Trust Verify Go", html)
+    return _send(to, f"Report approved: {report_id} ready for AUSTRAC — Verigo", html)
 
 
 def send_kyc_review_required(to: str, full_name: str, kyc_id: str, customer_name: str) -> bool:
@@ -130,7 +130,7 @@ A KYC record for <strong style="color:#fff;">{customer_name}</strong> requires y
 </div>
 <a href="{kyc_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:8px 0;">Review KYC Record</a>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, f"KYC review required: {customer_name} — Trust Verify Go", html)
+    return _send(to, f"KYC review required: {customer_name} — Verigo", html)
 
 
 def send_aml_alert(to: str, full_name: str, alert_type: str, customer_name: str, amount: float) -> bool:
@@ -150,4 +150,4 @@ An AML alert has been triggered for customer <strong style="color:#fff;">{custom
 </div>
 <a href="{monitor_url}" style="display:inline-block;background:#ef4444;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:8px 0;">Review Alert</a>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, f"AML Alert: {alert_type} — {customer_name} — Trust Verify Go", html)
+    return _send(to, f"AML Alert: {alert_type} — {customer_name} — Verigo", html)

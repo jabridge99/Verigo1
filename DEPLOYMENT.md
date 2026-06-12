@@ -1,4 +1,4 @@
-# Trust Verify Go — Production Deployment Runbook
+# Verigo — Production Deployment Runbook
 
 ## Architecture
 
@@ -70,7 +70,7 @@ For Kubernetes, each service maps to a Deployment + Service.
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/jabridge99/EcoBin.git tvg
+git clone https://github.com/jabridge99/Verigo1.git verigo
 cd tvg
 cp .env.example .env
 ```
@@ -113,7 +113,7 @@ cp /etc/letsencrypt/live/api.yourdomain.com/fullchain.pem nginx/certs/api.crt
 cp /etc/letsencrypt/live/api.yourdomain.com/privkey.pem   nginx/certs/api.key
 ```
 
-Also update domain names in `nginx/nginx.conf` — replace `app.trustverifygo.com.au` and `api.trustverifygo.com.au` with your actual domain.
+Also update domain names in `nginx/nginx.conf` — replace `app.verigo.com.au` and `api.verigo.com.au` with your actual domain.
 
 **Local/staging testing** — generate self-signed certs:
 
@@ -225,7 +225,7 @@ The test suite covers:
 
 ## IFTI Report Workflow (AUSTRAC)
 
-Trust Verify Go generates AUSTRAC-compatible IFTI-DRA Excel files for IFTI-IN (115 cols) and IFTI-OUT (112 cols).
+Verigo generates AUSTRAC-compatible IFTI-DRA Excel files for IFTI-IN (115 cols) and IFTI-OUT (112 cols).
 
 ```
 1. Create IFTI records via UI or POST /api/v1/ifti/
@@ -397,6 +397,6 @@ This system is designed for AUSTRAC-regulated Designated Remittance Arrangements
 
 ## Support
 
-- Issues: https://github.com/jabridge99/EcoBin/issues
-- Docs: https://docs.trustverifygo.com.au
-- Email: support@trustverifygo.com.au
+- Issues: https://github.com/jabridge99/Verigo1/issues
+- Docs: https://docs.verigo.com.au
+- Email: support@verigo.com.au

@@ -48,7 +48,7 @@ def verify_totp(secret: str, code: str, window: int = 1) -> bool:
     return False
 
 
-def totp_provisioning_uri(secret: str, account: str, issuer: str = "Trust Verify Go") -> str:
+def totp_provisioning_uri(secret: str, account: str, issuer: str = "Verigo") -> str:
     """Return an otpauth:// URI suitable for QR code generation."""
     account_enc = quote(account)
     issuer_enc  = quote(issuer)

@@ -173,7 +173,7 @@ export default function BrandingPage() {
                 Accent Button
               </span>
             </div>
-            {!config.hide_tvg_badge && (
+            {!config.hide_verigo_badge && (
               <p className="text-xs mt-3" style={{ color: config.primary_color }}>Powered by Verigo</p>
             )}
             <p className="text-xs text-slate-500 mt-1">{config.footer_text}</p>
@@ -223,10 +223,10 @@ export default function BrandingPage() {
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <div
-                    onClick={() => set("hide_tvg_badge", !config.hide_tvg_badge)}
-                    className={`w-11 h-6 rounded-full transition-colors relative ${config.hide_tvg_badge ? "bg-blue-600" : "bg-white/10"}`}
+                    onClick={() => set("hide_verigo_badge", !config.hide_verigo_badge)}
+                    className={`w-11 h-6 rounded-full transition-colors relative ${config.hide_verigo_badge ? "bg-blue-600" : "bg-white/10"}`}
                   >
-                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${config.hide_tvg_badge ? "translate-x-5" : "translate-x-0.5"}`} />
+                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${config.hide_verigo_badge ? "translate-x-5" : "translate-x-0.5"}`} />
                   </div>
                   <span className="text-sm text-slate-400">Remove "Powered by Verigo"</span>
                 </label>

@@ -42,7 +42,7 @@ export default function Footer() {
               <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
                 <Shield className="w-5 h-5 text-white" />
               </div>
-              <span className="text-white">Trust<span className="text-brand-400"> Verify</span><span className="text-gold-400"> Go</span></span>
+              <span className="text-white">Veri<span className="text-brand-400">go</span></span>
             </div>
             <p className="text-white/50 text-sm leading-relaxed">
               Australian-first Compliance Operating System for regulated businesses.

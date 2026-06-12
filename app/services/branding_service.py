@@ -14,16 +14,16 @@ from app.schemas.branding import BrandingConfig
 
 # Default branding — returned when no tenant overrides are set
 DEFAULT_BRANDING: dict = {
-    "company_name":   "Trust Verify Go",
+    "company_name":   "Verigo",
     "logo_url":       None,
     "favicon_url":    None,
     "primary_color":  "#2563eb",
     "accent_color":   "#f59e0b",
     "bg_color":       "#060d1a",
     "custom_domain":  None,
-    "support_email":  "support@trustverifygo.com.au",
+    "support_email":  "support@verigo.com.au",
     "footer_text":    "Australian Compliance Operating System",
-    "hide_tvg_badge": False,
+    "hide_verigo_badge": False,
 }
 
 

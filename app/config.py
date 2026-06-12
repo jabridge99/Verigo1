@@ -6,7 +6,7 @@ from pydantic import field_validator, model_validator
 
 class Settings(BaseSettings):
     # ── Identity ────────────────────────────────────────────────────────────
-    app_name: str = "Trust Verify Go"
+    app_name: str = "Verigo"
     environment: str = "development"   # development | staging | production
     debug: bool = False
     version: str = "1.0.0"
@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_pass: str = ""
-    from_email: str = "noreply@trustverifygo.com.au"
-    from_name: str = "Trust Verify Go"
+    from_email: str = "noreply@verigo.com.au"
+    from_name: str = "Verigo"
 
     # ── App URLs ──────────────────────────────────────────────────────────────
     app_url: str = "http://localhost:3000"

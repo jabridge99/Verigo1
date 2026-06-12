@@ -79,7 +79,7 @@ _openapi_url = None if settings.is_production else "/openapi.json"
 app = FastAPI(
     title=settings.app_name,
     description=(
-        "Trust Verify Go — Australian-first Compliance Operating System.\n\n"
+        "Verigo — Australian-first Compliance Operating System.\n\n"
         "Workflow: Industry selection → Compliance pack loading → Customer onboarding "
         "→ KYC/KYB → Transaction monitoring → AML alerts → Regulatory reporting → ECDD"
     ),

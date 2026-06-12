@@ -117,5 +117,5 @@ def test_webhook(
     wh = svc.get_webhook(db, webhook_id, current_user.user_id)
     if not wh:
         raise HTTPException(404, "Webhook not found")
-    delivery = svc.fire_webhook(db, wh, "test.ping", {"message": "Trust Verify Go webhook test"})
+    delivery = svc.fire_webhook(db, wh, "test.ping", {"message": "Verigo webhook test"})
     return {"success": delivery.success, "status_code": delivery.status_code}

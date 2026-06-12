@@ -10,7 +10,7 @@ export interface BrandingConfig {
   custom_domain?: string | null;
   support_email: string;
   footer_text: string;
-  hide_tvg_badge: boolean;
+  hide_verigo_badge: boolean;
   tenant_id?: string;
   industry_id?: string;
 }
@@ -22,7 +22,7 @@ export const DEFAULT_BRANDING: BrandingConfig = {
   bg_color: "#060d1a",
   support_email: "support@verigo.com.au",
   footer_text: "Australian Compliance Operating System",
-  hide_tvg_badge: false,
+  hide_verigo_badge: false,
 };
 
 export async function fetchBranding(industryId?: string): Promise<BrandingConfig> {

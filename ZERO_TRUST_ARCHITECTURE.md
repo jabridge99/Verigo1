@@ -1,4 +1,4 @@
-# Zero Trust Architecture — Trust Verify Go
+# Zero Trust Architecture — Verigo
 
 ## Architecture Diagram
 
