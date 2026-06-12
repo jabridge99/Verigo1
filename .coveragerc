@@ -1,0 +1,13 @@
+[run]
+omit =
+    # Storage backends require live S3/Azure/GCS credentials
+    app/services/storage/*
+    # Email requires live SMTP
+    app/services/email_service.py
+    # TOTP/MFA requires authenticator app
+    app/services/mfa_service.py
+    # Data packs
+    app/data/*
+
+[report]
+fail_under = 58

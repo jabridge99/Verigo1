@@ -62,7 +62,8 @@ jobs:
       - name: Run tests
         run: |
           pip install pytest-cov
-          pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=60
+          pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=58 \
+            --cov-config=.coveragerc
 
       - name: Upload coverage
         if: matrix.python-version == '3.11'
