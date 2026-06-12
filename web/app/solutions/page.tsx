@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen } from 'lucide-react'
+import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX } from 'lucide-react'
 import { industries } from '@/lib/industries'
 import { capabilities as libCaps } from '@/lib/capabilities'
 
@@ -30,7 +30,7 @@ const capIcons: Record<string, React.ElementType> = {
   'kyc-identity-verification': ScanFace,
   'kyb-business-verification': Building2,
   'sanctions-screening': ShieldAlert,
-  'pep-screening': Shield,
+  'pep-screening': UserX,
   'adverse-media': Newspaper,
   'transaction-monitoring': BarChart3,
   'case-management': Folder,
@@ -59,7 +59,7 @@ export default function SolutionsPage() {
             The Compliance<br />Operating System
           </h1>
           <p className="text-xl text-slate-600 max-w-2xl mx-auto mb-8">
-            Eight integrated capabilities designed to eliminate the complexity of AML/CTF compliance for Australian reporting entities.
+            Twelve integrated capabilities — from your AML Program foundation through to automated AUSTRAC reporting. Built exclusively for Australian regulated businesses.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/start-trial" className="pub-btn-lg">Start Free Trial <ArrowRight className="w-5 h-5" /></Link>
@@ -102,7 +102,7 @@ export default function SolutionsPage() {
             </div>
           </Link>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
             {capabilities.map(({ id, slug, icon: Icon, title, tagline, benefits }) => (
               <Link key={id} href={`/solutions/${slug}`} className="pub-card-hover group flex flex-col gap-4">
                 <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -120,6 +120,31 @@ export default function SolutionsPage() {
                 <span className="text-blue-600 text-sm font-semibold group-hover:underline">Learn more →</span>
               </Link>
             ))}
+          </div>
+
+          {/* AUSTRAC Reporting sub-capabilities */}
+          <div className="bg-slate-50 rounded-2xl p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <FileText className="w-5 h-5 text-blue-600" />
+              <h3 className="font-bold text-slate-900">AUSTRAC Reporting — all report types included</h3>
+              <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-700/10">Every plan</span>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-4">
+              {[
+                { code: 'IFTI', name: 'International Funds Transfer Instruction', desc: 'IFTI IN and IFTI OUT reports for international transfers of $10,000 AUD or more. Bulk import for high-volume corridors. Pre-populated from transaction data.', deadline: 'Due: within 10 business days' },
+                { code: 'SMR', name: 'Suspicious Matter Report', desc: 'Suspicious matter reports generated directly from investigated cases. Built-in AUSTRAC field validation. MLRO sign-off workflow before submission.', deadline: 'Due: within 3 business days' },
+                { code: 'TTR', name: 'Threshold Transaction Report', desc: 'Threshold cash transaction reports for transactions of $10,000 AUD or more. Auto-generated from transaction data. Batch submission supported.', deadline: 'Due: within 10 business days' },
+              ].map(r => (
+                <div key={r.code} className="bg-white rounded-xl p-5 ring-1 ring-slate-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1 text-sm font-black text-white">{r.code}</span>
+                    <span className="text-xs text-slate-400 font-medium">{r.deadline}</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-700 mb-2">{r.name}</p>
+                  <p className="text-xs text-slate-500 leading-relaxed">{r.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

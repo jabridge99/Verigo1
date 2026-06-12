@@ -150,7 +150,7 @@ function AMLReformTimeline() {
     <section className="pub-section bg-slate-900" id="aml-reform">
       <div className="pub-container">
         <div className="text-center mb-16">
-          <span className="inline-flex items-center rounded-full bg-amber-900/50 px-3 py-1.5 text-xs font-semibold text-amber-300 ring-1 ring-amber-700/30 mb-4 block w-fit mx-auto">🇦🇺 Australian Regulation</span>
+          <span className="inline-flex items-center rounded-full bg-blue-900/50 px-3 py-1.5 text-xs font-semibold text-blue-300 ring-1 ring-blue-700/30 mb-4 block w-fit mx-auto">🇦🇺 Australian Regulation</span>
           <h2 className="text-4xl md:text-5xl font-black text-white leading-tight tracking-tight mb-4">
             The biggest AML reform in 18 years is underway.
           </h2>
@@ -165,7 +165,7 @@ function AMLReformTimeline() {
             { year: '2024', title: 'Tranche 2 legislation introduced', desc: 'The AML/CTF Amendment Act 2024 passed Parliament, extending obligations to real estate professionals, lawyers, accountants, conveyancers, and precious metal dealers.', status: 'current' },
             { year: '2026', title: 'Expanded obligations commence', desc: 'From 2026, all newly captured businesses must have a full AML/CTF program in place, enrolled with AUSTRAC, and conducting customer due diligence.', status: 'upcoming' },
           ].map(item => (
-            <div key={item.year} className={`rounded-2xl p-8 ${item.status === 'upcoming' ? 'bg-blue-600' : item.status === 'current' ? 'bg-slate-800 ring-1 ring-amber-500/30' : 'bg-slate-800'}`}>
+            <div key={item.year} className={`rounded-2xl p-8 ${item.status === 'upcoming' ? 'bg-blue-600' : item.status === 'current' ? 'bg-slate-800 ring-1 ring-blue-500/40' : 'bg-slate-800'}`}>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{item.year}</div>
               <h3 className={`text-xl font-bold mb-3 ${item.status === 'upcoming' ? 'text-white' : 'text-white'}`}>{item.title}</h3>
               <p className={`text-sm leading-relaxed ${item.status === 'upcoming' ? 'text-blue-100' : 'text-slate-400'}`}>{item.desc}</p>
