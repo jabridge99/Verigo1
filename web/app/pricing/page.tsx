@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CheckCircle, X, ArrowRight, Shield, Zap, Database } from 'lucide-react'
+import { CheckCircle, X, ArrowRight, Shield, Zap, Database, Minus } from 'lucide-react'
 
 export const metadata = {
   title: 'Pricing | Verigo',
@@ -107,24 +107,73 @@ const plans = [
   },
 ]
 
-const compareRows = [
-  { feature: 'Customer limit', values: ['—', '500', '5,000', 'Unlimited'] },
-  { feature: 'Compliance packs', values: ['All packs (trial)', '1 pack', 'All packs', 'All packs'] },
-  { feature: 'KYC verification', values: ['✓', '✓', '✓', '✓'] },
-  { feature: 'KYB verification', values: ['✓', '✓', '✓', '✓'] },
-  { feature: 'AML Program templates', values: ['✓', '✓', '✓', '✓ Custom'] },
-  { feature: 'IFTI reporting', values: ['✓', '✓', '✓ + Bulk', '✓ + Bulk'] },
-  { feature: 'SMR & TTR reporting', values: ['✓', '✓', '✓', '✓'] },
-  { feature: 'Sanctions & PEP screening', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'Adverse media screening', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'EDD workflows', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'Transaction monitoring', values: ['✓', 'Basic', 'Advanced', 'Advanced'] },
-  { feature: 'Case management', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'Workflow automation', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'Reporting groups', values: ['✓', '✗', '✗', '✓'] },
-  { feature: 'White label', values: ['✗', '✗', '✗', '✓'] },
-  { feature: 'API access', values: ['✗', '✗', '✓', '✓'] },
-  { feature: 'Support', values: ['Email (trial)', 'Email', 'Priority', 'Dedicated'] },
+type CellValue = true | false | string
+
+const compareGroups: { group: string; rows: { feature: string; tooltip?: string; values: CellValue[] }[] }[] = [
+  {
+    group: 'Platform',
+    rows: [
+      { feature: 'Customer limit', values: ['Trial only', '500', '5,000', 'Unlimited'] },
+      { feature: 'Industry compliance packs', values: ['All packs (trial)', '1 pack', 'All packs', 'All packs'] },
+      { feature: 'AML/CTF Program templates', tooltip: 'Risk assessment, Part A & B, registers, training log', values: [true, true, true, 'Custom'] },
+      { feature: 'Annual review workflow', values: [true, true, true, true] },
+    ],
+  },
+  {
+    group: 'Customer Verification',
+    rows: [
+      { feature: 'KYC — identity verification', values: [true, true, true, true] },
+      { feature: 'KYB — business verification', values: [true, true, true, true] },
+      { feature: 'Beneficial ownership mapping', values: [true, true, true, true] },
+      { feature: 'Enhanced due diligence (EDD)', values: [true, false, true, true] },
+      { feature: 'Ongoing periodic re-verification', values: [true, true, true, true] },
+    ],
+  },
+  {
+    group: 'Screening',
+    rows: [
+      { feature: 'Sanctions screening (OFAC, UN, EU, DFAT, UK HMT)', values: [true, false, true, true] },
+      { feature: 'PEP screening', values: [true, false, true, true] },
+      { feature: 'Adverse media monitoring', values: [true, false, true, true] },
+    ],
+  },
+  {
+    group: 'Transaction Monitoring',
+    rows: [
+      { feature: 'Transaction monitoring rules', values: [true, 'Basic', 'Advanced', 'Advanced'] },
+      { feature: 'Structuring & velocity detection', values: [true, false, true, true] },
+      { feature: 'High-risk jurisdiction flags', values: [true, false, true, true] },
+    ],
+  },
+  {
+    group: 'AUSTRAC Reporting',
+    rows: [
+      { feature: 'IFTI IN & OUT reporting', values: [true, true, true, true] },
+      { feature: 'IFTI bulk import', values: [true, false, true, true] },
+      { feature: 'SMR reporting', values: [true, true, true, true] },
+      { feature: 'TTR reporting', values: [true, true, true, true] },
+      { feature: 'Report review & MLRO sign-off', values: [true, true, true, true] },
+    ],
+  },
+  {
+    group: 'Case Management & Automation',
+    rows: [
+      { feature: 'Case management & investigation', values: [true, false, true, true] },
+      { feature: 'No-code workflow automation', values: [true, false, true, true] },
+      { feature: 'Reporting groups (multi-entity)', values: [true, false, false, true] },
+      { feature: 'White label branding', values: [false, false, false, true] },
+      { feature: 'REST API access', values: [false, false, true, true] },
+    ],
+  },
+  {
+    group: 'Support & Infrastructure',
+    rows: [
+      { feature: 'Australian data hosting', values: [true, true, true, true] },
+      { feature: 'AES-256 encryption', values: [true, true, true, true] },
+      { feature: '99.9% uptime SLA', values: [true, true, true, true] },
+      { feature: 'Support level', values: ['Email (trial)', 'Email', 'Priority', 'Dedicated'] },
+    ],
+  },
 ]
 
 const highlights = [
@@ -132,6 +181,33 @@ const highlights = [
   { icon: Database, title: 'AUSTRAC-aligned templates', desc: 'SMR, IFTI, and TTR templates built to AUSTRAC specifications.' },
   { icon: Zap, title: 'Regular compliance updates', desc: 'Platform updated as AUSTRAC guidance and legislation evolves.' },
 ]
+
+function CellDisplay({ value, highlight }: { value: CellValue; highlight: boolean }) {
+  if (value === true) {
+    return (
+      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 mx-auto">
+        <CheckCircle className="w-4 h-4 text-green-600" />
+      </span>
+    )
+  }
+  if (value === false) {
+    return (
+      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 mx-auto">
+        <Minus className="w-3.5 h-3.5 text-slate-300" />
+      </span>
+    )
+  }
+  // String — label value like 'Advanced', 'Custom', 'Priority'
+  return (
+    <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${
+      highlight
+        ? 'text-blue-700 bg-blue-100'
+        : 'text-slate-700 bg-slate-100'
+    }`}>
+      {value}
+    </span>
+  )
+}
 
 export default function PricingPage() {
   return (
@@ -214,32 +290,88 @@ export default function PricingPage() {
           {/* Compare plans table */}
           <div>
             <h2 className="text-3xl font-black text-slate-900 mb-2 text-center">Compare plans</h2>
-            <p className="text-slate-500 text-center mb-8">See exactly what&apos;s included in each plan.</p>
-            <div className="overflow-x-auto rounded-2xl ring-1 ring-slate-200">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="text-left py-4 px-6 text-sm font-semibold text-slate-500 w-1/3">Feature</th>
+            <p className="text-slate-500 text-center mb-10">Every feature, every plan — side by side.</p>
+
+            <div className="overflow-x-auto rounded-2xl ring-1 ring-slate-200 shadow-sm">
+              <table className="w-full border-collapse min-w-[640px]">
+
+                {/* Sticky header */}
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-white border-b-2 border-slate-200">
+                    <th className="text-left py-5 px-6 text-sm font-semibold text-slate-400 w-2/5">Feature</th>
                     {plans.map(p => (
-                      <th key={p.name} className={`py-4 px-4 text-sm font-bold text-center ${p.highlight ? 'text-blue-600 bg-blue-50' : 'text-slate-900'}`}>
-                        {p.name}
-                        {p.period && <div className="text-xs font-normal text-slate-400 mt-0.5">{p.price}{p.period}</div>}
+                      <th
+                        key={p.name}
+                        className={`py-5 px-4 text-center w-[15%] ${p.highlight ? 'bg-blue-50' : 'bg-white'}`}
+                      >
+                        <div className={`text-base font-black ${p.highlight ? 'text-blue-600' : 'text-slate-900'}`}>{p.name}</div>
+                        {p.price !== 'Free' && p.price !== 'Custom' && (
+                          <div className="text-sm font-semibold text-slate-700 mt-0.5">{p.price}<span className="text-xs text-slate-400 font-normal">{p.period}</span></div>
+                        )}
+                        {p.price === 'Free' && <div className="text-sm text-slate-400 font-normal mt-0.5">7 days</div>}
+                        {p.price === 'Custom' && <div className="text-sm text-slate-400 font-normal mt-0.5">Tailored</div>}
+                        {p.badge && (
+                          <div className="mt-1.5">
+                            <span className="inline-flex items-center rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">{p.badge}</span>
+                          </div>
+                        )}
                       </th>
                     ))}
                   </tr>
                 </thead>
+
                 <tbody>
-                  {compareRows.map((row, i) => (
-                    <tr key={row.feature} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                      <td className="py-3 px-6 text-sm text-slate-600 font-medium">{row.feature}</td>
-                      {row.values.map((val, vi) => (
-                        <td key={vi} className={`py-3 px-4 text-sm text-center ${plans[vi].highlight ? 'font-semibold bg-blue-50/30' : ''} ${val === '✓' || val.startsWith('✓') ? 'text-green-600' : val === '✗' ? 'text-slate-300' : 'text-slate-700'}`}>
-                          {val}
+                  {compareGroups.map((group, gi) => (
+                    <>
+                      {/* Category group header */}
+                      <tr key={`group-${gi}`} className="bg-slate-50 border-y border-slate-200">
+                        <td colSpan={5} className="py-2.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          {group.group}
                         </td>
+                      </tr>
+
+                      {group.rows.map((row, ri) => (
+                        <tr
+                          key={`${gi}-${ri}`}
+                          className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
+                        >
+                          <td className="py-3.5 px-6">
+                            <span className="text-sm text-slate-700 font-medium">{row.feature}</span>
+                            {row.tooltip && (
+                              <span className="block text-xs text-slate-400 mt-0.5">{row.tooltip}</span>
+                            )}
+                          </td>
+                          {row.values.map((val, vi) => (
+                            <td
+                              key={vi}
+                              className={`py-3.5 px-4 text-center ${plans[vi].highlight ? 'bg-blue-50/40' : ''}`}
+                            >
+                              <CellDisplay value={val} highlight={plans[vi].highlight} />
+                            </td>
+                          ))}
+                        </tr>
                       ))}
-                    </tr>
+                    </>
                   ))}
                 </tbody>
+
+                {/* Footer CTA row */}
+                <tfoot>
+                  <tr className="bg-slate-50 border-t-2 border-slate-200">
+                    <td className="py-5 px-6 text-sm text-slate-500">Ready to get started?</td>
+                    {plans.map(p => (
+                      <td key={p.name} className={`py-5 px-4 text-center ${p.highlight ? 'bg-blue-50/40' : ''}`}>
+                        <Link
+                          href={p.href}
+                          className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold transition-colors ${p.highlight ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                        >
+                          {p.cta}
+                        </Link>
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+
               </table>
             </div>
           </div>
