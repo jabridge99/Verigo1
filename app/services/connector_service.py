@@ -26,10 +26,14 @@ log = logging.getLogger("tvg.connectors")
 
 # ── Encryption helpers ────────────────────────────────────────────────────────
 
+
 def _fernet():
     try:
+        import base64
+        import hashlib
+
         from cryptography.fernet import Fernet
-        import base64, hashlib
+
         # Derive a 32-byte key from secret_key and Base64-URL-encode it
         raw = hashlib.sha256(settings.secret_key.encode()).digest()
         key = base64.urlsafe_b64encode(raw)
@@ -47,6 +51,7 @@ def _decrypt(blob: str) -> dict:
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
+
 
 def create_credential(
     db: Session,
@@ -84,7 +89,9 @@ def get_credentials(
     industry_id: str,
     provider: Optional[ConnectorProvider] = None,
 ) -> list[ConnectorCredential]:
-    q = db.query(ConnectorCredential).filter(ConnectorCredential.industry_id == industry_id)
+    q = db.query(ConnectorCredential).filter(
+        ConnectorCredential.industry_id == industry_id
+    )
     if provider:
         q = q.filter(ConnectorCredential.provider == provider)
     return q.order_by(ConnectorCredential.created_at.desc()).all()
@@ -100,7 +107,7 @@ def get_default_credential(
         .filter(
             ConnectorCredential.industry_id == industry_id,
             ConnectorCredential.provider == provider,
-            ConnectorCredential.is_default == True,
+            ConnectorCredential.is_default,
             ConnectorCredential.status == ConnectorStatus.active,
         )
         .first()
@@ -120,10 +127,14 @@ def update_credential(
     label: Optional[str] = None,
     is_default: Optional[bool] = None,
 ) -> ConnectorCredential:
-    cred = db.query(ConnectorCredential).filter(
-        ConnectorCredential.credential_id == credential_id,
-        ConnectorCredential.industry_id == industry_id,
-    ).first()
+    cred = (
+        db.query(ConnectorCredential)
+        .filter(
+            ConnectorCredential.credential_id == credential_id,
+            ConnectorCredential.industry_id == industry_id,
+        )
+        .first()
+    )
     if not cred:
         raise ValueError("Credential not found")
     if credentials is not None:
@@ -149,16 +160,21 @@ def update_credential(
 
 
 def delete_credential(db: Session, credential_id: str, industry_id: str) -> None:
-    cred = db.query(ConnectorCredential).filter(
-        ConnectorCredential.credential_id == credential_id,
-        ConnectorCredential.industry_id == industry_id,
-    ).first()
+    cred = (
+        db.query(ConnectorCredential)
+        .filter(
+            ConnectorCredential.credential_id == credential_id,
+            ConnectorCredential.industry_id == industry_id,
+        )
+        .first()
+    )
     if cred:
         db.delete(cred)
         db.commit()
 
 
 # ── Provider connectivity tests ───────────────────────────────────────────────
+
 
 def test_credential(db: Session, credential_id: str, industry_id: str) -> dict:
     """
@@ -168,10 +184,14 @@ def test_credential(db: Session, credential_id: str, industry_id: str) -> dict:
     """
     from datetime import datetime, timezone
 
-    cred = db.query(ConnectorCredential).filter(
-        ConnectorCredential.credential_id == credential_id,
-        ConnectorCredential.industry_id == industry_id,
-    ).first()
+    cred = (
+        db.query(ConnectorCredential)
+        .filter(
+            ConnectorCredential.credential_id == credential_id,
+            ConnectorCredential.industry_id == industry_id,
+        )
+        .first()
+    )
     if not cred:
         raise ValueError("Credential not found")
 
@@ -201,10 +221,16 @@ def _run_provider_test(provider: ConnectorProvider, secrets: dict) -> dict:
             # Sumsub: GET /resources/applicants?limit=1 with App Token header
             req = urllib.request.Request(
                 "https://api.sumsub.com/resources/applicants?limit=1",
-                headers={"X-App-Token": secrets.get("app_token", ""), "Accept": "application/json"},
+                headers={
+                    "X-App-Token": secrets.get("app_token", ""),
+                    "Accept": "application/json",
+                },
             )
             with urllib.request.urlopen(req, timeout=10) as r:
-                return {"success": r.status in (200, 401), "message": f"HTTP {r.status}"}
+                return {
+                    "success": r.status in (200, 401),
+                    "message": f"HTTP {r.status}",
+                }
 
         if provider == ConnectorProvider.complyadvantage:
             req = urllib.request.Request(
@@ -212,15 +238,24 @@ def _run_provider_test(provider: ConnectorProvider, secrets: dict) -> dict:
                 headers={"Authorization": f"Token {secrets.get('api_key', '')}"},
             )
             with urllib.request.urlopen(req, timeout=10) as r:
-                return {"success": r.status in (200, 401), "message": f"HTTP {r.status}"}
+                return {
+                    "success": r.status in (200, 401),
+                    "message": f"HTTP {r.status}",
+                }
 
         if provider == ConnectorProvider.trulioo:
             req = urllib.request.Request(
                 "https://gateway.trulioo.com/configuration/v1/countrycodes/Identity Verification",
-                headers={"x-trulioo-api-key": secrets.get("api_key", ""), "Accept": "application/json"},
+                headers={
+                    "x-trulioo-api-key": secrets.get("api_key", ""),
+                    "Accept": "application/json",
+                },
             )
             with urllib.request.urlopen(req, timeout=10) as r:
-                return {"success": r.status in (200, 401), "message": f"HTTP {r.status}"}
+                return {
+                    "success": r.status in (200, 401),
+                    "message": f"HTTP {r.status}",
+                }
 
         # Generic: can't auto-test — mark as active optimistically with warning
         return {

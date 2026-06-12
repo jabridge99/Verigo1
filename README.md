@@ -1,8 +1,8 @@
-# Headwaters
+# Verigo
 
 **Australian-first AML/CTF Compliance Operating System for AUSTRAC-regulated businesses.**
 
-Headwaters automates the full compliance lifecycle — KYC/KYB onboarding, AML transaction monitoring, AUSTRAC regulatory reporting (IFTI-DRA, SMR, TTR, ECDD), sanction screening, and audit case management — in a single multi-tenant SaaS platform.
+Verigo automates the full compliance lifecycle — KYC/KYB onboarding, AML transaction monitoring, AUSTRAC regulatory reporting (IFTI-DRA, SMR, TTR, ECDD), sanction screening, and audit case management — in a single multi-tenant SaaS platform.
 
 ---
 
@@ -45,8 +45,8 @@ Headwaters automates the full compliance lifecycle — KYC/KYB onboarding, AML t
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/jabridge99/EcoBin.git headwaters
-cd headwaters
+git clone https://github.com/jabridge99/Verigo1.git verigo
+cd verigo
 cp .env.example .env
 ```
 
@@ -122,7 +122,7 @@ cd web && npm install
 ## Project Structure
 
 ```
-headwaters/
+verigo/
 ├── app/                    # FastAPI backend
 │   ├── api/routes/         # REST endpoints (auth, customers, IFTI, reports, billing…)
 │   ├── models/             # SQLAlchemy ORM models (17 tables)

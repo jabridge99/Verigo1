@@ -21,7 +21,7 @@ interface AppUser {
 }
 
 const DEMO_USERS: AppUser[] = [
-  { id: 1, user_id: 'USR-ADMIN001', email: 'admin@trustverifygo.com', full_name: 'System Administrator', role: 'admin', status: 'active', mfa_enabled: true, last_login_at: new Date().toISOString(), created_at: new Date(Date.now() - 86400000 * 90).toISOString() },
+  { id: 1, user_id: 'USR-ADMIN001', email: 'admin@verigo.com', full_name: 'System Administrator', role: 'admin', status: 'active', mfa_enabled: true, last_login_at: new Date().toISOString(), created_at: new Date(Date.now() - 86400000 * 90).toISOString() },
   { id: 2, user_id: 'USR-MLRO001', email: 'mlro@cryptoedge.com.au', full_name: 'Sarah Mitchell', role: 'mlro', status: 'active', industry_id: 'dce', mfa_enabled: true, last_login_at: new Date(Date.now() - 3600000).toISOString(), created_at: new Date(Date.now() - 86400000 * 60).toISOString() },
   { id: 3, user_id: 'USR-ANA001', email: 'analyst1@cryptoedge.com.au', full_name: 'James Chen', role: 'analyst', status: 'active', industry_id: 'dce', mfa_enabled: false, last_login_at: new Date(Date.now() - 86400000).toISOString(), created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
   { id: 4, user_id: 'USR-COM001', email: 'compliance@globalsend.com.au', full_name: 'James Nguyen', role: 'compliance', status: 'active', industry_id: 'remittance', mfa_enabled: true, last_login_at: new Date(Date.now() - 7200000).toISOString(), created_at: new Date(Date.now() - 86400000 * 45).toISOString() },

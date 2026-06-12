@@ -13,10 +13,10 @@ from typing import AsyncIterator, Optional
 
 @dataclass
 class StoredObject:
-    key: str           # logical path / blob name
-    size: int          # bytes
+    key: str  # logical path / blob name
+    size: int  # bytes
     content_type: str
-    url: Optional[str] = None   # pre-signed or public URL, if applicable
+    url: Optional[str] = None  # pre-signed or public URL, if applicable
     etag: Optional[str] = None
 
 

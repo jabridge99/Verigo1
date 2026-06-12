@@ -4,20 +4,23 @@ Notification service — create, list, mark-read, and optionally email notificat
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from typing import List, Optional
 
-from app.models.notification import Notification, NotificationType, NotificationPriority
-from app.schemas.notification import NotificationCreate
+from sqlalchemy import and_, desc
+from sqlalchemy.orm import Session
+
+from app.models.notification import Notification, NotificationPriority, NotificationType
 from app.models.user import User
+from app.schemas.notification import NotificationCreate
 
 
 def _notif_id() -> str:
     return f"NOTIF-{uuid.uuid4().hex[:12].upper()}"
 
 
-def create_notification(db: Session, data: NotificationCreate, send_email: bool = False) -> Notification:
+def create_notification(
+    db: Session, data: NotificationCreate, send_email: bool = False
+) -> Notification:
     notif = Notification(
         notif_id=_notif_id(),
         user_id=data.user_id,
@@ -42,6 +45,7 @@ def create_notification(db: Session, data: NotificationCreate, send_email: bool 
 
 def _try_email(db: Session, notif: Notification) -> None:
     from app.services import email_service as em
+
     user: Optional[User] = db.query(User).filter(User.user_id == notif.user_id).first()
     if not user:
         return
@@ -51,28 +55,43 @@ def _try_email(db: Session, notif: Notification) -> None:
 
     if t == NotificationType.alert:
         sent = em.send_aml_alert(
-            user.email, user.full_name,
-            notif.title, notif.entity_id or "Unknown", 0.0,
+            user.email,
+            user.full_name,
+            notif.title,
+            notif.entity_id or "Unknown",
+            0.0,
         )
     elif t == NotificationType.report_due:
         sent = em.send_report_deadline(
-            user.email, user.full_name,
-            notif.entity_type or "Report", notif.entity_id or "", 3,
+            user.email,
+            user.full_name,
+            notif.entity_type or "Report",
+            notif.entity_id or "",
+            3,
         )
     elif t == NotificationType.report_approved:
         sent = em.send_report_approved(
-            user.email, user.full_name,
-            notif.entity_type or "Report", notif.entity_id or "", "MLRO",
+            user.email,
+            user.full_name,
+            notif.entity_type or "Report",
+            notif.entity_id or "",
+            "MLRO",
         )
     elif t == NotificationType.case_assigned:
         sent = em.send_case_assignment(
-            user.email, user.full_name,
-            notif.entity_id or "", notif.title, "medium", "System",
+            user.email,
+            user.full_name,
+            notif.entity_id or "",
+            notif.title,
+            "medium",
+            "System",
         )
     elif t == NotificationType.kyc_review:
         sent = em.send_kyc_review_required(
-            user.email, user.full_name,
-            notif.entity_id or "", notif.entity_type or "Customer",
+            user.email,
+            user.full_name,
+            notif.entity_id or "",
+            notif.entity_type or "Customer",
         )
     else:
         return
@@ -104,16 +123,23 @@ def get_summary(db: Session, user_id: str) -> dict:
     total = base.count()
     unread = base.filter(Notification.read == False).count()  # noqa: E712
     urgent = base.filter(
-        and_(Notification.read == False, Notification.priority == NotificationPriority.urgent)  # noqa: E712
+        and_(
+            Notification.read == False,  # noqa: E712
+            Notification.priority == NotificationPriority.urgent,
+        )
     ).count()
     return {"unread_count": unread, "urgent_count": urgent, "total_count": total}
 
 
 def mark_read(db: Session, notif_id: str, user_id: str) -> Optional[Notification]:
-    notif = db.query(Notification).filter(
-        Notification.notif_id == notif_id,
-        (Notification.user_id == user_id) | (Notification.user_id == None),  # noqa: E711
-    ).first()
+    notif = (
+        db.query(Notification)
+        .filter(
+            Notification.notif_id == notif_id,
+            (Notification.user_id == user_id) | (Notification.user_id == None),  # noqa: E711
+        )
+        .first()
+    )
     if notif and not notif.read:
         notif.read = True
         notif.read_at = datetime.now(timezone.utc)
@@ -123,10 +149,14 @@ def mark_read(db: Session, notif_id: str, user_id: str) -> Optional[Notification
 
 
 def mark_all_read(db: Session, user_id: str) -> int:
-    rows = db.query(Notification).filter(
-        (Notification.user_id == user_id) | (Notification.user_id == None),  # noqa: E711
-        Notification.read == False,  # noqa: E712
-    ).all()
+    rows = (
+        db.query(Notification)
+        .filter(
+            (Notification.user_id == user_id) | (Notification.user_id == None),  # noqa: E711
+            Notification.read == False,  # noqa: E712
+        )
+        .all()
+    )
     now = datetime.now(timezone.utc)
     for n in rows:
         n.read = True
@@ -135,8 +165,14 @@ def mark_all_read(db: Session, user_id: str) -> int:
     return len(rows)
 
 
-def broadcast(db: Session, notif_type: NotificationType, priority: NotificationPriority,
-              title: str, body: str, link: Optional[str] = None) -> Notification:
+def broadcast(
+    db: Session,
+    notif_type: NotificationType,
+    priority: NotificationPriority,
+    title: str,
+    body: str,
+    link: Optional[str] = None,
+) -> Notification:
     data = NotificationCreate(
         user_id=None,
         notif_type=notif_type,

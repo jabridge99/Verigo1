@@ -8,16 +8,17 @@ DELETE /branding        — admin only, reset to defaults
 GET  /branding/css      — returns CSS custom properties for embedding
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
-from typing import Optional
 
+from app.api.routes.auth import _current_user
 from app.db.database import get_db
+from app.models.user import User
 from app.schemas.branding import BrandingConfig, BrandingResponse
 from app.services import branding_service as svc
-from app.api.routes.auth import _current_user
-from app.models.user import User
 
 router = APIRouter(prefix="/branding", tags=["branding"])
 

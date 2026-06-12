@@ -609,7 +609,7 @@ function IndustryPage({ ind }: { ind: ReturnType<typeof getIndustry> & {} }) {
       <section className="bg-gradient-to-b from-slate-50 to-white pt-32 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <Link href="/solutions" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-8">
-            ← All industries
+            ← All solutions
           </Link>
           <div className="flex items-start gap-6">
             <div className={`w-16 h-16 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-3xl flex-shrink-0`}>{ind.icon}</div>

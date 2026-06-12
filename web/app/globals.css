@@ -93,3 +93,35 @@
     padding-bottom: 0;
   }
 }
+
+/* ── Public / Marketing page theme ─────────────────────────────────────── */
+.pub-section {
+  @apply py-24 px-4 sm:px-6 lg:px-8;
+}
+.pub-container {
+  @apply max-w-7xl mx-auto;
+}
+.pub-label {
+  @apply inline-flex items-center rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-700/10;
+}
+.pub-card {
+  @apply rounded-2xl bg-white p-8 ring-1 ring-slate-200/80 shadow-sm;
+}
+.pub-card-hover {
+  @apply pub-card hover:shadow-md hover:ring-slate-300 transition-all duration-200;
+}
+.pub-btn-primary {
+  @apply inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors;
+}
+.pub-btn-lg {
+  @apply inline-flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 text-base font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors;
+}
+.pub-btn-secondary {
+  @apply inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors;
+}
+.pub-btn-secondary-lg {
+  @apply inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors;
+}
+.pub-btn-dark {
+  @apply inline-flex items-center gap-2 rounded-xl bg-slate-900 px-8 py-4 text-base font-semibold text-white hover:bg-slate-800 transition-colors;
+}

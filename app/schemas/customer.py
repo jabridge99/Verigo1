@@ -1,7 +1,9 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
 from datetime import datetime
-from app.models.customer import IndustryType, CustomerStatus, RiskLevel
+from typing import Optional
+
+from pydantic import BaseModel, EmailStr
+
+from app.models.customer import CustomerStatus, IndustryType, RiskLevel
 
 
 class CustomerCreate(BaseModel):

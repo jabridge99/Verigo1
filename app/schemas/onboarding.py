@@ -1,7 +1,9 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, Any
 from datetime import datetime
-from app.models.onboarding import SessionStatus, CustomerType, ImportSource
+from typing import Any, Optional
+
+from pydantic import BaseModel, EmailStr
+
+from app.models.onboarding import CustomerType
 
 
 class SessionCreate(BaseModel):

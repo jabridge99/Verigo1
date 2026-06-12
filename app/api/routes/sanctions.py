@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+
 from app.services.sanctions_screening import screen_name
 
 router = APIRouter(prefix="/sanctions", tags=["Sanctions Screening"])

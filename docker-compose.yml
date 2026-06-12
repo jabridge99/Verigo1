@@ -44,7 +44,7 @@ services:
       SMTP_USER:      ${SMTP_USER:-}
       SMTP_PASS:      ${SMTP_PASS:-}
       FROM_EMAIL:     ${FROM_EMAIL:-noreply@example.com}
-      FROM_NAME:      ${FROM_NAME:-Trust Verify Go}
+      FROM_NAME:      ${FROM_NAME:-Verigo}
       # Storage
       STORAGE_BACKEND:      ${STORAGE_BACKEND:-local}
       S3_BUCKET:            ${S3_BUCKET:-}

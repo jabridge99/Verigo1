@@ -16,6 +16,7 @@ import logging
 from typing import Optional
 
 from app.config import settings
+
 from .base import StorageProvider
 
 log = logging.getLogger("tvg.storage")
@@ -29,11 +30,18 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
 
     if backend == "local":
         from .local import LocalStorageProvider
-        root = cfg.get("root", settings.document_store_path if hasattr(settings, "document_store_path") else "./document_store")
+
+        root = cfg.get(
+            "root",
+            settings.document_store_path
+            if hasattr(settings, "document_store_path")
+            else "./document_store",
+        )
         return LocalStorageProvider(root=root)
 
     if backend in ("s3", "backblaze"):
         from .s3 import S3StorageProvider
+
         return S3StorageProvider(
             bucket=cfg["bucket"],
             region=cfg.get("region", "us-east-1"),
@@ -44,6 +52,7 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
 
     if backend == "azure":
         from .azure_blob import AzureBlobStorageProvider
+
         return AzureBlobStorageProvider(
             account_name=cfg["account_name"],
             account_key=cfg["account_key"],
@@ -52,6 +61,7 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
 
     if backend == "gcs":
         from .gcs import GCSStorageProvider
+
         return GCSStorageProvider(
             bucket=cfg["bucket"],
             credentials_json=cfg.get("credentials_json"),
@@ -71,13 +81,20 @@ def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
         try:
             from app.db.database import SessionLocal
             from app.models.tenant import IndustryTenant
+
             db = SessionLocal()
             try:
-                tenant = db.query(IndustryTenant).filter(
-                    IndustryTenant.industry_id == industry_id
-                ).first()
+                tenant = (
+                    db.query(IndustryTenant)
+                    .filter(IndustryTenant.industry_id == industry_id)
+                    .first()
+                )
                 if tenant and getattr(tenant, "storage_config", None):
-                    sc = json.loads(tenant.storage_config) if isinstance(tenant.storage_config, str) else tenant.storage_config
+                    sc = (
+                        json.loads(tenant.storage_config)
+                        if isinstance(tenant.storage_config, str)
+                        else tenant.storage_config
+                    )
                     backend = sc.get("backend", "local")
                     cache_key = f"{industry_id}:{backend}"
                     if cache_key not in _provider_cache:
@@ -86,7 +103,9 @@ def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
             finally:
                 db.close()
         except Exception as exc:
-            log.warning("Failed to load per-tenant storage config for %s: %s", industry_id, exc)
+            log.warning(
+                "Failed to load per-tenant storage config for %s: %s", industry_id, exc
+            )
 
     # Application-wide default
     backend = getattr(settings, "storage_backend", "local")

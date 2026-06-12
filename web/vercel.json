@@ -1,13 +1,12 @@
 {
+  "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "installCommand": "npm ci",
-  "devCommand": "npm run dev",
   "framework": "nextjs",
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "$API_BASE_URL/api/$1"
+      "destination": "https://api.verigo.com.au/api/$1"
     }
   ],
   "headers": [
@@ -19,6 +18,5 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
       ]
     }
-  ],
-  "env": {}
+  ]
 }

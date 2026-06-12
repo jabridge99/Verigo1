@@ -1,15 +1,17 @@
-from pydantic import BaseModel, HttpUrl
-from typing import Optional, List
 from datetime import datetime
-from app.models.api_key import APIKeyStatus, WebhookEvent, WebhookStatus
+from typing import List, Optional
 
+from pydantic import BaseModel
+
+from app.models.api_key import APIKeyStatus, WebhookStatus
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
+
 
 class APIKeyCreate(BaseModel):
     name: str
     scopes: List[str] = []
-    expires_days: Optional[int] = None   # None = never
+    expires_days: Optional[int] = None  # None = never
 
 
 class APIKeyResponse(BaseModel):
@@ -29,10 +31,11 @@ class APIKeyResponse(BaseModel):
 
 
 class APIKeyCreated(APIKeyResponse):
-    raw_key: str   # Only returned once on creation
+    raw_key: str  # Only returned once on creation
 
 
 # ── Webhooks ──────────────────────────────────────────────────────────────────
+
 
 class WebhookCreate(BaseModel):
     name: str

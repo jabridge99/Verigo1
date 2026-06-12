@@ -1,7 +1,9 @@
 """Immutable audit trail service."""
 
 import uuid
+
 from sqlalchemy.orm import Session
+
 from app.models.audit import AuditLog
 
 

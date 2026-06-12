@@ -12,7 +12,9 @@ class AzureBlobStorageProvider(StorageProvider):
         try:
             from azure.storage.blob.aio import BlobServiceClient
         except ImportError:
-            raise RuntimeError("azure-storage-blob is required: pip install azure-storage-blob")
+            raise RuntimeError(
+                "azure-storage-blob is required: pip install azure-storage-blob"
+            )
         conn_str = (
             f"DefaultEndpointsProtocol=https;AccountName={account_name};"
             f"AccountKey={account_key};EndpointSuffix=core.windows.net"
@@ -20,12 +22,21 @@ class AzureBlobStorageProvider(StorageProvider):
         self._client = BlobServiceClient.from_connection_string(conn_str)
         self.container = container
 
-    async def upload(self, key: str, data: bytes, content_type: str = "application/octet-stream",
-                     metadata: Optional[dict] = None) -> StoredObject:
+    async def upload(
+        self,
+        key: str,
+        data: bytes,
+        content_type: str = "application/octet-stream",
+        metadata: Optional[dict] = None,
+    ) -> StoredObject:
         async with self._client:
             blob = self._client.get_blob_client(self.container, key)
-            await blob.upload_blob(data, overwrite=True, content_settings={"content_type": content_type},
-                                   metadata=metadata)
+            await blob.upload_blob(
+                data,
+                overwrite=True,
+                content_settings={"content_type": content_type},
+                metadata=metadata,
+            )
         return StoredObject(key=key, size=len(data), content_type=content_type)
 
     async def download(self, key: str) -> bytes:
@@ -53,7 +64,9 @@ class AzureBlobStorageProvider(StorageProvider):
 
     async def get_url(self, key: str, expires_in: int = 3600) -> str:
         from datetime import datetime, timedelta, timezone
-        from azure.storage.blob import generate_blob_sas, BlobSasPermissions
+
+        from azure.storage.blob import BlobSasPermissions, generate_blob_sas
+
         # SAS generation is sync; acceptable for URL-only calls
         sas = generate_blob_sas(
             account_name=self._client.account_name,
@@ -73,10 +86,14 @@ class AzureBlobStorageProvider(StorageProvider):
         async with self._client:
             container_client = self._client.get_container_client(self.container)
             async for blob in container_client.list_blobs(name_starts_with=prefix):
-                results.append(StoredObject(
-                    key=blob.name,
-                    size=blob.size or 0,
-                    content_type=blob.content_settings.content_type if blob.content_settings else "application/octet-stream",
-                    etag=blob.etag,
-                ))
+                results.append(
+                    StoredObject(
+                        key=blob.name,
+                        size=blob.size or 0,
+                        content_type=blob.content_settings.content_type
+                        if blob.content_settings
+                        else "application/octet-stream",
+                        etag=blob.etag,
+                    )
+                )
         return results

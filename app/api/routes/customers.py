@@ -11,13 +11,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
 from app.models.customer import Customer, CustomerStatus
 from app.models.user import User, UserRole
-from app.schemas.customer import CustomerCreate, CustomerUpdate, CustomerResponse
+from app.schemas.customer import CustomerCreate, CustomerResponse, CustomerUpdate
 from app.services.risk_scoring import score_customer, score_to_level
 from app.services.sanctions_screening import screen_name
-from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -37,9 +37,11 @@ def _assert_tenant(current_user: User, customer_industry_id):
 def onboard_customer(
     payload: CustomerCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(
-        UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst
-    )),
+    current_user: User = Depends(
+        _require_roles(
+            UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst
+        )
+    ),
 ):
     existing = db.query(Customer).filter(Customer.email == payload.email).first()
     if existing:
@@ -47,7 +49,9 @@ def onboard_customer(
 
     customer = Customer(
         customer_id=f"CUST-{uuid.uuid4().hex[:10].upper()}",
-        industry_id=current_user.industry_id if current_user.role != UserRole.admin else None,
+        industry_id=current_user.industry_id
+        if current_user.role != UserRole.admin
+        else None,
         **payload.model_dump(),
     )
     sanctions = screen_name(payload.full_name)
@@ -116,7 +120,9 @@ def update_customer(
     # Prevent unprivileged users from changing status or risk fields
     attempted_privileged = set(updates.keys()) & _PRIVILEGED_FIELDS
     if attempted_privileged and current_user.role not in _PRIVILEGED_ROLES:
-        raise HTTPException(403, f"Insufficient role to update: {', '.join(attempted_privileged)}")
+        raise HTTPException(
+            403, f"Insufficient role to update: {', '.join(attempted_privileged)}"
+        )
 
     for field, value in updates.items():
         setattr(customer, field, value)
@@ -129,9 +135,9 @@ def update_customer(
 def rescore_customer(
     customer_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(
-        UserRole.admin, UserRole.mlro, UserRole.compliance
-    )),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
     """Re-run risk scoring and sanctions check for a customer."""
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()

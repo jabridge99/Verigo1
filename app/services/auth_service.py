@@ -12,8 +12,8 @@ Changes vs original:
 
 import hashlib
 import json
-import uuid
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -22,7 +22,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import User, MagicLinkToken, UserStatus
+from app.models.user import MagicLinkToken, User, UserStatus
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -34,6 +34,7 @@ TOKEN_BLACKLIST: set[str] = set()
 
 
 # ── Password ──────────────────────────────────────────────────────────────────
+
 
 def hash_password(plain: str) -> str:
     return pwd_ctx.hash(plain)
@@ -48,14 +49,20 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None,
-                        mfa_pending: bool = False) -> str:
+
+def create_access_token(
+    data: dict, expires_delta: Optional[timedelta] = None, mfa_pending: bool = False
+) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES))
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES)
+    )
     # mfa_pending tokens have short 10-minute expiry
     if mfa_pending:
         expire = datetime.now(timezone.utc) + timedelta(minutes=10)
-    to_encode.update({"exp": expire, "jti": uuid.uuid4().hex, "mfa_pending": mfa_pending})
+    to_encode.update(
+        {"exp": expire, "jti": uuid.uuid4().hex, "mfa_pending": mfa_pending}
+    )
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
@@ -68,8 +75,16 @@ def decode_token(token: str) -> Optional[dict]:
 
 # ── User CRUD ─────────────────────────────────────────────────────────────────
 
-def create_user(db: Session, email: str, full_name: str, password: str, role: str = "analyst",
-                industry_id: Optional[str] = None, tenant_id: Optional[str] = None) -> User:
+
+def create_user(
+    db: Session,
+    email: str,
+    full_name: str,
+    password: str,
+    role: str = "analyst",
+    industry_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+) -> User:
     user = User(
         user_id=f"USR-{uuid.uuid4().hex[:10].upper()}",
         email=email.lower().strip(),
@@ -130,6 +145,7 @@ def build_token_response(user: User, mfa_pending: bool = False) -> dict:
 
 # ── Magic links (token hashed in DB) ─────────────────────────────────────────
 
+
 def _hash_ml_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
@@ -137,24 +153,30 @@ def _hash_ml_token(token: str) -> str:
 def create_magic_link(db: Session, email: str) -> str:
     plain = secrets.token_urlsafe(32)
     hashed = _hash_ml_token(plain)
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=MAGIC_LINK_EXPIRY_MINUTES)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=MAGIC_LINK_EXPIRY_MINUTES
+    )
     # Invalidate previous unused tokens for this email
     db.query(MagicLinkToken).filter(
         MagicLinkToken.email == email.lower(),
-        MagicLinkToken.used == False,
+        not MagicLinkToken.used,
     ).update({"used": True})
     ml = MagicLinkToken(token=hashed, email=email.lower(), expires_at=expires_at)
     db.add(ml)
     db.commit()
-    return plain   # only the plaintext is returned (sent via email, never stored)
+    return plain  # only the plaintext is returned (sent via email, never stored)
 
 
 def verify_magic_link(db: Session, plain_token: str) -> Optional[str]:
     hashed = _hash_ml_token(plain_token)
-    ml = db.query(MagicLinkToken).filter(
-        MagicLinkToken.token == hashed,
-        MagicLinkToken.used == False,
-    ).first()
+    ml = (
+        db.query(MagicLinkToken)
+        .filter(
+            MagicLinkToken.token == hashed,
+            not MagicLinkToken.used,
+        )
+        .first()
+    )
     if not ml:
         return None
     if ml.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
@@ -166,6 +188,7 @@ def verify_magic_link(db: Session, plain_token: str) -> Optional[str]:
 
 # ── Security event logging ────────────────────────────────────────────────────
 
+
 def record_security_event(
     db: Session,
     event_type: str,
@@ -176,6 +199,7 @@ def record_security_event(
     """Write to security_events table; silently swallows errors to never block auth flows."""
     try:
         from app.models.security_event import SecurityEvent
+
         ev = SecurityEvent(
             event_id=f"SEC-{uuid.uuid4().hex[:12].upper()}",
             event_type=event_type,
@@ -187,23 +211,57 @@ def record_security_event(
         db.commit()
     except Exception as e:
         import logging
-        logging.getLogger("tvg.security").warning("Failed to record security event: %s", e)
+
+        logging.getLogger("tvg.security").warning(
+            "Failed to record security event: %s", e
+        )
 
 
 # ── RBAC helpers ──────────────────────────────────────────────────────────────
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "admin":      {"*"},
-    "mlro":       {"customers:read", "customers:write", "kyc:read", "kyc:write",
-                   "transactions:read", "reports:read", "reports:write", "reports:approve",
-                   "audit:read", "cases:read", "cases:write", "cases:close",
-                   "ecdd:read", "ecdd:write", "tenants:read"},
-    "compliance": {"customers:read", "customers:write", "kyc:read", "kyc:write",
-                   "transactions:read", "reports:read", "reports:write",
-                   "audit:read", "cases:read", "cases:write", "ecdd:read", "ecdd:write"},
-    "analyst":    {"customers:read", "kyc:read", "transactions:read",
-                   "reports:read", "audit:read", "cases:read", "ecdd:read"},
-    "viewer":     {"customers:read", "transactions:read", "reports:read", "audit:read"},
+    "admin": {"*"},
+    "mlro": {
+        "customers:read",
+        "customers:write",
+        "kyc:read",
+        "kyc:write",
+        "transactions:read",
+        "reports:read",
+        "reports:write",
+        "reports:approve",
+        "audit:read",
+        "cases:read",
+        "cases:write",
+        "cases:close",
+        "ecdd:read",
+        "ecdd:write",
+        "tenants:read",
+    },
+    "compliance": {
+        "customers:read",
+        "customers:write",
+        "kyc:read",
+        "kyc:write",
+        "transactions:read",
+        "reports:read",
+        "reports:write",
+        "audit:read",
+        "cases:read",
+        "cases:write",
+        "ecdd:read",
+        "ecdd:write",
+    },
+    "analyst": {
+        "customers:read",
+        "kyc:read",
+        "transactions:read",
+        "reports:read",
+        "audit:read",
+        "cases:read",
+        "ecdd:read",
+    },
+    "viewer": {"customers:read", "transactions:read", "reports:read", "audit:read"},
 }
 
 

@@ -5,12 +5,11 @@ Files are stored under DOCUMENT_STORE_PATH (default: ./uploads).
 
 import os
 import uuid
-import shutil
 from pathlib import Path
-from typing import Optional, List, BinaryIO
+from typing import List, Optional
 
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.schemas.document import DocumentUpdate
@@ -23,12 +22,16 @@ MAX_SIZE = 50 * 1024 * 1024
 
 ALLOWED_MIME = {
     "application/pdf",
-    "image/jpeg", "image/png", "image/webp", "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "text/plain", "text/csv",
+    "text/plain",
+    "text/csv",
 }
 
 
@@ -101,18 +104,26 @@ def list_documents(
 
 
 def get_document(db: Session, doc_id: str) -> Optional[Document]:
-    return db.query(Document).filter(
-        Document.doc_id == doc_id,
-        Document.status != DocumentStatus.deleted,
-    ).first()
+    return (
+        db.query(Document)
+        .filter(
+            Document.doc_id == doc_id,
+            Document.status != DocumentStatus.deleted,
+        )
+        .first()
+    )
 
 
 def get_file_path(doc: Document) -> Path:
     return STORE_PATH / doc.stored_name
 
 
-def update_document(db: Session, doc_id: str, data: DocumentUpdate, industry_id: Optional[str]) -> Optional[Document]:
-    q = db.query(Document).filter(Document.doc_id == doc_id, Document.status == DocumentStatus.active)
+def update_document(
+    db: Session, doc_id: str, data: DocumentUpdate, industry_id: Optional[str]
+) -> Optional[Document]:
+    q = db.query(Document).filter(
+        Document.doc_id == doc_id, Document.status == DocumentStatus.active
+    )
     if industry_id:
         q = q.filter(Document.industry_id == industry_id)
     doc = q.first()
@@ -125,8 +136,12 @@ def update_document(db: Session, doc_id: str, data: DocumentUpdate, industry_id:
     return doc
 
 
-def archive_document(db: Session, doc_id: str, industry_id: Optional[str]) -> Optional[Document]:
-    q = db.query(Document).filter(Document.doc_id == doc_id, Document.status == DocumentStatus.active)
+def archive_document(
+    db: Session, doc_id: str, industry_id: Optional[str]
+) -> Optional[Document]:
+    q = db.query(Document).filter(
+        Document.doc_id == doc_id, Document.status == DocumentStatus.active
+    )
     if industry_id:
         q = q.filter(Document.industry_id == industry_id)
     doc = q.first()

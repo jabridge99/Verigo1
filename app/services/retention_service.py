@@ -18,26 +18,27 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.retention import RetentionPolicy, LegalHold, EntityScope
+from app.models.retention import EntityScope, LegalHold, RetentionPolicy
 
 log = logging.getLogger("tvg.retention")
 
 AUSTRAC_DEFAULTS: dict[EntityScope, int] = {
-    EntityScope.customer:    7,
-    EntityScope.kyc_record:  7,
-    EntityScope.document:    7,
+    EntityScope.customer: 7,
+    EntityScope.kyc_record: 7,
+    EntityScope.document: 7,
     EntityScope.transaction: 7,
-    EntityScope.audit_log:   7,
-    EntityScope.report:      7,
+    EntityScope.audit_log: 7,
+    EntityScope.report: 7,
 }
 
 
 # ── Policy CRUD ───────────────────────────────────────────────────────────────
+
 
 def get_policy(
     db: Session,
@@ -46,17 +47,25 @@ def get_policy(
 ) -> RetentionPolicy:
     """Return the most-specific policy: tenant > global > AUSTRAC default (synthetic)."""
     if industry_id:
-        p = db.query(RetentionPolicy).filter(
-            RetentionPolicy.entity_scope == entity_scope,
-            RetentionPolicy.industry_id == industry_id,
-        ).first()
+        p = (
+            db.query(RetentionPolicy)
+            .filter(
+                RetentionPolicy.entity_scope == entity_scope,
+                RetentionPolicy.industry_id == industry_id,
+            )
+            .first()
+        )
         if p:
             return p
     # Global default
-    p = db.query(RetentionPolicy).filter(
-        RetentionPolicy.entity_scope == entity_scope,
-        RetentionPolicy.industry_id == None,
-    ).first()
+    p = (
+        db.query(RetentionPolicy)
+        .filter(
+            RetentionPolicy.entity_scope == entity_scope,
+            RetentionPolicy.industry_id is None,
+        )
+        .first()
+    )
     if p:
         return p
     # Synthetic AUSTRAC default — not persisted
@@ -81,10 +90,14 @@ def upsert_policy(
     if retention_years < 0:
         raise ValueError("retention_years must be >= 0 (0 = indefinite)")
 
-    p = db.query(RetentionPolicy).filter(
-        RetentionPolicy.entity_scope == entity_scope,
-        RetentionPolicy.industry_id == industry_id,
-    ).first()
+    p = (
+        db.query(RetentionPolicy)
+        .filter(
+            RetentionPolicy.entity_scope == entity_scope,
+            RetentionPolicy.industry_id == industry_id,
+        )
+        .first()
+    )
 
     if p:
         p.retention_years = retention_years
@@ -107,14 +120,18 @@ def upsert_policy(
     return p
 
 
-def list_policies(db: Session, industry_id: Optional[str] = None) -> list[RetentionPolicy]:
+def list_policies(
+    db: Session, industry_id: Optional[str] = None
+) -> list[RetentionPolicy]:
     q = db.query(RetentionPolicy).filter(
-        (RetentionPolicy.industry_id == industry_id) | (RetentionPolicy.industry_id == None)
+        (RetentionPolicy.industry_id == industry_id)
+        | (RetentionPolicy.industry_id is None)
     )
     return q.order_by(RetentionPolicy.entity_scope).all()
 
 
 # ── Legal Hold ────────────────────────────────────────────────────────────────
+
 
 def place_legal_hold(
     db: Session,
@@ -136,7 +153,13 @@ def place_legal_hold(
     db.add(hold)
     db.commit()
     db.refresh(hold)
-    log.info("Legal hold placed: %s on %s/%s by %s", hold.hold_id, entity_scope, entity_id, held_by)
+    log.info(
+        "Legal hold placed: %s on %s/%s by %s",
+        hold.hold_id,
+        entity_scope,
+        entity_id,
+        held_by,
+    )
     return hold
 
 
@@ -160,14 +183,20 @@ def release_legal_hold(
 
 
 def has_active_hold(db: Session, entity_scope: EntityScope, entity_id: str) -> bool:
-    return db.query(LegalHold).filter(
-        LegalHold.entity_scope == entity_scope,
-        LegalHold.entity_id == entity_id,
-        LegalHold.active == True,
-    ).count() > 0
+    return (
+        db.query(LegalHold)
+        .filter(
+            LegalHold.entity_scope == entity_scope,
+            LegalHold.entity_id == entity_id,
+            LegalHold.active,
+        )
+        .count()
+        > 0
+    )
 
 
 # ── Deletion Eligibility ──────────────────────────────────────────────────────
+
 
 def is_deletion_eligible(
     db: Session,
@@ -215,13 +244,16 @@ def is_deletion_eligible(
 
     return {
         "eligible": eligible,
-        "reason": "Retention period expired" if eligible else f"Retention period of {years} years not yet elapsed",
+        "reason": "Retention period expired"
+        if eligible
+        else f"Retention period of {years} years not yet elapsed",
         "retention_years": years,
         "eligible_after": cutoff.isoformat(),
     }
 
 
 # ── Scheduled purge report (dry-run only — no auto-delete) ───────────────────
+
 
 def generate_purge_report(db: Session, industry_id: Optional[str] = None) -> dict:
     """
@@ -230,10 +262,13 @@ def generate_purge_report(db: Session, industry_id: Optional[str] = None) -> dic
     """
     from app.models.customer import Customer
     from app.models.kyc import KYCRecord
-    from app.models.document import Document
 
     now = datetime.now(timezone.utc)
-    report: dict = {"generated_at": now.isoformat(), "industry_id": industry_id, "items": []}
+    report: dict = {
+        "generated_at": now.isoformat(),
+        "industry_id": industry_id,
+        "items": [],
+    }
 
     def _cutoff(scope: EntityScope, pep: bool = False) -> datetime:
         p = get_policy(db, scope, industry_id)
@@ -247,21 +282,27 @@ def generate_purge_report(db: Session, industry_id: Optional[str] = None) -> dic
         q = q.filter(Customer.industry_id == industry_id)
     for c in q.all():
         if not has_active_hold(db, EntityScope.customer, c.customer_id):
-            report["items"].append({
-                "scope": "customer", "id": c.customer_id,
-                "created_at": c.created_at.isoformat() if c.created_at else None,
-                "action": "eligible_for_deletion",
-            })
+            report["items"].append(
+                {
+                    "scope": "customer",
+                    "id": c.customer_id,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                    "action": "eligible_for_deletion",
+                }
+            )
 
     # KYC Records
     cutoff = _cutoff(EntityScope.kyc_record)
     for k in db.query(KYCRecord).filter(KYCRecord.created_at < cutoff).all():
         if not has_active_hold(db, EntityScope.kyc_record, k.kyc_id):
-            report["items"].append({
-                "scope": "kyc_record", "id": k.kyc_id,
-                "created_at": k.created_at.isoformat() if k.created_at else None,
-                "action": "eligible_for_deletion",
-            })
+            report["items"].append(
+                {
+                    "scope": "kyc_record",
+                    "id": k.kyc_id,
+                    "created_at": k.created_at.isoformat() if k.created_at else None,
+                    "action": "eligible_for_deletion",
+                }
+            )
 
     report["total_eligible"] = len(report["items"])
     return report

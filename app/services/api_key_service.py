@@ -2,23 +2,29 @@
 API key and webhook management service.
 """
 
-import uuid
-import secrets
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Tuple
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional, Tuple
 
 import httpx
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
-from app.models.api_key import APIKey, APIKeyStatus, WebhookEndpoint, WebhookDelivery, WebhookStatus
+from app.models.api_key import (
+    APIKey,
+    APIKeyStatus,
+    WebhookDelivery,
+    WebhookEndpoint,
+    WebhookStatus,
+)
 from app.schemas.api_key import APIKeyCreate, WebhookCreate, WebhookUpdate
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _uid() -> str:
     return uuid.uuid4().hex[:12].upper()
@@ -30,7 +36,10 @@ def _hash_key(raw: str) -> str:
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
 
-def create_api_key(db: Session, data: APIKeyCreate, user_id: str, industry_id: Optional[str]) -> Tuple[APIKey, str]:
+
+def create_api_key(
+    db: Session, data: APIKeyCreate, user_id: str, industry_id: Optional[str]
+) -> Tuple[APIKey, str]:
     raw = f"tvg_live_{secrets.token_urlsafe(32)}"
     prefix = raw[:12]
     expires_at = None
@@ -63,7 +72,11 @@ def list_api_keys(db: Session, user_id: str) -> List[APIKey]:
 
 
 def revoke_api_key(db: Session, key_id: str, user_id: str) -> Optional[APIKey]:
-    key = db.query(APIKey).filter(APIKey.key_id == key_id, APIKey.user_id == user_id).first()
+    key = (
+        db.query(APIKey)
+        .filter(APIKey.key_id == key_id, APIKey.user_id == user_id)
+        .first()
+    )
     if not key:
         return None
     key.status = APIKeyStatus.revoked
@@ -85,27 +98,39 @@ def _validate_webhook_url(url: str) -> None:
         raise ValueError("Webhook URL must use HTTPS")
     host = parsed.hostname or ""
     # Block cloud metadata endpoints
-    _BLOCKED_HOSTS = {"169.254.169.254", "metadata.google.internal", "metadata.internal"}
+    _BLOCKED_HOSTS = {
+        "169.254.169.254",
+        "metadata.google.internal",
+        "metadata.internal",
+    }
     if host.lower() in _BLOCKED_HOSTS or host.lower().endswith(".internal"):
         raise ValueError(f"Webhook URL host '{host}' is not allowed")
     try:
         ip = ipaddress.ip_address(host)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            raise ValueError(f"Webhook URL must not target a private/loopback/reserved IP: {host}")
+            raise ValueError(
+                f"Webhook URL must not target a private/loopback/reserved IP: {host}"
+            )
     except ValueError as e:
         if "Webhook URL" in str(e):
             raise
-        pass   # not a raw IP — hostname is fine
+        pass  # not a raw IP — hostname is fine
 
 
 def authenticate_api_key(db: Session, raw: str) -> Optional[APIKey]:
-    key = db.query(APIKey).filter(
-        APIKey.key_hash == _hash_key(raw),
-        APIKey.status == APIKeyStatus.active,
-    ).first()
+    key = (
+        db.query(APIKey)
+        .filter(
+            APIKey.key_hash == _hash_key(raw),
+            APIKey.status == APIKeyStatus.active,
+        )
+        .first()
+    )
     if not key:
         return None
-    if key.expires_at and key.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if key.expires_at and key.expires_at.replace(tzinfo=timezone.utc) < datetime.now(
+        timezone.utc
+    ):
         key.status = APIKeyStatus.expired
         db.commit()
         return None
@@ -116,7 +141,10 @@ def authenticate_api_key(db: Session, raw: str) -> Optional[APIKey]:
 
 # ── Webhooks ──────────────────────────────────────────────────────────────────
 
-def create_webhook(db: Session, data: WebhookCreate, user_id: str, industry_id: Optional[str]) -> WebhookEndpoint:
+
+def create_webhook(
+    db: Session, data: WebhookCreate, user_id: str, industry_id: Optional[str]
+) -> WebhookEndpoint:
     _validate_webhook_url(data.url)
     wh = WebhookEndpoint(
         webhook_id=f"WH-{_uid()}",
@@ -142,14 +170,22 @@ def list_webhooks(db: Session, user_id: str) -> List[WebhookEndpoint]:
     )
 
 
-def get_webhook(db: Session, webhook_id: str, user_id: str) -> Optional[WebhookEndpoint]:
-    return db.query(WebhookEndpoint).filter(
-        WebhookEndpoint.webhook_id == webhook_id,
-        WebhookEndpoint.user_id == user_id,
-    ).first()
+def get_webhook(
+    db: Session, webhook_id: str, user_id: str
+) -> Optional[WebhookEndpoint]:
+    return (
+        db.query(WebhookEndpoint)
+        .filter(
+            WebhookEndpoint.webhook_id == webhook_id,
+            WebhookEndpoint.user_id == user_id,
+        )
+        .first()
+    )
 
 
-def update_webhook(db: Session, webhook_id: str, user_id: str, data: WebhookUpdate) -> Optional[WebhookEndpoint]:
+def update_webhook(
+    db: Session, webhook_id: str, user_id: str, data: WebhookUpdate
+) -> Optional[WebhookEndpoint]:
     wh = get_webhook(db, webhook_id, user_id)
     if not wh:
         return None
@@ -169,7 +205,9 @@ def delete_webhook(db: Session, webhook_id: str, user_id: str) -> bool:
     return True
 
 
-def list_deliveries(db: Session, webhook_id: str, limit: int = 50) -> List[WebhookDelivery]:
+def list_deliveries(
+    db: Session, webhook_id: str, limit: int = 50
+) -> List[WebhookDelivery]:
     return (
         db.query(WebhookDelivery)
         .filter(WebhookDelivery.webhook_id == webhook_id)
@@ -188,6 +226,7 @@ def check_api_key_scope(key: APIKey, required_scope: str) -> bool:
     scopes = key.scopes or []
     if isinstance(scopes, str):
         import json as _json
+
         try:
             scopes = _json.loads(scopes)
         except Exception:
@@ -195,12 +234,16 @@ def check_api_key_scope(key: APIKey, required_scope: str) -> bool:
     return "*" in scopes or required_scope in scopes
 
 
-def fire_webhook(db: Session, wh: WebhookEndpoint, event: str, payload: dict) -> WebhookDelivery:
+def fire_webhook(
+    db: Session, wh: WebhookEndpoint, event: str, payload: dict
+) -> WebhookDelivery:
     ts = str(int(datetime.now(timezone.utc).timestamp()))
     body = json.dumps({"event": event, "data": payload, "timestamp": ts})
     # Include timestamp in HMAC to prevent replay attacks
     signed_content = f"{ts}.{body}"
-    sig = hmac.new(wh.secret.encode(), signed_content.encode(), hashlib.sha256).hexdigest()
+    sig = hmac.new(
+        wh.secret.encode(), signed_content.encode(), hashlib.sha256
+    ).hexdigest()
     headers = {
         "Content-Type": "application/json",
         "X-TVG-Event": event,
@@ -243,7 +286,9 @@ def fire_webhook(db: Session, wh: WebhookEndpoint, event: str, payload: dict) ->
     return delivery
 
 
-def dispatch_event(db: Session, event: str, payload: dict, industry_id: Optional[str] = None) -> List[WebhookDelivery]:
+def dispatch_event(
+    db: Session, event: str, payload: dict, industry_id: Optional[str] = None
+) -> List[WebhookDelivery]:
     q = db.query(WebhookEndpoint).filter(WebhookEndpoint.status == WebhookStatus.active)
     if industry_id:
         q = q.filter(WebhookEndpoint.industry_id == industry_id)

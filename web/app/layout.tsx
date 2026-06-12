@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'TVG Compliance',
+    title: 'Verigo',
   },
   icons: {
     icon: '/favicon.png',

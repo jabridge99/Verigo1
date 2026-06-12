@@ -1,7 +1,9 @@
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
-from app.models.report import ReportType, ReportStatus, ReportPriority
+from typing import Optional
+
+from pydantic import BaseModel
+
+from app.models.report import ReportPriority, ReportType
 
 
 class ReportCreate(BaseModel):

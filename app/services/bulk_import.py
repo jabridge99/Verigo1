@@ -6,13 +6,13 @@ import csv
 import io
 
 COLUMN_MAP = {
-    "name":          ["name", "full_name", "fullname", "applicant_name", "customer_name"],
-    "email":         ["email", "email_address", "e-mail", "applicant_email"],
-    "phone":         ["phone", "mobile", "phone_number", "mobile_number", "contact_number"],
-    "company":       ["company", "business_name", "organisation", "organization", "employer"],
+    "name": ["name", "full_name", "fullname", "applicant_name", "customer_name"],
+    "email": ["email", "email_address", "e-mail", "applicant_email"],
+    "phone": ["phone", "mobile", "phone_number", "mobile_number", "contact_number"],
+    "company": ["company", "business_name", "organisation", "organization", "employer"],
     "customer_type": ["customer_type", "type", "entity_type"],
-    "first_name":    ["first_name", "firstname", "given_name"],
-    "last_name":     ["last_name", "lastname", "surname", "family_name"],
+    "first_name": ["first_name", "firstname", "given_name"],
+    "last_name": ["last_name", "lastname", "surname", "family_name"],
 }
 
 
@@ -60,6 +60,7 @@ def parse_excel(content):
     except ImportError:
         raise ImportError("openpyxl is required for Excel import: pip install openpyxl")
     import io as _io
+
     wb = openpyxl.load_workbook(_io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.active
     rows_data = list(ws.iter_rows(values_only=True))
@@ -68,7 +69,11 @@ def parse_excel(content):
     headers = [str(h or "").strip() for h in rows_data[0]]
     result, warnings = [], []
     for i, row in enumerate(rows_data[1:], start=2):
-        raw = {headers[j]: str(v or "").strip() for j, v in enumerate(row) if j < len(headers)}
+        raw = {
+            headers[j]: str(v or "").strip()
+            for j, v in enumerate(row)
+            if j < len(headers)
+        }
         if not any(raw.values()):
             continue
         mapped = _map_row(raw)

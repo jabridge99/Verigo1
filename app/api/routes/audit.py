@@ -13,12 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
 from app.models.audit import AuditLog
 from app.models.user import User, UserRole
 from app.schemas.audit import AuditLogCreate, AuditLogResponse
 from app.services.audit_service import log_action
-from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/audit", tags=["Audit Trail"])
 
@@ -35,9 +35,9 @@ def _scoped_query(db: Session, current_user: User):
 def create_log(
     payload: AuditLogCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(
-        UserRole.admin, UserRole.mlro, UserRole.compliance
-    )),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
     """Write an audit event. Restricted to privileged roles to prevent log-stuffing."""
     return log_action(db, **payload.model_dump())
@@ -46,9 +46,9 @@ def create_log(
 @router.get("/", response_model=list[AuditLogResponse])
 def list_logs(
     entity_type: Optional[str] = None,
-    entity_id:   Optional[str] = None,
-    actor:       Optional[str] = None,
-    action:      Optional[str] = None,
+    entity_id: Optional[str] = None,
+    actor: Optional[str] = None,
+    action: Optional[str] = None,
     industry_id: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -56,11 +56,15 @@ def list_logs(
     current_user: User = Depends(_current_user),
 ):
     q = _scoped_query(db, current_user)
-    if entity_type:  q = q.filter(AuditLog.entity_type == entity_type)
-    if entity_id:    q = q.filter(AuditLog.entity_id == entity_id)
+    if entity_type:
+        q = q.filter(AuditLog.entity_type == entity_type)
+    if entity_id:
+        q = q.filter(AuditLog.entity_id == entity_id)
     # Use .contains() — safe parameterised LIKE, no f-string injection
-    if actor:        q = q.filter(AuditLog.actor.contains(actor))
-    if action:       q = q.filter(AuditLog.action.contains(action))
+    if actor:
+        q = q.filter(AuditLog.actor.contains(actor))
+    if action:
+        q = q.filter(AuditLog.action.contains(action))
     # Admin can filter by any industry_id; non-admin query is already scoped
     if industry_id and current_user.role == UserRole.admin:
         q = q.filter(AuditLog.industry_id == industry_id)
@@ -84,15 +88,33 @@ def export_csv(
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["log_id", "action", "entity_type", "entity_id",
-                     "actor", "actor_role", "notes", "industry_id", "created_at"])
+    writer.writerow(
+        [
+            "log_id",
+            "action",
+            "entity_type",
+            "entity_id",
+            "actor",
+            "actor_role",
+            "notes",
+            "industry_id",
+            "created_at",
+        ]
+    )
     for entry in logs:
-        writer.writerow([
-            entry.log_id, entry.action, entry.entity_type, entry.entity_id,
-            entry.actor, entry.actor_role, entry.notes or "",
-            entry.industry_id or "",
-            entry.created_at.isoformat() if entry.created_at else "",
-        ])
+        writer.writerow(
+            [
+                entry.log_id,
+                entry.action,
+                entry.entity_type,
+                entry.entity_id,
+                entry.actor,
+                entry.actor_role,
+                entry.notes or "",
+                entry.industry_id or "",
+                entry.created_at.isoformat() if entry.created_at else "",
+            ]
+        )
     buf.seek(0)
     return StreamingResponse(
         buf,
@@ -111,6 +133,9 @@ def get_log(
     if not entry:
         raise HTTPException(404, "Log entry not found")
     # Tenant isolation: non-admin cannot read another tenant's log entry
-    if current_user.role != UserRole.admin and entry.industry_id != current_user.industry_id:
+    if (
+        current_user.role != UserRole.admin
+        and entry.industry_id != current_user.industry_id
+    ):
         raise HTTPException(403, "Cross-tenant access denied")
     return entry

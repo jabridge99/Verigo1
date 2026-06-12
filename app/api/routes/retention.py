@@ -3,27 +3,32 @@ Data Retention & Legal Hold API.
 Admin/MLRO only — implements Part 11 of the enterprise security review.
 """
 
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _require_roles
 from app.db.database import get_db
-from app.models.retention import EntityScope, RetentionPolicy, LegalHold
+from app.models.retention import EntityScope, LegalHold
 from app.models.user import User, UserRole
 from app.services.retention_service import (
-    get_policy, upsert_policy, list_policies,
-    place_legal_hold, release_legal_hold, is_deletion_eligible,
     generate_purge_report,
+    get_policy,
+    is_deletion_eligible,
+    list_policies,
+    place_legal_hold,
+    release_legal_hold,
+    upsert_policy,
 )
-from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/retention", tags=["Data Retention"])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class PolicyUpsert(BaseModel):
     entity_scope: EntityScope
@@ -75,12 +80,17 @@ class EligibilityQuery(BaseModel):
 
 # ── Policy endpoints ──────────────────────────────────────────────────────────
 
+
 @router.get("/policies", response_model=list[PolicyResponse])
 def list_retention_policies(
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    industry_id = (
+        None if current_user.role == UserRole.admin else current_user.industry_id
+    )
     return list_policies(db, industry_id)
 
 
@@ -90,7 +100,9 @@ def set_retention_policy(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    industry_id = (
+        None if current_user.role == UserRole.admin else current_user.industry_id
+    )
     try:
         return upsert_policy(
             db,
@@ -109,13 +121,18 @@ def set_retention_policy(
 def get_retention_policy(
     entity_scope: EntityScope,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    industry_id = (
+        None if current_user.role == UserRole.admin else current_user.industry_id
+    )
     return get_policy(db, entity_scope, industry_id)
 
 
 # ── Legal hold endpoints ──────────────────────────────────────────────────────
+
 
 @router.post("/holds", response_model=HoldResponse, status_code=201)
 def create_legal_hold(
@@ -129,7 +146,9 @@ def create_legal_hold(
         entity_id=payload.entity_id,
         reason=payload.reason,
         held_by=current_user.user_id,
-        industry_id=current_user.industry_id if current_user.role != UserRole.admin else None,
+        industry_id=current_user.industry_id
+        if current_user.role != UserRole.admin
+        else None,
     )
 
 
@@ -141,8 +160,12 @@ def release_hold(
 ):
     try:
         return release_legal_hold(
-            db, hold_id, released_by=current_user.user_id,
-            industry_id=current_user.industry_id if current_user.role != UserRole.admin else None,
+            db,
+            hold_id,
+            released_by=current_user.user_id,
+            industry_id=current_user.industry_id
+            if current_user.role != UserRole.admin
+            else None,
         )
     except (ValueError, PermissionError) as e:
         raise HTTPException(400 if isinstance(e, ValueError) else 403, str(e))
@@ -153,7 +176,9 @@ def list_legal_holds(
     entity_scope: Optional[EntityScope] = None,
     active_only: bool = True,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
     q = db.query(LegalHold)
     if current_user.role != UserRole.admin:
@@ -161,11 +186,12 @@ def list_legal_holds(
     if entity_scope:
         q = q.filter(LegalHold.entity_scope == entity_scope)
     if active_only:
-        q = q.filter(LegalHold.active == True)
+        q = q.filter(LegalHold.active)
     return q.order_by(LegalHold.placed_at.desc()).all()
 
 
 # ── Eligibility check ─────────────────────────────────────────────────────────
+
 
 @router.post("/eligibility")
 def check_deletion_eligibility(
@@ -173,7 +199,9 @@ def check_deletion_eligibility(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    industry_id = (
+        None if current_user.role == UserRole.admin else current_user.industry_id
+    )
     return is_deletion_eligible(
         db,
         entity_scope=payload.entity_scope,
@@ -186,11 +214,14 @@ def check_deletion_eligibility(
 
 # ── Purge report ──────────────────────────────────────────────────────────────
 
+
 @router.get("/purge-report")
 def purge_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     """Dry-run purge report — identifies eligible records without deleting them."""
-    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    industry_id = (
+        None if current_user.role == UserRole.admin else current_user.industry_id
+    )
     return generate_purge_report(db, industry_id)

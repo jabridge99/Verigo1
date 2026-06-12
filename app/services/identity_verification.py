@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, date
+from datetime import date, datetime
 
 
 def _normalize(text: str) -> str:
@@ -22,7 +22,9 @@ def verify_document(customer, document) -> dict:
             issues.append("Date of birth mismatch")
     if document.extracted_expiry:
         try:
-            expiry_date = datetime.strptime(document.extracted_expiry, "%Y-%m-%d").date()
+            expiry_date = datetime.strptime(
+                document.extracted_expiry, "%Y-%m-%d"
+            ).date()
             if expiry_date < date.today():
                 score -= 40
                 issues.append("Document is expired")
@@ -33,7 +35,9 @@ def verify_document(customer, document) -> dict:
             score -= 20
             issues.append("ID number mismatch")
     score = max(score, 0.0)
-    result = "valid" if score >= 70 else ("invalid" if score < 40 else "review_required")
+    result = (
+        "valid" if score >= 70 else ("invalid" if score < 40 else "review_required")
+    )
     return {"confidence_score": score, "verification_result": result, "issues": issues}
 
 

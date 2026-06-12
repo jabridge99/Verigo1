@@ -8,16 +8,19 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
-from app.models.kyc import KYCRecord, KYCDocument, KYCStatus, DocumentType
-from app.models.customer import Customer, CustomerStatus
-from app.models.user import User, UserRole
-from app.services.identity_verification import verify_document, compute_kyc_identity_score
-from app.services.sanctions_screening import screen_name
 from app.api.routes.auth import _current_user, _require_roles
+from app.db.database import get_db
+from app.models.customer import Customer, CustomerStatus
+from app.models.kyc import DocumentType, KYCDocument, KYCRecord, KYCStatus
+from app.models.user import User, UserRole
+from app.services.identity_verification import (
+    compute_kyc_identity_score,
+    verify_document,
+)
+from app.services.sanctions_screening import screen_name
 
 router = APIRouter(prefix="/kyc", tags=["KYC"])
 
@@ -42,10 +45,14 @@ def initiate_kyc(
     if not customer:
         raise HTTPException(404, "Customer not found")
     _assert_tenant(current_user, customer.industry_id)
-    existing = db.query(KYCRecord).filter(
-        KYCRecord.customer_id == customer.id,
-        KYCRecord.status.notin_([KYCStatus.rejected]),
-    ).first()
+    existing = (
+        db.query(KYCRecord)
+        .filter(
+            KYCRecord.customer_id == customer.id,
+            KYCRecord.status.notin_([KYCStatus.rejected]),
+        )
+        .first()
+    )
     if existing:
         raise HTTPException(400, "Active KYC record already exists")
     kyc = KYCRecord(
@@ -121,7 +128,9 @@ def review_kyc(
     notes: str = None,
     rejection_reason: str = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
     kyc = db.query(KYCRecord).filter(KYCRecord.kyc_id == kyc_id).first()
     if not kyc:
@@ -145,14 +154,22 @@ def review_kyc(
     elif approve:
         requires_ecdd = customer.is_pep or customer.risk_score >= 61
         kyc.status = KYCStatus.requires_ecdd if requires_ecdd else KYCStatus.approved
-        customer.status = CustomerStatus.kyc_approved if not requires_ecdd else CustomerStatus.kyc_in_progress
+        customer.status = (
+            CustomerStatus.kyc_approved
+            if not requires_ecdd
+            else CustomerStatus.kyc_in_progress
+        )
     else:
         kyc.status = KYCStatus.rejected
         kyc.rejection_reason = rejection_reason or "Manual rejection"
         customer.status = CustomerStatus.kyc_rejected
 
     db.commit()
-    return {"kyc_id": kyc.kyc_id, "status": kyc.status, "requires_ecdd": kyc.status == KYCStatus.requires_ecdd}
+    return {
+        "kyc_id": kyc.kyc_id,
+        "status": kyc.status,
+        "requires_ecdd": kyc.status == KYCStatus.requires_ecdd,
+    }
 
 
 @router.get("/{customer_id}/history")

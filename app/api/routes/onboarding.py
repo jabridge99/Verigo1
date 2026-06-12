@@ -2,24 +2,39 @@
 Customer Onboarding Autopilot — API routes.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy.orm import Session
 from typing import Optional
-import math
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.onboarding import OnboardingSession, OnboardingAuditLog, ImportBatch, SessionStatus
+from app.models.onboarding import (
+    ImportBatch,
+    OnboardingAuditLog,
+    OnboardingSession,
+    SessionStatus,
+)
 from app.schemas.onboarding import (
-    SessionCreate, SessionSummary, SessionDetail,
-    AuditLogEntry, PortalTokenResponse, StepSubmit,
-    BatchSummary, PipelineStats,
+    AuditLogEntry,
+    BatchSummary,
+    PipelineStats,
+    PortalTokenResponse,
+    SessionCreate,
+    SessionDetail,
+    SessionSummary,
+    StepSubmit,
 )
+from app.services.bulk_import import generate_csv_template, parse_csv, parse_excel
 from app.services.onboarding_service import (
-    create_session, bulk_create_sessions, open_invite,
-    advance_step, submit_onboarding, get_sessions_needing_reminder,
-    send_reminder, ONBOARDING_STEPS,
+    ONBOARDING_STEPS,
+    advance_step,
+    bulk_create_sessions,
+    create_session,
+    get_sessions_needing_reminder,
+    open_invite,
+    send_reminder,
+    submit_onboarding,
 )
-from app.services.bulk_import import parse_csv, parse_excel, generate_csv_template
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
@@ -62,10 +77,12 @@ def list_sessions(
     if search:
         like = f"%{search}%"
         q = q.filter(
-            OnboardingSession.applicant_name.ilike(like) |
-            OnboardingSession.applicant_email.ilike(like)
+            OnboardingSession.applicant_name.ilike(like)
+            | OnboardingSession.applicant_email.ilike(like)
         )
-    return q.order_by(OnboardingSession.created_at.desc()).offset(skip).limit(limit).all()
+    return (
+        q.order_by(OnboardingSession.created_at.desc()).offset(skip).limit(limit).all()
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
@@ -81,7 +98,12 @@ def get_audit_log(session_id: str, db: Session = Depends(get_db)):
     s = db.query(OnboardingSession).filter_by(session_id=session_id).first()
     if not s:
         raise HTTPException(404, "Session not found")
-    return db.query(OnboardingAuditLog).filter_by(session_id=s.id).order_by(OnboardingAuditLog.created_at).all()
+    return (
+        db.query(OnboardingAuditLog)
+        .filter_by(session_id=s.id)
+        .order_by(OnboardingAuditLog.created_at)
+        .all()
+    )
 
 
 @router.post("/sessions/{session_id}/remind")
@@ -112,7 +134,8 @@ async def import_csv(
     content = await file.read()
     rows, warnings = parse_csv(content)
     batch = bulk_create_sessions(
-        db, rows,
+        db,
+        rows,
         industry_id=industry_id,
         source="csv",
         file_name=file.filename,
@@ -135,7 +158,8 @@ async def import_excel(
     except ImportError as e:
         raise HTTPException(422, str(e))
     batch = bulk_create_sessions(
-        db, rows,
+        db,
+        rows,
         industry_id=industry_id,
         source="excel",
         file_name=file.filename,
@@ -148,6 +172,7 @@ async def import_excel(
 @router.get("/import/template")
 def csv_template():
     from fastapi.responses import PlainTextResponse
+
     return PlainTextResponse(
         generate_csv_template(),
         media_type="text/csv",
@@ -217,6 +242,7 @@ def run_reminders(db: Session = Depends(get_db)):
 @router.get("/portal/{token}", response_model=PortalTokenResponse)
 def portal_open(token: str, db: Session = Depends(get_db)):
     from datetime import datetime, timezone
+
     session = open_invite(db, token)
     if not session:
         raise HTTPException(404, "Invalid or expired invite link")

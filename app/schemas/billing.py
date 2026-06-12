@@ -1,7 +1,14 @@
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
-from app.models.billing import BillingPlan, BillingInterval, SubscriptionStatus, InvoiceStatus
+from typing import List, Optional
+
+from pydantic import BaseModel
+
+from app.models.billing import (
+    BillingInterval,
+    BillingPlan,
+    InvoiceStatus,
+    SubscriptionStatus,
+)
 
 
 class SubscriptionResponse(BaseModel):
@@ -35,12 +42,13 @@ class SubscriptionCreate(BaseModel):
 
 class SubscriptionAdminUpdate(BaseModel):
     """Admin/VVIP price override and plan management."""
+
     plan: Optional[BillingPlan] = None
     interval: Optional[BillingInterval] = None
     status: Optional[SubscriptionStatus] = None
     custom_monthly_aud: Optional[float] = None
     custom_annual_aud: Optional[float] = None
-    annual_discount_pct: Optional[float] = None   # e.g. 30 for 30%
+    annual_discount_pct: Optional[float] = None  # e.g. 30 for 30%
     notes: Optional[str] = None
 
 

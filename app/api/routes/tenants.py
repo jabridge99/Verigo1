@@ -1,12 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from app.db.database import get_db
-from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse, TenantSummary
+from app.schemas.tenant import TenantCreate, TenantResponse, TenantSummary, TenantUpdate
 from app.services.tenant_service import (
-    create_tenant, get_tenant, get_tenant_by_industry,
-    list_tenants, update_tenant, suspend_tenant, activate_tenant, tenant_stats
+    activate_tenant,
+    create_tenant,
+    get_tenant,
+    get_tenant_by_industry,
+    list_tenants,
+    suspend_tenant,
+    tenant_stats,
+    update_tenant,
 )
 
 router = APIRouter(prefix="/tenants", tags=["Industry Tenants"])
@@ -16,12 +23,19 @@ router = APIRouter(prefix="/tenants", tags=["Industry Tenants"])
 def create(payload: TenantCreate, db: Session = Depends(get_db)):
     existing = get_tenant_by_industry(db, payload.industry_id)
     if existing:
-        raise HTTPException(409, f"Tenant for industry '{payload.industry_id}' already exists")
+        raise HTTPException(
+            409, f"Tenant for industry '{payload.industry_id}' already exists"
+        )
     return create_tenant(db, payload)
 
 
 @router.get("/", response_model=list[TenantSummary])
-def list_all(status: Optional[str] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def list_all(
+    status: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
     return list_tenants(db, status=status, skip=skip, limit=limit)
 
 

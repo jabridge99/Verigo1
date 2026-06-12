@@ -1,6 +1,6 @@
 {
-  "name": "Trust Verify Go — Compliance OS",
-  "short_name": "TVG Compliance",
+  "name": "Verigo — Compliance OS",
+  "short_name": "Verigo",
   "description": "Australian-first AML/CTF Compliance Operating System. KYC, transaction monitoring, AUSTRAC reporting, and case management on the go.",
   "start_url": "/dashboard",
   "display": "standalone",

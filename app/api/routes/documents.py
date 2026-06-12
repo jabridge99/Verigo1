@@ -9,22 +9,20 @@ Zero Trust fixes:
 - RBAC: delete restricted to admin/mlro; archive restricted to compliance+
 """
 
-import imghdr
-import struct
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
+from app.models.document import DocumentCategory
+from app.models.user import User, UserRole
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.services import document_service as svc
 from app.services.document_service import ALLOWED_MIME, MAX_SIZE
-from app.api.routes.auth import _current_user, _require_roles
-from app.models.user import User, UserRole
-from app.models.document import DocumentCategory
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -36,7 +34,9 @@ _SAFE_EXTENSIONS = {
     "image/webp": {".webp"},
     "image/gif": {".gif"},
     "application/msword": {".doc"},
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {".docx"},
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+        ".docx"
+    },
     "application/vnd.ms-excel": {".xls"},
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {".xlsx"},
     "text/plain": {".txt"},
@@ -45,14 +45,14 @@ _SAFE_EXTENSIONS = {
 
 # Magic byte signatures for server-side verification
 _MAGIC = {
-    b"%PDF":    "application/pdf",
+    b"%PDF": "application/pdf",
     b"\xff\xd8\xff": "image/jpeg",
     b"\x89PNG": "image/png",
-    b"RIFF":    "image/webp",   # partial; need WEBP check
-    b"GIF87a":  "image/gif",
-    b"GIF89a":  "image/gif",
-    b"\xd0\xcf": "application/msword",   # OLE2 — .doc/.xls
-    b"PK\x03\x04": None,   # ZIP-based — .docx/.xlsx/webp — checked by extension
+    b"RIFF": "image/webp",  # partial; need WEBP check
+    b"GIF87a": "image/gif",
+    b"GIF89a": "image/gif",
+    b"\xd0\xcf": "application/msword",  # OLE2 — .doc/.xls
+    b"PK\x03\x04": None,  # ZIP-based — .docx/.xlsx/webp — checked by extension
 }
 
 
@@ -61,7 +61,7 @@ def _verify_magic(content: bytes, declared_mime: str) -> bool:
     for sig, mime in _MAGIC.items():
         if content.startswith(sig):
             if mime is None:
-                return True   # ZIP-based: trust extension whitelist
+                return True  # ZIP-based: trust extension whitelist
             return mime == declared_mime
     # WEBP inside RIFF
     if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
@@ -75,7 +75,7 @@ def _verify_magic(content: bytes, declared_mime: str) -> bool:
 def _assert_tenant(current_user: User, doc_industry_id: Optional[str]):
     """Explicit check — admin sees all, non-admin must match their industry_id."""
     if current_user.role == UserRole.admin:
-        return   # admin has cross-tenant read access by design
+        return  # admin has cross-tenant read access by design
     if doc_industry_id and doc_industry_id != current_user.industry_id:
         raise HTTPException(403, "Cross-tenant document access denied")
 
@@ -107,7 +107,9 @@ async def upload_document(
     ext = Path(file.filename or "upload").suffix.lower()
     allowed_exts = _SAFE_EXTENSIONS.get(mime, set())
     if allowed_exts and ext not in allowed_exts:
-        raise HTTPException(415, f"Extension '{ext}' not permitted for MIME type '{mime}'")
+        raise HTTPException(
+            415, f"Extension '{ext}' not permitted for MIME type '{mime}'"
+        )
 
     # Magic byte verification — blocks polyglot files
     if not _verify_magic(content, mime):
@@ -210,9 +212,9 @@ def update_document(
 def archive_document(
     doc_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(
-        UserRole.admin, UserRole.mlro, UserRole.compliance
-    )),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
     doc = svc.archive_document(db, doc_id, _industry_scope(current_user))
     if not doc:

@@ -8,12 +8,20 @@ from .base import StorageProvider, StoredObject
 
 
 class S3StorageProvider(StorageProvider):
-    def __init__(self, bucket: str, region: str, access_key: str, secret_key: str,
-                 endpoint_url: Optional[str] = None):
+    def __init__(
+        self,
+        bucket: str,
+        region: str,
+        access_key: str,
+        secret_key: str,
+        endpoint_url: Optional[str] = None,
+    ):
         try:
-            import aioboto3
+            import aioboto3 as _aioboto3
         except ImportError:
-            raise RuntimeError("aioboto3 is required for S3 storage: pip install aioboto3")
+            raise RuntimeError(
+                "aioboto3 is required for S3 storage: pip install aioboto3"
+            )
         self.bucket = bucket
         self._session_kwargs = dict(
             region_name=region,
@@ -21,7 +29,6 @@ class S3StorageProvider(StorageProvider):
             aws_secret_access_key=secret_key,
         )
         self._endpoint_url = endpoint_url
-        import aioboto3 as _aioboto3
         self._aioboto3 = _aioboto3
 
     def _client(self):
@@ -29,11 +36,18 @@ class S3StorageProvider(StorageProvider):
             "s3", endpoint_url=self._endpoint_url, **self._session_kwargs
         )
 
-    async def upload(self, key: str, data: bytes, content_type: str = "application/octet-stream",
-                     metadata: Optional[dict] = None) -> StoredObject:
+    async def upload(
+        self,
+        key: str,
+        data: bytes,
+        content_type: str = "application/octet-stream",
+        metadata: Optional[dict] = None,
+    ) -> StoredObject:
         async with self._client() as s3:
             await s3.put_object(
-                Bucket=self.bucket, Key=key, Body=data,
+                Bucket=self.bucket,
+                Key=key,
+                Body=data,
                 ContentType=content_type,
                 Metadata={k: str(v) for k, v in (metadata or {}).items()},
             )
@@ -76,10 +90,12 @@ class S3StorageProvider(StorageProvider):
             paginator = s3.get_paginator("list_objects_v2")
             async for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
                 for obj in page.get("Contents", []):
-                    results.append(StoredObject(
-                        key=obj["Key"],
-                        size=obj["Size"],
-                        content_type="application/octet-stream",
-                        etag=obj.get("ETag", "").strip('"'),
-                    ))
+                    results.append(
+                        StoredObject(
+                            key=obj["Key"],
+                            size=obj["Size"],
+                            content_type="application/octet-stream",
+                            etag=obj.get("ETag", "").strip('"'),
+                        )
+                    )
         return results

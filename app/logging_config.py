@@ -5,7 +5,7 @@ JSON format in production; coloured text in development.
 
 import logging
 import logging.config
-import sys
+
 from app.config import settings
 
 
@@ -41,7 +41,10 @@ def setup_logging() -> None:
         },
         "loggers": {
             "uvicorn": {"level": "INFO", "propagate": True},
-            "uvicorn.access": {"level": "WARNING", "propagate": True},  # handled by our middleware
+            "uvicorn.access": {
+                "level": "WARNING",
+                "propagate": True,
+            },  # handled by our middleware
             "sqlalchemy.engine": {"level": "WARNING", "propagate": True},
             "tvg": {"level": log_level, "propagate": True},
         },

@@ -12,25 +12,26 @@ Statutory deadlines per AML/CTF Act 2006 and AUSTRAC guidance.
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
 from sqlalchemy.orm import Session
 
-from app.models.report import ComplianceReport, ReportType, ReportStatus, ReportPriority
-from app.models.transaction import Transaction, TransactionAlert, AlertType
 from app.models.customer import Customer
+from app.models.report import ComplianceReport, ReportPriority, ReportStatus, ReportType
+from app.models.transaction import Transaction, TransactionAlert
 
 # Statutory reporting deadlines (business days approximated as calendar days * 1.4)
 DEADLINE_DAYS = {
-    "ttr":      14,   # 10 business days ≈ 14 calendar days
-    "ifti_in":  14,
+    "ttr": 14,  # 10 business days ≈ 14 calendar days
+    "ifti_in": 14,
     "ifti_out": 14,
-    "smr":       4,   # 3 business days ≈ 4 calendar days
+    "smr": 4,  # 3 business days ≈ 4 calendar days
 }
 
 AUSTRAC_FORMS = {
-    "ttr":      "TTR",
-    "ifti_in":  "IFTI-I",
+    "ttr": "TTR",
+    "ifti_in": "IFTI-I",
     "ifti_out": "IFTI-E",
-    "smr":      "SMR",
+    "smr": "SMR",
 }
 
 
@@ -59,6 +60,7 @@ def _priority(report_type: str, days_left: int) -> ReportPriority:
 
 # ─── Auto-generation from alerts ─────────────────────────────────────────────
 
+
 def auto_generate_from_alert(
     db: Session,
     alert: TransactionAlert,
@@ -70,7 +72,11 @@ def auto_generate_from_alert(
     Returns None if this alert type doesn't map to a mandatory report.
     Skips if a non-submitted report already exists for this alert.
     """
-    alert_type = alert.alert_type.value if hasattr(alert.alert_type, "value") else alert.alert_type
+    alert_type = (
+        alert.alert_type.value
+        if hasattr(alert.alert_type, "value")
+        else alert.alert_type
+    )
     txn = db.query(Transaction).filter(Transaction.id == alert.transaction_id).first()
     customer = db.query(Customer).filter(Customer.id == alert.customer_id).first()
 
@@ -81,9 +87,20 @@ def auto_generate_from_alert(
     if alert_type == "large_transaction":
         rtype = ReportType.ttr
     elif alert_type == "cross_border":
-        is_outbound = txn.transaction_type.value in ("withdrawal", "transfer", "payment")
+        is_outbound = txn.transaction_type.value in (
+            "withdrawal",
+            "transfer",
+            "payment",
+        )
         rtype = ReportType.ifti_out if is_outbound else ReportType.ifti_in
-    elif alert_type in ("sanctions_match", "structuring", "pep_transaction", "unusual_pattern", "rule_triggered", "velocity_breach"):
+    elif alert_type in (
+        "sanctions_match",
+        "structuring",
+        "pep_transaction",
+        "unusual_pattern",
+        "rule_triggered",
+        "velocity_breach",
+    ):
         rtype = ReportType.smr
     else:
         return None
@@ -94,7 +111,9 @@ def auto_generate_from_alert(
         .filter(
             ComplianceReport.customer_id == customer.id,
             ComplianceReport.report_type == rtype,
-            ComplianceReport.status.notin_([ReportStatus.submitted, ReportStatus.acknowledged]),
+            ComplianceReport.status.notin_(
+                [ReportStatus.submitted, ReportStatus.acknowledged]
+            ),
         )
         .first()
     )
@@ -112,10 +131,10 @@ def auto_generate_from_alert(
     days_left = _days_remaining(due)
 
     titles = {
-        ReportType.ttr:      f"TTR — {customer.full_name} — AUD ${amount:,.2f}",
-        ReportType.ifti_in:  f"IFTI Inbound — {customer.full_name} — {txn.counterparty_country or 'Unknown'}",
+        ReportType.ttr: f"TTR — {customer.full_name} — AUD ${amount:,.2f}",
+        ReportType.ifti_in: f"IFTI Inbound — {customer.full_name} — {txn.counterparty_country or 'Unknown'}",
         ReportType.ifti_out: f"IFTI Outbound — {customer.full_name} — {txn.counterparty_country or 'Unknown'}",
-        ReportType.smr:      f"SMR — {customer.full_name} — {alert_type.replace('_',' ').title()}",
+        ReportType.smr: f"SMR — {customer.full_name} — {alert_type.replace('_', ' ').title()}",
     }
 
     summaries = {
@@ -203,11 +222,18 @@ def reporting_summary(db: Session, industry_id: str = None) -> dict:
     now = datetime.now(timezone.utc)
 
     for r in reports:
-        rt = r.report_type.value if hasattr(r.report_type, "value") else str(r.report_type)
+        rt = (
+            r.report_type.value
+            if hasattr(r.report_type, "value")
+            else str(r.report_type)
+        )
         by_type[rt] = by_type.get(rt, 0) + 1
         st = r.status.value if hasattr(r.status, "value") else str(r.status)
         by_status[st] = by_status.get(st, 0) + 1
-        if r.due_date and r.status not in (ReportStatus.submitted, ReportStatus.acknowledged):
+        if r.due_date and r.status not in (
+            ReportStatus.submitted,
+            ReportStatus.acknowledged,
+        ):
             days = (r.due_date.replace(tzinfo=timezone.utc) - now).days
             if days < 0:
                 overdue += 1

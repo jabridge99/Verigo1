@@ -2,14 +2,15 @@
 Analytics endpoints — compliance KPIs and chart data.
 """
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
 from typing import Optional
 
-from app.db.database import get_db
-from app.services import analytics_service as svc
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
 from app.api.routes.auth import _current_user
+from app.db.database import get_db
 from app.models.user import User
+from app.services import analytics_service as svc
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 

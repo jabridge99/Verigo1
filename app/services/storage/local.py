@@ -22,8 +22,13 @@ class LocalStorageProvider(StorageProvider):
             raise ValueError(f"Path traversal attempt: {key}")
         return resolved
 
-    async def upload(self, key: str, data: bytes, content_type: str = "application/octet-stream",
-                     metadata: Optional[dict] = None) -> StoredObject:
+    async def upload(
+        self,
+        key: str,
+        data: bytes,
+        content_type: str = "application/octet-stream",
+        metadata: Optional[dict] = None,
+    ) -> StoredObject:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         await asyncio.to_thread(path.write_bytes, data)
@@ -34,6 +39,7 @@ class LocalStorageProvider(StorageProvider):
 
     async def stream(self, key: str, chunk_size: int = 65_536) -> AsyncIterator[bytes]:
         path = self._path(key)
+
         def _iter():
             with open(path, "rb") as f:
                 while True:
@@ -41,6 +47,7 @@ class LocalStorageProvider(StorageProvider):
                     if not chunk:
                         break
                     yield chunk
+
         for chunk in await asyncio.to_thread(list, _iter()):
             yield chunk
 
@@ -63,8 +70,11 @@ class LocalStorageProvider(StorageProvider):
                 if p.is_file():
                     rel = str(p.relative_to(self.root))
                     ct, _ = mimetypes.guess_type(str(p))
-                    results.append(StoredObject(
-                        key=rel, size=p.stat().st_size,
-                        content_type=ct or "application/octet-stream",
-                    ))
+                    results.append(
+                        StoredObject(
+                            key=rel,
+                            size=p.stat().st_size,
+                            content_type=ct or "application/octet-stream",
+                        )
+                    )
         return results

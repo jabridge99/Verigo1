@@ -1,11 +1,15 @@
 import uuid
+
 from sqlalchemy.orm import Session
+
 from app.models.tenant import IndustryTenant
 from app.schemas.tenant import TenantCreate, TenantUpdate
 
 
 def create_tenant(db: Session, payload: TenantCreate) -> IndustryTenant:
-    tenant = IndustryTenant(tenant_id=f"TENANT-{uuid.uuid4().hex[:10].upper()}", **payload.model_dump())
+    tenant = IndustryTenant(
+        tenant_id=f"TENANT-{uuid.uuid4().hex[:10].upper()}", **payload.model_dump()
+    )
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
@@ -47,8 +51,13 @@ def activate_tenant(db: Session, tenant_id: str):
 
 
 def tenant_stats(db: Session) -> dict:
-    total     = db.query(IndustryTenant).count()
-    active    = db.query(IndustryTenant).filter_by(status="active").count()
+    total = db.query(IndustryTenant).count()
+    active = db.query(IndustryTenant).filter_by(status="active").count()
     suspended = db.query(IndustryTenant).filter_by(status="suspended").count()
-    pending   = db.query(IndustryTenant).filter_by(status="pending").count()
-    return {"total": total, "active": active, "suspended": suspended, "pending": pending}
+    pending = db.query(IndustryTenant).filter_by(status="pending").count()
+    return {
+        "total": total,
+        "active": active,
+        "suspended": suspended,
+        "pending": pending,
+    }
