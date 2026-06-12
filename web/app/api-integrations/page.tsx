@@ -41,7 +41,7 @@ export default function APIPage() {
               </ul>
             </div>
             <div className="bg-navy-900 rounded-xl p-5 font-mono text-sm">
-              <div className="text-white/30 mb-3 text-xs">// POST /api/v1/customers</div>
+              <div className="text-white/30 mb-3 text-xs">{'// POST /api/v1/customers'}</div>
               <pre className="text-green-400 text-xs leading-relaxed overflow-x-auto">{`{
   "full_name": "Jane Smith",
   "date_of_birth": "1985-03-15",
@@ -50,7 +50,7 @@ export default function APIPage() {
   "id_number": "PA1234567",
   "industry": "digital_currency_exchange"
 }`}</pre>
-              <div className="border-t border-white/10 mt-4 pt-3 text-white/30 text-xs">// Response</div>
+              <div className="border-t border-white/10 mt-4 pt-3 text-white/30 text-xs">{'// Response'}</div>
               <pre className="text-brand-400 text-xs leading-relaxed">{`{
   "customer_id": "CUST-A3F8C92D",
   "status": "pending",
