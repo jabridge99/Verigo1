@@ -1,7 +1,7 @@
 import { CheckCircle, ArrowRight, Code2, Globe, Database, Zap } from 'lucide-react'
 import Link from 'next/link'
 
-export const metadata = { title: 'API & Integrations | Trust Verify Go' }
+export const metadata = { title: 'API & Integrations | Verigo' }
 
 const freeConnectors = [
   { name: 'DFAT Sanctions List', desc: 'Australian Department of Foreign Affairs and Trade consolidated list', tag: 'Free' },
@@ -33,7 +33,7 @@ export default function APIPage() {
           <div className="grid md:grid-cols-2 gap-8 items-center">
             <div>
               <div className="flex items-center gap-3 mb-4"><Code2 className="w-6 h-6 text-brand-400" /><h2 className="text-2xl font-bold">REST API</h2></div>
-              <p className="text-white/60 mb-6 leading-relaxed">Full programmatic access to every Trust Verify Go module. Customer onboarding, KYC orchestration, transaction submission, report generation — all via API.</p>
+              <p className="text-white/60 mb-6 leading-relaxed">Full programmatic access to every Verigo module. Customer onboarding, KYC orchestration, transaction submission, report generation — all via API.</p>
               <ul className="space-y-2">
                 {['JSON REST API', 'Webhook event delivery', 'Bearer token auth', 'Rate limiting and usage metering', 'OpenAPI 3.0 spec', 'SDKs: Python, Node.js (planned)'].map(f => (
                   <li key={f} className="flex items-center gap-2 text-sm text-white/70"><CheckCircle className="w-4 h-4 text-green-400" /> {f}</li>
@@ -79,7 +79,7 @@ export default function APIPage() {
         </div>
         <div className="mb-12">
           <h2 className="text-2xl font-bold mb-2 flex items-center gap-3"><Zap className="w-6 h-6 text-amber-400" />Premium connector marketplace</h2>
-          <p className="text-white/50 text-sm mb-6">Bring your own API keys. Pay your vendor directly. Trust Verify Go acts as the orchestration layer.</p>
+          <p className="text-white/50 text-sm mb-6">Bring your own API keys. Pay your vendor directly. Verigo acts as the orchestration layer.</p>
           <div className="grid md:grid-cols-2 gap-4">
             {premiumConnectors.map(c => (
               <div key={c.name} className="card flex items-start gap-4">

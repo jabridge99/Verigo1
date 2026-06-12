@@ -1,6 +1,6 @@
 import { CheckCircle, Calendar, Clock, Users } from 'lucide-react'
 
-export const metadata = { title: 'Book a Demo | Trust Verify Go' }
+export const metadata = { title: 'Book a Demo | Verigo' }
 
 export default function LiveDemoPage() {
   return (
@@ -9,7 +9,7 @@ export default function LiveDemoPage() {
         <div className="grid md:grid-cols-2 gap-16 items-start">
           <div>
             <span className="badge bg-brand-900/50 text-brand-400 border border-brand-700/30 mb-4">Live Demo</span>
-            <h1 className="text-4xl font-bold mb-6">See Trust Verify Go in action.</h1>
+            <h1 className="text-4xl font-bold mb-6">See Verigo in action.</h1>
             <p className="text-white/60 leading-relaxed mb-8">Book a 30-minute guided demo with our compliance team. We&apos;ll walk you through the full platform — from customer onboarding to AUSTRAC submission — using your industry as the example.</p>
             <div className="space-y-4 mb-8">
               {[

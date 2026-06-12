@@ -62,7 +62,7 @@ export default function CustomerPortal({ token, data }: { token: string; data: P
             </div>
           )}
           <div className="flex items-center gap-2 justify-center text-xs text-slate-500">
-            <Shield className="w-4 h-4" /> Secured by Trust Verify Go
+            <Shield className="w-4 h-4" /> Secured by Verigo
           </div>
         </div>
       </div>
@@ -74,7 +74,7 @@ export default function CustomerPortal({ token, data }: { token: string; data: P
       <div className="border-b border-navy-800 px-6 py-4">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2 text-brand-400 text-xs font-medium mb-0.5"><Shield className="w-3.5 h-3.5" />Trust Verify Go — Secure Onboarding</div>
+            <div className="flex items-center gap-2 text-brand-400 text-xs font-medium mb-0.5"><Shield className="w-3.5 h-3.5" />Verigo — Secure Onboarding</div>
             <h1 className="font-bold text-slate-100">Welcome, {data.applicant_name}</h1>
           </div>
           <div className="text-right">

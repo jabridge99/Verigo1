@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { CheckCircle, ArrowRight } from 'lucide-react'
 import { industries } from '@/lib/industries'
 
-export const metadata = { title: 'Start Free Trial | Trust Verify Go' }
+export const metadata = { title: 'Start Free Trial | Verigo' }
 
 export default function StartTrialPage() {
   return (

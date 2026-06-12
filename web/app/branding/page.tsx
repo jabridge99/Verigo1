@@ -10,7 +10,7 @@ import { fetchBranding, saveBranding, resetBranding, applyBrandingToDOM, DEFAULT
 import { useRouter } from "next/navigation";
 
 const PRESET_PALETTES = [
-  { name: "Trust Verify Go", primary: "#2563eb", accent: "#f59e0b", bg: "#060d1a" },
+  { name: "Verigo", primary: "#2563eb", accent: "#f59e0b", bg: "#060d1a" },
   { name: "Midnight Green",  primary: "#059669", accent: "#34d399", bg: "#022c22" },
   { name: "Royal Purple",    primary: "#7c3aed", accent: "#a78bfa", bg: "#0d0414" },
   { name: "Crimson",         primary: "#dc2626", accent: "#fbbf24", bg: "#0c0303" },
@@ -87,7 +87,7 @@ export default function BrandingPage() {
   };
 
   const handleReset = async () => {
-    if (!confirm("Reset all branding to Trust Verify Go defaults?")) return;
+    if (!confirm("Reset all branding to Verigo defaults?")) return;
     try {
       await resetBranding(getToken()!);
       setConfig(DEFAULT_BRANDING);
@@ -174,7 +174,7 @@ export default function BrandingPage() {
               </span>
             </div>
             {!config.hide_tvg_badge && (
-              <p className="text-xs mt-3" style={{ color: config.primary_color }}>Powered by Trust Verify Go</p>
+              <p className="text-xs mt-3" style={{ color: config.primary_color }}>Powered by Verigo</p>
             )}
             <p className="text-xs text-slate-500 mt-1">{config.footer_text}</p>
           </div>
@@ -228,7 +228,7 @@ export default function BrandingPage() {
                   >
                     <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${config.hide_tvg_badge ? "translate-x-5" : "translate-x-0.5"}`} />
                   </div>
-                  <span className="text-sm text-slate-400">Remove "Powered by Trust Verify Go"</span>
+                  <span className="text-sm text-slate-400">Remove "Powered by Verigo"</span>
                 </label>
               </div>
             </div>
@@ -318,7 +318,7 @@ export default function BrandingPage() {
               />
             </div>
             <p className="text-xs text-slate-500 mt-3 ml-0">
-              Add a CNAME record pointing <code className="text-blue-400">compliance.yourcompany.com</code> → <code className="text-blue-400">app.trustverifygo.com.au</code>, then enter the domain above.
+              Add a CNAME record pointing <code className="text-blue-400">compliance.yourcompany.com</code> → <code className="text-blue-400">app.verigo.com.au</code>, then enter the domain above.
             </p>
           </section>
 
@@ -327,7 +327,7 @@ export default function BrandingPage() {
             <h4 className="text-sm font-semibold text-blue-400 mb-2">Embed branding in external tools</h4>
             <p className="text-sm text-slate-400 mb-3">Fetch your brand CSS variables from the public endpoint to style external portals consistently.</p>
             <pre className="text-xs bg-black/40 rounded-lg p-3 text-green-300 overflow-x-auto">{`/* Load in your <head> */
-<link rel="stylesheet" href="${process.env.NEXT_PUBLIC_API_URL ?? "https://api.trustverifygo.com.au"}/api/v1/branding/css?industry_id=YOUR_INDUSTRY_ID" />`}</pre>
+<link rel="stylesheet" href="${process.env.NEXT_PUBLIC_API_URL ?? "https://api.verigo.com.au"}/api/v1/branding/css?industry_id=YOUR_INDUSTRY_ID" />`}</pre>
           </section>
 
         </div>

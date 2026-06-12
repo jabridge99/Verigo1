@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { CheckCircle, X, ArrowRight } from 'lucide-react'
 
 export const metadata = {
-  title: 'Pricing | Trust Verify Go',
+  title: 'Pricing | Verigo',
   description: 'Simple, transparent pricing for Australian regulated businesses. Start with a 7-day free trial.',
 }
 

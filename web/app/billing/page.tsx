@@ -255,7 +255,7 @@ function BillingContent() {
 
   const checkout = async (planKey: string) => {
     if (planKey === "vvip") {
-      window.location.href = `mailto:sales@trustverifygo.com.au?subject=VVIP Enquiry`;
+      window.location.href = `mailto:sales@verigo.com.au?subject=VVIP Enquiry`;
       return;
     }
     setCheckingOut(planKey);

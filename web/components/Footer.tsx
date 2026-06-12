@@ -72,7 +72,7 @@ export default function Footer() {
 
         <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-white/40 text-sm">
-            © {new Date().getFullYear()} Trust Verify Go. All rights reserved. ABN: XX XXX XXX XXX
+            © {new Date().getFullYear()} Verigo. All rights reserved. ABN: XX XXX XXX XXX
           </p>
           <div className="flex gap-6">
             {['Privacy Policy', 'Terms of Service', 'Security'].map(l => (

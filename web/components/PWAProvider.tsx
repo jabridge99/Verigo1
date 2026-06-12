@@ -59,7 +59,7 @@ export default function PWAProvider() {
             <Smartphone className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-white text-sm">Install Trust Verify Go</h4>
+            <h4 className="font-semibold text-white text-sm">Install Verigo</h4>
             <p className="text-xs text-white/60 mt-0.5">
               Add to your home screen for instant access and offline support.
             </p>

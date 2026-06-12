@@ -16,11 +16,11 @@ export interface BrandingConfig {
 }
 
 export const DEFAULT_BRANDING: BrandingConfig = {
-  company_name: "Trust Verify Go",
+  company_name: "Verigo",
   primary_color: "#2563eb",
   accent_color: "#f59e0b",
   bg_color: "#060d1a",
-  support_email: "support@trustverifygo.com.au",
+  support_email: "support@verigo.com.au",
   footer_text: "Australian Compliance Operating System",
   hide_tvg_badge: false,
 };

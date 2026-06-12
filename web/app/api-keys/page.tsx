@@ -198,7 +198,7 @@ export default function APIKeysPage() {
           <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400"><Key className="w-6 h-6" /></div>
           <div>
             <h1 className="text-2xl font-bold">API Keys & Webhooks</h1>
-            <p className="text-sm text-slate-400">Integrate Trust Verify Go with your systems</p>
+            <p className="text-sm text-slate-400">Integrate Verigo with your systems</p>
           </div>
         </div>
 

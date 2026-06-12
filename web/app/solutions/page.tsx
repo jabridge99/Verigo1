@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle } from 'lucide-react'
 import { industries } from '@/lib/industries'
 
 export const metadata = {
-  title: 'Industry Solutions | Trust Verify Go',
+  title: 'Industry Solutions | Verigo',
   description: 'Compliance packs for every regulated Australian industry.',
 }
 
@@ -18,7 +18,7 @@ export default function SolutionsPage() {
           <span className="badge bg-brand-900/50 text-brand-400 border border-brand-700/30 mb-4">All Industries</span>
           <h1 className="text-5xl font-black mb-6">The right compliance pack<br /><span className="gradient-text">for your industry.</span></h1>
           <p className="text-white/60 text-xl max-w-2xl mx-auto">
-            Select your industry and Trust Verify Go automatically loads the correct compliance requirements, risk matrix, KYC rules, and AUSTRAC reporting obligations.
+            Select your industry and Verigo automatically loads the correct compliance requirements, risk matrix, KYC rules, and AUSTRAC reporting obligations.
           </p>
         </div>
 

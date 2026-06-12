@@ -21,7 +21,7 @@ function Hero() {
           <span className="gradient-text">slow you down.</span>
         </h1>
         <p className="text-xl text-white/60 max-w-3xl mx-auto mb-10 leading-relaxed">
-          Trust Verify Go is Australia&apos;s first end-to-end Compliance Operating System —
+          Verigo is Australia&apos;s first end-to-end Compliance Operating System —
           built for regulated businesses navigating AUSTRAC requirements, FATF recommendations,
           and the upcoming Tranche 2 reforms.
         </p>
@@ -190,7 +190,7 @@ function Industries() {
         <div className="text-center mb-12">
           <span className="badge bg-brand-900/50 text-brand-400 border border-brand-700/30 mb-4">Industry Solutions</span>
           <h2 className="text-4xl font-bold mb-4">Built for your industry.</h2>
-          <p className="text-white/60 max-w-xl mx-auto">Select your industry and Trust Verify Go loads the right compliance pack automatically.</p>
+          <p className="text-white/60 max-w-xl mx-auto">Select your industry and Verigo loads the right compliance pack automatically.</p>
         </div>
         <div className="mb-10">
           <p className="text-white/50 text-sm font-semibold uppercase tracking-wider mb-4">Current Reporting Entities</p>
