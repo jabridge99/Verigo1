@@ -2,7 +2,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 
 # ── Stage 2: builder ──────────────────────────────────────────────────────────
@@ -11,8 +11,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_API_URL=https://api.trustverifygo.com.au
-ARG NEXT_PUBLIC_APP_URL=https://app.trustverifygo.com.au
+ARG NEXT_PUBLIC_API_URL=https://api.verigo.com.au
+ARG NEXT_PUBLIC_APP_URL=https://app.verigo.com.au
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
     NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} \
     NEXT_TELEMETRY_DISABLED=1
