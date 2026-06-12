@@ -1,17 +1,34 @@
 import Link from 'next/link'
-import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network } from 'lucide-react'
+import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen } from 'lucide-react'
 import { industries } from '@/lib/industries'
 import { capabilities as libCaps } from '@/lib/capabilities'
 
 export const metadata = {
   title: 'AML Compliance Solutions | Verigo',
-  description: 'Explore VeriGo\'s complete suite of AML/CTF compliance solutions: customer onboarding, KYC, KYB, sanctions screening, PEP screening, adverse media, transaction monitoring, case management, and AUSTRAC reporting.',
+  description: 'Explore VeriGo\'s complete suite of AML/CTF compliance solutions: AML Program, customer onboarding, KYC, KYB, sanctions screening, PEP screening, adverse media, transaction monitoring, case management, and AUSTRAC reporting.',
+}
+
+const amlProgramFeature = {
+  id: 'aml-program',
+  slug: 'aml-program',
+  title: 'AML Program',
+  tagline: 'Your legally required AML/CTF Program — built into the platform, not sitting in a drawer',
+  benefits: [
+    'Industry-specific AML/CTF Risk Assessment Matrix',
+    'Part A & Part B program templates',
+    'CDD/EDD policies and MLRO workflows',
+    'Compliance registers maintained automatically',
+    'Staff training module with completion tracking',
+    'Annual review workflow with automated reminders',
+  ],
+  icon: BookOpen,
+  highlight: true,
 }
 
 const capIcons: Record<string, React.ElementType> = {
   'customer-onboarding': UserCheck,
-  'kyc': ScanFace,
-  'kyb': Building2,
+  'kyc-identity-verification': ScanFace,
+  'kyb-business-verification': Building2,
   'sanctions-screening': ShieldAlert,
   'pep-screening': Shield,
   'adverse-media': Newspaper,
@@ -25,6 +42,7 @@ const capIcons: Record<string, React.ElementType> = {
 const capabilities = libCaps.map(c => ({
   ...c,
   icon: capIcons[c.id] ?? Shield,
+  highlight: false,
 }))
 
 export default function SolutionsPage() {
@@ -57,9 +75,36 @@ export default function SolutionsPage() {
             <h2 className="text-3xl font-black text-slate-900 mb-3">Platform Capabilities</h2>
             <p className="text-slate-500 max-w-xl mx-auto">Every capability works independently or as part of the full compliance stack.</p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+
+          {/* AML Program featured card */}
+          <Link href="/solutions/aml-program" className="block pub-card-hover mb-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white group">
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+                <BookOpen className="w-7 h-7 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-xl font-bold text-white">{amlProgramFeature.title}</h3>
+                  <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold text-white">Core Feature — Included in every plan</span>
+                </div>
+                <p className="text-blue-100 text-sm mb-4">{amlProgramFeature.tagline}</p>
+                <div className="flex flex-wrap gap-x-6 gap-y-1">
+                  {amlProgramFeature.benefits.slice(0, 4).map(b => (
+                    <span key={b} className="text-xs text-blue-200 flex items-center gap-1.5">
+                      <span className="text-green-300">✓</span> {b}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <span className="text-white font-semibold text-sm flex items-center gap-1 group-hover:gap-2 transition-all flex-shrink-0">
+                Explore <ArrowRight className="w-4 h-4" />
+              </span>
+            </div>
+          </Link>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {capabilities.map(({ id, slug, icon: Icon, title, tagline, benefits }) => (
-              <Link key={id} href={`/solutions/${id}`} className="pub-card-hover group flex flex-col gap-4">
+              <Link key={id} href={`/solutions/${slug}`} className="pub-card-hover group flex flex-col gap-4">
                 <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
                   <Icon className="w-5 h-5 text-blue-600" />
                 </div>

@@ -3,7 +3,7 @@ import {
   Shield, CheckCircle, AlertTriangle, FileText, Users, Lock,
   Zap, BarChart3, ArrowRight, Building2, Search, Activity,
   Database, Folder, UserCheck, ShieldAlert, Newspaper, Network,
-  UserX, ScanFace, FolderOpen
+  UserX, ScanFace, FolderOpen, BookOpen, ClipboardList, RefreshCw, GraduationCap,
 } from 'lucide-react'
 import { industries } from '@/lib/industries'
 
@@ -185,6 +185,7 @@ function AMLReformTimeline() {
 
 function PlatformCapabilities() {
   const caps = [
+    { icon: BookOpen, title: 'AML Program', desc: 'Risk assessment, Part A/B templates, policy registers, and board approval workflows', slug: 'aml-program', highlight: true },
     { icon: UserCheck, title: 'Customer Onboarding', desc: 'Guided digital onboarding with built-in compliance checks', slug: 'customer-onboarding' },
     { icon: ScanFace, title: 'KYC / Identity Verification', desc: 'Automated identity document and biometric verification', slug: 'kyc-identity-verification' },
     { icon: Building2, title: 'KYB / Business Verification', desc: 'Business verification and beneficial ownership mapping', slug: 'kyb-business-verification' },
@@ -204,23 +205,95 @@ function PlatformCapabilities() {
             Everything you need to stay compliant.
           </h2>
           <p className="text-slate-600 max-w-xl mx-auto">
-            Eight integrated capabilities in one platform. Designed to eliminate the complexity of AML/CTF compliance for Australian reporting entities.
+            Nine integrated capabilities — from your AML Program foundation through to automated AUSTRAC reporting.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {caps.map(({ icon: Icon, title, desc, slug }) => (
-            <Link key={slug} href="/solutions" className="pub-card-hover group flex flex-col gap-4">
-              <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
-                <Icon className="w-5 h-5 text-blue-600" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {caps.map(({ icon: Icon, title, desc, slug, highlight }) => (
+            <Link
+              key={slug}
+              href={`/solutions/${slug}`}
+              className={`pub-card-hover group flex flex-col gap-4 ${highlight ? 'ring-blue-300 bg-blue-50 lg:col-span-1' : ''}`}
+            >
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${highlight ? 'bg-blue-600' : 'bg-blue-50'}`}>
+                <Icon className={`w-5 h-5 ${highlight ? 'text-white' : 'text-blue-600'}`} />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-900 mb-1">{title}</h3>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-slate-900">{title}</h3>
+                  {highlight && <span className="inline-flex items-center rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">Core</span>}
+                </div>
                 <p className="text-slate-500 text-sm">{desc}</p>
               </div>
               <span className="text-blue-600 text-sm font-semibold group-hover:underline mt-auto">Learn more →</span>
             </Link>
           ))}
+        </div>
+
+        <div className="mt-8 text-center">
+          <Link href="/solutions" className="pub-btn-secondary">View all capabilities</Link>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function AMLProgramSpotlight() {
+  const components = [
+    { icon: ClipboardList, title: 'Risk Assessment', desc: 'Industry-specific AML/CTF risk assessment matrix. Pre-populated with the risk factors that matter for your sector.' },
+    { icon: FileText, title: 'Part A Program', desc: 'Governance framework, senior officer responsibilities, employee due diligence, and ongoing training obligations.' },
+    { icon: Shield, title: 'Part B Program', desc: 'Customer identification and verification procedures — the rules your staff follow when onboarding every customer.' },
+    { icon: Users, title: 'CDD & EDD Policies', desc: 'Standard and enhanced due diligence policies with trigger rules and MLRO sign-off workflows built in.' },
+    { icon: Database, title: 'Compliance Registers', desc: 'Employee DD register, training log, and high-risk customer register — maintained automatically as your team uses the platform.' },
+    { icon: RefreshCw, title: 'Annual Review', desc: 'Automated reminder and review workflow. Update your program annually as required by AUSTRAC guidance.' },
+    { icon: GraduationCap, title: 'Staff Training Module', desc: 'AML/CTF awareness training for all staff, with completion tracking and a dated training log for AUSTRAC inspections.' },
+  ]
+
+  return (
+    <section className="pub-section bg-white">
+      <div className="pub-container">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          {/* Left: copy */}
+          <div>
+            <span className="pub-label mb-6 block w-fit">AML Program — Core Feature</span>
+            <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight tracking-tight mb-6">
+              Your AML/CTF Program.<br />
+              <span className="text-blue-600">Built in, not bolted on.</span>
+            </h2>
+            <p className="text-slate-600 leading-relaxed mb-5">
+              Every reporting entity is legally required to have a written AML/CTF Program under the AML/CTF Act 2006. Most businesses treat it as a document exercise — once written, filed away and forgotten. VeriGo makes your AML Program a living, working system that drives every compliance decision your team makes.
+            </p>
+            <p className="text-slate-600 leading-relaxed mb-8">
+              The program is not a PDF. It is the engine behind your onboarding rules, risk thresholds, monitoring triggers, and reporting obligations. When AUSTRAC comes calling, you can demonstrate compliance from the program level down to individual transaction decisions.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link href="/solutions/aml-program" className="pub-btn-primary">
+                Explore AML Program <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link href="/start-trial" className="pub-btn-secondary">Start Free Trial</Link>
+            </div>
+          </div>
+
+          {/* Right: component cards */}
+          <div className="grid grid-cols-2 gap-3">
+            {components.map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="pub-card py-5 px-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
+                <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900 text-sm mb-1">{title}</h3>
+                  <p className="text-slate-500 text-xs leading-relaxed">{desc}</p>
+                </div>
+              </div>
+            ))}
+            <div className="pub-card py-5 px-5 bg-blue-600 flex flex-col gap-3 justify-center items-center text-center">
+              <BookOpen className="w-8 h-8 text-white" />
+              <p className="text-white font-bold text-sm">All included in every plan</p>
+              <p className="text-blue-200 text-xs">AUSTRAC-compliant templates, ready to use</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -473,6 +546,7 @@ export default function HomePage() {
       <WhyComplianceMatters />
       <AMLReformTimeline />
       <PlatformCapabilities />
+      <AMLProgramSpotlight />
       <HowItWorks />
       <IndustriesSection />
       <WhyChooseVerigo />

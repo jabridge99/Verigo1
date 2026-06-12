@@ -4,6 +4,7 @@ import {
   CheckCircle, ArrowRight, Shield, AlertTriangle, Users, Search,
   BarChart3, Folder, FileText, Building2, Zap, Eye, ClipboardList,
   TrendingUp, BookOpen, ScanFace, ShieldAlert, UserX, Newspaper, Activity, Network,
+  Database, RefreshCw, GraduationCap,
 } from 'lucide-react'
 import { industries, getIndustry } from '@/lib/industries'
 import { capabilities as libCapabilities } from '@/lib/capabilities'
@@ -11,6 +12,7 @@ import { capabilities as libCapabilities } from '@/lib/capabilities'
 // ── Capability definitions ────────────────────────────────────────────────────
 
 const capabilityIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  'aml-program': BookOpen,
   'compliance-operations': Shield,
   'customer-onboarding': Users,
   'kyc-kyb': Search,
@@ -59,6 +61,30 @@ const capabilitiesData: Capability[] = [
       'Financial institutions managing complex AML obligations',
       'Tranche 2 businesses establishing their first compliance programme',
       'Reporting groups needing centralised oversight across entities',
+    ],
+  },
+  {
+    slug: 'aml-program',
+    title: 'AML Program',
+    tagline: 'Your legally required AML/CTF Program — built in, not bolted on',
+    color: 'from-blue-600 to-indigo-600',
+    problem: 'Every reporting entity must have a written AML/CTF Program under the AML/CTF Act 2006 — but most treat it as a compliance document that sits in a drawer. A program disconnected from day-to-day operations provides no real defence in an AUSTRAC audit and no genuine risk reduction.',
+    solution: 'VeriGo embeds your AML/CTF Program into the platform itself. Risk assessments, Part A and Part B program templates, CDD/EDD policies, compliance registers, and board approval workflows are all part of the platform — automatically updated as your team uses it, and instantly producible for AUSTRAC.',
+    benefits: [
+      'Industry-specific AML/CTF Risk Assessment Matrix — pre-populated for your sector',
+      'Part A Program template — governance, senior officer responsibilities, employee DD',
+      'Part B Program template — customer identification and verification procedures',
+      'CDD and EDD policy templates with MLRO sign-off workflows',
+      'Employee due diligence register maintained automatically',
+      'Training log with completion tracking and dated records',
+      'High-risk customer register — auto-populated from risk scoring',
+      'Annual review workflow with automated reminder and update cycle',
+    ],
+    outcome: 'A living AML/CTF Program that reflects how your business actually operates — not a static document that goes stale.',
+    useCases: [
+      'Tranche 2 businesses building their first-ever AML/CTF Program before the 2026 deadline',
+      'DCEs and remittance providers updating their program to reflect operational changes',
+      'MLRO teams preparing for AUSTRAC audits with a complete, current program on demand',
     ],
   },
   {
@@ -255,6 +281,11 @@ export async function generateStaticParams() {
 export default function IndustryOrCapabilityPage({ params }: { params: { industry: string } }) {
   const slug = params.industry
 
+  // AML Program gets its own dedicated page
+  if (slug === 'aml-program') {
+    return <AMLProgramPage />
+  }
+
   // Check inline capabilities first, then fall back to lib
   const inlineCap = capabilitiesData.find(c => c.slug === slug)
   if (inlineCap) {
@@ -282,6 +313,199 @@ export default function IndustryOrCapabilityPage({ params }: { params: { industr
   }
 
   notFound()
+}
+
+// ── Capability Page ───────────────────────────────────────────────────────────
+
+// ── AML Program Dedicated Page ────────────────────────────────────────────────
+
+function AMLProgramPage() {
+  const programComponents = [
+    {
+      number: '01',
+      title: 'AML/CTF Risk Assessment',
+      color: 'bg-blue-600',
+      desc: 'Your legally required risk assessment — identifying the ML/TF risks your business faces. Pre-populated with the risk factors relevant to your industry, with a scoring matrix your MLRO can review and sign off.',
+      items: ['Inherent risk identification', 'Control effectiveness rating', 'Residual risk scoring', 'Board-level summary report', 'Annual review workflow'],
+    },
+    {
+      number: '02',
+      title: 'Part A AML/CTF Program',
+      color: 'bg-indigo-600',
+      desc: 'The governance layer of your program — who is responsible for what, how compliance is reported to the board, employee due diligence requirements, and your ongoing training obligations.',
+      items: ['Senior officer accountability framework', 'Compliance reporting to board/management', 'Employee due diligence procedures', 'AML/CTF training policy', 'Outsourcing and reliance arrangements'],
+    },
+    {
+      number: '03',
+      title: 'Part B AML/CTF Program',
+      color: 'bg-violet-600',
+      desc: "The operational rulebook your staff follow when dealing with customers — how to identify and verify customers, when to apply enhanced due diligence, and what to do when something doesn't add up.",
+      items: ['Customer identification procedures', 'Verification rules by customer type', 'Enhanced due diligence triggers', 'Ongoing CDD review cadence', 'Simplified CDD criteria (where applicable)'],
+    },
+    {
+      number: '04',
+      title: 'CDD & EDD Policies',
+      color: 'bg-blue-500',
+      desc: 'Standard and enhanced due diligence policies with built-in workflow triggers. When a customer hits a risk threshold, VeriGo automatically routes to the EDD workflow — no manual intervention required.',
+      items: ['Standard CDD requirements', 'EDD trigger rules (risk-based)', 'Source of funds policy', 'Source of wealth policy', 'MLRO sign-off workflow for EDD'],
+    },
+    {
+      number: '05',
+      title: 'Compliance Registers',
+      color: 'bg-teal-600',
+      desc: "Registers maintained automatically as your team uses the platform. No manual spreadsheet updates — the platform records every action, decision, and review event that compliance regulations require you to document.",
+      items: ['Employee due diligence register', 'Training completion log (dated)', 'High-risk customer register', 'PEP relationship register', 'Suspicious matter register'],
+    },
+    {
+      number: '06',
+      title: 'Staff Training Module',
+      color: 'bg-green-600',
+      desc: "AML/CTF awareness training for all staff members, with a built-in completion tracker and dated training log. Produced instantly for AUSTRAC audit requests.",
+      items: ['AML/CTF fundamentals module', 'Role-specific training tracks', 'Completion tracking per employee', 'Dated and signed training records', 'Annual refresh reminder'],
+    },
+  ]
+
+  return (
+    <div className="bg-white text-slate-900">
+      {/* Hero */}
+      <section className="bg-gradient-to-b from-slate-50 to-white pt-32 pb-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <Link href="/solutions" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-8">
+            ← All solutions
+          </Link>
+          <div className="flex items-start gap-6 mb-10">
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <span className="pub-label">Core Feature</span>
+                <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 ring-1 ring-inset ring-green-700/10">Included in every plan</span>
+              </div>
+              <h1 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight mb-3">AML Program</h1>
+              <p className="text-xl text-slate-500 max-w-2xl">Your legally required AML/CTF Program — built into the platform, not sitting in a drawer.</p>
+            </div>
+          </div>
+
+          {/* Problem/Solution summary */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="pub-card border-l-4 border-red-200">
+              <h2 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-500" /> The problem with most AML Programs
+              </h2>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                Most AML/CTF Programs are a Word document written once by a consultant, approved at a board meeting, and never looked at again. When AUSTRAC audits your business, they ask whether your program reflects how you actually operate. A static document that predates your current products, customer types, and risk profile fails that test.
+              </p>
+            </div>
+            <div className="pub-card border-l-4 border-blue-200">
+              <h2 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-blue-500" /> How VeriGo solves it
+              </h2>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                VeriGo embeds your AML/CTF Program into the operating platform. Risk assessments are derived from live customer and transaction data. Registers are maintained automatically. The program you produce for AUSTRAC reflects exactly how your business runs — because it is extracted from the same system your team uses every day.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="pub-section pt-8">
+        <div className="pub-container space-y-16">
+
+          {/* Program components */}
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 mb-3">What&apos;s inside your AML Program</h2>
+            <p className="text-slate-500 mb-10 max-w-2xl">Six components, all included. Each one is a living document maintained by the platform — not a static file you manually update once a year.</p>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {programComponents.map(c => (
+                <div key={c.number} className="pub-card flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 ${c.color} rounded-xl flex items-center justify-center text-white font-black text-xs flex-shrink-0`}>{c.number}</div>
+                    <h3 className="font-bold text-slate-900 text-sm">{c.title}</h3>
+                  </div>
+                  <p className="text-slate-500 text-sm leading-relaxed">{c.desc}</p>
+                  <ul className="space-y-1.5 mt-auto">
+                    {c.items.map(item => (
+                      <li key={item} className="flex items-center gap-2 text-xs text-slate-600">
+                        <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" /> {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Why it matters */}
+          <div className="bg-slate-50 rounded-2xl p-10">
+            <div className="grid md:grid-cols-3 gap-8">
+              {[
+                { stat: 'Required', label: 'by the AML/CTF Act 2006 for all reporting entities', sub: 'Legal obligation' },
+                { stat: 'Annual', label: 'review required — VeriGo sends reminders and guides the update', sub: 'Ongoing compliance' },
+                { stat: 'On demand', label: 'export for AUSTRAC audits, board reporting, and senior management', sub: 'Audit ready' },
+              ].map(s => (
+                <div key={s.stat} className="text-center">
+                  <div className="text-4xl font-black text-blue-600 mb-2">{s.stat}</div>
+                  <div className="text-slate-700 text-sm font-medium mb-1">{s.label}</div>
+                  <div className="text-xs text-slate-400">{s.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tranche 2 callout */}
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-8 flex gap-5">
+            <span className="text-3xl flex-shrink-0">⚠️</span>
+            <div>
+              <h3 className="font-bold text-amber-900 mb-2">Critical for Tranche 2 businesses — deadline 2026</h3>
+              <p className="text-amber-800 text-sm leading-relaxed mb-4">
+                Lawyers, accountants, real estate professionals, conveyancers, and precious metal dealers coming under AUSTRAC from 2026 must have a compliant AML/CTF Program in place from the date their obligations commence. VeriGo&apos;s industry-specific program templates give you a head start — don&apos;t wait until the deadline.
+              </p>
+              <Link href="/learn/austrac-reform-guide" className="text-amber-800 text-sm font-semibold underline hover:text-amber-900">
+                Read the AUSTRAC Reform Guide →
+              </Link>
+            </div>
+          </div>
+
+          {/* Use cases */}
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 mb-6">Who benefits most</h2>
+            <div className="grid sm:grid-cols-3 gap-4">
+              {[
+                { n: '1', title: 'Tranche 2 businesses (2026)', desc: 'Building their first AML/CTF Program. VeriGo provides the structure, templates, and workflows — no consultant required.' },
+                { n: '2', title: 'MLROs preparing for audit', desc: 'Produce a current, complete AML/CTF Program from the platform in minutes — reflecting live risk assessments and operational procedures.' },
+                { n: '3', title: 'Growing reporting entities', desc: 'Program templates evolve as new products, customer types, and risk factors are added — without manual rewrites.' },
+              ].map(uc => (
+                <div key={uc.n} className="pub-card flex gap-3">
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{uc.n}</div>
+                  <div>
+                    <p className="font-semibold text-slate-900 text-sm mb-1">{uc.title}</p>
+                    <p className="text-slate-500 text-sm">{uc.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA */}
+          <div className="bg-slate-900 rounded-2xl p-10 text-center">
+            <BookOpen className="w-10 h-10 text-blue-400 mx-auto mb-4" />
+            <h2 className="text-3xl font-black text-white mb-3">Your AML Program is included in every plan</h2>
+            <p className="text-slate-400 mb-8 max-w-xl mx-auto">Start your 7-day free trial and your industry-specific AML Program templates are configured on day one. No credit card required.</p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
+                Start Free Trial <ArrowRight className="w-5 h-5" />
+              </Link>
+              <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
+                Book Demo
+              </Link>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  )
 }
 
 // ── Capability Page ───────────────────────────────────────────────────────────
