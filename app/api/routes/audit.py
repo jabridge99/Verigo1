@@ -13,12 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
 from app.models.audit import AuditLog
 from app.models.user import User, UserRole
 from app.schemas.audit import AuditLogCreate, AuditLogResponse
 from app.services.audit_service import log_action
-from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/audit", tags=["Audit Trail"])
 
@@ -56,11 +56,15 @@ def list_logs(
     current_user: User = Depends(_current_user),
 ):
     q = _scoped_query(db, current_user)
-    if entity_type:  q = q.filter(AuditLog.entity_type == entity_type)
-    if entity_id:    q = q.filter(AuditLog.entity_id == entity_id)
+    if entity_type:
+        q = q.filter(AuditLog.entity_type == entity_type)
+    if entity_id:
+        q = q.filter(AuditLog.entity_id == entity_id)
     # Use .contains() — safe parameterised LIKE, no f-string injection
-    if actor:        q = q.filter(AuditLog.actor.contains(actor))
-    if action:       q = q.filter(AuditLog.action.contains(action))
+    if actor:
+        q = q.filter(AuditLog.actor.contains(actor))
+    if action:
+        q = q.filter(AuditLog.action.contains(action))
     # Admin can filter by any industry_id; non-admin query is already scoped
     if industry_id and current_user.role == UserRole.admin:
         q = q.filter(AuditLog.industry_id == industry_id)

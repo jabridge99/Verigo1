@@ -4,21 +4,24 @@ Tenant admins manage external provider credentials here.
 Plain credentials are NEVER returned by any GET endpoint — only hints and metadata.
 """
 
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _require_roles
 from app.db.database import get_db
-from app.models.connector import ConnectorCredential, ConnectorProvider, ConnectorStatus
+from app.models.connector import ConnectorProvider, ConnectorStatus
 from app.models.user import User, UserRole
 from app.services.connector_service import (
-    create_credential, get_credentials, update_credential,
-    delete_credential, test_credential,
+    create_credential,
+    delete_credential,
+    get_credentials,
+    test_credential,
+    update_credential,
 )
-from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/connectors", tags=["Connector Marketplace"])
 

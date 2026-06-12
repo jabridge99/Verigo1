@@ -1,5 +1,7 @@
 import uuid
+
 from sqlalchemy.orm import Session
+
 from app.models.tenant import IndustryTenant
 from app.schemas.tenant import TenantCreate, TenantUpdate
 

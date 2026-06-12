@@ -1,7 +1,20 @@
-from sqlalchemy import Column, String, Integer, DateTime, Enum, Text, ForeignKey, Float, Boolean, JSON
+import enum
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
+
 from app.db.database import Base
 
 

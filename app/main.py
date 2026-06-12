@@ -1,47 +1,57 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import settings
-from app.logging_config import setup_logging
-from app.middleware import SecurityHeadersMiddleware, RequestLoggingMiddleware, RateLimitMiddleware
-from app.db.database import Base, engine, SessionLocal
-
-from app.api.routes import customers, kyc, transactions, reports, sanctions
-from app.api.routes import onboarding
-from app.api.routes import audit
-from app.api.routes import tenants
-from app.api.routes import auth
-from app.api.routes import notifications
-from app.api.routes import api_keys
-from app.api.routes import analytics
-from app.api.routes import documents
-from app.api.routes import branding
-from app.api.routes import billing
-from app.api.routes import connectors
-from app.api.routes import retention
-from app.api.routes import security_monitor
-from app.api.routes import ifti
+import app.models.api_key  # noqa: F401
+import app.models.audit  # noqa: F401
+import app.models.billing  # noqa: F401
+import app.models.connector  # noqa: F401
 
 # Register all models so SQLAlchemy creates their tables at startup
-import app.models.customer      # noqa: F401
-import app.models.kyc           # noqa: F401
-import app.models.transaction   # noqa: F401
-import app.models.report        # noqa: F401
-import app.models.onboarding    # noqa: F401
-import app.models.audit         # noqa: F401
-import app.models.tenant        # noqa: F401
-import app.models.user          # noqa: F401
+import app.models.customer  # noqa: F401
+import app.models.document  # noqa: F401
+import app.models.ifti  # noqa: F401
+import app.models.kyc  # noqa: F401
 import app.models.notification  # noqa: F401
-import app.models.api_key       # noqa: F401
-import app.models.document      # noqa: F401
-import app.models.billing       # noqa: F401
+import app.models.onboarding  # noqa: F401
+import app.models.report  # noqa: F401
+import app.models.retention  # noqa: F401
 import app.models.security_event  # noqa: F401
-import app.models.connector      # noqa: F401
-import app.models.retention      # noqa: F401
-import app.models.ifti           # noqa: F401
+import app.models.tenant  # noqa: F401
+import app.models.transaction  # noqa: F401
+import app.models.user  # noqa: F401
+from app.api.routes import (
+    analytics,
+    api_keys,
+    audit,
+    auth,
+    billing,
+    branding,
+    connectors,
+    customers,
+    documents,
+    ifti,
+    kyc,
+    notifications,
+    onboarding,
+    reports,
+    retention,
+    sanctions,
+    security_monitor,
+    tenants,
+    transactions,
+)
+from app.config import settings
+from app.db.database import Base, SessionLocal, engine
+from app.logging_config import setup_logging
+from app.middleware import (
+    RateLimitMiddleware,
+    RequestLoggingMiddleware,
+    SecurityHeadersMiddleware,
+)
 
 setup_logging()
 
@@ -114,7 +124,8 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    import logging, traceback
+    import logging
+    import traceback
     logging.getLogger("tvg").error("Unhandled exception: %s\n%s", exc, traceback.format_exc())
     return JSONResponse(
         status_code=500,
@@ -164,8 +175,8 @@ def readiness():
     Readiness probe — verifies DB connectivity.
     Returns 503 if the database is unreachable.
     """
-    from sqlalchemy import text
     from fastapi import HTTPException
+    from sqlalchemy import text
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))

@@ -10,9 +10,11 @@ Column structure reverse-engineered from AUSTRAC official spreadsheets:
   IFTI-DRA IN:  115 columns
 """
 
-from sqlalchemy import Column, String, Integer, Float, Date, DateTime, Text, Enum as SAEnum
-from sqlalchemy.sql import func
 import enum
+
+from sqlalchemy import Column, Date, DateTime, Float, Integer, String
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.sql import func
 
 from app.db.database import Base
 

@@ -2,19 +2,25 @@
 API Key and Webhook endpoint routes.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from typing import List
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.api.routes.auth import _current_user
 from app.db.database import get_db
+from app.models.api_key import WebhookEvent
+from app.models.user import User
 from app.schemas.api_key import (
-    APIKeyCreate, APIKeyResponse, APIKeyCreated,
-    WebhookCreate, WebhookUpdate, WebhookResponse, WebhookDeliveryResponse,
+    APIKeyCreate,
+    APIKeyCreated,
+    APIKeyResponse,
+    WebhookCreate,
+    WebhookDeliveryResponse,
+    WebhookResponse,
+    WebhookUpdate,
 )
 from app.services import api_key_service as svc
-from app.api.routes.auth import _current_user
-from app.models.user import User
-from app.models.api_key import WebhookEvent
 
 router = APIRouter(tags=["api-keys"])
 

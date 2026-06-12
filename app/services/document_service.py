@@ -5,12 +5,11 @@ Files are stored under DOCUMENT_STORE_PATH (default: ./uploads).
 
 import os
 import uuid
-import shutil
 from pathlib import Path
-from typing import Optional, List, BinaryIO
+from typing import List, Optional
 
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.schemas.document import DocumentUpdate

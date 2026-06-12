@@ -8,26 +8,39 @@ Zero Trust fixes:
 - Alert status transitions validated
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from typing import Optional
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.api.routes.auth import _require_roles
 from app.db.database import get_db
-from app.models.transaction import (
-    Transaction, TransactionAlert, MonitoringCase,
-    TransactionStatus, AlertStatus,
-)
 from app.models.customer import Customer
+from app.models.transaction import (
+    AlertStatus,
+    MonitoringCase,
+    Transaction,
+    TransactionAlert,
+    TransactionStatus,
+)
 from app.models.user import User, UserRole
 from app.schemas.transaction import (
-    TransactionCreate, TransactionResponse, AlertResponse,
-    AlertUpdate, CaseCreate, CaseResponse, MonitoringStats,
+    AlertResponse,
+    AlertUpdate,
+    CaseCreate,
+    CaseResponse,
+    MonitoringStats,
+    TransactionCreate,
+    TransactionResponse,
+)
+from app.services.monitoring_engine import (
+    get_alert_queue,
+    monitoring_stats,
+    run_monitoring,
 )
 from app.services.risk_scoring import score_transaction
-from app.services.monitoring_engine import run_monitoring, get_alert_queue, monitoring_stats
-from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -119,9 +132,12 @@ def list_transactions(
     current_user: User = Depends(_READER),
 ):
     q = _scoped_txn(db, current_user)
-    if customer_id: q = q.filter(Transaction.customer_id == customer_id)
-    if is_suspicious is not None: q = q.filter(Transaction.is_suspicious == is_suspicious)
-    if status: q = q.filter(Transaction.status == status)
+    if customer_id:
+        q = q.filter(Transaction.customer_id == customer_id)
+    if is_suspicious is not None:
+        q = q.filter(Transaction.is_suspicious == is_suspicious)
+    if status:
+        q = q.filter(Transaction.status == status)
     return q.order_by(Transaction.transaction_date.desc()).offset(skip).limit(limit).all()
 
 

@@ -4,18 +4,18 @@ Aggregates security events for the SOC/compliance dashboard.
 All endpoints restricted to admin/mlro.
 """
 
-from datetime import datetime, timezone, timedelta
-from typing import Optional
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
 
+from app.api.routes.auth import _require_roles
 from app.db.database import get_db
 from app.models.security_event import SecurityEvent
 from app.models.user import User, UserRole
-from app.api.routes.auth import _require_roles
 
 router = APIRouter(prefix="/security", tags=["Security Monitor"])
 
@@ -90,7 +90,7 @@ def security_summary(
         .filter(
             SecurityEvent.event_type == "login_failed",
             SecurityEvent.created_at >= since,
-            SecurityEvent.ip_address != None,
+            SecurityEvent.ip_address is not None,
             SecurityEvent.ip_address != "unknown",
         )
         .group_by(SecurityEvent.ip_address)
@@ -190,7 +190,7 @@ def mfa_adoption(
     """MFA adoption rate across all users."""
     from app.models.user import User as UserModel
     total = db.query(UserModel).count()
-    mfa_on = db.query(UserModel).filter(UserModel.mfa_enabled == True).count()
+    mfa_on = db.query(UserModel).filter(UserModel.mfa_enabled).count()
     mfa_off = total - mfa_on
     return {
         "total_users": total,
@@ -219,7 +219,7 @@ def active_alerts(
         .filter(
             SecurityEvent.event_type == "login_failed",
             SecurityEvent.created_at >= since_1h,
-            SecurityEvent.ip_address != None,
+            SecurityEvent.ip_address is not None,
         )
         .group_by(SecurityEvent.ip_address)
         .having(func.count(SecurityEvent.id) > 20)

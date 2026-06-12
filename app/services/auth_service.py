@@ -12,8 +12,8 @@ Changes vs original:
 
 import hashlib
 import json
-import uuid
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -22,7 +22,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import User, MagicLinkToken, UserStatus
+from app.models.user import MagicLinkToken, User, UserStatus
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -141,7 +141,7 @@ def create_magic_link(db: Session, email: str) -> str:
     # Invalidate previous unused tokens for this email
     db.query(MagicLinkToken).filter(
         MagicLinkToken.email == email.lower(),
-        MagicLinkToken.used == False,
+        not MagicLinkToken.used,
     ).update({"used": True})
     ml = MagicLinkToken(token=hashed, email=email.lower(), expires_at=expires_at)
     db.add(ml)
@@ -153,7 +153,7 @@ def verify_magic_link(db: Session, plain_token: str) -> Optional[str]:
     hashed = _hash_ml_token(plain_token)
     ml = db.query(MagicLinkToken).filter(
         MagicLinkToken.token == hashed,
-        MagicLinkToken.used == False,
+        not MagicLinkToken.used,
     ).first()
     if not ml:
         return None

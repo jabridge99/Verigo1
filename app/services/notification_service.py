@@ -4,13 +4,14 @@ Notification service — create, list, mark-read, and optionally email notificat
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from typing import List, Optional
 
-from app.models.notification import Notification, NotificationType, NotificationPriority
-from app.schemas.notification import NotificationCreate
+from sqlalchemy import and_, desc
+from sqlalchemy.orm import Session
+
+from app.models.notification import Notification, NotificationPriority, NotificationType
 from app.models.user import User
+from app.schemas.notification import NotificationCreate
 
 
 def _notif_id() -> str:

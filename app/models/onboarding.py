@@ -2,13 +2,22 @@
 Customer Onboarding Autopilot — data models.
 """
 
+import enum
+
 from sqlalchemy import (
-    Column, String, Integer, DateTime, Enum, Text, ForeignKey,
-    Boolean, JSON, Float
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
+
 from app.db.database import Base
 
 

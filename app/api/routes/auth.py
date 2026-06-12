@@ -16,22 +16,36 @@ import hashlib
 import logging
 import secrets
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
-    UserCreate, UserUpdate, UserLogin, UserResponse,
-    TokenResponse, MagicLinkRequest, MagicLinkVerify, PasswordChange,
+    MagicLinkRequest,
+    MagicLinkVerify,
+    PasswordChange,
+    TokenResponse,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    UserUpdate,
 )
 from app.services.auth_service import (
-    create_user, get_user_by_email, get_user_by_id, authenticate_user,
-    build_token_response, create_magic_link, verify_magic_link,
-    decode_token, hash_password, verify_password,
-    TOKEN_BLACKLIST, record_security_event,
+    TOKEN_BLACKLIST,
+    authenticate_user,
+    build_token_response,
+    create_magic_link,
+    create_user,
+    decode_token,
+    get_user_by_email,
+    get_user_by_id,
+    hash_password,
+    record_security_event,
+    verify_magic_link,
+    verify_password,
 )
 
 log = logging.getLogger("tvg.auth")

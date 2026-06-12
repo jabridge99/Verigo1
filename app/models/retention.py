@@ -4,9 +4,11 @@ Configurable per tenant, per entity type.
 AUSTRAC default: 7 years from last transaction; escalate to 10 years for ECDD subjects.
 """
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, Enum as SAEnum
-from sqlalchemy.sql import func
 import enum
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.sql import func
 
 from app.db.database import Base
 

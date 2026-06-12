@@ -53,7 +53,8 @@ class AzureBlobStorageProvider(StorageProvider):
 
     async def get_url(self, key: str, expires_in: int = 3600) -> str:
         from datetime import datetime, timedelta, timezone
-        from azure.storage.blob import generate_blob_sas, BlobSasPermissions
+
+        from azure.storage.blob import BlobSasPermissions, generate_blob_sas
         # SAS generation is sync; acceptable for URL-only calls
         sas = generate_blob_sas(
             account_name=self._client.account_name,

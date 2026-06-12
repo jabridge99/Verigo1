@@ -21,10 +21,10 @@ from datetime import date, datetime
 from typing import List, Optional
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from app.models.ifti import IFTIRecord, IFTIDirection
+from app.models.ifti import IFTIDirection, IFTIRecord
 
 # ── Column definitions ────────────────────────────────────────────────────────
 # Each entry: (section_label, column_label)
@@ -639,7 +639,7 @@ def generate_ifti_excel(
     # ── Column widths ─────────────────────────────────────────────────────────
     for ci in range(1, n_cols + 1):
         col_letter = get_column_letter(ci)
-        section_label = columns[ci - 1][0]
+        columns[ci - 1][0]
         # Narrow columns for simple fields, wider for name/address
         sub_label = columns[ci - 1][1].lower()
         if any(k in sub_label for k in ("address", "occupation", "reason", "name of inst")):

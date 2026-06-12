@@ -2,21 +2,22 @@
 Onboarding Autopilot service.
 """
 
-import uuid
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-from sqlalchemy.orm import Session
 
-from app.models.onboarding import (
-    OnboardingSession, OnboardingAuditLog, ImportBatch,
-    SessionStatus, ImportSource, CustomerType,
-)
 from app.models.customer import Customer, CustomerStatus
 from app.models.kyc import KYCRecord, KYCStatus
+from app.models.onboarding import (
+    CustomerType,
+    ImportBatch,
+    ImportSource,
+    OnboardingAuditLog,
+    OnboardingSession,
+    SessionStatus,
+)
 from app.services.risk_scoring import score_customer, score_to_level
 from app.services.sanctions_screening import screen_name
-
 
 INVITE_EXPIRY_DAYS = 7
 REMINDER_INTERVALS_HOURS = [24, 72, 168]

@@ -9,26 +9,34 @@ Zero Trust fixes:
 - Audit trail on every state transition
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from typing import Optional
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.api.routes.auth import _require_roles
 from app.db.database import get_db
-from app.models.report import ComplianceReport, ECDDRecord, ReportStatus, ReportType
 from app.models.customer import Customer
+from app.models.report import ComplianceReport, ECDDRecord, ReportStatus
 from app.models.user import User, UserRole
 from app.schemas.report import (
-    ReportCreate, ReportSubmit, ReportResponse, ReportUpdate,
-    ECDDCreate, ECDDResponse, ReportingSummary,
+    ECDDCreate,
+    ECDDResponse,
+    ReportCreate,
+    ReportingSummary,
+    ReportResponse,
+    ReportSubmit,
+    ReportUpdate,
 )
 from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
-from app.services.risk_scoring import score_to_level
 from app.services.reporting_service import (
-    auto_generate_from_alert, bulk_auto_generate, reporting_summary,
+    auto_generate_from_alert,
+    bulk_auto_generate,
+    reporting_summary,
 )
-from app.api.routes.auth import _current_user, _require_roles
+from app.services.risk_scoring import score_to_level
 
 router = APIRouter(prefix="/reports", tags=["Compliance Reports"])
 
@@ -66,7 +74,12 @@ def create_report(
         raise HTTPException(404, "Customer not found")
     _assert_tenant(current_user, customer.industry_id)
 
-    from app.services.reporting_service import _report_id, _due_date, _days_remaining, _priority
+    from app.services.reporting_service import (
+        _days_remaining,
+        _due_date,
+        _priority,
+        _report_id,
+    )
     rtype = payload.report_type.value
     due = _due_date(rtype)
     data = payload.model_dump()
@@ -101,10 +114,14 @@ def list_reports(
     current_user: User = Depends(_READER),
 ):
     q = _scoped(db, current_user)
-    if customer_id: q = q.filter(ComplianceReport.customer_id == customer_id)
-    if report_type: q = q.filter(ComplianceReport.report_type == report_type)
-    if status:      q = q.filter(ComplianceReport.status == status)
-    if priority:    q = q.filter(ComplianceReport.priority == priority)
+    if customer_id:
+        q = q.filter(ComplianceReport.customer_id == customer_id)
+    if report_type:
+        q = q.filter(ComplianceReport.report_type == report_type)
+    if status:
+        q = q.filter(ComplianceReport.status == status)
+    if priority:
+        q = q.filter(ComplianceReport.priority == priority)
     return q.order_by(ComplianceReport.created_at.desc()).offset(skip).limit(limit).all()
 
 

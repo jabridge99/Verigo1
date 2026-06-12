@@ -2,21 +2,26 @@
 API key and webhook management service.
 """
 
-import uuid
-import secrets
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Tuple
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional, Tuple
 
 import httpx
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
-from app.models.api_key import APIKey, APIKeyStatus, WebhookEndpoint, WebhookDelivery, WebhookStatus
+from app.models.api_key import (
+    APIKey,
+    APIKeyStatus,
+    WebhookDelivery,
+    WebhookEndpoint,
+    WebhookStatus,
+)
 from app.schemas.api_key import APIKeyCreate, WebhookCreate, WebhookUpdate
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

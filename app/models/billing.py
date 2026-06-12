@@ -1,6 +1,18 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Enum, JSON, Text, BigInteger
-from sqlalchemy.sql import func
 import enum
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.sql import func
+
 from app.db.database import Base
 
 

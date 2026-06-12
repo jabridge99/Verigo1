@@ -1,7 +1,13 @@
-from pydantic import BaseModel
-from typing import Optional, Any
 from datetime import datetime
-from app.models.transaction import TransactionType, TransactionStatus, AlertType, AlertStatus, AlertSeverity
+from typing import Optional
+
+from pydantic import BaseModel
+
+from app.models.transaction import (
+    AlertSeverity,
+    AlertStatus,
+    TransactionType,
+)
 
 
 class TransactionCreate(BaseModel):

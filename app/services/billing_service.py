@@ -17,17 +17,22 @@ checkout sessions return a placeholder URL and no real charges occur.
 
 import os
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
 from app.models.billing import (
-    Subscription, Invoice, BillingPlan, BillingInterval,
-    SubscriptionStatus, InvoiceStatus, PLAN_CATALOGUE,
+    PLAN_CATALOGUE,
+    BillingInterval,
+    BillingPlan,
+    Invoice,
+    InvoiceStatus,
+    Subscription,
+    SubscriptionStatus,
 )
-from app.schemas.billing import SubscriptionAdminUpdate, CheckoutSessionRequest
+from app.schemas.billing import CheckoutSessionRequest, SubscriptionAdminUpdate
 
 STRIPE_KEY     = os.getenv("STRIPE_SECRET_KEY", "")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")

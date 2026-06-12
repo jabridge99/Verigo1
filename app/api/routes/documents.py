@@ -9,22 +9,20 @@ Zero Trust fixes:
 - RBAC: delete restricted to admin/mlro; archive restricted to compliance+
 """
 
-import imghdr
-import struct
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
+from app.models.document import DocumentCategory
+from app.models.user import User, UserRole
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.services import document_service as svc
 from app.services.document_service import ALLOWED_MIME, MAX_SIZE
-from app.api.routes.auth import _current_user, _require_roles
-from app.models.user import User, UserRole
-from app.models.document import DocumentCategory
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 

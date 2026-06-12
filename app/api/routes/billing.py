@@ -12,20 +12,23 @@ PATCH /billing/admin/{industry_id}  — admin: VVIP / price override
 GET  /billing/admin/all         — admin: list all subscriptions
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.orm import Session
+
+from app.api.routes.auth import _current_user
 from app.db.database import get_db
+from app.models.user import User
 from app.schemas.billing import (
-    CheckoutSessionRequest, CheckoutSessionResponse, CustomerPortalResponse,
-    SubscriptionResponse, SubscriptionAdminUpdate, InvoiceResponse, PlanInfo,
+    CheckoutSessionRequest,
+    CheckoutSessionResponse,
+    CustomerPortalResponse,
+    InvoiceResponse,
+    SubscriptionAdminUpdate,
+    SubscriptionResponse,
 )
 from app.services import billing_service as svc
-from app.api.routes.auth import _current_user
-from app.models.user import User
-from app.models.billing import PLAN_CATALOGUE
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -149,7 +152,7 @@ def admin_update_subscription(
     if not sub:
         # Create one if it doesn't exist yet
         from app.services.billing_service import create_trial
-        trial = create_trial(db, industry_id)
+        create_trial(db, industry_id)
         sub = svc.admin_update(db, industry_id, data)
     return sub
 

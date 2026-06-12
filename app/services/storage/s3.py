@@ -11,7 +11,7 @@ class S3StorageProvider(StorageProvider):
     def __init__(self, bucket: str, region: str, access_key: str, secret_key: str,
                  endpoint_url: Optional[str] = None):
         try:
-            import aioboto3
+            import aioboto3 as _aioboto3
         except ImportError:
             raise RuntimeError("aioboto3 is required for S3 storage: pip install aioboto3")
         self.bucket = bucket
@@ -21,7 +21,6 @@ class S3StorageProvider(StorageProvider):
             aws_secret_access_key=secret_key,
         )
         self._endpoint_url = endpoint_url
-        import aioboto3 as _aioboto3
         self._aioboto3 = _aioboto3
 
     def _client(self):

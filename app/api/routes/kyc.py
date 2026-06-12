@@ -8,16 +8,19 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
-from app.models.kyc import KYCRecord, KYCDocument, KYCStatus, DocumentType
-from app.models.customer import Customer, CustomerStatus
-from app.models.user import User, UserRole
-from app.services.identity_verification import verify_document, compute_kyc_identity_score
-from app.services.sanctions_screening import screen_name
 from app.api.routes.auth import _current_user, _require_roles
+from app.db.database import get_db
+from app.models.customer import Customer, CustomerStatus
+from app.models.kyc import DocumentType, KYCDocument, KYCRecord, KYCStatus
+from app.models.user import User, UserRole
+from app.services.identity_verification import (
+    compute_kyc_identity_score,
+    verify_document,
+)
+from app.services.sanctions_screening import screen_name
 
 router = APIRouter(prefix="/kyc", tags=["KYC"])
 

@@ -2,24 +2,39 @@
 Customer Onboarding Autopilot — API routes.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy.orm import Session
 from typing import Optional
-import math
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.onboarding import OnboardingSession, OnboardingAuditLog, ImportBatch, SessionStatus
+from app.models.onboarding import (
+    ImportBatch,
+    OnboardingAuditLog,
+    OnboardingSession,
+    SessionStatus,
+)
 from app.schemas.onboarding import (
-    SessionCreate, SessionSummary, SessionDetail,
-    AuditLogEntry, PortalTokenResponse, StepSubmit,
-    BatchSummary, PipelineStats,
+    AuditLogEntry,
+    BatchSummary,
+    PipelineStats,
+    PortalTokenResponse,
+    SessionCreate,
+    SessionDetail,
+    SessionSummary,
+    StepSubmit,
 )
+from app.services.bulk_import import generate_csv_template, parse_csv, parse_excel
 from app.services.onboarding_service import (
-    create_session, bulk_create_sessions, open_invite,
-    advance_step, submit_onboarding, get_sessions_needing_reminder,
-    send_reminder, ONBOARDING_STEPS,
+    ONBOARDING_STEPS,
+    advance_step,
+    bulk_create_sessions,
+    create_session,
+    get_sessions_needing_reminder,
+    open_invite,
+    send_reminder,
+    submit_onboarding,
 )
-from app.services.bulk_import import parse_csv, parse_excel, generate_csv_template
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 

@@ -12,14 +12,20 @@ Returns a list of alerts to be persisted.
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+
 from sqlalchemy.orm import Session
 
-from app.models.transaction import (
-    Transaction, TransactionAlert, AlertType, AlertStatus, AlertSeverity, TransactionStatus,
-)
 from app.models.customer import Customer
-from app.services.risk_scoring import score_transaction, score_to_level, HIGH_RISK_COUNTRIES, CTR_THRESHOLD
+from app.models.transaction import (
+    AlertSeverity,
+    AlertType,
+    Transaction,
+    TransactionAlert,
+)
+from app.services.risk_scoring import (
+    CTR_THRESHOLD,
+    HIGH_RISK_COUNTRIES,
+)
 from app.services.sanctions_screening import screen_transaction
 
 VELOCITY_WINDOWS = {

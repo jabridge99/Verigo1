@@ -3,22 +3,26 @@ Data Retention & Legal Hold API.
 Admin/MLRO only — implements Part 11 of the enterprise security review.
 """
 
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _require_roles
 from app.db.database import get_db
-from app.models.retention import EntityScope, RetentionPolicy, LegalHold
+from app.models.retention import EntityScope, LegalHold
 from app.models.user import User, UserRole
 from app.services.retention_service import (
-    get_policy, upsert_policy, list_policies,
-    place_legal_hold, release_legal_hold, is_deletion_eligible,
     generate_purge_report,
+    get_policy,
+    is_deletion_eligible,
+    list_policies,
+    place_legal_hold,
+    release_legal_hold,
+    upsert_policy,
 )
-from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/retention", tags=["Data Retention"])
 
@@ -161,7 +165,7 @@ def list_legal_holds(
     if entity_scope:
         q = q.filter(LegalHold.entity_scope == entity_scope)
     if active_only:
-        q = q.filter(LegalHold.active == True)
+        q = q.filter(LegalHold.active)
     return q.order_by(LegalHold.placed_at.desc()).all()
 
 

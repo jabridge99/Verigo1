@@ -11,13 +11,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
 from app.models.customer import Customer, CustomerStatus
 from app.models.user import User, UserRole
-from app.schemas.customer import CustomerCreate, CustomerUpdate, CustomerResponse
+from app.schemas.customer import CustomerCreate, CustomerResponse, CustomerUpdate
 from app.services.risk_scoring import score_customer, score_to_level
 from app.services.sanctions_screening import screen_name
-from app.api.routes.auth import _current_user, _require_roles
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 

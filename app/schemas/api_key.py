@@ -1,8 +1,9 @@
-from pydantic import BaseModel, HttpUrl
-from typing import Optional, List
 from datetime import datetime
-from app.models.api_key import APIKeyStatus, WebhookEvent, WebhookStatus
+from typing import List, Optional
 
+from pydantic import BaseModel
+
+from app.models.api_key import APIKeyStatus, WebhookStatus
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
 

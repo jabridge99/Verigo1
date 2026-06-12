@@ -7,6 +7,7 @@ the frontend can fetch it before the user logs in.
 """
 
 from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from app.models.tenant import IndustryTenant

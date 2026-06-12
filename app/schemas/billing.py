@@ -1,7 +1,14 @@
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
-from app.models.billing import BillingPlan, BillingInterval, SubscriptionStatus, InvoiceStatus
+from typing import List, Optional
+
+from pydantic import BaseModel
+
+from app.models.billing import (
+    BillingInterval,
+    BillingPlan,
+    InvoiceStatus,
+    SubscriptionStatus,
+)
 
 
 class SubscriptionResponse(BaseModel):

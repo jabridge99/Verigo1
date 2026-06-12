@@ -2,16 +2,18 @@
 Analytics service — aggregates compliance metrics for the reporting dashboard.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func, case, and_
 
-from app.models.customer import Customer, RiskLevel, CustomerStatus
-from app.models.kyc import KYCRecord, KYCStatus
-from app.models.transaction import Transaction
-from app.models.report import ComplianceReport as Report, ReportStatus, ReportType
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.models.audit import AuditLog
+from app.models.customer import Customer, RiskLevel
+from app.models.kyc import KYCRecord, KYCStatus
+from app.models.report import ComplianceReport as Report
+from app.models.report import ReportStatus, ReportType
+from app.models.transaction import Transaction
 
 
 def _now():

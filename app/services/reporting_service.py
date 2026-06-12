@@ -12,11 +12,12 @@ Statutory deadlines per AML/CTF Act 2006 and AUSTRAC guidance.
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
 from sqlalchemy.orm import Session
 
-from app.models.report import ComplianceReport, ReportType, ReportStatus, ReportPriority
-from app.models.transaction import Transaction, TransactionAlert, AlertType
 from app.models.customer import Customer
+from app.models.report import ComplianceReport, ReportPriority, ReportStatus, ReportType
+from app.models.transaction import Transaction, TransactionAlert
 
 # Statutory reporting deadlines (business days approximated as calendar days * 1.4)
 DEADLINE_DAYS = {

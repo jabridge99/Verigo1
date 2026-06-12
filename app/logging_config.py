@@ -5,7 +5,7 @@ JSON format in production; coloured text in development.
 
 import logging
 import logging.config
-import sys
+
 from app.config import settings
 
 

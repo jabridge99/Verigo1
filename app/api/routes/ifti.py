@@ -11,20 +11,21 @@ All endpoints require authentication. Generation requires compliance+ role.
 """
 
 import uuid
-from datetime import datetime, timezone, date as _date_type
-from typing import Optional, List
+from datetime import date as _date_type
+from datetime import datetime, timezone
 from io import BytesIO
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_serializer
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _require_roles
 from app.db.database import get_db
-from app.models.ifti import IFTIRecord, IFTIDirection, IFTIStatus
+from app.models.ifti import IFTIDirection, IFTIRecord, IFTIStatus
 from app.models.user import User, UserRole
-from app.services.ifti_service import generate_ifti_excel, list_ifti, get_ifti
-from app.api.routes.auth import _current_user, _require_roles
+from app.services.ifti_service import generate_ifti_excel, get_ifti, list_ifti
 
 router = APIRouter(prefix="/ifti", tags=["IFTI Reports"])
 
@@ -212,7 +213,6 @@ class IFTIResponse(BaseModel):
 def _parse_date(val: Optional[str]):
     if not val:
         return None
-    from datetime import date as date_type
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
         try:
             return datetime.strptime(val, fmt).date()

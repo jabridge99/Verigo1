@@ -2,15 +2,20 @@
 Notification endpoints — list, summary, mark-read, create (admin/system).
 """
 
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
 
-from app.db.database import get_db
-from app.schemas.notification import NotificationCreate, NotificationResponse, NotificationSummary
-from app.services import notification_service as svc
 from app.api.routes.auth import _current_user
+from app.db.database import get_db
 from app.models.user import User
+from app.schemas.notification import (
+    NotificationCreate,
+    NotificationResponse,
+    NotificationSummary,
+)
+from app.services import notification_service as svc
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 

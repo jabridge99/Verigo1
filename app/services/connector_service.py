@@ -28,8 +28,10 @@ log = logging.getLogger("tvg.connectors")
 
 def _fernet():
     try:
+        import base64
+        import hashlib
+
         from cryptography.fernet import Fernet
-        import base64, hashlib
         # Derive a 32-byte key from secret_key and Base64-URL-encode it
         raw = hashlib.sha256(settings.secret_key.encode()).digest()
         key = base64.urlsafe_b64encode(raw)
@@ -100,7 +102,7 @@ def get_default_credential(
         .filter(
             ConnectorCredential.industry_id == industry_id,
             ConnectorCredential.provider == provider,
-            ConnectorCredential.is_default == True,
+            ConnectorCredential.is_default,
             ConnectorCredential.status == ConnectorStatus.active,
         )
         .first()

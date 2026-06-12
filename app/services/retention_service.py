@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.retention import RetentionPolicy, LegalHold, EntityScope
+from app.models.retention import EntityScope, LegalHold, RetentionPolicy
 
 log = logging.getLogger("tvg.retention")
 
@@ -55,7 +55,7 @@ def get_policy(
     # Global default
     p = db.query(RetentionPolicy).filter(
         RetentionPolicy.entity_scope == entity_scope,
-        RetentionPolicy.industry_id == None,
+        RetentionPolicy.industry_id is None,
     ).first()
     if p:
         return p
@@ -109,7 +109,7 @@ def upsert_policy(
 
 def list_policies(db: Session, industry_id: Optional[str] = None) -> list[RetentionPolicy]:
     q = db.query(RetentionPolicy).filter(
-        (RetentionPolicy.industry_id == industry_id) | (RetentionPolicy.industry_id == None)
+        (RetentionPolicy.industry_id == industry_id) | (RetentionPolicy.industry_id is None)
     )
     return q.order_by(RetentionPolicy.entity_scope).all()
 
@@ -163,7 +163,7 @@ def has_active_hold(db: Session, entity_scope: EntityScope, entity_id: str) -> b
     return db.query(LegalHold).filter(
         LegalHold.entity_scope == entity_scope,
         LegalHold.entity_id == entity_id,
-        LegalHold.active == True,
+        LegalHold.active,
     ).count() > 0
 
 
@@ -230,7 +230,6 @@ def generate_purge_report(db: Session, industry_id: Optional[str] = None) -> dic
     """
     from app.models.customer import Customer
     from app.models.kyc import KYCRecord
-    from app.models.document import Document
 
     now = datetime.now(timezone.utc)
     report: dict = {"generated_at": now.isoformat(), "industry_id": industry_id, "items": []}

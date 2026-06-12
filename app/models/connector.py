@@ -4,9 +4,11 @@ Stores per-tenant API keys for external identity/AML/business verification provi
 Credentials are stored encrypted; only the last 4 chars of the key are kept in plaintext.
 """
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, Enum as SAEnum
-from sqlalchemy.sql import func
 import enum
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.sql import func
 
 from app.db.database import Base
 

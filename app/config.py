@@ -1,7 +1,8 @@
 import secrets
-from typing import List, Optional
+from typing import List
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
-from pydantic import field_validator, model_validator
 
 
 class Settings(BaseSettings):

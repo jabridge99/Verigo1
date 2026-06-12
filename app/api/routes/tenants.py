@@ -1,12 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from app.db.database import get_db
-from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse, TenantSummary
+from app.schemas.tenant import TenantCreate, TenantResponse, TenantSummary, TenantUpdate
 from app.services.tenant_service import (
-    create_tenant, get_tenant, get_tenant_by_industry,
-    list_tenants, update_tenant, suspend_tenant, activate_tenant, tenant_stats
+    activate_tenant,
+    create_tenant,
+    get_tenant,
+    get_tenant_by_industry,
+    list_tenants,
+    suspend_tenant,
+    tenant_stats,
+    update_tenant,
 )
 
 router = APIRouter(prefix="/tenants", tags=["Industry Tenants"])
