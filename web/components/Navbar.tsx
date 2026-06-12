@@ -250,8 +250,6 @@ export default function Navbar() {
 
           <Link href="/company" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Our Company</Link>
           <Link href="/pricing" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Pricing</Link>
-          <Link href="/learn" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Learning Centre</Link>
-          <Link href="/contact" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Contact</Link>
 
           <div className="flex flex-col gap-2 pt-4 border-t border-slate-200 mt-4">
             {user ? (
