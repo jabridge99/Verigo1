@@ -14,3 +14,6 @@ __pycache__/
 /tvg_migration.db
 /uploads/
 /.env
+
+# Node artefacts at repo root
+/node_modules/
