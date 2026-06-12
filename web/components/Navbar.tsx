@@ -179,8 +179,6 @@ export default function Navbar() {
 
               <Link href="/company" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Our Company</Link>
               <Link href="/pricing" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Pricing</Link>
-              <Link href="/learn" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Learn</Link>
-              <Link href="/contact" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Contact</Link>
             </div>
           ) : isPublicPage && user ? (
             <div className="hidden lg:flex items-center gap-6">

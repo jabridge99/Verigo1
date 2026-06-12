@@ -174,7 +174,7 @@ function AMLReformTimeline() {
         </div>
 
         <div className="text-center">
-          <Link href="/resources/aml-reform" className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold text-white ring-1 ring-white/20 hover:bg-white/20 transition-colors">
+          <Link href="/learn/austrac-reform-guide" className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold text-white ring-1 ring-white/20 hover:bg-white/20 transition-colors">
             Read the AML Reform Guide <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
