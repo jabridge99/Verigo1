@@ -3,64 +3,71 @@ import { Shield } from 'lucide-react'
 
 const footerLinks = {
   Solutions: [
-    { label: 'Digital Currency Exchange', href: '/solutions/digital-currency-exchange' },
-    { label: 'Remittance Provider', href: '/solutions/remittance-provider' },
-    { label: 'Foreign Exchange', href: '/solutions/foreign-exchange' },
-    { label: 'Payment Service Provider', href: '/solutions/payment-service-provider' },
-    { label: 'Real Estate', href: '/solutions/real-estate' },
-    { label: 'Lawyers & Accountants', href: '/solutions/lawyer' },
+    { label: 'Compliance Operations', href: '/solutions/compliance-operations' },
+    { label: 'Customer Onboarding', href: '/solutions/customer-onboarding' },
+    { label: 'KYC & KYB', href: '/solutions/kyc-kyb' },
+    { label: 'Transaction Monitoring', href: '/solutions/transaction-monitoring' },
+    { label: 'Case Management', href: '/solutions/case-management' },
+    { label: 'Regulatory Reporting', href: '/solutions/regulatory-reporting' },
+    { label: 'Workflow Automation', href: '/solutions/workflow-automation' },
   ],
-  Platform: [
-    { label: 'Customer Onboarding', href: '/#onboarding' },
-    { label: 'KYC / KYB Verification', href: '/#kyc' },
-    { label: 'Transaction Monitoring', href: '/#monitoring' },
-    { label: 'AUSTRAC Reporting', href: '/#reporting' },
-    { label: 'Case Management', href: '/#cases' },
-    { label: 'API & Integrations', href: '/api-integrations' },
+  Industries: [
+    { label: 'Digital Currency Exchanges', href: '/solutions/digital-currency-exchange' },
+    { label: 'Remittance Providers', href: '/solutions/remittance-provider' },
+    { label: 'Real Estate Professionals', href: '/solutions/real-estate' },
+    { label: 'Law Firms', href: '/solutions/lawyer' },
+    { label: 'Accounting Firms', href: '/solutions/accountant' },
+    { label: 'Conveyancers', href: '/solutions/conveyancer' },
+    { label: 'View all industries', href: '/solutions' },
   ],
   Company: [
+    { label: 'Our Company', href: '/company' },
     { label: 'Pricing', href: '/pricing' },
-    { label: 'Live Demo', href: '/live-demo' },
+    { label: 'Book Demo', href: '/live-demo' },
     { label: 'Start Free Trial', href: '/start-trial' },
-    { label: 'Login', href: '/login' },
+    { label: 'Sign In', href: '/login' },
   ],
-  Compliance: [
-    { label: 'AUSTRAC', href: 'https://www.austrac.gov.au', target: '_blank' },
-    { label: 'FATF Recommendations', href: 'https://www.fatf-gafi.org', target: '_blank' },
-    { label: 'AML/CTF Act 2006', href: '#' },
-    { label: 'Tranche 2 Reforms', href: '#' },
+  Resources: [
+    { label: 'AUSTRAC', href: 'https://www.austrac.gov.au', target: '_blank' as const },
+    { label: 'FATF Recommendations', href: 'https://www.fatf-gafi.org', target: '_blank' as const },
+    { label: 'AML/CTF Act 2006', href: 'https://www.legislation.gov.au', target: '_blank' as const },
+    { label: 'Tranche 2 Reforms', href: '/company#aml-reform' },
   ],
 }
 
 export default function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-navy-900 pt-16 pb-8 px-4">
-      <div className="container-xl mx-auto">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
-          <div className="col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2 font-bold text-lg mb-4">
-              <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" />
+    <footer className="bg-slate-950 pt-16 pb-8 px-4">
+      <div className="max-w-7xl mx-auto">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-8 mb-12">
+          <div className="col-span-2">
+            <Link href="/" className="flex items-center gap-2.5 mb-4">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Shield className="w-4 h-4 text-white" />
               </div>
-              <span className="text-white">Trust<span className="text-brand-400"> Verify</span><span className="text-gold-400"> Go</span></span>
-            </div>
-            <p className="text-white/50 text-sm leading-relaxed">
-              Australian-first Compliance Operating System for regulated businesses.
+              <span className="font-bold text-lg text-white">Veri<span className="text-blue-400">go</span></span>
+            </Link>
+            <p className="text-slate-400 text-sm leading-relaxed max-w-xs mb-5">
+              Australia&apos;s Compliance Operating System for regulated businesses navigating AUSTRAC obligations and AML reforms.
             </p>
-            <div className="mt-4 flex gap-2 flex-wrap">
-              <span className="badge bg-brand-900/50 text-brand-400 border border-brand-700/30">AUSTRAC Aligned</span>
-              <span className="badge bg-green-900/30 text-green-400 border border-green-700/30">FATF Ready</span>
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center rounded-full bg-blue-950 px-2.5 py-1 text-xs font-medium text-blue-400 ring-1 ring-blue-800">AUSTRAC Aligned</span>
+              <span className="inline-flex items-center rounded-full bg-emerald-950 px-2.5 py-1 text-xs font-medium text-emerald-400 ring-1 ring-emerald-800">FATF Ready</span>
+              <span className="inline-flex items-center rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-slate-700">🇦🇺 Australian Data</span>
             </div>
           </div>
 
           {Object.entries(footerLinks).map(([section, links]) => (
             <div key={section}>
               <h4 className="text-white font-semibold text-sm mb-4">{section}</h4>
-              <ul className="space-y-2">
+              <ul className="space-y-2.5">
                 {links.map(l => (
                   <li key={l.label}>
-                    <Link href={l.href} target={(l as any).target}
-                      className="text-white/50 hover:text-white/80 text-sm transition-colors">
+                    <Link
+                      href={l.href}
+                      target={'target' in l ? l.target : undefined}
+                      className="text-slate-400 hover:text-slate-200 text-sm transition-colors"
+                    >
                       {l.label}
                     </Link>
                   </li>
@@ -70,13 +77,13 @@ export default function Footer() {
           ))}
         </div>
 
-        <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-white/40 text-sm">
-            © {new Date().getFullYear()} Trust Verify Go. All rights reserved. ABN: XX XXX XXX XXX
+        <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-slate-500 text-sm">
+            © {new Date().getFullYear()} Verigo. All rights reserved.
           </p>
           <div className="flex gap-6">
             {['Privacy Policy', 'Terms of Service', 'Security'].map(l => (
-              <Link key={l} href="#" className="text-white/40 hover:text-white/60 text-sm transition-colors">{l}</Link>
+              <Link key={l} href="#" className="text-slate-500 hover:text-slate-400 text-sm transition-colors">{l}</Link>
             ))}
           </div>
         </div>
