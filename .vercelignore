@@ -1,16 +1,16 @@
-# Python backend — Vercel only deploys the Next.js frontend
-app/
-alembic/
-alembic.ini
-requirements.txt
-Dockerfile
-docker-compose.yml
-nginx/
-tests/
+# Python backend — Vercel only deploys the Next.js frontend in web/
+/app/
+/alembic/
+/alembic.ini
+/requirements.txt
+/Dockerfile
+/docker-compose.yml
+/nginx/
+/tests/
 *.py
 *.pyc
 __pycache__/
-tvg.db
-tvg_migration.db
-uploads/
-.env
+/tvg.db
+/tvg_migration.db
+/uploads/
+/.env
