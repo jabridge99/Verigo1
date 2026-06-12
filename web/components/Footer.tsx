@@ -23,15 +23,19 @@ const footerLinks = {
   Company: [
     { label: 'Our Company', href: '/company' },
     { label: 'Pricing', href: '/pricing' },
+    { label: 'API & Integrations', href: '/api-integrations' },
+    { label: 'Trust Centre', href: '/trust-centre' },
+    { label: 'Contact Us', href: '/contact' },
     { label: 'Book Demo', href: '/live-demo' },
-    { label: 'Start Free Trial', href: '/start-trial' },
     { label: 'Sign In', href: '/login' },
   ],
   Resources: [
+    { label: 'Learning Centre', href: '/learn' },
+    { label: 'AML/CTF Fundamentals', href: '/learn/aml-fundamentals' },
+    { label: 'KYC Guide', href: '/learn/kyc-guide' },
+    { label: 'SMR Guide', href: '/learn/smr-guide' },
+    { label: 'AUSTRAC Reform Guide', href: '/learn/austrac-reform-guide' },
     { label: 'AUSTRAC', href: 'https://www.austrac.gov.au', target: '_blank' as const },
-    { label: 'FATF Recommendations', href: 'https://www.fatf-gafi.org', target: '_blank' as const },
-    { label: 'AML/CTF Act 2006', href: 'https://www.legislation.gov.au', target: '_blank' as const },
-    { label: 'Tranche 2 Reforms', href: '/company#aml-reform' },
   ],
 }
 

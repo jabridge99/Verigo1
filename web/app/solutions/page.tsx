@@ -1,78 +1,31 @@
 import Link from 'next/link'
-import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap } from 'lucide-react'
+import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network } from 'lucide-react'
 import { industries } from '@/lib/industries'
+import { capabilities as libCaps } from '@/lib/capabilities'
 
 export const metadata = {
-  title: 'Solutions | Verigo',
-  description: 'Platform capabilities and industry compliance packs for every Australian regulated business.',
+  title: 'AML Compliance Solutions | Verigo',
+  description: 'Explore VeriGo\'s complete suite of AML/CTF compliance solutions: customer onboarding, KYC, KYB, sanctions screening, PEP screening, adverse media, transaction monitoring, case management, and AUSTRAC reporting.',
 }
 
-const capabilities = [
-  {
-    slug: 'compliance-operations',
-    icon: Shield,
-    title: 'Compliance Operations',
-    desc: 'Your central compliance command centre. Manage obligations, workflows, and team tasks in one place.',
-    problem: 'Managing compliance across multiple obligations is complex, manual, and error-prone.',
-    solution: 'Verigo consolidates all compliance workflows into a single operating system with real-time visibility.',
-  },
-  {
-    slug: 'customer-onboarding',
-    icon: Users,
-    title: 'Customer Onboarding',
-    desc: 'Digital onboarding with built-in KYC. Collect information once, verify automatically.',
-    problem: 'Manual onboarding is slow, inconsistent, and creates compliance gaps.',
-    solution: 'Guided digital flows with embedded checks ensure every customer is onboarded correctly from the start.',
-  },
-  {
-    slug: 'kyc-kyb',
-    icon: Search,
-    title: 'KYC & KYB',
-    desc: 'Identity and business verification. Sanctions, PEP, and adverse media screening.',
-    problem: 'Verifying identities manually across multiple databases is time-consuming and unreliable.',
-    solution: 'One-click verification against global sanctions lists, PEP databases, and identity document checks.',
-  },
-  {
-    slug: 'transaction-monitoring',
-    icon: BarChart3,
-    title: 'Transaction Monitoring',
-    desc: 'Automated AML transaction surveillance. Rule-based and risk-scored monitoring 24/7.',
-    problem: 'Suspicious activity hides in transaction volume that humans cannot manually review.',
-    solution: 'Automated rule engine screens every transaction against configurable AML rules and generates alerts.',
-  },
-  {
-    slug: 'case-management',
-    icon: Folder,
-    title: 'Case Management',
-    desc: 'Alert-to-resolution case workflows. Full audit trail and escalation paths.',
-    problem: 'Alerts without structured workflows lead to missed investigations and no audit trail.',
-    solution: 'Automated case creation from alerts with assignment, four-eyes approval, and complete documentation.',
-  },
-  {
-    slug: 'regulatory-reporting',
-    icon: FileText,
-    title: 'Regulatory Reporting',
-    desc: 'AUSTRAC-ready report generation. TTR, IFTI, and SMR with pre-filled templates.',
-    problem: 'Building AUSTRAC-compliant reports manually is slow, error-prone, and stressful.',
-    solution: 'Pre-filled report templates with built-in validation ensure accurate, on-time AUSTRAC submissions.',
-  },
-  {
-    slug: 'reporting-groups',
-    icon: Building2,
-    title: 'Reporting Groups',
-    desc: 'Multi-entity group compliance. Consolidated oversight across related businesses.',
-    problem: 'Large groups struggle to maintain consistent compliance standards across multiple entities.',
-    solution: 'Group-level dashboard with consolidated reporting, shared customer records, and centralised oversight.',
-  },
-  {
-    slug: 'workflow-automation',
-    icon: Zap,
-    title: 'Workflow Automation',
-    desc: 'No-code compliance automation. Build triggers, rules, and escalations without development.',
-    problem: 'Compliance teams are bottlenecked by manual processes that should be automated.',
-    solution: 'No-code workflow builder lets compliance teams automate repetitive tasks and approvals instantly.',
-  },
-]
+const capIcons: Record<string, React.ElementType> = {
+  'customer-onboarding': UserCheck,
+  'kyc': ScanFace,
+  'kyb': Building2,
+  'sanctions-screening': ShieldAlert,
+  'pep-screening': Shield,
+  'adverse-media': Newspaper,
+  'transaction-monitoring': BarChart3,
+  'case-management': Folder,
+  'regulatory-reporting': FileText,
+  'reporting-groups': Network,
+  'workflow-automation': Zap,
+}
+
+const capabilities = libCaps.map(c => ({
+  ...c,
+  icon: capIcons[c.id] ?? Shield,
+}))
 
 export default function SolutionsPage() {
   const current = industries.filter(i => i.regime === 'current')
@@ -105,17 +58,19 @@ export default function SolutionsPage() {
             <p className="text-slate-500 max-w-xl mx-auto">Every capability works independently or as part of the full compliance stack.</p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {capabilities.map(({ slug, icon: Icon, title, desc, problem, solution }) => (
-              <Link key={slug} href={`/solutions/${slug}`} className="pub-card-hover group flex flex-col gap-4">
+            {capabilities.map(({ id, slug, icon: Icon, title, tagline, benefits }) => (
+              <Link key={id} href={`/solutions/${id}`} className="pub-card-hover group flex flex-col gap-4">
                 <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
                   <Icon className="w-5 h-5 text-blue-600" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-slate-900 mb-2">{title}</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed mb-3">{desc}</p>
-                  <div className="text-xs text-slate-400 space-y-1">
-                    <p><span className="font-semibold text-red-500">Problem:</span> {problem}</p>
-                  </div>
+                  <h3 className="font-bold text-slate-900 mb-1">{title}</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-3">{tagline}</p>
+                  {benefits.slice(0, 2).map(b => (
+                    <p key={b} className="text-xs text-slate-400 flex items-start gap-1.5 mb-1">
+                      <span className="text-green-500 mt-0.5">✓</span> {b}
+                    </p>
+                  ))}
                 </div>
                 <span className="text-blue-600 text-sm font-semibold group-hover:underline">Learn more →</span>
               </Link>
