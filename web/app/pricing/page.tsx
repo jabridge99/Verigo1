@@ -8,26 +8,6 @@ export const metadata = {
 
 const plans = [
   {
-    name: 'Free Trial',
-    price: 'Free',
-    period: '',
-    badge: null,
-    description: '7 days. No credit card. Full access to every feature.',
-    highlight: false,
-    features: [
-      { label: 'Full platform access for 7 days', included: true },
-      { label: 'All industry compliance packs', included: true },
-      { label: 'KYC identity verification', included: true },
-      { label: 'Transaction monitoring', included: true },
-      { label: 'AUSTRAC report templates', included: true },
-      { label: 'Case management', included: true },
-      { label: 'Email support during trial', included: true },
-      { label: 'No credit card required', included: true },
-    ],
-    cta: 'Start Free Trial',
-    href: '/start-trial',
-  },
-  {
     name: 'Essential',
     price: '$299',
     period: '/month',
@@ -100,20 +80,20 @@ const plans = [
 ]
 
 const compareRows = [
-  { feature: 'Customer limit', values: ['—', '500', '5,000', 'Unlimited'] },
-  { feature: 'Compliance packs', values: ['All packs', '1 pack', '3 packs', 'All packs'] },
-  { feature: 'KYC verification', values: ['✓', '✓', '✓', '✓'] },
-  { feature: 'KYB verification', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'Sanctions & PEP screening', values: ['✓', '✓', '✓', '✓'] },
-  { feature: 'Transaction monitoring', values: ['✓', 'Basic', 'Advanced', 'Advanced'] },
-  { feature: 'IFTI reporting', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'SMR & TTR reporting', values: ['✓', '✓', '✓', '✓'] },
-  { feature: 'Case management', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'Workflow automation', values: ['✓', '✗', '✓', '✓'] },
-  { feature: 'Reporting groups', values: ['✓', '✗', '✗', '✓'] },
-  { feature: 'White label', values: ['✓', '✗', '✗', '✓'] },
-  { feature: 'API access', values: ['✓', '✗', '✗', '✓'] },
-  { feature: 'Support', values: ['Email', 'Email', 'Priority', 'Dedicated'] },
+  { feature: 'Customer limit', values: ['500', '5,000', 'Unlimited'] },
+  { feature: 'Compliance packs', values: ['1 pack', '3 packs', 'All packs'] },
+  { feature: 'KYC verification', values: ['✓', '✓', '✓'] },
+  { feature: 'KYB verification', values: ['✗', '✓', '✓'] },
+  { feature: 'Sanctions & PEP screening', values: ['✓', '✓', '✓'] },
+  { feature: 'Transaction monitoring', values: ['Basic', 'Advanced', 'Advanced'] },
+  { feature: 'IFTI reporting', values: ['✗', '✓', '✓'] },
+  { feature: 'SMR & TTR reporting', values: ['✓', '✓', '✓'] },
+  { feature: 'Case management', values: ['✗', '✓', '✓'] },
+  { feature: 'Workflow automation', values: ['✗', '✓', '✓'] },
+  { feature: 'Reporting groups', values: ['✗', '✗', '✓'] },
+  { feature: 'White label', values: ['✗', '✗', '✓'] },
+  { feature: 'API access', values: ['✗', '✗', '✓'] },
+  { feature: 'Support', values: ['Email', 'Priority', 'Dedicated'] },
 ]
 
 export default function PricingPage() {
@@ -136,11 +116,29 @@ export default function PricingPage() {
       {/* Plans */}
       <section className="pub-section">
         <div className="pub-container">
-          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-5 mb-16">
+
+          {/* Free Trial Banner */}
+          <div className="bg-blue-600 rounded-2xl p-8 mb-12 text-center text-white">
+            <div className="inline-flex items-center gap-2 bg-white/20 rounded-full px-3 py-1 text-sm font-semibold mb-4">
+              🎉 No credit card required
+            </div>
+            <h2 className="text-3xl font-black mb-3">Try Verigo free for 7 days</h2>
+            <p className="text-blue-100 text-lg mb-6 max-w-xl mx-auto">Full access to every feature. All compliance packs. Set up in under 10 minutes.</p>
+            <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
+              Start Free Trial <ArrowRight className="w-5 h-5" />
+            </Link>
+            <div className="flex flex-wrap justify-center gap-6 mt-6 text-sm text-blue-200">
+              {['7 days full access', 'All industry packs', 'No credit card', 'Cancel anytime'].map(t => (
+                <span key={t} className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4" />{t}</span>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 mb-16">
             {plans.map(plan => (
               <div
                 key={plan.name}
-                className={`flex flex-col rounded-2xl p-8 ring-1 ${plan.highlight ? 'ring-blue-500 shadow-lg shadow-blue-100 bg-blue-50' : 'ring-slate-200 bg-white shadow-sm'}`}
+                className={`pub-card flex flex-col ${plan.highlight ? 'ring-2 ring-blue-600 shadow-lg shadow-blue-600/10' : ''}`}
               >
                 {plan.badge && (
                   <div className="mb-4">
@@ -166,7 +164,7 @@ export default function PricingPage() {
                 </ul>
                 <Link
                   href={plan.href}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-colors ${plan.highlight ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                  className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-colors w-full justify-center ${plan.highlight ? 'pub-btn-primary' : 'pub-btn-secondary'}`}
                 >
                   {plan.cta} <ArrowRight className="w-4 h-4" />
                 </Link>

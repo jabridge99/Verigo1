@@ -13,7 +13,7 @@ export const metadata = {
 
 function Hero() {
   return (
-    <section className="bg-gradient-to-b from-slate-50 to-white pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+    <section className="bg-gradient-to-b from-slate-50 to-white pt-32 pb-24 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto text-center">
         <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 ring-1 ring-blue-700/10 mb-8">
           <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -47,9 +47,9 @@ function Hero() {
         </div>
 
         {/* Workflow strip */}
-        <div className="max-w-5xl mx-auto bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-6">
+        <div className="max-w-5xl mx-auto bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-6 overflow-hidden">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">How Verigo Works</p>
-          <div className="flex flex-wrap items-center justify-center gap-2 text-sm font-medium text-slate-700">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-700 overflow-x-auto pb-1 scrollbar-hide">
             {[
               'Choose Industry',
               'Onboard Customer',
@@ -109,6 +109,7 @@ function WhyComplianceMatters() {
             {[
               { icon: Shield, title: 'Fraud Prevention', desc: 'Identify high-risk customers before they cause harm. Automated KYC, sanctions screening, and PEP detection protect your business and your customers.' },
               { icon: BarChart3, title: 'Risk Reduction', desc: 'Real-time transaction monitoring and automated risk scoring dramatically reduce your exposure to financial crime and regulatory action.' },
+              { icon: Users, title: 'Customer Trust', desc: 'Customers expect their service providers to have robust compliance programmes. Meeting your obligations signals professionalism and builds lasting trust.' },
               { icon: CheckCircle, title: 'Regulatory Readiness', desc: 'Stay ahead of AUSTRAC requirements with pre-built compliance packs, automated reporting templates, and a living audit trail.' },
             ].map(({ icon: Icon, title, desc }) => (
               <div key={title} className="pub-card flex gap-4">

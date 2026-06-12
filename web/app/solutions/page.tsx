@@ -105,17 +105,14 @@ export default function SolutionsPage() {
             <p className="text-slate-500 max-w-xl mx-auto">Every capability works independently or as part of the full compliance stack.</p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {capabilities.map(({ slug, icon: Icon, title, desc, problem, solution }) => (
+            {capabilities.map(({ slug, icon: Icon, title, desc }) => (
               <Link key={slug} href={`/solutions/${slug}`} className="pub-card-hover group flex flex-col gap-4">
                 <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
                   <Icon className="w-5 h-5 text-blue-600" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-bold text-slate-900 mb-2">{title}</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed mb-3">{desc}</p>
-                  <div className="text-xs text-slate-400 space-y-1">
-                    <p><span className="font-semibold text-red-500">Problem:</span> {problem}</p>
-                  </div>
+                  <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
                 </div>
                 <span className="text-blue-600 text-sm font-semibold group-hover:underline">Learn more →</span>
               </Link>

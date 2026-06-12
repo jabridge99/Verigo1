@@ -53,7 +53,7 @@ export default function CompanyPage() {
             </div>
             <div className="space-y-4">
               {[
-                { stat: '9', label: 'Industry compliance packs' },
+                { stat: '10', label: 'Industry compliance packs' },
                 { stat: '8', label: 'Platform capabilities' },
                 { stat: '100%', label: 'Australian data sovereignty' },
                 { stat: '7-day', label: 'Free trial, no credit card' },
