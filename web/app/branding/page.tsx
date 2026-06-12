@@ -318,7 +318,7 @@ export default function BrandingPage() {
               />
             </div>
             <p className="text-xs text-slate-500 mt-3 ml-0">
-              Add a CNAME record pointing <code className="text-blue-400">compliance.yourcompany.com</code> → <code className="text-blue-400">app.verigo.com.au</code>, then enter the domain above.
+              Add a CNAME record pointing <code className="text-blue-400">compliance.yourcompany.com</code> → <code className="text-blue-400">app.trustverifygo.com.au</code>, then enter the domain above.
             </p>
           </section>
 
@@ -327,7 +327,7 @@ export default function BrandingPage() {
             <h4 className="text-sm font-semibold text-blue-400 mb-2">Embed branding in external tools</h4>
             <p className="text-sm text-slate-400 mb-3">Fetch your brand CSS variables from the public endpoint to style external portals consistently.</p>
             <pre className="text-xs bg-black/40 rounded-lg p-3 text-green-300 overflow-x-auto">{`/* Load in your <head> */
-<link rel="stylesheet" href="${process.env.NEXT_PUBLIC_API_URL ?? "https://api.verigo.com.au"}/api/v1/branding/css?industry_id=YOUR_INDUSTRY_ID" />`}</pre>
+<link rel="stylesheet" href="${process.env.NEXT_PUBLIC_API_URL ?? "https://api.trustverifygo.com.au"}/api/v1/branding/css?industry_id=YOUR_INDUSTRY_ID" />`}</pre>
           </section>
 
         </div>
