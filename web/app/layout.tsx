@@ -6,11 +6,11 @@ import MobileNav from '@/components/MobileNav'
 import PWAProvider from '@/components/PWAProvider'
 
 export const metadata: Metadata = {
-  title: 'Trust Verify Go | Australian AML/CTF Compliance Platform',
+  title: 'Verigo | Australian AML/CTF Compliance Platform',
   description: 'The Australian-first Compliance Operating System for regulated businesses. AUSTRAC-aligned KYC, AML transaction monitoring, IFTI/TTR/SMR reporting, sanctions screening and case management.',
   keywords: 'AML, KYC, AUSTRAC, compliance, Australia, digital currency exchange, remittance, Tranche 2, anti-money laundering',
   manifest: '/manifest.json',
-  applicationName: 'Trust Verify Go',
+  applicationName: 'Verigo',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

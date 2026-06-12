@@ -28,7 +28,7 @@ const DEMO: Notif[] = [
   { id: 3, notif_id: "NOTIF-003", notif_type: "case_assigned", priority: "high", title: "Case Assigned: CASE-2025-0088", body: "Sarah Chen has assigned a high-severity SAR investigation to you.", link: "/mlro", entity_type: "case", entity_id: "CASE-2025-0088", read: false, emailed: true, created_at: new Date(Date.now() - 14400000).toISOString() },
   { id: 4, notif_id: "NOTIF-004", notif_type: "kyc_review", priority: "medium", title: "KYC Review Required", body: "KYC record for Nguyen Trading Pty Ltd requires MLRO sign-off.", link: "/customers", entity_type: "customer", entity_id: "KYC-9912", read: false, emailed: false, created_at: new Date(Date.now() - 86400000).toISOString() },
   { id: 5, notif_id: "NOTIF-005", notif_type: "report_approved", priority: "medium", title: "Report Approved for Submission", body: "IFTI-00019 has been approved by MLRO and is ready to submit to AUSTRAC.", link: "/reporting", entity_type: "report", entity_id: "IFTI-00019", read: true, emailed: true, created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: 6, notif_id: "NOTIF-006", notif_type: "system", priority: "low", title: "System Maintenance Scheduled", body: "Trust Verify Go will undergo scheduled maintenance on Sunday 15 June 02:00–04:00 AEST.", read: true, emailed: false, created_at: new Date(Date.now() - 259200000).toISOString() },
+  { id: 6, notif_id: "NOTIF-006", notif_type: "system", priority: "low", title: "System Maintenance Scheduled", body: "Verigo will undergo scheduled maintenance on Sunday 15 June 02:00–04:00 AEST.", read: true, emailed: false, created_at: new Date(Date.now() - 259200000).toISOString() },
 ];
 
 const TYPE_ICON: Record<string, React.ReactNode> = {

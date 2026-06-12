@@ -10,7 +10,7 @@ import { fetchBranding, saveBranding, resetBranding, applyBrandingToDOM, DEFAULT
 import { useRouter } from "next/navigation";
 
 const PRESET_PALETTES = [
-  { name: "Trust Verify Go", primary: "#2563eb", accent: "#f59e0b", bg: "#060d1a" },
+  { name: "Verigo", primary: "#2563eb", accent: "#f59e0b", bg: "#060d1a" },
   { name: "Midnight Green",  primary: "#059669", accent: "#34d399", bg: "#022c22" },
   { name: "Royal Purple",    primary: "#7c3aed", accent: "#a78bfa", bg: "#0d0414" },
   { name: "Crimson",         primary: "#dc2626", accent: "#fbbf24", bg: "#0c0303" },
@@ -87,7 +87,7 @@ export default function BrandingPage() {
   };
 
   const handleReset = async () => {
-    if (!confirm("Reset all branding to Trust Verify Go defaults?")) return;
+    if (!confirm("Reset all branding to Verigo defaults?")) return;
     try {
       await resetBranding(getToken()!);
       setConfig(DEFAULT_BRANDING);
@@ -174,7 +174,7 @@ export default function BrandingPage() {
               </span>
             </div>
             {!config.hide_tvg_badge && (
-              <p className="text-xs mt-3" style={{ color: config.primary_color }}>Powered by Trust Verify Go</p>
+              <p className="text-xs mt-3" style={{ color: config.primary_color }}>Powered by Verigo</p>
             )}
             <p className="text-xs text-slate-500 mt-1">{config.footer_text}</p>
           </div>
@@ -228,7 +228,7 @@ export default function BrandingPage() {
                   >
                     <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${config.hide_tvg_badge ? "translate-x-5" : "translate-x-0.5"}`} />
                   </div>
-                  <span className="text-sm text-slate-400">Remove "Powered by Trust Verify Go"</span>
+                  <span className="text-sm text-slate-400">Remove "Powered by Verigo"</span>
                 </label>
               </div>
             </div>

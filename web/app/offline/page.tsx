@@ -11,7 +11,7 @@ export default function OfflinePage() {
         </div>
         <h1 className="text-2xl font-bold mb-2">You're offline</h1>
         <p className="text-slate-400 text-sm mb-6">
-          Trust Verify Go needs an internet connection to load live compliance data.
+          Verigo needs an internet connection to load live compliance data.
           Cached pages remain available — reconnect to sync the latest alerts and reports.
         </p>
         <button

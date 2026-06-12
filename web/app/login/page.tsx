@@ -73,7 +73,7 @@ export default function LoginPage() {
             <Shield className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold">Welcome back</h1>
-          <p className="text-white/50 mt-2 text-sm">Sign in to your Trust Verify Go workspace</p>
+          <p className="text-white/50 mt-2 text-sm">Sign in to your Verigo workspace</p>
         </div>
 
         <div className="card">
