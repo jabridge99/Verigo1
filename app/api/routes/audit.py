@@ -35,9 +35,9 @@ def _scoped_query(db: Session, current_user: User):
 def create_log(
     payload: AuditLogCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(
-        UserRole.admin, UserRole.mlro, UserRole.compliance
-    )),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
     """Write an audit event. Restricted to privileged roles to prevent log-stuffing."""
     return log_action(db, **payload.model_dump())
@@ -46,9 +46,9 @@ def create_log(
 @router.get("/", response_model=list[AuditLogResponse])
 def list_logs(
     entity_type: Optional[str] = None,
-    entity_id:   Optional[str] = None,
-    actor:       Optional[str] = None,
-    action:      Optional[str] = None,
+    entity_id: Optional[str] = None,
+    actor: Optional[str] = None,
+    action: Optional[str] = None,
     industry_id: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -88,15 +88,33 @@ def export_csv(
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["log_id", "action", "entity_type", "entity_id",
-                     "actor", "actor_role", "notes", "industry_id", "created_at"])
+    writer.writerow(
+        [
+            "log_id",
+            "action",
+            "entity_type",
+            "entity_id",
+            "actor",
+            "actor_role",
+            "notes",
+            "industry_id",
+            "created_at",
+        ]
+    )
     for entry in logs:
-        writer.writerow([
-            entry.log_id, entry.action, entry.entity_type, entry.entity_id,
-            entry.actor, entry.actor_role, entry.notes or "",
-            entry.industry_id or "",
-            entry.created_at.isoformat() if entry.created_at else "",
-        ])
+        writer.writerow(
+            [
+                entry.log_id,
+                entry.action,
+                entry.entity_type,
+                entry.entity_id,
+                entry.actor,
+                entry.actor_role,
+                entry.notes or "",
+                entry.industry_id or "",
+                entry.created_at.isoformat() if entry.created_at else "",
+            ]
+        )
     buf.seek(0)
     return StreamingResponse(
         buf,
@@ -115,6 +133,9 @@ def get_log(
     if not entry:
         raise HTTPException(404, "Log entry not found")
     # Tenant isolation: non-admin cannot read another tenant's log entry
-    if current_user.role != UserRole.admin and entry.industry_id != current_user.industry_id:
+    if (
+        current_user.role != UserRole.admin
+        and entry.industry_id != current_user.industry_id
+    ):
         raise HTTPException(403, "Cross-tenant access denied")
     return entry

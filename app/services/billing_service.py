@@ -34,27 +34,40 @@ from app.models.billing import (
 )
 from app.schemas.billing import CheckoutSessionRequest, SubscriptionAdminUpdate
 
-STRIPE_KEY     = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-APP_URL        = os.getenv("APP_URL", "http://localhost:3000")
+APP_URL = os.getenv("APP_URL", "http://localhost:3000")
 
 # Stripe Price IDs (populated from env)
 _PRICE_IDS = {
-    (BillingPlan.starter,      BillingInterval.monthly): os.getenv("STRIPE_STARTER_MONTHLY_ID", ""),
-    (BillingPlan.starter,      BillingInterval.annual):  os.getenv("STRIPE_STARTER_ANNUAL_ID", ""),
-    (BillingPlan.professional, BillingInterval.monthly): os.getenv("STRIPE_PRO_MONTHLY_ID", ""),
-    (BillingPlan.professional, BillingInterval.annual):  os.getenv("STRIPE_PRO_ANNUAL_ID", ""),
-    (BillingPlan.enterprise,   BillingInterval.monthly): os.getenv("STRIPE_ENT_MONTHLY_ID", ""),
-    (BillingPlan.enterprise,   BillingInterval.annual):  os.getenv("STRIPE_ENT_ANNUAL_ID", ""),
+    (BillingPlan.starter, BillingInterval.monthly): os.getenv(
+        "STRIPE_STARTER_MONTHLY_ID", ""
+    ),
+    (BillingPlan.starter, BillingInterval.annual): os.getenv(
+        "STRIPE_STARTER_ANNUAL_ID", ""
+    ),
+    (BillingPlan.professional, BillingInterval.monthly): os.getenv(
+        "STRIPE_PRO_MONTHLY_ID", ""
+    ),
+    (BillingPlan.professional, BillingInterval.annual): os.getenv(
+        "STRIPE_PRO_ANNUAL_ID", ""
+    ),
+    (BillingPlan.enterprise, BillingInterval.monthly): os.getenv(
+        "STRIPE_ENT_MONTHLY_ID", ""
+    ),
+    (BillingPlan.enterprise, BillingInterval.annual): os.getenv(
+        "STRIPE_ENT_ANNUAL_ID", ""
+    ),
 }
 
-GST_RATE = 0.10   # 10% Australian GST
+GST_RATE = 0.10  # 10% Australian GST
 
 
 def _stripe():
     if not STRIPE_KEY:
         return None
     import stripe as _stripe_lib
+
     _stripe_lib.api_key = STRIPE_KEY
     return _stripe_lib
 
@@ -68,6 +81,7 @@ def _inv_id():
 
 
 # ── Price resolution ───────────────────────────────────────────────────────────
+
 
 def effective_price(sub: Subscription) -> float:
     """Return the effective AUD price for the current interval."""
@@ -86,7 +100,9 @@ def effective_price(sub: Subscription) -> float:
         return PLAN_CATALOGUE.get(sub.plan, {}).get("monthly_aud") or 0.0
 
 
-def catalogue_with_custom(sub: Optional[Subscription] = None, discount_pct: float = 20.0) -> List[dict]:
+def catalogue_with_custom(
+    sub: Optional[Subscription] = None, discount_pct: float = 20.0
+) -> List[dict]:
     """Return plan catalogue with annual price computed from current discount."""
     plans = []
     for plan_key, info in PLAN_CATALOGUE.items():
@@ -100,24 +116,37 @@ def catalogue_with_custom(sub: Optional[Subscription] = None, discount_pct: floa
             "limits": info["limits"],
         }
         if info["monthly_aud"] and discount_pct != 20.0:
-            entry["annual_aud"] = round(info["monthly_aud"] * 12 * (1 - discount_pct / 100), 2)
+            entry["annual_aud"] = round(
+                info["monthly_aud"] * 12 * (1 - discount_pct / 100), 2
+            )
         plans.append(entry)
     return plans
 
 
 # ── Subscription CRUD ──────────────────────────────────────────────────────────
 
+
 def get_subscription(db: Session, industry_id: str) -> Optional[Subscription]:
-    return db.query(Subscription).filter(
-        Subscription.industry_id == industry_id
-    ).order_by(desc(Subscription.created_at)).first()
+    return (
+        db.query(Subscription)
+        .filter(Subscription.industry_id == industry_id)
+        .order_by(desc(Subscription.created_at))
+        .first()
+    )
 
 
 def list_subscriptions(db: Session, limit: int = 100) -> List[Subscription]:
-    return db.query(Subscription).order_by(desc(Subscription.created_at)).limit(limit).all()
+    return (
+        db.query(Subscription)
+        .order_by(desc(Subscription.created_at))
+        .limit(limit)
+        .all()
+    )
 
 
-def create_trial(db: Session, industry_id: str, tenant_id: Optional[str] = None) -> Subscription:
+def create_trial(
+    db: Session, industry_id: str, tenant_id: Optional[str] = None
+) -> Subscription:
     sub = Subscription(
         subscription_id=_sub_id(),
         industry_id=industry_id,
@@ -134,7 +163,9 @@ def create_trial(db: Session, industry_id: str, tenant_id: Optional[str] = None)
     return sub
 
 
-def admin_update(db: Session, industry_id: str, data: SubscriptionAdminUpdate) -> Optional[Subscription]:
+def admin_update(
+    db: Session, industry_id: str, data: SubscriptionAdminUpdate
+) -> Optional[Subscription]:
     sub = get_subscription(db, industry_id)
     if not sub:
         return None
@@ -147,7 +178,9 @@ def admin_update(db: Session, industry_id: str, data: SubscriptionAdminUpdate) -
     return sub
 
 
-def cancel_subscription(db: Session, industry_id: str, at_period_end: bool = True) -> Optional[Subscription]:
+def cancel_subscription(
+    db: Session, industry_id: str, at_period_end: bool = True
+) -> Optional[Subscription]:
     sub = get_subscription(db, industry_id)
     if not sub:
         return None
@@ -171,6 +204,7 @@ def cancel_subscription(db: Session, industry_id: str, at_period_end: bool = Tru
 
 # ── Stripe Checkout ────────────────────────────────────────────────────────────
 
+
 def create_checkout_session(
     db: Session,
     industry_id: str,
@@ -192,7 +226,9 @@ def create_checkout_session(
 
     # Create or reuse Stripe customer
     if not stripe_customer_id:
-        customer = stripe.Customer.create(email=customer_email, metadata={"industry_id": industry_id})
+        customer = stripe.Customer.create(
+            email=customer_email, metadata={"industry_id": industry_id}
+        )
         stripe_customer_id = customer.id
         if sub:
             sub.stripe_customer_id = stripe_customer_id
@@ -205,7 +241,11 @@ def create_checkout_session(
         mode="subscription",
         success_url=req.success_url + "?session_id={CHECKOUT_SESSION_ID}",
         cancel_url=req.cancel_url,
-        metadata={"industry_id": industry_id, "plan": req.plan, "interval": req.interval},
+        metadata={
+            "industry_id": industry_id,
+            "plan": req.plan,
+            "interval": req.interval,
+        },
         tax_id_collection={"enabled": True},
         automatic_tax={"enabled": True},
     )
@@ -227,6 +267,7 @@ def create_customer_portal(db: Session, industry_id: str, return_url: str) -> st
 
 # ── Stripe Webhook Handler ─────────────────────────────────────────────────────
 
+
 def handle_stripe_webhook(db: Session, payload: bytes, sig_header: str) -> dict:
     stripe = _stripe()
     if not stripe:
@@ -238,7 +279,7 @@ def handle_stripe_webhook(db: Session, payload: bytes, sig_header: str) -> dict:
         raise ValueError(f"Webhook signature invalid: {e}")
 
     etype = event["type"]
-    obj   = event["data"]["object"]
+    obj = event["data"]["object"]
 
     if etype == "checkout.session.completed":
         _handle_checkout_completed(db, obj)
@@ -254,7 +295,7 @@ def handle_stripe_webhook(db: Session, payload: bytes, sig_header: str) -> dict:
 
 def _handle_checkout_completed(db: Session, session: dict):
     industry_id = session.get("metadata", {}).get("industry_id")
-    plan_str    = session.get("metadata", {}).get("plan", "starter")
+    plan_str = session.get("metadata", {}).get("plan", "starter")
     interval_str = session.get("metadata", {}).get("interval", "monthly")
     if not industry_id:
         return
@@ -262,15 +303,16 @@ def _handle_checkout_completed(db: Session, session: dict):
     sub = get_subscription(db, industry_id)
     if not sub:
         sub = Subscription(
-            subscription_id=_sub_id(), industry_id=industry_id,
+            subscription_id=_sub_id(),
+            industry_id=industry_id,
             annual_discount_pct=20.0,
         )
         db.add(sub)
 
-    sub.plan     = BillingPlan(plan_str)
+    sub.plan = BillingPlan(plan_str)
     sub.interval = BillingInterval(interval_str)
-    sub.status   = SubscriptionStatus.active
-    sub.stripe_customer_id     = session.get("customer")
+    sub.status = SubscriptionStatus.active
+    sub.stripe_customer_id = session.get("customer")
     sub.stripe_subscription_id = session.get("subscription")
     sub.base_price_aud = effective_price(sub)
     db.commit()
@@ -278,7 +320,11 @@ def _handle_checkout_completed(db: Session, session: dict):
 
 def _handle_subscription_updated(db: Session, stripe_sub: dict):
     stripe_id = stripe_sub["id"]
-    sub = db.query(Subscription).filter(Subscription.stripe_subscription_id == stripe_id).first()
+    sub = (
+        db.query(Subscription)
+        .filter(Subscription.stripe_subscription_id == stripe_id)
+        .first()
+    )
     if not sub:
         return
     status_map = {
@@ -293,16 +339,22 @@ def _handle_subscription_updated(db: Session, stripe_sub: dict):
     sub.status = status_map.get(stripe_sub.get("status", ""), SubscriptionStatus.active)
     sub.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
     if stripe_sub.get("current_period_start"):
-        sub.current_period_start = datetime.fromtimestamp(stripe_sub["current_period_start"], tz=timezone.utc)
+        sub.current_period_start = datetime.fromtimestamp(
+            stripe_sub["current_period_start"], tz=timezone.utc
+        )
     if stripe_sub.get("current_period_end"):
-        sub.current_period_end = datetime.fromtimestamp(stripe_sub["current_period_end"], tz=timezone.utc)
+        sub.current_period_end = datetime.fromtimestamp(
+            stripe_sub["current_period_end"], tz=timezone.utc
+        )
     db.commit()
 
 
 def _handle_subscription_deleted(db: Session, stripe_sub: dict):
-    sub = db.query(Subscription).filter(
-        Subscription.stripe_subscription_id == stripe_sub["id"]
-    ).first()
+    sub = (
+        db.query(Subscription)
+        .filter(Subscription.stripe_subscription_id == stripe_sub["id"])
+        .first()
+    )
     if sub:
         sub.status = SubscriptionStatus.canceled
         sub.canceled_at = datetime.now(timezone.utc)
@@ -311,11 +363,13 @@ def _handle_subscription_deleted(db: Session, stripe_sub: dict):
 
 def _handle_invoice_event(db: Session, inv_obj: dict, etype: str):
     stripe_inv_id = inv_obj.get("id")
-    existing = db.query(Invoice).filter(Invoice.stripe_invoice_id == stripe_inv_id).first()
+    existing = (
+        db.query(Invoice).filter(Invoice.stripe_invoice_id == stripe_inv_id).first()
+    )
 
-    amount  = (inv_obj.get("amount_due", 0) or 0) / 100
-    total   = (inv_obj.get("amount_due", 0) or 0) / 100
-    tax     = (inv_obj.get("tax", 0) or 0) / 100
+    amount = (inv_obj.get("amount_due", 0) or 0) / 100
+    total = (inv_obj.get("amount_due", 0) or 0) / 100
+    tax = (inv_obj.get("tax", 0) or 0) / 100
 
     status_map = {
         "invoice.paid": InvoiceStatus.paid,
@@ -327,9 +381,11 @@ def _handle_invoice_event(db: Session, inv_obj: dict, etype: str):
     if not existing:
         # Find subscription by stripe customer
         stripe_sub_id = inv_obj.get("subscription")
-        sub = db.query(Subscription).filter(
-            Subscription.stripe_subscription_id == stripe_sub_id
-        ).first()
+        sub = (
+            db.query(Subscription)
+            .filter(Subscription.stripe_subscription_id == stripe_sub_id)
+            .first()
+        )
         inv = Invoice(
             invoice_id=_inv_id(),
             subscription_id=sub.subscription_id if sub else None,
@@ -343,9 +399,13 @@ def _handle_invoice_event(db: Session, inv_obj: dict, etype: str):
             stripe_pdf_url=inv_obj.get("invoice_pdf"),
         )
         if inv_obj.get("period_start"):
-            inv.period_start = datetime.fromtimestamp(inv_obj["period_start"], tz=timezone.utc)
+            inv.period_start = datetime.fromtimestamp(
+                inv_obj["period_start"], tz=timezone.utc
+            )
         if inv_obj.get("period_end"):
-            inv.period_end = datetime.fromtimestamp(inv_obj["period_end"], tz=timezone.utc)
+            inv.period_end = datetime.fromtimestamp(
+                inv_obj["period_end"], tz=timezone.utc
+            )
         db.add(inv)
     else:
         existing.status = status
@@ -356,7 +416,12 @@ def _handle_invoice_event(db: Session, inv_obj: dict, etype: str):
 
 # ── Invoice queries ────────────────────────────────────────────────────────────
 
+
 def list_invoices(db: Session, industry_id: str, limit: int = 20) -> List[Invoice]:
-    return db.query(Invoice).filter(
-        Invoice.industry_id == industry_id
-    ).order_by(desc(Invoice.created_at)).limit(limit).all()
+    return (
+        db.query(Invoice)
+        .filter(Invoice.industry_id == industry_id)
+        .order_by(desc(Invoice.created_at))
+        .limit(limit)
+        .all()
+    )

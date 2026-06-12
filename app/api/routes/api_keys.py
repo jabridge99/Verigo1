@@ -27,8 +27,11 @@ router = APIRouter(tags=["api-keys"])
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
 
+
 @router.get("/api-keys", response_model=List[APIKeyResponse])
-def list_keys(db: Session = Depends(get_db), current_user: User = Depends(_current_user)):
+def list_keys(
+    db: Session = Depends(get_db), current_user: User = Depends(_current_user)
+):
     return svc.list_api_keys(db, current_user.user_id)
 
 
@@ -40,7 +43,9 @@ def create_key(
 ):
     if current_user.role not in ("admin", "mlro"):
         raise HTTPException(403, "Insufficient permissions")
-    key, raw = svc.create_api_key(db, data, current_user.user_id, current_user.industry_id)
+    key, raw = svc.create_api_key(
+        db, data, current_user.user_id, current_user.industry_id
+    )
     return {**key.__dict__, "raw_key": raw}
 
 
@@ -62,8 +67,11 @@ def list_events():
 
 # ── Webhooks ──────────────────────────────────────────────────────────────────
 
+
 @router.get("/webhooks", response_model=List[WebhookResponse])
-def list_webhooks(db: Session = Depends(get_db), current_user: User = Depends(_current_user)):
+def list_webhooks(
+    db: Session = Depends(get_db), current_user: User = Depends(_current_user)
+):
     return svc.list_webhooks(db, current_user.user_id)
 
 
@@ -101,7 +109,9 @@ def delete_webhook(
         raise HTTPException(404, "Webhook not found")
 
 
-@router.get("/webhooks/{webhook_id}/deliveries", response_model=List[WebhookDeliveryResponse])
+@router.get(
+    "/webhooks/{webhook_id}/deliveries", response_model=List[WebhookDeliveryResponse]
+)
 def get_deliveries(
     webhook_id: str,
     limit: int = Query(50, ge=1, le=200),

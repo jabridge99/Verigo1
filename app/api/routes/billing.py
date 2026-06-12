@@ -35,6 +35,7 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 
 # ── Public ────────────────────────────────────────────────────────────────────
 
+
 @router.get("/plans")
 def list_plans(discount_pct: float = Query(20.0, ge=0, le=100)):
     """Public — returns plan catalogue, with annual price recalculated for the given discount."""
@@ -42,6 +43,7 @@ def list_plans(discount_pct: float = Query(20.0, ge=0, le=100)):
 
 
 # ── Authenticated user routes ─────────────────────────────────────────────────
+
 
 @router.get("/subscription", response_model=SubscriptionResponse)
 def my_subscription(
@@ -52,7 +54,11 @@ def my_subscription(
     if not sub:
         # Auto-create a trial for new tenants
         if current_user.industry_id:
-            sub = svc.create_trial(db, current_user.industry_id, current_user.tenant_id if hasattr(current_user, "tenant_id") else None)
+            sub = svc.create_trial(
+                db,
+                current_user.industry_id,
+                current_user.tenant_id if hasattr(current_user, "tenant_id") else None,
+            )
         else:
             raise HTTPException(404, "No subscription found")
     return sub
@@ -66,7 +72,9 @@ def create_checkout(
 ):
     if not current_user.industry_id:
         raise HTTPException(400, "User has no industry_id")
-    result = svc.create_checkout_session(db, current_user.industry_id, req, current_user.email)
+    result = svc.create_checkout_session(
+        db, current_user.industry_id, req, current_user.email
+    )
     return result
 
 
@@ -79,7 +87,8 @@ def customer_portal(
     if not current_user.industry_id:
         raise HTTPException(400, "User has no industry_id")
     url = svc.create_customer_portal(
-        db, current_user.industry_id,
+        db,
+        current_user.industry_id,
         return_url or f"{svc.APP_URL}/billing",
     )
     return {"portal_url": url}
@@ -108,9 +117,10 @@ def list_invoices(
 
 # ── Stripe Webhook (no auth — verified by signature) ──────────────────────────
 
+
 @router.post("/webhook", status_code=200)
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
-    payload    = await request.body()
+    payload = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
     try:
         result = svc.handle_stripe_webhook(db, payload, sig_header)
@@ -120,6 +130,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 # ── Admin routes ──────────────────────────────────────────────────────────────
+
 
 def _require_admin(current_user: User):
     if current_user.role != "admin":
@@ -152,6 +163,7 @@ def admin_update_subscription(
     if not sub:
         # Create one if it doesn't exist yet
         from app.services.billing_service import create_trial
+
         create_trial(db, industry_id)
         sub = svc.admin_update(db, industry_id, data)
     return sub

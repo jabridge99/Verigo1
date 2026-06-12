@@ -15,24 +15,28 @@ from app.schemas.branding import BrandingConfig
 
 # Default branding — returned when no tenant overrides are set
 DEFAULT_BRANDING: dict = {
-    "company_name":   "Verigo",
-    "logo_url":       None,
-    "favicon_url":    None,
-    "primary_color":  "#2563eb",
-    "accent_color":   "#f59e0b",
-    "bg_color":       "#060d1a",
-    "custom_domain":  None,
-    "support_email":  "support@verigo.com.au",
-    "footer_text":    "Australian Compliance Operating System",
+    "company_name": "Verigo",
+    "logo_url": None,
+    "favicon_url": None,
+    "primary_color": "#2563eb",
+    "accent_color": "#f59e0b",
+    "bg_color": "#060d1a",
+    "custom_domain": None,
+    "support_email": "support@verigo.com.au",
+    "footer_text": "Australian Compliance Operating System",
     "hide_verigo_badge": False,
 }
 
 
 def _tenant(db: Session, industry_id: str) -> Optional[IndustryTenant]:
-    return db.query(IndustryTenant).filter(
-        IndustryTenant.industry_id == industry_id,
-        IndustryTenant.status == "active",
-    ).first()
+    return (
+        db.query(IndustryTenant)
+        .filter(
+            IndustryTenant.industry_id == industry_id,
+            IndustryTenant.status == "active",
+        )
+        .first()
+    )
 
 
 def get_branding(db: Session, industry_id: Optional[str]) -> dict:

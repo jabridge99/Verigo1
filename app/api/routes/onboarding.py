@@ -77,10 +77,12 @@ def list_sessions(
     if search:
         like = f"%{search}%"
         q = q.filter(
-            OnboardingSession.applicant_name.ilike(like) |
-            OnboardingSession.applicant_email.ilike(like)
+            OnboardingSession.applicant_name.ilike(like)
+            | OnboardingSession.applicant_email.ilike(like)
         )
-    return q.order_by(OnboardingSession.created_at.desc()).offset(skip).limit(limit).all()
+    return (
+        q.order_by(OnboardingSession.created_at.desc()).offset(skip).limit(limit).all()
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
@@ -96,7 +98,12 @@ def get_audit_log(session_id: str, db: Session = Depends(get_db)):
     s = db.query(OnboardingSession).filter_by(session_id=session_id).first()
     if not s:
         raise HTTPException(404, "Session not found")
-    return db.query(OnboardingAuditLog).filter_by(session_id=s.id).order_by(OnboardingAuditLog.created_at).all()
+    return (
+        db.query(OnboardingAuditLog)
+        .filter_by(session_id=s.id)
+        .order_by(OnboardingAuditLog.created_at)
+        .all()
+    )
 
 
 @router.post("/sessions/{session_id}/remind")
@@ -127,7 +134,8 @@ async def import_csv(
     content = await file.read()
     rows, warnings = parse_csv(content)
     batch = bulk_create_sessions(
-        db, rows,
+        db,
+        rows,
         industry_id=industry_id,
         source="csv",
         file_name=file.filename,
@@ -150,7 +158,8 @@ async def import_excel(
     except ImportError as e:
         raise HTTPException(422, str(e))
     batch = bulk_create_sessions(
-        db, rows,
+        db,
+        rows,
         industry_id=industry_id,
         source="excel",
         file_name=file.filename,
@@ -163,6 +172,7 @@ async def import_excel(
 @router.get("/import/template")
 def csv_template():
     from fastapi.responses import PlainTextResponse
+
     return PlainTextResponse(
         generate_csv_template(),
         media_type="text/csv",
@@ -232,6 +242,7 @@ def run_reminders(db: Session = Depends(get_db)):
 @router.get("/portal/{token}", response_model=PortalTokenResponse)
 def portal_open(token: str, db: Session = Depends(get_db)):
     from datetime import datetime, timezone
+
     session = open_invite(db, token)
     if not session:
         raise HTTPException(404, "Invalid or expired invite link")

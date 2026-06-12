@@ -54,6 +54,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # ── Auth dependency ────────────────────────────────────────────────────────────
 
+
 def _current_user(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
@@ -80,17 +81,25 @@ def _current_user(
 def _require_roles(*roles: UserRole):
     def _dep(current_user: User = Depends(_current_user)):
         if current_user.role not in roles:
-            raise HTTPException(403, f"Requires role: {', '.join(r.value for r in roles)}")
+            raise HTTPException(
+                403, f"Requires role: {', '.join(r.value for r in roles)}"
+            )
         return current_user
+
     return _dep
 
 
 def _client_ip(request: Request) -> str:
     xff = request.headers.get("X-Forwarded-For", "")
-    return xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    return (
+        xff.split(",")[0].strip()
+        if xff
+        else (request.client.host if request.client else "unknown")
+    )
 
 
 # ── Register ──────────────────────────────────────────────────────────────────
+
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 def register(payload: UserCreate, request: Request, db: Session = Depends(get_db)):
@@ -105,20 +114,27 @@ def register(payload: UserCreate, request: Request, db: Session = Depends(get_db
         industry_id=payload.industry_id,
         tenant_id=payload.tenant_id,
     )
-    record_security_event(db, "user_registered", user.user_id,
-                          ip=_client_ip(request), meta={"email": user.email})
+    record_security_event(
+        db,
+        "user_registered",
+        user.user_id,
+        ip=_client_ip(request),
+        meta={"email": user.email},
+    )
     return build_token_response(user)
 
 
 # ── Login ──────────────────────────────────────────────────────────────────────
+
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
     ip = _client_ip(request)
     user = authenticate_user(db, payload.email, payload.password)
     if not user:
-        record_security_event(db, "login_failed", None, ip=ip,
-                              meta={"email": payload.email})
+        record_security_event(
+            db, "login_failed", None, ip=ip, meta={"email": payload.email}
+        )
         log.warning("Failed login: %s from %s", payload.email, ip)
         raise HTTPException(401, "Invalid email or password")
 
@@ -135,6 +151,7 @@ def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
 
 # ── Logout ────────────────────────────────────────────────────────────────────
 
+
 @router.post("/logout")
 def logout(
     authorization: Optional[str] = Header(None),
@@ -148,18 +165,30 @@ def logout(
 
 # ── MFA ───────────────────────────────────────────────────────────────────────
 
+
 @router.post("/mfa/enrol")
-def mfa_enrol(current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def mfa_enrol(
+    current_user: User = Depends(_current_user), db: Session = Depends(get_db)
+):
     from app.services.mfa_service import generate_totp_secret, totp_provisioning_uri
+
     secret = generate_totp_secret()
     current_user.mfa_secret = secret
     db.commit()
-    return {"otpauth_uri": totp_provisioning_uri(secret, current_user.email), "secret": secret}
+    return {
+        "otpauth_uri": totp_provisioning_uri(secret, current_user.email),
+        "secret": secret,
+    }
 
 
 @router.post("/mfa/verify-enrolment")
-def mfa_verify_enrolment(code: str, current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def mfa_verify_enrolment(
+    code: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
     from app.services.mfa_service import verify_totp
+
     if not current_user.mfa_secret:
         raise HTTPException(400, "MFA not initiated — call /mfa/enrol first")
     if not verify_totp(current_user.mfa_secret, code):
@@ -171,19 +200,33 @@ def mfa_verify_enrolment(code: str, current_user: User = Depends(_current_user),
 
 
 @router.post("/mfa/challenge")
-def mfa_challenge(code: str, request: Request, current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def mfa_challenge(
+    code: str,
+    request: Request,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
     from app.services.mfa_service import verify_totp
+
     if not current_user.mfa_enabled or not current_user.mfa_secret:
         raise HTTPException(400, "MFA not enabled")
     if not verify_totp(current_user.mfa_secret, code):
-        record_security_event(db, "mfa_failed", current_user.user_id, ip=_client_ip(request))
+        record_security_event(
+            db, "mfa_failed", current_user.user_id, ip=_client_ip(request)
+        )
         raise HTTPException(401, "Invalid TOTP code")
-    record_security_event(db, "mfa_success", current_user.user_id, ip=_client_ip(request))
+    record_security_event(
+        db, "mfa_success", current_user.user_id, ip=_client_ip(request)
+    )
     return build_token_response(current_user)
 
 
 @router.delete("/mfa/disable")
-def mfa_disable(password: str, current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def mfa_disable(
+    password: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
     if not verify_password(password, current_user.hashed_password or ""):
         raise HTTPException(401, "Incorrect password")
     current_user.mfa_enabled = False
@@ -195,13 +238,19 @@ def mfa_disable(password: str, current_user: User = Depends(_current_user), db: 
 
 # ── Magic Link ────────────────────────────────────────────────────────────────
 
+
 @router.post("/magic-link")
-def request_magic_link(payload: MagicLinkRequest, request: Request, db: Session = Depends(get_db)):
+def request_magic_link(
+    payload: MagicLinkRequest, request: Request, db: Session = Depends(get_db)
+):
     user = get_user_by_email(db, payload.email)
     if user and user.status == UserStatus.active:
-        token = create_magic_link(db, payload.email)   # hashed in service layer
-        record_security_event(db, "magic_link_requested", user.user_id, ip=_client_ip(request))
+        token = create_magic_link(db, payload.email)  # hashed in service layer
+        record_security_event(
+            db, "magic_link_requested", user.user_id, ip=_client_ip(request)
+        )
         from app.config import settings
+
         if not settings.is_production:
             return {"detail": "Magic link sent", "dev_token": token}
     # Always same response — prevents user enumeration
@@ -209,7 +258,9 @@ def request_magic_link(payload: MagicLinkRequest, request: Request, db: Session 
 
 
 @router.post("/magic-link/verify", response_model=TokenResponse)
-def verify_magic_link_endpoint(payload: MagicLinkVerify, request: Request, db: Session = Depends(get_db)):
+def verify_magic_link_endpoint(
+    payload: MagicLinkVerify, request: Request, db: Session = Depends(get_db)
+):
     email = verify_magic_link(db, payload.token)
     if not email:
         record_security_event(db, "magic_link_invalid", None, ip=_client_ip(request))
@@ -225,13 +276,18 @@ def verify_magic_link_endpoint(payload: MagicLinkVerify, request: Request, db: S
 
 # ── Me ────────────────────────────────────────────────────────────────────────
 
+
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(_current_user)):
     return current_user
 
 
 @router.patch("/me", response_model=UserResponse)
-def update_me(payload: UserUpdate, current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def update_me(
+    payload: UserUpdate,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
     # Users may only update their own display name — not role/status
     if payload.full_name:
         current_user.full_name = payload.full_name
@@ -241,8 +297,14 @@ def update_me(payload: UserUpdate, current_user: User = Depends(_current_user), 
 
 
 @router.post("/me/change-password")
-def change_password(payload: PasswordChange, current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
-    if not verify_password(payload.current_password, current_user.hashed_password or ""):
+def change_password(
+    payload: PasswordChange,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(
+        payload.current_password, current_user.hashed_password or ""
+    ):
         raise HTTPException(400, "Current password is incorrect")
     if len(payload.new_password) < 12:
         raise HTTPException(400, "Password must be at least 12 characters")
@@ -254,6 +316,7 @@ def change_password(payload: PasswordChange, current_user: User = Depends(_curre
 
 # ── Token verify ──────────────────────────────────────────────────────────────
 
+
 @router.post("/verify")
 def verify_token(current_user: User = Depends(_current_user)):
     return {"valid": True, "user_id": current_user.user_id, "role": current_user.role}
@@ -261,8 +324,12 @@ def verify_token(current_user: User = Depends(_current_user)):
 
 # ── Admin: User management ─────────────────────────────────────────────────────
 
+
 @router.get("/users", response_model=List[UserResponse])
-def list_users(current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)), db: Session = Depends(get_db)):
+def list_users(
+    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
+    db: Session = Depends(get_db),
+):
     q = db.query(User)
     if current_user.role != UserRole.admin:
         q = q.filter(User.industry_id == current_user.industry_id)
@@ -287,9 +354,13 @@ def create_user_admin(
         industry_id=payload.industry_id or current_user.industry_id,
         tenant_id=payload.tenant_id,
     )
-    record_security_event(db, "user_created_by_admin", current_user.user_id,
-                          meta={"target": user.user_id, "role": user.role.value},
-                          ip=_client_ip(request))
+    record_security_event(
+        db,
+        "user_created_by_admin",
+        current_user.user_id,
+        meta={"target": user.user_id, "role": user.role.value},
+        ip=_client_ip(request),
+    )
     return user
 
 
@@ -310,14 +381,23 @@ def update_user_admin(
     db.commit()
     db.refresh(target)
     if old_role != target.role:
-        record_security_event(db, "role_changed", current_user.user_id,
-                              meta={"target": user_id, "from": old_role.value, "to": target.role.value},
-                              ip=_client_ip(request))
+        record_security_event(
+            db,
+            "role_changed",
+            current_user.user_id,
+            meta={"target": user_id, "from": old_role.value, "to": target.role.value},
+            ip=_client_ip(request),
+        )
     return target
 
 
 @router.post("/users/{user_id}/suspend")
-def suspend_user(user_id: str, request: Request, current_user: User = Depends(_require_roles(UserRole.admin)), db: Session = Depends(get_db)):
+def suspend_user(
+    user_id: str,
+    request: Request,
+    current_user: User = Depends(_require_roles(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
     target = get_user_by_id(db, user_id)
     if not target:
         raise HTTPException(404, "User not found")
@@ -325,16 +405,33 @@ def suspend_user(user_id: str, request: Request, current_user: User = Depends(_r
         raise HTTPException(400, "Cannot suspend yourself")
     target.status = UserStatus.suspended
     db.commit()
-    record_security_event(db, "user_suspended", current_user.user_id, meta={"target": user_id}, ip=_client_ip(request))
+    record_security_event(
+        db,
+        "user_suspended",
+        current_user.user_id,
+        meta={"target": user_id},
+        ip=_client_ip(request),
+    )
     return {"detail": f"User {user_id} suspended"}
 
 
 @router.post("/users/{user_id}/activate")
-def activate_user(user_id: str, request: Request, current_user: User = Depends(_require_roles(UserRole.admin)), db: Session = Depends(get_db)):
+def activate_user(
+    user_id: str,
+    request: Request,
+    current_user: User = Depends(_require_roles(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
     target = get_user_by_id(db, user_id)
     if not target:
         raise HTTPException(404, "User not found")
     target.status = UserStatus.active
     db.commit()
-    record_security_event(db, "user_activated", current_user.user_id, meta={"target": user_id}, ip=_client_ip(request))
+    record_security_event(
+        db,
+        "user_activated",
+        current_user.user_id,
+        meta={"target": user_id},
+        ip=_client_ip(request),
+    )
     return {"detail": f"User {user_id} activated"}

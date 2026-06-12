@@ -28,9 +28,10 @@ router = APIRouter(prefix="/connectors", tags=["Connector Marketplace"])
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class ConnectorCreate(BaseModel):
     provider: ConnectorProvider
-    credentials: dict       # plaintext — accepted once, immediately encrypted
+    credentials: dict  # plaintext — accepted once, immediately encrypted
     label: Optional[str] = None
     is_default: bool = False
 
@@ -59,6 +60,7 @@ class ConnectorResponse(BaseModel):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+
 @router.get("/providers")
 def list_providers():
     """Return all supported provider names and categories."""
@@ -75,9 +77,15 @@ def list_providers():
 def list_connectors(
     provider: Optional[ConnectorProvider] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
 ):
-    industry_id = current_user.industry_id if current_user.role != UserRole.admin else current_user.industry_id
+    industry_id = (
+        current_user.industry_id
+        if current_user.role != UserRole.admin
+        else current_user.industry_id
+    )
     return get_credentials(db, industry_id, provider)
 
 
@@ -99,6 +107,7 @@ def add_connector(
     )
     if payload.is_default:
         from app.services.connector_service import update_credential as uc
+
         uc(db, cred.credential_id, current_user.industry_id, is_default=True)
         db.refresh(cred)
     return cred
@@ -113,7 +122,9 @@ def update_connector(
 ):
     try:
         return update_credential(
-            db, credential_id, current_user.industry_id,
+            db,
+            credential_id,
+            current_user.industry_id,
             credentials=payload.credentials,
             label=payload.label,
             is_default=payload.is_default,

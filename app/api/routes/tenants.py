@@ -23,12 +23,19 @@ router = APIRouter(prefix="/tenants", tags=["Industry Tenants"])
 def create(payload: TenantCreate, db: Session = Depends(get_db)):
     existing = get_tenant_by_industry(db, payload.industry_id)
     if existing:
-        raise HTTPException(409, f"Tenant for industry '{payload.industry_id}' already exists")
+        raise HTTPException(
+            409, f"Tenant for industry '{payload.industry_id}' already exists"
+        )
     return create_tenant(db, payload)
 
 
 @router.get("/", response_model=list[TenantSummary])
-def list_all(status: Optional[str] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def list_all(
+    status: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
     return list_tenants(db, status=status, skip=skip, limit=limit)
 
 

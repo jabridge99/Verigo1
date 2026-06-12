@@ -28,9 +28,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Permissions-Policy"] = (
+            "geolocation=(), microphone=(), camera=()"
+        )
         response.headers["X-Request-ID"] = (
-            request.state.request_id if hasattr(request.state, "request_id") else str(uuid.uuid4())[:8]
+            request.state.request_id
+            if hasattr(request.state, "request_id")
+            else str(uuid.uuid4())[:8]
         )
         # HSTS: enforce HTTPS for 1 year, include subdomains, allow preload
         response.headers["Strict-Transport-Security"] = (
@@ -64,20 +68,29 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             logger.error(
                 "[%s] %s %s — UNHANDLED ERROR: %s",
-                request_id, request.method, request.url.path, exc
+                request_id,
+                request.method,
+                request.url.path,
+                exc,
             )
             raise
 
         duration_ms = round((time.monotonic() - start) * 1000, 1)
         # Read real client IP from X-Forwarded-For
         xff = request.headers.get("X-Forwarded-For", "")
-        client_ip = xff.split(",")[0].strip() if xff else (
-            request.client.host if request.client else "-"
+        client_ip = (
+            xff.split(",")[0].strip()
+            if xff
+            else (request.client.host if request.client else "-")
         )
         logger.info(
             "[%s] %s %s → %s (%.1fms) %s",
-            request_id, request.method, request.url.path,
-            response.status_code, duration_ms, client_ip,
+            request_id,
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            client_ip,
         )
         return response
 

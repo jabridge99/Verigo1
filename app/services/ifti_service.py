@@ -33,7 +33,10 @@ from app.models.ifti import IFTIDirection, IFTIRecord
 IFTI_OUT_COLUMNS: list[tuple[str, str]] = [
     # Transaction details (7)
     ("Transaction details", "Date money/property received from the ordering customer"),
-    ("Transaction details", "Date money/property made available to the beneficiary customer"),
+    (
+        "Transaction details",
+        "Date money/property made available to the beneficiary customer",
+    ),
     ("Transaction details", "Currency code"),
     ("Transaction details", "Total amount/value"),
     ("Transaction details", "Type of transfer"),
@@ -44,7 +47,10 @@ IFTI_OUT_COLUMNS: list[tuple[str, str]] = [
     ("Ordering customer", "If known by any other name"),
     ("Ordering customer", "Date of birth (if an individual)"),
     # Ordering customer contact details (12)
-    ("Ordering customer contact details", "Business/residential address (not a post box address)"),
+    (
+        "Ordering customer contact details",
+        "Business/residential address (not a post box address)",
+    ),
     ("Ordering customer contact details", "City/town/suburb"),
     ("Ordering customer contact details", "State"),
     ("Ordering customer contact details", "Postcode"),
@@ -57,7 +63,10 @@ IFTI_OUT_COLUMNS: list[tuple[str, str]] = [
     ("Ordering customer contact details", "Phone"),
     ("Ordering customer contact details", "Email"),
     # Ordering customer business details (5)
-    ("Ordering customer business details", "Occupation, business or principal activity"),
+    (
+        "Ordering customer business details",
+        "Occupation, business or principal activity",
+    ),
     ("Ordering customer business details", "ABN, ACN or ARBN"),
     ("Ordering customer business details", "Customer number (allocated by remitter)"),
     ("Ordering customer business details", "Account number (held by remitter)"),
@@ -75,9 +84,15 @@ IFTI_OUT_COLUMNS: list[tuple[str, str]] = [
     # Beneficiary customer (3)
     ("Beneficiary customer", "Full name"),
     ("Beneficiary customer", "Date of birth (if an individual)"),
-    ("Beneficiary customer", "Any business name under which the beneficiary customer is operating"),
+    (
+        "Beneficiary customer",
+        "Any business name under which the beneficiary customer is operating",
+    ),
     # Beneficiary customer contact details (12)
-    ("Beneficiary customer contact details", "Business/residential address (not a post box address)"),
+    (
+        "Beneficiary customer contact details",
+        "Business/residential address (not a post box address)",
+    ),
     ("Beneficiary customer contact details", "City/town/suburb"),
     ("Beneficiary customer contact details", "State"),
     ("Beneficiary customer contact details", "Postcode"),
@@ -90,69 +105,180 @@ IFTI_OUT_COLUMNS: list[tuple[str, str]] = [
     ("Beneficiary customer contact details", "Phone"),
     ("Beneficiary customer contact details", "Email"),
     # Beneficiary customer business details (2)
-    ("Beneficiary customer business details", "Occupation, business or principal activity"),
+    (
+        "Beneficiary customer business details",
+        "Occupation, business or principal activity",
+    ),
     ("Beneficiary customer business details", "ABN, ACN or ARBN"),
-    ("Beneficiary customer business details", "Business structure (if not an individual)"),
+    (
+        "Beneficiary customer business details",
+        "Business structure (if not an individual)",
+    ),
     # Beneficiary customer account details (4)
     ("Beneficiary customer account details", "Account number"),
-    ("Beneficiary customer account details", "Name of institution (where account is held)"),
+    (
+        "Beneficiary customer account details",
+        "Name of institution (where account is held)",
+    ),
     ("Beneficiary customer account details", "City"),
     ("Beneficiary customer account details", "Country"),
     # Person/org accepting transfer instruction (7+1 retail ID)
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Identification number of the retail outlet/business location"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Full name"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Business/residential address (not a post box address)"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "City/town/suburb"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "State"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Postcode"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Is this person/organisation accepting the money or property?"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Is this person/organisation sending the transfer instruction?"),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Identification number of the retail outlet/business location",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Full name",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "City/town/suburb",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "State",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Postcode",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Is this person/organisation accepting the money or property?",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Is this person/organisation sending the transfer instruction?",
+    ),
     # Person/org accepting money (if different) (5)
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "Full name"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "Business/residential address (not a post box address)"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "City/town/suburb"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "State"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "Postcode"),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "Full name",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "City/town/suburb",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "State",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "Postcode",
+    ),
     # Person/org sending transfer instruction (if different) (16)
-    ("Person/organisation sending the transfer instruction (if different)", "Full name"),
-    ("Person/organisation sending the transfer instruction (if different)", "If known by any other name"),
-    ("Person/organisation sending the transfer instruction (if different)", "Date of birth (if an individual)"),
-    ("Person/organisation sending the transfer instruction (if different)", "Business/residential address (not a post box address)"),
-    ("Person/organisation sending the transfer instruction (if different)", "City/town/suburb"),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Full name",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "If known by any other name",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Date of birth (if an individual)",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "City/town/suburb",
+    ),
     ("Person/organisation sending the transfer instruction (if different)", "State"),
     ("Person/organisation sending the transfer instruction (if different)", "Postcode"),
-    ("Person/organisation sending the transfer instruction (if different)", "Postal address"),
-    ("Person/organisation sending the transfer instruction (if different)", "City/town/suburb"),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Postal address",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "City/town/suburb",
+    ),
     ("Person/organisation sending the transfer instruction (if different)", "State"),
     ("Person/organisation sending the transfer instruction (if different)", "Postcode"),
     ("Person/organisation sending the transfer instruction (if different)", "Phone"),
     ("Person/organisation sending the transfer instruction (if different)", "Email"),
-    ("Person/organisation sending the transfer instruction (if different)", "Occupation, business or principal activity"),
-    ("Person/organisation sending the transfer instruction (if different)", "ABN, ACN or ARBN"),
-    ("Person/organisation sending the transfer instruction (if different)", "Business structure (if not an individual)"),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Occupation, business or principal activity",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "ABN, ACN or ARBN",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Business structure (if not an individual)",
+    ),
     # Person/org receiving transfer instruction (8)
     ("Person/organisation receiving the transfer instruction", "Full name"),
-    ("Person/organisation receiving the transfer instruction", "Business/residential address (not a post box address)"),
+    (
+        "Person/organisation receiving the transfer instruction",
+        "Business/residential address (not a post box address)",
+    ),
     ("Person/organisation receiving the transfer instruction", "City/town/suburb"),
     ("Person/organisation receiving the transfer instruction", "State"),
     ("Person/organisation receiving the transfer instruction", "Postcode"),
     ("Person/organisation receiving the transfer instruction", "Country"),
-    ("Person/organisation receiving the transfer instruction", "Is this person/organisation distributing money or property?"),
-    ("Person/organisation receiving the transfer instruction", "Is there a separate retail outlet/business location at which the money or property is being distributed?"),
+    (
+        "Person/organisation receiving the transfer instruction",
+        "Is this person/organisation distributing money or property?",
+    ),
+    (
+        "Person/organisation receiving the transfer instruction",
+        "Is there a separate retail outlet/business location at which the money or property is being distributed?",
+    ),
     # Person/org distributing (if different) (6)
     ("Person/organisation distributing money or property (if different)", "Full name"),
-    ("Person/organisation distributing money or property (if different)", "Business/residential address (not a post box address)"),
-    ("Person/organisation distributing money or property (if different)", "City/town/suburb"),
+    (
+        "Person/organisation distributing money or property (if different)",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Person/organisation distributing money or property (if different)",
+        "City/town/suburb",
+    ),
     ("Person/organisation distributing money or property (if different)", "State"),
     ("Person/organisation distributing money or property (if different)", "Postcode"),
     ("Person/organisation distributing money or property (if different)", "Country"),
     # Retail outlet (if different) (6)
-    ("Retail outlet/business location where money or property is being distributed (if different)", "Full name"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "Business/residential address (not a post box address)"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "City/town/suburb"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "State"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "Postcode"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "Country"),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "Full name",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "City/town/suburb",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "State",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "Postcode",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "Country",
+    ),
     # Reason + Reporter (5)
     ("Reason", "Reason for the transfer"),
     ("Person completing this report", "Full name"),
@@ -164,7 +290,10 @@ IFTI_OUT_COLUMNS: list[tuple[str, str]] = [
 IFTI_IN_COLUMNS: list[tuple[str, str]] = [
     # Transaction details (7)
     ("Transaction details", "Date money/property received from the ordering customer"),
-    ("Transaction details", "Date money/property made available to the beneficiary customer"),
+    (
+        "Transaction details",
+        "Date money/property made available to the beneficiary customer",
+    ),
     ("Transaction details", "Currency code"),
     ("Transaction details", "Total amount/value"),
     ("Transaction details", "Type of transfer"),
@@ -175,7 +304,10 @@ IFTI_IN_COLUMNS: list[tuple[str, str]] = [
     ("Ordering customer", "If known by any other name"),
     ("Ordering customer", "Date of birth (if an individual)"),
     # Ordering customer contact details (12)
-    ("Ordering customer contact details", "Business/residential address (not a post box address)"),
+    (
+        "Ordering customer contact details",
+        "Business/residential address (not a post box address)",
+    ),
     ("Ordering customer contact details", "City/town/suburb"),
     ("Ordering customer contact details", "State"),
     ("Ordering customer contact details", "Postcode"),
@@ -188,7 +320,10 @@ IFTI_IN_COLUMNS: list[tuple[str, str]] = [
     ("Ordering customer contact details", "Phone"),
     ("Ordering customer contact details", "Email"),
     # Ordering customer business details (5 — no ID section for IN)
-    ("Ordering customer business details", "Occupation, business or principal activity"),
+    (
+        "Ordering customer business details",
+        "Occupation, business or principal activity",
+    ),
     ("Ordering customer business details", "ABN, ACN or ARBN"),
     ("Ordering customer business details", "Customer number (allocated by remitter)"),
     ("Ordering customer business details", "Account number"),
@@ -196,9 +331,15 @@ IFTI_IN_COLUMNS: list[tuple[str, str]] = [
     # Beneficiary customer (3)
     ("Beneficiary customer", "Full name"),
     ("Beneficiary customer", "Date of birth (if an individual)"),
-    ("Beneficiary customer", "Any business name under which the beneficiary customer is operating"),
+    (
+        "Beneficiary customer",
+        "Any business name under which the beneficiary customer is operating",
+    ),
     # Beneficiary customer contact details (12)
-    ("Beneficiary customer contact details", "Business/residential address (not a post box address)"),
+    (
+        "Beneficiary customer contact details",
+        "Business/residential address (not a post box address)",
+    ),
     ("Beneficiary customer contact details", "City/town/suburb"),
     ("Beneficiary customer contact details", "State"),
     ("Beneficiary customer contact details", "Postcode"),
@@ -211,81 +352,228 @@ IFTI_IN_COLUMNS: list[tuple[str, str]] = [
     ("Beneficiary customer contact details", "Phone"),
     ("Beneficiary customer contact details", "Email"),
     # Beneficiary customer business details (2)
-    ("Beneficiary customer business details", "Occupation, business or principal activity"),
+    (
+        "Beneficiary customer business details",
+        "Occupation, business or principal activity",
+    ),
     ("Beneficiary customer business details", "ABN, ACN or ARBN"),
-    ("Beneficiary customer business details", "Business structure (if not an individual)"),
+    (
+        "Beneficiary customer business details",
+        "Business structure (if not an individual)",
+    ),
     # Beneficiary customer account details (4)
     ("Beneficiary customer account details", "Account number"),
-    ("Beneficiary customer account details", "Name of institution (where account is held)"),
+    (
+        "Beneficiary customer account details",
+        "Name of institution (where account is held)",
+    ),
     ("Beneficiary customer account details", "City"),
     ("Beneficiary customer account details", "Country"),
     # Person/org accepting transfer instruction (19 cols for IN — has address, postal, phone, email, occ, etc.)
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Full name"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "If known by any other name"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Date of birth (if an individual)"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Business/residential address (not a post box address)"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "City/town/suburb"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "State"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Postcode"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Country"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Postal address"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "City/town/suburb"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "State"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Postcode"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Country"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Phone"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Email"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Occupation, business or principal activity"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Business structure (if not an individual)"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Is this person/organisation accepting the money or property?"),
-    ("Person/organisation accepting the transfer instruction from the ordering customer", "Is this person/organisation sending the transfer instruction?"),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Full name",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "If known by any other name",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Date of birth (if an individual)",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "City/town/suburb",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "State",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Postcode",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Country",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Postal address",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "City/town/suburb",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "State",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Postcode",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Country",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Phone",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Email",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Occupation, business or principal activity",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Business structure (if not an individual)",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Is this person/organisation accepting the money or property?",
+    ),
+    (
+        "Person/organisation accepting the transfer instruction from the ordering customer",
+        "Is this person/organisation sending the transfer instruction?",
+    ),
     # Person/org accepting money (if different) (6)
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "Full name"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "Business/residential address (not a post box address)"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "City/town/suburb"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "State"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "Postcode"),
-    ("Person/organisation accepting the money or property from the ordering customer (if different)", "Country"),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "Full name",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "City/town/suburb",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "State",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "Postcode",
+    ),
+    (
+        "Person/organisation accepting the money or property from the ordering customer (if different)",
+        "Country",
+    ),
     # Person/org sending transfer instruction (if different) (18)
-    ("Person/organisation sending the transfer instruction (if different)", "Full name"),
-    ("Person/organisation sending the transfer instruction (if different)", "If known by any other name"),
-    ("Person/organisation sending the transfer instruction (if different)", "Date of birth (if an individual)"),
-    ("Person/organisation sending the transfer instruction (if different)", "Business/residential address (not a post box address)"),
-    ("Person/organisation sending the transfer instruction (if different)", "City/town/suburb"),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Full name",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "If known by any other name",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Date of birth (if an individual)",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "City/town/suburb",
+    ),
     ("Person/organisation sending the transfer instruction (if different)", "State"),
     ("Person/organisation sending the transfer instruction (if different)", "Postcode"),
     ("Person/organisation sending the transfer instruction (if different)", "Country"),
-    ("Person/organisation sending the transfer instruction (if different)", "Postal address"),
-    ("Person/organisation sending the transfer instruction (if different)", "City/town/suburb"),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Postal address",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "City/town/suburb",
+    ),
     ("Person/organisation sending the transfer instruction (if different)", "State"),
     ("Person/organisation sending the transfer instruction (if different)", "Postcode"),
     ("Person/organisation sending the transfer instruction (if different)", "Country"),
     ("Person/organisation sending the transfer instruction (if different)", "Phone"),
     ("Person/organisation sending the transfer instruction (if different)", "Email"),
-    ("Person/organisation sending the transfer instruction (if different)", "Occupation, business or principal activity"),
-    ("Person/organisation sending the transfer instruction (if different)", "ABN, ACN or ARBN"),
-    ("Person/organisation sending the transfer instruction (if different)", "Business structure (if not an individual)"),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Occupation, business or principal activity",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "ABN, ACN or ARBN",
+    ),
+    (
+        "Person/organisation sending the transfer instruction (if different)",
+        "Business structure (if not an individual)",
+    ),
     # Person/org receiving transfer instruction (7)
     ("Person/organisation receiving the transfer instruction", "Full name"),
-    ("Person/organisation receiving the transfer instruction", "Business/residential address (not a post box address)"),
+    (
+        "Person/organisation receiving the transfer instruction",
+        "Business/residential address (not a post box address)",
+    ),
     ("Person/organisation receiving the transfer instruction", "City/town/suburb"),
     ("Person/organisation receiving the transfer instruction", "State"),
     ("Person/organisation receiving the transfer instruction", "Postcode"),
-    ("Person/organisation receiving the transfer instruction", "Is this person/organisation distributing money or property?"),
-    ("Person/organisation receiving the transfer instruction", "Is there a separate retail outlet/business location at which the money or property is being distributed?"),
+    (
+        "Person/organisation receiving the transfer instruction",
+        "Is this person/organisation distributing money or property?",
+    ),
+    (
+        "Person/organisation receiving the transfer instruction",
+        "Is there a separate retail outlet/business location at which the money or property is being distributed?",
+    ),
     # Person/org distributing (if different) (5)
     ("Person/organisation distributing money or property (if different)", "Full name"),
-    ("Person/organisation distributing money or property (if different)", "Business/residential address (not a post box address)"),
-    ("Person/organisation distributing money or property (if different)", "City/town/suburb"),
+    (
+        "Person/organisation distributing money or property (if different)",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Person/organisation distributing money or property (if different)",
+        "City/town/suburb",
+    ),
     ("Person/organisation distributing money or property (if different)", "State"),
     ("Person/organisation distributing money or property (if different)", "Postcode"),
     # Retail outlet (6)
-    ("Retail outlet/business location where money or property is being distributed (if different)", "Identification number of the retail outlet/business location"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "Full name"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "Business/residential address (not a post box address)"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "City/town/suburb"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "State"),
-    ("Retail outlet/business location where money or property is being distributed (if different)", "Postcode"),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "Identification number of the retail outlet/business location",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "Full name",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "Business/residential address (not a post box address)",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "City/town/suburb",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "State",
+    ),
+    (
+        "Retail outlet/business location where money or property is being distributed (if different)",
+        "Postcode",
+    ),
     # Reason + Reporter (5)
     ("Reason", "Reason for the transfer"),
     ("Person completing this report", "Full name"),
@@ -564,16 +852,17 @@ def _row_in(r: IFTIRecord) -> list:
 
 # ── Styles ────────────────────────────────────────────────────────────────────
 
-_SECTION_FILL   = PatternFill("solid", fgColor="4472C4")
-_SECTION_FONT   = Font(bold=True, color="FFFFFF", size=9)
-_HEADER_FILL    = PatternFill("solid", fgColor="D9E1F2")
-_HEADER_FONT    = Font(bold=True, size=8)
-_DATA_FONT      = Font(size=9)
-_BORDER_SIDE    = Side(style="thin", color="B8CCE4")
-_BORDER         = Border(left=_BORDER_SIDE, right=_BORDER_SIDE,
-                         top=_BORDER_SIDE, bottom=_BORDER_SIDE)
-_CENTER         = Alignment(horizontal="center", vertical="center", wrap_text=True)
-_LEFT           = Alignment(horizontal="left", vertical="top", wrap_text=True)
+_SECTION_FILL = PatternFill("solid", fgColor="4472C4")
+_SECTION_FONT = Font(bold=True, color="FFFFFF", size=9)
+_HEADER_FILL = PatternFill("solid", fgColor="D9E1F2")
+_HEADER_FONT = Font(bold=True, size=8)
+_DATA_FONT = Font(size=9)
+_BORDER_SIDE = Side(style="thin", color="B8CCE4")
+_BORDER = Border(
+    left=_BORDER_SIDE, right=_BORDER_SIDE, top=_BORDER_SIDE, bottom=_BORDER_SIDE
+)
+_CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+_LEFT = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
 
 def generate_ifti_excel(
@@ -586,7 +875,7 @@ def generate_ifti_excel(
     Returns raw bytes (.xlsx) ready to stream or save.
     The sheet name and column structure match the official AUSTRAC template exactly.
     """
-    is_out = (direction == IFTIDirection.outgoing or direction == "outgoing")
+    is_out = direction == IFTIDirection.outgoing or direction == "outgoing"
     columns = IFTI_OUT_COLUMNS if is_out else IFTI_IN_COLUMNS
     sheet_name = "IFTI-DRA OUT" if is_out else "IFTI-DRA IN"
     row_mapper = _row_out if is_out else _row_in
@@ -613,10 +902,7 @@ def generate_ifti_excel(
         cell.border = _BORDER
         if span > 1:
             end_col = col + span - 1
-            ws.merge_cells(
-                start_row=1, start_column=col,
-                end_row=1, end_column=end_col
-            )
+            ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=end_col)
         col += span
 
     # ── Row 2: Column sub-headers ────────────────────────────────────────────
@@ -642,11 +928,26 @@ def generate_ifti_excel(
         columns[ci - 1][0]
         # Narrow columns for simple fields, wider for name/address
         sub_label = columns[ci - 1][1].lower()
-        if any(k in sub_label for k in ("address", "occupation", "reason", "name of inst")):
+        if any(
+            k in sub_label for k in ("address", "occupation", "reason", "name of inst")
+        ):
             ws.column_dimensions[col_letter].width = 28
         elif any(k in sub_label for k in ("full name", "if known", "description")):
             ws.column_dimensions[col_letter].width = 22
-        elif any(k in sub_label for k in ("date", "currency", "type", "postcode", "state", "phone", "email", "number", "abn")):
+        elif any(
+            k in sub_label
+            for k in (
+                "date",
+                "currency",
+                "type",
+                "postcode",
+                "state",
+                "phone",
+                "email",
+                "number",
+                "abn",
+            )
+        ):
             ws.column_dimensions[col_letter].width = 16
         else:
             ws.column_dimensions[col_letter].width = 18
@@ -657,7 +958,9 @@ def generate_ifti_excel(
 
     # ── Instructions sheet ────────────────────────────────────────────────────
     wi = wb.create_sheet("Instructions")
-    wi["A1"] = "International Funds Transfer Instruction Report under a Designated Remittance Arrangement"
+    wi["A1"] = (
+        "International Funds Transfer Instruction Report under a Designated Remittance Arrangement"
+    )
     wi["A1"].font = Font(bold=True, size=11)
     wi["A3"] = (
         "Complete this form if you are a reporting entity receiving an international funds transfer "
@@ -687,9 +990,15 @@ def generate_ifti_excel(
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
-def list_ifti(db, industry_id: Optional[str] = None, direction: Optional[str] = None,
-               status: Optional[str] = None) -> list:
+
+def list_ifti(
+    db,
+    industry_id: Optional[str] = None,
+    direction: Optional[str] = None,
+    status: Optional[str] = None,
+) -> list:
     from app.models.ifti import IFTIRecord
+
     q = db.query(IFTIRecord)
     if industry_id:
         q = q.filter(IFTIRecord.industry_id == industry_id)
@@ -702,4 +1011,5 @@ def list_ifti(db, industry_id: Optional[str] = None, direction: Optional[str] = 
 
 def get_ifti(db, ifti_id: str) -> Optional[IFTIRecord]:
     from app.models.ifti import IFTIRecord
+
     return db.query(IFTIRecord).filter(IFTIRecord.ifti_id == ifti_id).first()

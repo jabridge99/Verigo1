@@ -26,6 +26,7 @@ def _days_ago(n: int):
 
 # ── Customer Analytics ─────────────────────────────────────────────────────────
 
+
 def customer_risk_breakdown(db: Session, industry_id: Optional[str] = None):
     q = db.query(Customer)
     if industry_id:
@@ -37,7 +38,9 @@ def customer_risk_breakdown(db: Session, industry_id: Optional[str] = None):
     return {"total": total, "by_risk": breakdown}
 
 
-def customer_onboarding_trend(db: Session, days: int = 30, industry_id: Optional[str] = None):
+def customer_onboarding_trend(
+    db: Session, days: int = 30, industry_id: Optional[str] = None
+):
     since = _days_ago(days)
     q = db.query(
         func.date(Customer.created_at).label("day"),
@@ -51,7 +54,10 @@ def customer_onboarding_trend(db: Session, days: int = 30, industry_id: Optional
 
 # ── Transaction Analytics ──────────────────────────────────────────────────────
 
-def transaction_volume_trend(db: Session, days: int = 30, industry_id: Optional[str] = None):
+
+def transaction_volume_trend(
+    db: Session, days: int = 30, industry_id: Optional[str] = None
+):
     since = _days_ago(days)
     q = db.query(
         func.date(Transaction.created_at).label("day"),
@@ -61,7 +67,9 @@ def transaction_volume_trend(db: Session, days: int = 30, industry_id: Optional[
     if industry_id:
         q = q.filter(Transaction.industry_id == industry_id)
     rows = q.group_by(func.date(Transaction.created_at)).order_by("day").all()
-    return [{"date": str(r.day), "count": r.count, "volume": float(r.volume)} for r in rows]
+    return [
+        {"date": str(r.day), "count": r.count, "volume": float(r.volume)} for r in rows
+    ]
 
 
 def flagged_transaction_stats(db: Session, industry_id: Optional[str] = None):
@@ -79,6 +87,7 @@ def flagged_transaction_stats(db: Session, industry_id: Optional[str] = None):
 
 # ── KYC Analytics ─────────────────────────────────────────────────────────────
 
+
 def kyc_status_breakdown(db: Session, industry_id: Optional[str] = None):
     q = db.query(KYCRecord)
     if industry_id:
@@ -90,6 +99,7 @@ def kyc_status_breakdown(db: Session, industry_id: Optional[str] = None):
 
 
 # ── Reporting Analytics ────────────────────────────────────────────────────────
+
 
 def report_stats(db: Session, industry_id: Optional[str] = None):
     q = db.query(Report)
@@ -105,7 +115,9 @@ def report_stats(db: Session, industry_id: Optional[str] = None):
     return {"total": total, "by_status": by_status, "by_type": by_type}
 
 
-def report_submission_trend(db: Session, days: int = 90, industry_id: Optional[str] = None):
+def report_submission_trend(
+    db: Session, days: int = 90, industry_id: Optional[str] = None
+):
     since = _days_ago(days)
     q = db.query(
         func.date(Report.created_at).label("day"),
@@ -119,7 +131,10 @@ def report_submission_trend(db: Session, days: int = 90, industry_id: Optional[s
 
 # ── Audit Analytics ────────────────────────────────────────────────────────────
 
-def audit_activity_trend(db: Session, days: int = 30, industry_id: Optional[str] = None):
+
+def audit_activity_trend(
+    db: Session, days: int = 30, industry_id: Optional[str] = None
+):
     since = _days_ago(days)
     q = db.query(
         func.date(AuditLog.created_at).label("day"),
@@ -132,6 +147,7 @@ def audit_activity_trend(db: Session, days: int = 30, industry_id: Optional[str]
 
 
 # ── Composite Dashboard Summary ────────────────────────────────────────────────
+
 
 def dashboard_summary(db: Session, industry_id: Optional[str] = None):
     customers = customer_risk_breakdown(db, industry_id)
@@ -150,6 +166,7 @@ def dashboard_summary(db: Session, industry_id: Optional[str] = None):
         "alerts": {
             "pending_kyc_reviews": pending_kyc,
             "overdue_reports": overdue_reports,
-            "high_risk_customers": customers["by_risk"].get("high", 0) + customers["by_risk"].get("very_high", 0),
+            "high_risk_customers": customers["by_risk"].get("high", 0)
+            + customers["by_risk"].get("very_high", 0),
         },
     }

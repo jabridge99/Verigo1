@@ -29,16 +29,19 @@ from app.services.ifti_service import generate_ifti_excel, get_ifti, list_ifti
 
 router = APIRouter(prefix="/ifti", tags=["IFTI Reports"])
 
-_READER  = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst)
-_WRITER  = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+_READER = _require_roles(
+    UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst
+)
+_WRITER = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+
 class IFTICreate(BaseModel):
     direction: IFTIDirection
-    date_received: str            # DD/MM/YYYY
-    date_available: str           # DD/MM/YYYY
+    date_received: str  # DD/MM/YYYY
+    date_available: str  # DD/MM/YYYY
     currency_code: str = "AUD"
     total_amount: float
     transfer_type: str = "Money"
@@ -223,14 +226,21 @@ def _parse_date(val: Optional[str]):
 
 def _apply_fields(record: IFTIRecord, data: IFTICreate):
     for field, value in data.model_dump(exclude={"direction"}).items():
-        if field in ("date_received", "date_available", "oc_dob", "bc_dob",
-                     "accept_dob", "send_dob"):
+        if field in (
+            "date_received",
+            "date_available",
+            "oc_dob",
+            "bc_dob",
+            "accept_dob",
+            "send_dob",
+        ):
             setattr(record, field, _parse_date(value))
         else:
             setattr(record, field, value)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/", response_model=List[IFTIResponse])
 def list_records(
@@ -239,7 +249,9 @@ def list_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    industry_id = (
+        None if current_user.role == UserRole.admin else current_user.industry_id
+    )
     return list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
 
@@ -271,7 +283,10 @@ def get_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if current_user.role != UserRole.admin and r.industry_id != current_user.industry_id:
+    if (
+        current_user.role != UserRole.admin
+        and r.industry_id != current_user.industry_id
+    ):
         raise HTTPException(403, "Access denied")
     return r
 
@@ -286,7 +301,10 @@ def update_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if current_user.role != UserRole.admin and r.industry_id != current_user.industry_id:
+    if (
+        current_user.role != UserRole.admin
+        and r.industry_id != current_user.industry_id
+    ):
         raise HTTPException(403, "Access denied")
     if r.status == IFTIStatus.submitted:
         raise HTTPException(400, "Cannot edit a submitted IFTI record")
@@ -336,13 +354,17 @@ def delete_record(
         raise HTTPException(404, "IFTI record not found")
     if r.status == IFTIStatus.submitted:
         raise HTTPException(400, "Cannot delete a submitted record")
-    if current_user.role != UserRole.admin and r.industry_id != current_user.industry_id:
+    if (
+        current_user.role != UserRole.admin
+        and r.industry_id != current_user.industry_id
+    ):
         raise HTTPException(403, "Access denied")
     db.delete(r)
     db.commit()
 
 
 # ── Excel download ────────────────────────────────────────────────────────────
+
 
 @router.get("/export/{direction}")
 def export_excel(
@@ -357,13 +379,17 @@ def export_excel(
     The downloaded file matches the official AUSTRAC IFTI-DRA IN / OUT template
     exactly — open it, verify, then copy-paste rows into AUSTRAC Online and submit.
     """
-    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+    industry_id = (
+        None if current_user.role == UserRole.admin else current_user.industry_id
+    )
     records = list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
     if not records:
-        raise HTTPException(404, f"No {direction} IFTI records found" + (
-            f" with status={status}" if status else ""
-        ))
+        raise HTTPException(
+            404,
+            f"No {direction} IFTI records found"
+            + (f" with status={status}" if status else ""),
+        )
 
     xlsx_bytes = generate_ifti_excel(records, direction=direction)
     label = "OUT" if direction == IFTIDirection.outgoing else "IN"
@@ -388,7 +414,10 @@ def export_selected(
 ):
     """Export a specific selection of IFTI records to Excel."""
     from app.models.ifti import IFTIRecord as IFTIModel
-    industry_id = None if current_user.role == UserRole.admin else current_user.industry_id
+
+    industry_id = (
+        None if current_user.role == UserRole.admin else current_user.industry_id
+    )
     q = db.query(IFTIModel).filter(
         IFTIModel.ifti_id.in_(ifti_ids),
         IFTIModel.direction == direction,

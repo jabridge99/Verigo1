@@ -8,13 +8,13 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-SMTP_HOST  = os.getenv("SMTP_HOST", "")
-SMTP_PORT  = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER  = os.getenv("SMTP_USER", "")
-SMTP_PASS  = os.getenv("SMTP_PASS", "")
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@verigo.com.au")
-FROM_NAME  = os.getenv("FROM_NAME",  "Verigo")
-APP_URL    = os.getenv("APP_URL",    "http://localhost:3000")
+FROM_NAME = os.getenv("FROM_NAME", "Verigo")
+APP_URL = os.getenv("APP_URL", "http://localhost:3000")
 
 _BRAND_HEADER = """
 <div style="background:#1e3a8a;padding:24px 32px;border-radius:12px 12px 0 0;">
@@ -22,10 +22,10 @@ _BRAND_HEADER = """
 </div>
 """
 
-_WRAP_OPEN  = '<div style="font-family:Inter,system-ui,sans-serif;max-width:580px;margin:0 auto;background:#0d1526;border-radius:12px;overflow:hidden;">'
+_WRAP_OPEN = '<div style="font-family:Inter,system-ui,sans-serif;max-width:580px;margin:0 auto;background:#0d1526;border-radius:12px;overflow:hidden;">'
 _WRAP_CLOSE = '<p style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Verigo · Australian Compliance Operating System<br>© 2025 Verigo Pty Ltd</p></div>'
-_BODY_OPEN  = '<div style="padding:28px 32px;">'
-_BODY_CLOSE = '</div>'
+_BODY_OPEN = '<div style="padding:28px 32px;">'
+_BODY_CLOSE = "</div>"
 
 
 def _send(to: str, subject: str, html: str) -> bool:
@@ -36,8 +36,8 @@ def _send(to: str, subject: str, html: str) -> bool:
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"]    = f"{FROM_NAME} <{FROM_EMAIL}>"
-        msg["To"]      = to
+        msg["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
+        msg["To"] = to
         msg.attach(MIMEText(html, "html"))
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
             s.starttls()
@@ -50,6 +50,7 @@ def _send(to: str, subject: str, html: str) -> bool:
 
 
 # ─── Templates ────────────────────────────────────────────────────────────────
+
 
 def send_magic_link(to: str, full_name: str, token: str) -> bool:
     verify_url = f"{APP_URL}/login?magic={token}"
@@ -64,7 +65,9 @@ Token (for reference): <code style="color:#60a5fa;">{token[:12]}…</code></p>
     return _send(to, "Your Verigo sign-in link", html)
 
 
-def send_report_deadline(to: str, full_name: str, report_type: str, report_id: str, days_remaining: int) -> bool:
+def send_report_deadline(
+    to: str, full_name: str, report_type: str, report_id: str, days_remaining: int
+) -> bool:
     urgency_color = "#ef4444" if days_remaining <= 2 else "#f59e0b"
     urgency_label = "URGENT" if days_remaining <= 2 else "ACTION REQUIRED"
     report_url = f"{APP_URL}/reporting"
@@ -72,17 +75,33 @@ def send_report_deadline(to: str, full_name: str, report_type: str, report_id: s
 <div style="background:{urgency_color}22;border:1px solid {urgency_color}55;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
   <span style="color:{urgency_color};font-weight:700;font-size:13px;">{urgency_label}</span>
 </div>
-<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">{report_type} report due in {days_remaining} day{'s' if days_remaining != 1 else ''}</h2>
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">{report_type} report due in {days_remaining} day{"s" if days_remaining != 1 else ""}</h2>
 <p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {full_name},<br><br>
-A <strong style="color:#fff;">{report_type}</strong> report (<code style="color:#60a5fa;">{report_id}</code>) must be submitted to AUSTRAC within <strong style="color:{urgency_color};">{days_remaining} day{'s' if days_remaining != 1 else ''}</strong>.</p>
+A <strong style="color:#fff;">{report_type}</strong> report (<code style="color:#60a5fa;">{report_id}</code>) must be submitted to AUSTRAC within <strong style="color:{urgency_color};">{days_remaining} day{"s" if days_remaining != 1 else ""}</strong>.</p>
 <p style="color:#94a3b8;font-size:14px;">Failure to submit on time may constitute a breach of the AML/CTF Act 2006 and may attract civil or criminal penalties.</p>
 <a href="{report_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Review & Submit Report</a>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, f"[{urgency_label}] {report_type} due in {days_remaining} day(s) — Verigo", html)
+    return _send(
+        to,
+        f"[{urgency_label}] {report_type} due in {days_remaining} day(s) — Verigo",
+        html,
+    )
 
 
-def send_case_assignment(to: str, full_name: str, case_id: str, case_title: str, severity: str, assigned_by: str) -> bool:
-    sev_color = {"critical": "#ef4444", "high": "#f97316", "medium": "#f59e0b", "low": "#22c55e"}.get(severity, "#60a5fa")
+def send_case_assignment(
+    to: str,
+    full_name: str,
+    case_id: str,
+    case_title: str,
+    severity: str,
+    assigned_by: str,
+) -> bool:
+    sev_color = {
+        "critical": "#ef4444",
+        "high": "#f97316",
+        "medium": "#f59e0b",
+        "low": "#22c55e",
+    }.get(severity, "#60a5fa")
     case_url = f"{APP_URL}/mlro"
     html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
 <h2 style="color:#fff;font-size:22px;margin:0 0 12px;">New case assigned to you</h2>
@@ -101,7 +120,9 @@ def send_case_assignment(to: str, full_name: str, case_id: str, case_title: str,
     return _send(to, f"Case assigned: {case_id} — Verigo", html)
 
 
-def send_report_approved(to: str, full_name: str, report_type: str, report_id: str, approved_by: str) -> bool:
+def send_report_approved(
+    to: str, full_name: str, report_type: str, report_id: str, approved_by: str
+) -> bool:
     report_url = f"{APP_URL}/reporting"
     html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
 <h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Report approved for AUSTRAC submission</h2>
@@ -117,7 +138,9 @@ Your <strong style="color:#fff;">{report_type}</strong> report has been approved
     return _send(to, f"Report approved: {report_id} ready for AUSTRAC — Verigo", html)
 
 
-def send_kyc_review_required(to: str, full_name: str, kyc_id: str, customer_name: str) -> bool:
+def send_kyc_review_required(
+    to: str, full_name: str, kyc_id: str, customer_name: str
+) -> bool:
     kyc_url = f"{APP_URL}/customers"
     html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
 <h2 style="color:#fff;font-size:22px;margin:0 0 12px;">KYC review required</h2>
@@ -132,7 +155,9 @@ A KYC record for <strong style="color:#fff;">{customer_name}</strong> requires y
     return _send(to, f"KYC review required: {customer_name} — Verigo", html)
 
 
-def send_aml_alert(to: str, full_name: str, alert_type: str, customer_name: str, amount: float) -> bool:
+def send_aml_alert(
+    to: str, full_name: str, alert_type: str, customer_name: str, amount: float
+) -> bool:
     monitor_url = f"{APP_URL}/monitoring"
     html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
 <div style="background:#ef444422;border:1px solid #ef444455;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
