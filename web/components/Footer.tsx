@@ -3,22 +3,22 @@ import { Shield } from 'lucide-react'
 
 const footerLinks = {
   Solutions: [
-    { label: 'Compliance Operations', href: '/solutions/compliance-operations' },
+    { label: 'All Solutions', href: '/solutions' },
     { label: 'Customer Onboarding', href: '/solutions/customer-onboarding' },
-    { label: 'KYC & KYB', href: '/solutions/kyc-kyb' },
+    { label: 'KYC & Identity Verification', href: '/solutions/kyc-identity-verification' },
     { label: 'Transaction Monitoring', href: '/solutions/transaction-monitoring' },
-    { label: 'Case Management', href: '/solutions/case-management' },
     { label: 'Regulatory Reporting', href: '/solutions/regulatory-reporting' },
+    { label: 'Case Management', href: '/solutions/case-management' },
     { label: 'Workflow Automation', href: '/solutions/workflow-automation' },
   ],
   Industries: [
-    { label: 'Digital Currency Exchanges', href: '/solutions/digital-currency-exchange' },
-    { label: 'Remittance Providers', href: '/solutions/remittance-provider' },
-    { label: 'Real Estate Professionals', href: '/solutions/real-estate' },
-    { label: 'Law Firms', href: '/solutions/lawyer' },
-    { label: 'Accounting Firms', href: '/solutions/accountant' },
-    { label: 'Conveyancers', href: '/solutions/conveyancer' },
-    { label: 'View all industries', href: '/solutions' },
+    { label: 'Compliance Packs', href: '/packs' },
+    { label: 'Digital Currency Exchanges', href: '/packs/digital-currency-exchange' },
+    { label: 'Remittance Providers', href: '/packs/remittance-provider' },
+    { label: 'Real Estate Professionals', href: '/packs/real-estate' },
+    { label: 'Law Firms', href: '/packs/lawyer' },
+    { label: 'Accounting Firms', href: '/packs/accountant' },
+    { label: 'View all packs', href: '/packs' },
   ],
   Company: [
     { label: 'Our Company', href: '/company' },

@@ -520,6 +520,9 @@ function IndustryPage({ ind }: { ind: ReturnType<typeof getIndustry> & {} }) {
                 Pre-loaded compliance configuration for {ind.label} — KYC rules, risk thresholds, AUSTRAC report templates, and monitoring rules configured for your sector out of the box.
               </p>
               <div className="space-y-2">
+                <Link href={`/packs/${ind.id}`} className="pub-btn-secondary w-full justify-center mb-1">
+                  View full pack details
+                </Link>
                 <Link href="/start-trial" className="pub-btn-primary w-full justify-center">
                   Start Free Trial <ArrowRight className="w-4 h-4" />
                 </Link>
