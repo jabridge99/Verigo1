@@ -60,7 +60,9 @@ jobs:
           mypy app/ --ignore-missing-imports --no-strict-optional --no-error-summary || true
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=60
+        run: |
+          pip install pytest-cov
+          pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=60
 
       - name: Upload coverage
         if: matrix.python-version == '3.11'
