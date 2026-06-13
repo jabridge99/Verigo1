@@ -208,7 +208,7 @@ export default function APIIntegrationsPage() {
               </ul>
             </div>
             <div className="bg-slate-900 rounded-2xl p-6 font-mono text-sm">
-              <div className="text-slate-500 mb-3 text-xs">// POST /api/v1/customers</div>
+              <div className="text-slate-500 mb-3 text-xs">{'// POST /api/v1/customers'}</div>
               <pre className="text-green-400 text-xs leading-relaxed overflow-x-auto">{`{
   "full_name": "Jane Smith",
   "date_of_birth": "1985-03-15",
@@ -217,7 +217,7 @@ export default function APIIntegrationsPage() {
   "id_number": "PA1234567",
   "industry": "digital_currency_exchange"
 }`}</pre>
-              <div className="border-t border-slate-700 mt-4 pt-4 text-slate-500 text-xs mb-2">// Response</div>
+              <div className="border-t border-slate-700 mt-4 pt-4 text-slate-500 text-xs mb-2">{'// Response'}</div>
               <pre className="text-blue-400 text-xs leading-relaxed">{`{
   "customer_id": "CUST-A3F8C92D",
   "status": "pending_verification",
