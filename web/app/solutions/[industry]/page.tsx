@@ -850,183 +850,221 @@ function CapabilityPage({ cap }: { cap: Capability }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INDUSTRY PAGE
+// INDUSTRY PAGE — 9-section structure
 // ─────────────────────────────────────────────────────────────────────────────
 
-function IndustryPage({ ind }: { ind: ReturnType<typeof getIndustry> & {} }) {
+function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>> }) {
   const regimeBadge = ind.regime === 'current'
     ? { label: 'Active obligations now', cls: 'bg-green-50 text-green-700 ring-green-700/10' }
     : { label: 'Tranche 2 — obligations from 2026', cls: 'bg-amber-50 text-amber-700 ring-amber-700/10' }
 
+  const planColor: Record<string, string> = {
+    Essential: 'bg-slate-900 text-white',
+    Professional: 'bg-blue-600 text-white',
+    Enterprise: 'bg-indigo-600 text-white',
+  }
+
   return (
     <div className="bg-white text-slate-900">
-      {/* Hero */}
-      <section className="bg-gradient-to-b from-slate-50 to-white pt-32 pb-16 px-4 sm:px-6 lg:px-8">
+
+      {/* HERO */}
+      <section className={`bg-gradient-to-br ${ind.color} pt-32 pb-16 px-4 sm:px-6 lg:px-8`}>
         <div className="max-w-5xl mx-auto">
-          <Link href="/solutions" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-8">
+          <Link href="/solutions" className="inline-flex items-center gap-1 text-sm text-white/70 hover:text-white mb-8 transition-colors">
             ← All solutions
           </Link>
           <div className="flex items-start gap-6">
-            <div className={`w-16 h-16 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-3xl flex-shrink-0`}>{ind.icon}</div>
+            <div className="w-16 h-16 bg-white/15 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0 ring-1 ring-white/20">{ind.icon}</div>
             <div>
-              <div className="flex items-center gap-3 mb-3">
-                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${regimeBadge.cls}`}>
-                  {regimeBadge.label}
-                </span>
-              </div>
-              <h1 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight mb-3">{ind.label}</h1>
-              <p className="text-xl text-slate-500 max-w-2xl">{ind.description}</p>
-              <p className="text-xs text-slate-400 mt-2">{ind.austracRef}</p>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset mb-3 block w-fit ${regimeBadge.cls}`}>
+                {regimeBadge.label}
+              </span>
+              <h1 className="text-4xl md:text-5xl font-black text-white leading-tight mb-3">{ind.label}</h1>
+              <p className="text-xl text-white/80 max-w-2xl">{ind.description}</p>
+              <p className="text-xs text-white/50 mt-2">{ind.austracRef}</p>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-16">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-20">
 
-        {/* Overview */}
+        {/* 1 — INDUSTRY OVERVIEW */}
         <section>
-          <p className="text-slate-600 leading-relaxed text-lg max-w-3xl">{ind.overview}</p>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-4 h-4 text-blue-600" />
+            </div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Industry Overview</h2>
+          </div>
+          <p className="text-xl text-slate-700 leading-relaxed max-w-3xl">{ind.overview}</p>
         </section>
 
-        {/* Compliance Challenges */}
+        {/* 2 — COMPLIANCE CHALLENGES */}
         <section>
           <div className="flex items-center gap-3 mb-6">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h2 className="text-xl font-black text-slate-900">Compliance Challenges</h2>
+            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            </div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-amber-600">Common Compliance Challenges</h2>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
             {ind.risks.map((r, i) => (
-              <div key={i} className="flex items-start gap-3 bg-amber-50 rounded-xl px-5 py-4 ring-1 ring-amber-100">
+              <div key={i} className="flex items-start gap-3 bg-amber-50 rounded-2xl px-5 py-4 ring-1 ring-amber-100">
                 <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-2" />
-                <p className="text-slate-700 text-sm">{r}</p>
+                <p className="text-slate-700 text-sm leading-relaxed">{r}</p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* AML/CTF Obligations */}
-        <section>
+        {/* 3 — AML OBLIGATIONS */}
+        <section className="bg-slate-900 rounded-3xl p-10">
           <div className="flex items-center gap-3 mb-6">
-            <Shield className="w-5 h-5 text-blue-600" />
-            <h2 className="text-xl font-black text-slate-900">Australian AML/CTF Obligations</h2>
+            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Shield className="w-4 h-4 text-blue-300" />
+            </div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-300">AML/CTF Obligations</h2>
           </div>
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3 mb-8">
             {ind.obligations.map((o, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                <p className="text-slate-700 text-sm">{o}</p>
+              <div key={i} className="flex items-start gap-3 bg-white/5 rounded-xl px-4 py-3 ring-1 ring-white/10">
+                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                <p className="text-slate-300 text-sm leading-relaxed">{o}</p>
               </div>
             ))}
           </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="text-xs text-slate-500 mr-2 self-center">Required reports:</span>
+            {ind.reportingRequirements.types.map(t => (
+              <span key={t} className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-white">{t}</span>
+            ))}
+          </div>
+          <p className="text-slate-400 text-sm mt-3 leading-relaxed">{ind.reportingRequirements.details}</p>
         </section>
 
-        {/* CDD */}
-        <section>
-          <div className="flex items-center gap-3 mb-6">
-            <Users className="w-5 h-5 text-blue-600" />
-            <h2 className="text-xl font-black text-slate-900">Customer Due Diligence Requirements</h2>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {ind.cddRequirements.map((c, i) => (
-              <div key={i} className="pub-card flex items-start gap-3 py-4">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <span className="text-blue-600 font-bold text-xs">{i + 1}</span>
+        {/* 4 — TYPICAL CUSTOMER RISKS */}
+        {ind.customerRisks.length > 0 && (
+          <section>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Users className="w-4 h-4 text-red-500" />
+              </div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-red-500">Typical Customer Risk Profiles</h2>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {ind.customerRisks.map((r, i) => (
+                <div key={i} className="pub-card flex flex-col gap-2">
+                  <div className="w-6 h-6 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-red-600 font-bold text-xs">{i + 1}</span>
+                  </div>
+                  <p className="text-slate-600 text-sm leading-relaxed">{r}</p>
                 </div>
-                <p className="text-slate-600 text-sm">{c}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Monitoring */}
-        <section>
-          <div className="flex items-center gap-3 mb-6">
-            <Eye className="w-5 h-5 text-blue-600" />
-            <h2 className="text-xl font-black text-slate-900">Transaction Monitoring Requirements</h2>
-          </div>
-          <div className="space-y-3">
-            {ind.monitoringRequirements.map((m, i) => (
-              <div key={i} className="flex items-start gap-3 bg-slate-50 rounded-xl px-5 py-4">
-                <TrendingUp className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                <p className="text-slate-700 text-sm">{m}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Reporting */}
-        <section>
-          <div className="flex items-center gap-3 mb-6">
-            <FileText className="w-5 h-5 text-blue-600" />
-            <h2 className="text-xl font-black text-slate-900">AUSTRAC Reporting Requirements</h2>
-          </div>
-          <div className="pub-card bg-slate-50 ring-slate-200">
-            <div className="flex flex-wrap gap-2 mb-4">
-              {ind.reportingRequirements.types.map(t => (
-                <span key={t} className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-white">{t}</span>
               ))}
             </div>
-            <p className="text-slate-600 text-sm leading-relaxed">{ind.reportingRequirements.details}</p>
+          </section>
+        )}
+
+        {/* 5 — RECOMMENDED COMPLIANCE PACK */}
+        <section>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Database className="w-4 h-4 text-blue-600" />
+            </div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Recommended Compliance Pack</h2>
+          </div>
+          <div className="bg-blue-50 ring-1 ring-blue-200 rounded-2xl p-7 flex flex-col sm:flex-row gap-6 items-start">
+            <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl flex-shrink-0`}>{ind.icon}</div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900 text-lg mb-1">{ind.packName}</h3>
+              <p className="text-slate-600 text-sm leading-relaxed mb-4">
+                Pre-configured for {ind.label} — KYC rules, risk thresholds, AUSTRAC report templates, CDD workflows, and transaction monitoring rules aligned to your obligations. Ready from day one.
+              </p>
+              <Link href={`/packs/${ind.id}`} className="pub-btn-secondary inline-flex">View pack details</Link>
+            </div>
           </div>
         </section>
 
-        {/* How Verigo Helps */}
-        <section>
+        {/* 6 — HOW VERIGO HELPS */}
+        <section className={`bg-gradient-to-br ${ind.color} rounded-3xl p-10`}>
           <div className="flex items-center gap-3 mb-6">
-            <ClipboardList className="w-5 h-5 text-blue-600" />
-            <h2 className="text-xl font-black text-slate-900">How VeriGo Helps {ind.shortLabel}</h2>
+            <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-4 h-4 text-white" />
+            </div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-white/80">How VeriGo Helps {ind.shortLabel}</h2>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
             {ind.howVerigoHelps.map((h, i) => (
-              <div key={i} className="flex items-start gap-3 pub-card py-4">
-                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                <p className="text-slate-700 text-sm">{h}</p>
+              <div key={i} className="flex items-start gap-3 bg-white/10 rounded-2xl p-4 ring-1 ring-white/15">
+                <CheckCircle className="w-5 h-5 text-white flex-shrink-0 mt-0.5" />
+                <p className="text-white text-sm leading-relaxed">{h}</p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* CTA cards */}
-        <section className="grid md:grid-cols-2 gap-6">
-          <div className="pub-card bg-blue-50 ring-blue-200 flex flex-col">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-12 h-12 bg-gradient-to-br ${ind.color} rounded-xl flex items-center justify-center text-2xl`}>{ind.icon}</div>
-              <div>
-                <h3 className="font-bold text-slate-900">{ind.packName}</h3>
-                <p className="text-xs text-slate-500">Recommended Compliance Pack</p>
+        {/* 7 — EXAMPLE WORKFLOW */}
+        {ind.exampleWorkflow.length > 0 && (
+          <section>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <RefreshCw className="w-4 h-4 text-indigo-600" />
               </div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-indigo-600">Example Workflow</h2>
             </div>
-            <p className="text-slate-600 text-sm mb-6 leading-relaxed flex-1">
-              Pre-loaded compliance configuration for {ind.label} — KYC rules, risk thresholds, AUSTRAC report templates, and monitoring rules configured for your sector out of the box.
-            </p>
-            <div className="space-y-2">
-              <Link href={`/packs/${ind.id}`} className="pub-btn-secondary w-full justify-center">View full pack details</Link>
-              <Link href="/start-trial" className="pub-btn-primary w-full justify-center">
-                Start Free Trial <ArrowRight className="w-4 h-4" />
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {ind.exampleWorkflow.map((step, i) => (
+                <div key={i} className="pub-card flex gap-4">
+                  <div className="w-8 h-8 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black text-xs flex-shrink-0">
+                    {i + 1}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm mb-1">{step.title}</h3>
+                    <p className="text-slate-500 text-xs leading-relaxed">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* 8 — PRICING RECOMMENDATION */}
+        <section>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
+            </div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-600">Pricing Recommendation</h2>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-5 items-start">
+            <div className={`${planColor[ind.pricingRec.plan] ?? 'bg-slate-900 text-white'} rounded-2xl px-6 py-4 flex-shrink-0 text-center min-w-[120px]`}>
+              <p className="text-xs font-bold uppercase tracking-wider opacity-70 mb-1">Recommended</p>
+              <p className="text-2xl font-black">{ind.pricingRec.plan}</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-5 flex-1 ring-1 ring-slate-200">
+              <p className="text-slate-700 text-sm leading-relaxed mb-4">{ind.pricingRec.reason}</p>
+              <Link href="/pricing" className="text-blue-600 text-sm font-semibold hover:underline flex items-center gap-1">
+                View full pricing <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
+        </section>
 
-          <div className="bg-slate-900 rounded-2xl p-7 flex flex-col">
-            <h3 className="text-xl font-bold text-white mb-3">Start compliant in minutes</h3>
-            <p className="text-slate-400 text-sm mb-5 leading-relaxed flex-1">
-              The {ind.packName} is configured on day one of your trial. Your team gets a fully working AML/CTF programme from the moment you sign up — no consultants, no configuration sprints.
-            </p>
-            <ul className="space-y-2 mb-6">
-              {[
-                'Pre-built KYC and CDD workflows',
-                'Industry-specific monitoring rules',
-                'AUSTRAC report templates ready to use',
-                '7-day free trial, no credit card',
-              ].map(f => (
-                <li key={f} className="flex items-center gap-2 text-sm text-slate-300">
-                  <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" /> {f}
-                </li>
-              ))}
-            </ul>
-            <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
-              Start Free Trial <ArrowRight className="w-4 h-4" />
+        {/* 9 — BOOK DEMO */}
+        <section className="bg-slate-900 rounded-3xl p-10 text-center">
+          <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5`}>{ind.icon}</div>
+          <h2 className="text-3xl font-black text-white mb-3">
+            Ready to get compliant as a {ind.shortLabel}?
+          </h2>
+          <p className="text-slate-400 max-w-lg mx-auto mb-8">
+            Your {ind.packName} is configured on day one. 7-day free trial — no credit card, no consultants, no configuration sprints.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
+              Start Free Trial <ArrowRight className="w-5 h-5" />
+            </Link>
+            <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+              Book a Demo
             </Link>
           </div>
         </section>
