@@ -7,8 +7,9 @@ export async function generateStaticParams() {
   return learnGuides.map(g => ({ slug: g.slug }))
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }) {
-  const guide = learnGuides.find(g => g.slug === params.slug)
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const guide = learnGuides.find(g => g.slug === slug)
   if (!guide) return {}
   return {
     title: guide.metaTitle,
@@ -25,8 +26,9 @@ const categoryColors: Record<string, string> = {
   Advanced: 'bg-indigo-50 text-indigo-700 ring-indigo-700/10',
 }
 
-export default function LearnGuidePage({ params }: { params: { slug: string } }) {
-  const guide = learnGuides.find(g => g.slug === params.slug)
+export default async function LearnGuidePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const guide = learnGuides.find(g => g.slug === slug)
   if (!guide) notFound()
 
   const related = learnGuides.filter(g => guide.relatedSlugs.includes(g.slug))

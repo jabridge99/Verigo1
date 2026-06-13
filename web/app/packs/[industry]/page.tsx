@@ -701,8 +701,9 @@ export async function generateStaticParams() {
   return industries.map(i => ({ industry: i.id }))
 }
 
-export async function generateMetadata({ params }: { params: { industry: string } }) {
-  const ind = getIndustry(params.industry)
+export async function generateMetadata({ params }: { params: Promise<{ industry: string }> }) {
+  const { industry } = await params
+  const ind = getIndustry(industry)
   if (!ind) return {}
   return {
     title: `${ind.packName} — ${ind.label} Compliance Pack | Verigo`,
@@ -712,8 +713,9 @@ export async function generateMetadata({ params }: { params: { industry: string 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function PackPage({ params }: { params: { industry: string } }) {
-  const ind = getIndustry(params.industry)
+export default async function PackPage({ params }: { params: Promise<{ industry: string }> }) {
+  const { industry } = await params
+  const ind = getIndustry(industry)
   if (!ind) notFound()
 
   const extra = packExtras[ind.id]

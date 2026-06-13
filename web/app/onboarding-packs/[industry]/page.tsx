@@ -11,9 +11,10 @@ export function generateStaticParams() {
   return industries.map(i => ({ industry: i.id }))
 }
 
-export async function generateMetadata({ params }: { params: { industry: string } }) {
-  const pack = onboardingPacks.find(p => p.industryId === params.industry)
-  const ind = industries.find(i => i.id === params.industry)
+export async function generateMetadata({ params }: { params: Promise<{ industry: string }> }) {
+  const { industry } = await params
+  const pack = onboardingPacks.find(p => p.industryId === industry)
+  const ind = industries.find(i => i.id === industry)
   if (!pack || !ind) return {}
   return {
     title: `${ind.label} Onboarding Pack | Verigo`,
@@ -36,9 +37,10 @@ const sections = [
   { id: 'go-live', label: 'Go-Live Assessment' },
 ]
 
-export default function OnboardingPackPage({ params }: { params: { industry: string } }) {
-  const pack = onboardingPacks.find(p => p.industryId === params.industry)
-  const ind = industries.find(i => i.id === params.industry)
+export default async function OnboardingPackPage({ params }: { params: Promise<{ industry: string }> }) {
+  const { industry } = await params
+  const pack = onboardingPacks.find(p => p.industryId === industry)
+  const ind = industries.find(i => i.id === industry)
 
   if (!pack || !ind) notFound()
 

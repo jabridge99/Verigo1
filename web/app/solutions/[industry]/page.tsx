@@ -243,8 +243,8 @@ const capabilitiesData: Capability[] = [
   },
 ]
 
-export async function generateMetadata({ params }: { params: { industry: string } }) {
-  const slug = params.industry
+export async function generateMetadata({ params }: { params: Promise<{ industry: string }> }) {
+  const { industry: slug } = await params
   const ind = getIndustry(slug)
   if (ind) {
     return {
@@ -278,8 +278,8 @@ export async function generateStaticParams() {
   return [...industrySlugs, ...dedupedCaps]
 }
 
-export default function IndustryOrCapabilityPage({ params }: { params: { industry: string } }) {
-  const slug = params.industry
+export default async function IndustryOrCapabilityPage({ params }: { params: Promise<{ industry: string }> }) {
+  const { industry: slug } = await params
 
   // AML Program gets its own dedicated page
   if (slug === 'aml-program') {
