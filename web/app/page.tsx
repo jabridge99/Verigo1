@@ -365,7 +365,7 @@ function IndustriesSection() {
             <div className="space-y-3">
               {current.map(ind => (
                 <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover flex items-center gap-4 group">
-                  <span className="text-2xl">{ind.icon}</span>
+                  <div className={`w-10 h-10 bg-gradient-to-br ${ind.color} rounded-xl flex items-center justify-center text-xl flex-shrink-0`}>{ind.icon}</div>
                   <div className="flex-1">
                     <div className="font-semibold text-slate-900">{ind.label}</div>
                     <div className="text-slate-400 text-xs mt-0.5">{ind.packName}</div>
@@ -383,7 +383,7 @@ function IndustriesSection() {
             <div className="space-y-3">
               {expanded.map(ind => (
                 <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover flex items-center gap-4 group">
-                  <span className="text-2xl">{ind.icon}</span>
+                  <div className={`w-10 h-10 bg-gradient-to-br ${ind.color} rounded-xl flex items-center justify-center text-xl flex-shrink-0`}>{ind.icon}</div>
                   <div className="flex-1">
                     <div className="font-semibold text-slate-900">{ind.label}</div>
                     <div className="text-amber-600 text-xs font-semibold mt-0.5">{ind.packName}</div>
