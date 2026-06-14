@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark } from 'lucide-react'
+import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark, BookOpen, HelpCircle } from 'lucide-react'
 import { getStoredUser, getToken, clearUser } from '@/lib/auth'
 import { useRouter, usePathname } from 'next/navigation'
 
@@ -190,12 +190,54 @@ export default function Navbar() {
             <div className="hidden lg:flex items-center gap-6">
               <Link href="/" className={linkClass}>Home</Link>
               <Link href="/pricing" className={linkClass}>Pricing</Link>
+              <div className="relative">
+                <button
+                  onClick={() => toggleDropdown('resources')}
+                  className={`flex items-center gap-1 ${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}
+                >
+                  Resources <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'resources' ? 'rotate-180' : ''}`} />
+                </button>
+                {activeDropdown === 'resources' && (
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 pb-2 mb-1 border-b border-slate-100">Subscriber Resources</p>
+                    <Link href="/learn" onClick={() => setActiveDropdown(null)} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+                      <BookOpen className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-900">Learning Centre</span>
+                    </Link>
+                    <Link href="/faq" onClick={() => setActiveDropdown(null)} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+                      <HelpCircle className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-900">FAQ</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="hidden md:flex items-center gap-6">
               <Link href="/" className="text-sm text-white/70 hover:text-white transition-colors">Home</Link>
               <Link href="/solutions" className="text-sm text-white/70 hover:text-white transition-colors">Solutions</Link>
               <Link href="/pricing" className="text-sm text-white/70 hover:text-white transition-colors">Pricing</Link>
+              <div className="relative">
+                <button
+                  onClick={() => toggleDropdown('resources')}
+                  className="flex items-center gap-1 text-sm text-white/70 hover:text-white transition-colors"
+                >
+                  Resources <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'resources' ? 'rotate-180' : ''}`} />
+                </button>
+                {activeDropdown === 'resources' && (
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 pb-2 mb-1 border-b border-slate-100">Subscriber Resources</p>
+                    <Link href="/learn" onClick={() => setActiveDropdown(null)} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+                      <BookOpen className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-900">Learning Centre</span>
+                    </Link>
+                    <Link href="/faq" onClick={() => setActiveDropdown(null)} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+                      <HelpCircle className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-900">FAQ</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -256,6 +298,18 @@ export default function Navbar() {
 
           <Link href="/company" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Our Company</Link>
           <Link href="/pricing" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Pricing</Link>
+
+          {user && (
+            <div>
+              <p className="px-3 pt-3 pb-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Resources</p>
+              <Link href="/learn" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-700 hover:bg-slate-50">
+                <BookOpen className="w-4 h-4 text-slate-500 flex-shrink-0" /> Learning Centre
+              </Link>
+              <Link href="/faq" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-700 hover:bg-slate-50">
+                <HelpCircle className="w-4 h-4 text-slate-500 flex-shrink-0" /> FAQ
+              </Link>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2 pt-4 border-t border-slate-200 mt-4">
             {user ? (
