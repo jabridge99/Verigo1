@@ -1,7 +1,21 @@
 import Link from 'next/link'
-import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX } from 'lucide-react'
+import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Landmark } from 'lucide-react'
 import { industries } from '@/lib/industries'
 import { capabilities as libCaps } from '@/lib/capabilities'
+
+const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  'digital-currency-exchange': Coins,
+  'remittance-provider': Globe,
+  'foreign-exchange': ArrowLeftRight,
+  'payment-service-provider': CreditCard,
+  'real-estate': Home,
+  'conveyancer': FileCheck,
+  'law-firm': Scale,
+  'accounting-firm': Calculator,
+  'precious-metals': Gem,
+  'reporting-group': Network,
+  'mortgage-broker': Landmark,
+}
 
 export const metadata = {
   title: 'AML Compliance Solutions | Verigo',
@@ -14,8 +28,8 @@ const amlProgramFeature = {
   title: 'AML Program',
   tagline: 'Your legally required AML/CTF Program — built into the platform, not sitting in a drawer',
   benefits: [
-    'Industry-specific AML/CTF Risk Assessment Matrix',
-    'Part A & Part B program templates',
+    'ML/TF Risk Assessment — the foundation of your program',
+    'Unified AML/CTF Program aligned to 2026 reforms',
     'CDD/EDD policies and MLRO workflows',
     'Compliance registers maintained automatically',
     'Staff training module with completion tracking',
@@ -160,7 +174,7 @@ export default function SolutionsPage() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {current.map(ind => (
                 <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
-                  <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl mb-5`}>{ind.icon}</div>
+                  {(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}><Icon className="w-7 h-7 text-white" /></div> })()}
                   <h3 className="text-lg font-bold text-slate-900 mb-2">{ind.label}</h3>
                   <p className="text-slate-500 text-sm leading-relaxed mb-5 flex-1">{ind.description}</p>
                   <div className="flex items-center justify-between">
@@ -187,7 +201,7 @@ export default function SolutionsPage() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {expanded.map(ind => (
                 <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
-                  <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl mb-5`}>{ind.icon}</div>
+                  {(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}><Icon className="w-7 h-7 text-white" /></div> })()}
                   <h3 className="text-lg font-bold text-slate-900 mb-2">{ind.label}</h3>
                   <p className="text-slate-500 text-sm leading-relaxed mb-5 flex-1">{ind.description}</p>
                   <div className="flex items-center justify-between">
@@ -196,6 +210,76 @@ export default function SolutionsPage() {
                   </div>
                 </Link>
               ))}
+            </div>
+          </div>
+
+          {/* Other regulated sectors */}
+          <div className="mt-16 pt-12 border-t border-slate-200">
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-2xl font-black text-slate-900">Other AUSTRAC-regulated sectors</h2>
+            </div>
+            <p className="text-slate-500 text-sm mb-8 max-w-2xl">
+              AUSTRAC regulates a broad range of financial services beyond those with dedicated compliance packs. These sectors are all subject to AML/CTF obligations under the AML/CTF Act 2006.
+            </p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {[
+                { icon: '🏦', label: 'Banks & Authorised Deposit-taking Institutions' },
+                { icon: '🏠', label: 'Mortgage Brokers & Credit Providers' },
+                { icon: '📈', label: 'Stockbrokers & Securities Dealers' },
+                { icon: '💼', label: 'Financial Advisers & Planners' },
+                { icon: '🛡️', label: 'Life Insurance Providers' },
+                { icon: '🏛️', label: 'Superannuation Trustees' },
+                { icon: '🎰', label: 'Casino & Wagering Operators' },
+                { icon: '💳', label: 'Stored Value Card Providers' },
+                { icon: '🏭', label: 'Factoring & Invoice Finance Companies' },
+              ].map(s => (
+                <div key={s.label} className="flex items-center gap-3 bg-white rounded-xl px-4 py-3.5 ring-1 ring-slate-100">
+                  <span className="text-xl flex-shrink-0">{s.icon}</span>
+                  <span className="text-sm font-medium text-slate-700">{s.label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 mt-4">
+              Compliance packs for these sectors are on our roadmap. <Link href="/contact" className="text-blue-600 hover:underline">Contact us</Link> to register interest or discuss your specific requirements.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Other regulated sectors */}
+      <section className="pub-section bg-white">
+        <div className="pub-container">
+          <div className="border-t border-slate-100 pt-12">
+            <h2 className="text-2xl font-black text-slate-900 mb-2">Other AUSTRAC-regulated sectors</h2>
+            <p className="text-slate-500 text-sm mb-8 max-w-2xl">
+              AUSTRAC regulates a broad range of financial services businesses in Australia. The following sectors are all subject to AML/CTF obligations under the AML/CTF Act 2006.
+            </p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+              {[
+                { icon: '🏦', label: 'Banks & Authorised Deposit-taking Institutions (ADIs)' },
+                { icon: '📈', label: 'Stockbrokers & Securities Dealers' },
+                { icon: '💼', label: 'Financial Advisers & Financial Planners' },
+                { icon: '🛡️', label: 'Life Insurance Providers' },
+                { icon: '🏛️', label: 'Superannuation Trustees & Fund Managers' },
+                { icon: '🎰', label: 'Casino & Wagering Operators' },
+                { icon: '💳', label: 'Stored Value Card & Prepaid Product Providers' },
+                { icon: '🏭', label: 'Factoring & Invoice Finance Companies' },
+                { icon: '🤝', label: 'Trust & Company Service Providers (TCSPs)' },
+              ].map(s => (
+                <div key={s.label} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 ring-1 ring-slate-100">
+                  <span className="text-xl flex-shrink-0">{s.icon}</span>
+                  <span className="text-sm font-medium text-slate-700">{s.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="bg-slate-900 rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center gap-5">
+              <div className="flex-1">
+                <p className="font-semibold text-white mb-1">Operating in one of these sectors?</p>
+                <p className="text-slate-400 text-sm">We can tailor a compliance solution to your specific obligations. Contact us to discuss your requirements.</p>
+              </div>
+              <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100 transition-colors flex-shrink-0">
+                Talk to us <ArrowRight className="w-4 h-4" />
+              </Link>
             </div>
           </div>
         </div>

@@ -524,18 +524,22 @@ function PricingPreview() {
   const plans = [
     {
       name: 'Essential',
-      price: 'From $149/mo',
-      desc: 'For small businesses getting compliant for the first time.',
-      features: ['AML Program', 'Customer Onboarding', 'Basic Screening', 'AUSTRAC Reporting'],
+      price: '$299',
+      period: '/year',
+      badge: null,
+      desc: 'For small reporting entities building their first AML/CTF programme.',
+      features: ['Unlimited customers', 'KYC & KYB verification', 'AML/CTF Program template', 'IFTI, SMR & TTR reporting', 'Basic transaction monitoring', 'Essential integrations'],
       cta: 'Start Free Trial',
       href: '/start-trial',
       highlight: false,
     },
     {
       name: 'Professional',
-      price: 'From $349/mo',
-      desc: 'For growing compliance teams that need full automation.',
-      features: ['Everything in Essential', 'Transaction Monitoring', 'Case Management', 'Workflow Automation', 'Priority Support'],
+      price: '$799',
+      period: '/year',
+      badge: 'Most Popular',
+      desc: 'For growing compliance teams with full AUSTRAC reporting obligations.',
+      features: ['Everything in Essential', 'Sanctions, PEP & adverse media', 'Advanced transaction monitoring', 'EDD workflows', 'Case management', 'Workflow automation', 'AML data connectors'],
       cta: 'Start Free Trial',
       href: '/start-trial',
       highlight: true,
@@ -543,8 +547,10 @@ function PricingPreview() {
     {
       name: 'Enterprise',
       price: 'Custom',
-      desc: 'For large organisations and Reporting Groups.',
-      features: ['Everything in Professional', 'Reporting Groups', 'Custom Integrations', 'Dedicated Account Manager', 'SLA Guarantee'],
+      period: '',
+      badge: null,
+      desc: 'For reporting groups, financial institutions, and SaaS resellers.',
+      features: ['Everything in Professional', 'All compliance packs', 'Reporting groups (multi-entity)', 'White label branding', 'Dedicated compliance support', 'SLA guarantee'],
       cta: 'Contact Sales',
       href: '/live-demo',
       highlight: false,
@@ -575,11 +581,16 @@ function PricingPreview() {
               }`}
             >
               <div>
-                <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${plan.highlight ? 'text-blue-200' : 'text-slate-400'}`}>
-                  {plan.name}
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className={`text-xs font-bold uppercase tracking-wider ${plan.highlight ? 'text-blue-200' : 'text-slate-400'}`}>
+                    {plan.name}
+                  </p>
+                  {plan.badge && (
+                    <span className="text-xs font-semibold bg-white/20 text-white px-2 py-0.5 rounded-full">{plan.badge}</span>
+                  )}
+                </div>
                 <p className={`text-2xl font-black ${plan.highlight ? 'text-white' : 'text-slate-900'}`}>
-                  {plan.price}
+                  {plan.price}<span className={`text-base font-medium ${plan.highlight ? 'text-blue-200' : 'text-slate-400'}`}>{plan.period}</span>
                 </p>
                 <p className={`text-sm mt-1 ${plan.highlight ? 'text-blue-100' : 'text-slate-500'}`}>
                   {plan.desc}

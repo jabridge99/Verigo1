@@ -36,15 +36,15 @@ export const industries: Industry[] = [
   {
     id: 'digital-currency-exchange',
     slug: 'digital-currency-exchange',
-    label: 'Virtual Asset Service Provider (VASP)',
+    label: 'Virtual Asset Service Provider (VASP) / DCE',
     shortLabel: 'VASP / DCE',
     regime: 'current',
-    icon: '₿',
-    description: 'VASPs — including Digital Currency Exchanges (DCEs) — must register with AUSTRAC and implement full AML/CTF programs under the AML/CTF Act 2006.',
-    overview: "You're running a crypto exchange or virtual asset business in one of the most scrutinised sectors under Australian AML law. AUSTRAC watches VASPs (formerly known as Digital Currency Exchanges or DCEs) closely — and for good reason. The pseudonymous nature of blockchain transactions means your platform can be used to move money without a trace unless you have the right controls in place. The good news: with the right compliance program, you can onboard customers fast, trade compliantly, and never miss an AUSTRAC deadline.",
+    icon: 'Coins',
+    description: 'VASPs or Digital Currency Exchanges (DCEs) must register with AUSTRAC and implement full AML/CTF programs under the AML/CTF Act 2006.',
+    overview: "You're running a crypto exchange or virtual asset business in one of the most scrutinised sectors under Australian AML law. AUSTRAC watches VASPs and DCEs closely — and for good reason. The pseudonymous nature of blockchain transactions means your platform can be used to move money without a trace unless you have the right controls in place. The good news: with the right compliance program, you can onboard customers fast, trade compliantly, and never miss an AUSTRAC deadline.",
     obligations: [
       'Register with AUSTRAC before providing any digital currency exchange services',
-      'Implement and maintain a written Part A and Part B AML/CTF program',
+      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program based on it',
       'Conduct KYC on all customers before providing any designated service',
       'Lodge IFTI reports for international transfers of $1,000 AUD equivalent or more',
       'Lodge SMR reports within 3 business days of forming a suspicion',
@@ -84,7 +84,7 @@ export const industries: Industry[] = [
       'IFTI, TTR, and SMR report templates pre-populated from transaction data with AUSTRAC validation',
       'Immutable audit trail for every customer interaction and compliance decision',
     ],
-    austracRef: 'AML/CTF Act 2006 — Virtual Asset Service Providers (Digital Currency Exchange Providers)',
+    austracRef: 'AML/CTF Act 2006 — Virtual Asset Service Providers (VASPs) / Digital Currency Exchange Providers (DCEs)',
     packName: 'Crypto Pack',
     color: 'from-orange-500 to-amber-500',
     customerRisks: [
@@ -116,7 +116,7 @@ export const industries: Industry[] = [
     label: 'Remittance Provider',
     shortLabel: 'Remittance',
     regime: 'current',
-    icon: '🌏',
+    icon: 'Globe',
     description: 'Remittance providers transfer value on behalf of customers internationally and face IFTI reporting obligations.',
     overview: "You move money across borders for people — often to families, small businesses, and communities in developing countries. That's a vital service. But the remittance sector is also one of AUSTRAC's highest priorities. Every international transfer above $1,000 requires an IFTI report. Every suspicious pattern — structuring, nominee senders, high-risk corridors — needs to be caught and reported. The compliance burden is real, but with the right tools it doesn't have to stop you operating at volume.",
     obligations: [
@@ -193,12 +193,12 @@ export const industries: Industry[] = [
     label: 'Foreign Exchange Provider',
     shortLabel: 'FX',
     regime: 'current',
-    icon: '💱',
+    icon: 'ArrowLeftRight',
     description: 'FX businesses exchange currency and must identify customers, monitor transactions and report as required.',
     overview: "Whether you're running a CBD currency exchange counter or an online FX platform, your obligations under the AML/CTF Act 2006 are significant. Every cash transaction at or above $10,000 triggers a TTR. Every suspicious customer pattern — bulk cash, structuring, PEP customers — needs to be monitored and potentially reported. FX businesses sit at a natural intersection of cash and cross-border flows, making them a persistent focus for AUSTRAC supervision.",
     obligations: [
       'Register with AUSTRAC as a currency exchange provider',
-      'Implement and maintain a Part A and Part B AML/CTF program',
+      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program based on it',
       'Conduct KYC on all customers at the point of onboarding',
       'Lodge TTR reports within 10 business days of a cash transaction at or above $10,000 AUD',
       'Lodge IFTI reports where the FX transaction involves an international payment instruction',
@@ -270,7 +270,7 @@ export const industries: Industry[] = [
     label: 'Payment Service Provider',
     shortLabel: 'PSP',
     regime: 'current',
-    icon: '💳',
+    icon: 'CreditCard',
     description: 'PSPs facilitate payment flows and are reporting entities under the AML/CTF Act with broad monitoring obligations.',
     overview: "You process payments between merchants and their customers — which means you sit in the middle of transactions you didn't initiate and can't always control. That creates a unique compliance challenge. AUSTRAC expects you to verify the merchants you onboard, monitor for suspicious payment patterns across your entire network, and file reports when something doesn't look right. Volume is not an excuse — 100% of transactions need to be covered.",
     obligations: [
@@ -347,7 +347,7 @@ export const industries: Industry[] = [
     label: 'Real Estate Professional',
     shortLabel: 'Real Estate',
     regime: 'expanded',
-    icon: '🏠',
+    icon: 'Home',
     description: 'From 2026, real estate agents buying/selling on behalf of clients become reporting entities under the AML/CTF reforms.',
     overview: "From 1 July 2026, if you buy or sell real property on behalf of clients, you are a reporting entity under Australian law. This is the biggest change to your business in decades. You'll need an AML/CTF program, you'll need to check your clients' identities, verify where their money is coming from, and report anything suspicious to AUSTRAC. The Australian property market has been identified internationally as a high-risk sector for money laundering — and the law is now catching up.",
     obligations: [
@@ -425,7 +425,7 @@ export const industries: Industry[] = [
     label: 'Conveyancer',
     shortLabel: 'Conveyancer',
     regime: 'expanded',
-    icon: '📋',
+    icon: 'FileCheck',
     description: 'Conveyancers handling property settlements will be captured under Tranche 2 reforms effective 2026.',
     overview: "You sit at the sharp end of every property transaction — the point where money actually changes hands. From 1 July 2026, that makes you a reporting entity under Australian AML law. Settlement is the stage where large sums move between parties, and it's the stage that criminals most want to exploit. Your obligation is to verify your clients, check where settlement funds are coming from, and report anything that doesn't add up to AUSTRAC.",
     obligations: [
@@ -502,7 +502,7 @@ export const industries: Industry[] = [
     label: 'Law Firm',
     shortLabel: 'Legal',
     regime: 'expanded',
-    icon: '⚖️',
+    icon: 'Scale',
     description: 'Law firms providing certain designated services — property, company formation, trust services — become reporting entities under Tranche 2.',
     overview: "From 1 July 2026, law firms providing designated services are reporting entities under Australian AML law. This includes property transactions, company and trust formation, managing client funds, and other specified legal work. This is not a minor administrative update — it fundamentally changes how you onboard clients and manage trust accounts. The obligation applies at the matter level. Before you open a new matter involving a designated service, you need to know who you're acting for.",
     obligations: [
@@ -579,7 +579,7 @@ export const industries: Industry[] = [
     label: 'Accounting Firm',
     shortLabel: 'Accounting',
     regime: 'expanded',
-    icon: '📊',
+    icon: 'Calculator',
     description: 'Accounting firms providing certain services will be required to implement AML/CTF programs from 2026.',
     overview: "Accountants have been at the centre of financial crime debates for years — and from 1 July 2026, the law catches up. If your firm provides company or trust formation, acts as a nominee director, manages client funds, or provides tax services connected to asset structures, you are a reporting entity. Your clients trust you with some of their most sensitive financial information. The AML framework asks you to consider whether that trust is being misused.",
     obligations: [
@@ -656,7 +656,7 @@ export const industries: Industry[] = [
     label: 'Precious Metal Dealer',
     shortLabel: 'Precious Metals',
     regime: 'expanded',
-    icon: '🥇',
+    icon: 'Gem',
     description: 'Dealers in gold, silver, platinum and other precious metals are captured under Tranche 2 reforms.',
     overview: "Gold and precious metals have historically been used to convert cash into portable, high-value assets outside the financial system. From 1 July 2026, that changes for Australian dealers. If you buy or sell physical gold, silver, platinum, or gemstones, you're a reporting entity. The obligation kicks in for cash transactions at or above $10,000. But the risk picture is broader — structuring below that threshold, conflict mineral sourcing, and anonymous bulk buyers all need to be on your radar.",
     obligations: [
@@ -733,7 +733,7 @@ export const industries: Industry[] = [
     label: 'Reporting Group',
     shortLabel: 'Reporting Group',
     regime: 'current',
-    icon: '🏢',
+    icon: 'Network',
     description: 'Multi-entity compliance groups can establish a reporting group to consolidate compliance operations and share customer data.',
     overview: "If you operate multiple AUSTRAC-regulated businesses — two crypto exchanges, a remittance business and an FX operation, a financial services group with several licensed entities — a Reporting Group structure can reduce duplication and give you consolidated compliance oversight. Under AUSTRAC authorisation, your group can operate a single AML/CTF program, share customer records across entities, and file reports under a group arrangement. The compliance complexity of managing multiple separate programs goes away.",
     obligations: [
@@ -798,6 +798,84 @@ export const industries: Industry[] = [
     pricingRec: {
       plan: 'Enterprise',
       reason: 'Reporting Groups require multi-entity configuration, shared customer records, group-level monitoring, and consolidated reporting. Enterprise includes all of this plus a dedicated account manager and custom SLA.',
+    },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // MORTGAGE BROKER
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: 'mortgage-broker',
+    slug: 'mortgage-broker',
+    label: 'Mortgage Broker',
+    shortLabel: 'Mortgage',
+    regime: 'current',
+    icon: 'Landmark',
+    description: 'Mortgage brokers who arrange or provide credit facilities are reporting entities under the AML/CTF Act 2006 with obligations to verify borrowers and report suspicious activity.',
+    overview: "You sit between the borrower and the lender — and that makes you a gatekeeper for one of the largest financial transactions most Australians ever make. Mortgage brokers who provide or arrange credit are reporting entities under the AML/CTF Act 2006. Your obligation is to know who you're dealing with, verify where the funds are coming from, and report anything that doesn't add up. Property transactions are one of the most common vehicles for money laundering in Australia — AUSTRAC's data confirms it.",
+    obligations: [
+      'Enrol with AUSTRAC as a provider of designated credit services',
+      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program based on it',
+      'Conduct CDD on all borrowers before providing credit services',
+      'Verify the source of the borrower\'s deposit and other funds being applied to the transaction',
+      'Identify and verify any guarantors or third parties contributing funds',
+      'Lodge SMR reports within 3 business days of forming a suspicion',
+      'Maintain all CDD and transaction records for a minimum of 7 years',
+    ],
+    keyRisks: [
+      'Borrowers using property finance to integrate criminal proceeds into the legitimate economy',
+      'Third-party gifted deposits with no verifiable legitimate source',
+      'Income inflation or falsified employment documents used to secure larger loans',
+      'PEPs and their associates using property purchases to move significant funds',
+    ],
+    risks: [
+      'Borrowers using property finance to integrate criminal proceeds into the legitimate economy',
+      'Third-party gifted deposits with no verifiable legitimate source',
+      'Income inflation or falsified employment documents used to secure larger loans',
+      'PEPs and their associates purchasing property through mortgage arrangements',
+    ],
+    cddRequirements: [
+      'Full identity verification of all borrowers with government-issued photo ID',
+      'Source of funds verification for the deposit and any other funds being applied to the purchase',
+      'Third-party fund contributor identification and verification where gifted or contributed funds are involved',
+      'PEP and sanctions screening of all borrowers, guarantors, and material third parties at application',
+    ],
+    monitoringRequirements: [
+      'Ongoing monitoring of borrower application patterns for inconsistencies between stated income and deposit source',
+      'Periodic review of borrower risk ratings where material changes in circumstances are identified',
+      'Post-settlement review for indicators that emerge after loan approval that may require SMR filing',
+    ],
+    reportingRequirements: {
+      types: ['SMR'],
+      details: 'Mortgage brokers must lodge SMR reports within 3 business days of forming a suspicion about a borrower, application, or transaction. You must not disclose to the borrower that an SMR has been filed.',
+    },
+    howVerigoHelps: [
+      'Guided borrower CDD workflow — identity verification and document collection completed digitally before application progresses',
+      'Source of funds verification module with document upload, review, and documented approval workflow',
+      'PEP and sanctions screening of all borrowers, guarantors, and third-party fund contributors at application',
+      'Third-party fund contributor identification and KYC workflow triggered automatically when gift or contribution is declared',
+      'SMR case management and preparation tools for MLRO review and AUSTRAC lodgement',
+    ],
+    austracRef: 'AML/CTF Act 2006 — Providers of Designated Credit Services',
+    packName: 'Mortgage Broker Pack',
+    color: 'from-sky-500 to-blue-600',
+    customerRisks: [
+      "Borrowers with large unexplained cash deposits — a deposit that significantly exceeds what the borrower's declared income could plausibly support is a major red flag. Source of funds must be documented and verified before you proceed.",
+      "Third-party gifted funds — when the deposit or top-up funds come from a third party not on the application, that person must be identified and the source of their contribution documented. Undisclosed third-party contributors are a classic ML structuring method.",
+      "Borrowers from high-risk jurisdictions with offshore income — borrowers whose funds originate from countries with weak AML regimes, or whose offshore income is difficult to verify, carry elevated risk and require enhanced scrutiny.",
+      "PEP borrowers — politicians, senior government officials, and their family members seeking mortgage finance require enhanced due diligence regardless of apparent legitimacy.",
+    ],
+    exampleWorkflow: [
+      { title: 'Borrower submits application', desc: 'Application received. CDD workflow triggered immediately — digital ID check sent to borrower.' },
+      { title: 'Identity verified', desc: 'Borrower completes KYC from their phone. Document and biometric check runs automatically.' },
+      { title: 'Source of funds requested', desc: 'Borrower provides bank statements and documentation confirming the origin of the deposit and any other funds.' },
+      { title: 'Third-party contributors identified', desc: 'Gifted or contributed funds declared? Contributor identified, verified, and source of their funds documented.' },
+      { title: 'PEP and sanctions screening', desc: 'All borrowers, guarantors, and material third parties screened. PEP flag triggers EDD before application advances.' },
+      { title: 'Loan proceeds or SMR filed', desc: 'Clean application proceeds to lender. Red flags? MLRO reviews and prepares SMR if required. Records retained for 7 years.' },
+    ],
+    pricingRec: {
+      plan: 'Professional',
+      reason: 'Mortgage brokers need full KYC, source of funds workflows, third-party contributor management, PEP screening, and MLRO case management for SMR preparation. Professional covers all of this with advanced monitoring and case management built in.',
     },
   },
 ]

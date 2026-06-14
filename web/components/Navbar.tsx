@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Menu, X, ChevronDown, Shield, Bell } from 'lucide-react'
+import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark } from 'lucide-react'
 import { getStoredUser, getToken, clearUser } from '@/lib/auth'
 import { useRouter, usePathname } from 'next/navigation'
 
@@ -19,15 +19,16 @@ const solutionItems = [
 ]
 
 const industryItems = [
-  { label: 'Virtual Asset Service Providers (VASPs)', href: '/solutions/digital-currency-exchange', emoji: '₿' },
-  { label: 'Remittance Providers', href: '/solutions/remittance-provider', emoji: '🌏' },
-  { label: 'Foreign Exchange', href: '/solutions/foreign-exchange', emoji: '💱' },
-  { label: 'Payment Service Providers', href: '/solutions/payment-service-provider', emoji: '💳' },
-  { label: 'Real Estate Professionals', href: '/solutions/real-estate', emoji: '🏠' },
-  { label: 'Conveyancers', href: '/solutions/conveyancer', emoji: '📋' },
-  { label: 'Law Firms', href: '/solutions/law-firm', emoji: '⚖️' },
-  { label: 'Accounting Firms', href: '/solutions/accounting-firm', emoji: '📊' },
-  { label: 'Precious Metal Dealers', href: '/solutions/precious-metals', emoji: '🥇' },
+  { label: 'VASPs / Digital Currency Exchanges (DCEs)', href: '/solutions/digital-currency-exchange', icon: Coins },
+  { label: 'Remittance Providers', href: '/solutions/remittance-provider', icon: Globe },
+  { label: 'Foreign Exchange', href: '/solutions/foreign-exchange', icon: ArrowLeftRight },
+  { label: 'Payment Service Providers', href: '/solutions/payment-service-provider', icon: CreditCard },
+  { label: 'Mortgage Brokers', href: '/solutions/mortgage-broker', icon: Landmark },
+  { label: 'Real Estate Professionals', href: '/solutions/real-estate', icon: Home },
+  { label: 'Conveyancers', href: '/solutions/conveyancer', icon: FileCheck },
+  { label: 'Law Firms', href: '/solutions/law-firm', icon: Scale },
+  { label: 'Accounting Firms', href: '/solutions/accounting-firm', icon: Calculator },
+  { label: 'Precious Metal Dealers', href: '/solutions/precious-metals', icon: Gem },
 ]
 
 export default function Navbar() {
@@ -169,7 +170,7 @@ export default function Navbar() {
                         onClick={() => setActiveDropdown(null)}
                         className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors"
                       >
-                        <span className="text-lg">{item.emoji}</span>
+                        <item.icon className="w-4 h-4 text-slate-500 flex-shrink-0" />
                         <span className="text-sm font-medium text-slate-900">{item.label}</span>
                       </Link>
                     ))}
@@ -243,7 +244,7 @@ export default function Navbar() {
             <p className="px-3 pt-3 pb-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Industries</p>
             {industryItems.map(item => (
               <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-700 hover:bg-slate-50">
-                <span>{item.emoji}</span>{item.label}
+                <item.icon className="w-4 h-4 text-slate-500 flex-shrink-0" />{item.label}
               </Link>
             ))}
           </div>

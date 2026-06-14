@@ -13,7 +13,7 @@ const footerLinks = {
   ],
   Industries: [
     { label: 'Compliance Packs', href: '/packs' },
-    { label: 'Virtual Asset Service Providers (VASPs)', href: '/packs/digital-currency-exchange' },
+    { label: 'VASPs / Digital Currency Exchanges (DCEs)', href: '/packs/digital-currency-exchange' },
     { label: 'Remittance Providers', href: '/packs/remittance-provider' },
     { label: 'Real Estate Professionals', href: '/packs/real-estate' },
     { label: 'Law Firms', href: '/packs/law-firm' },

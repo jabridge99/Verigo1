@@ -5,9 +5,29 @@ import {
   Folder, FileText, Building2, Zap, Eye, ClipboardList,
   BookOpen, ScanFace, ShieldAlert, Newspaper, Activity, Network,
   Database, RefreshCw, GraduationCap, TrendingUp, UserCheck,
+  Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck,
+  Scale, Calculator, Gem, Landmark,
 } from 'lucide-react'
 import { industries, getIndustry } from '@/lib/industries'
 import { capabilities as libCapabilities } from '@/lib/capabilities'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDUSTRY ICON MAP
+// ─────────────────────────────────────────────────────────────────────────────
+
+const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  'digital-currency-exchange': Coins,
+  'remittance-provider': Globe,
+  'foreign-exchange': ArrowLeftRight,
+  'payment-service-provider': CreditCard,
+  'real-estate': Home,
+  'conveyancer': FileCheck,
+  'law-firm': Scale,
+  'accounting-firm': Calculator,
+  'precious-metals': Gem,
+  'reporting-group': Network,
+  'mortgage-broker': Landmark,
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -113,7 +133,7 @@ const capabilitiesData: Capability[] = [
   {
     slug: 'aml-program',
     title: 'AML Program',
-    tagline: 'Your legally required AML/CTF Program — built in, not bolted on',
+    tagline: 'Your legally required AML/CTF Program — risk-based, unified, and always current',
     color: 'from-blue-600 to-indigo-600',
     problem: "Every reporting entity must have a written AML/CTF Program — but most treat it as a document exercise. A program that sits in a drawer, disconnected from day-to-day operations, provides no real defence when AUSTRAC asks whether your business actually operates by it.",
     painPoints: [
@@ -121,38 +141,38 @@ const capabilitiesData: Capability[] = [
       'Annual review forgotten — last update was 3 years ago',
       'No connection between your written policies and what your team actually does',
     ],
-    whyMatters: 'When AUSTRAC audits your business, they ask two questions: does your AML Program exist, and does your business operate according to it? Most businesses pass the first test. Many fail the second. A living program embedded in your operations is the difference.',
+    whyMatters: 'Under the AML/CTF Amendment Act 2024 (effective 1 July 2026), the old Part A / Part B structure is replaced by a unified, risk-based program built directly from your ML/TF Risk Assessment. AUSTRAC now expects the Risk Assessment to come first — and the program to be proportionate to the risks it identifies. A static document no longer meets the standard.',
     stats: [
       { stat: 'Required', label: 'By the AML/CTF Act 2006 for all reporting entities' },
-      { stat: 'Annual', label: 'Review required — VeriGo guides the whole cycle' },
-      { stat: 'Day 1', label: 'Industry-specific templates ready from your first login' },
+      { stat: 'Risk-first', label: 'ML/TF Risk Assessment now drives the entire program' },
+      { stat: 'Unified', label: 'Single program replaces the old Part A / Part B structure' },
     ],
-    solution: 'VeriGo embeds your AML/CTF Program into the operating platform. Risk assessments are derived from live customer and transaction data. Registers update automatically as your team works. The program you produce for AUSTRAC reflects exactly how your business runs — because it comes from the same system your team uses every day.',
+    solution: 'VeriGo builds your ML/TF Risk Assessment first — from your industry, customer types, products, and transaction profile — then generates your unified AML/CTF Program directly from it. As your risk profile changes, the program updates. The document AUSTRAC sees reflects exactly how your business operates today.',
     workflow: [
-      { title: 'Risk Assessment', desc: 'Industry-specific risk matrix pre-populated. MLRO reviews and signs off.' },
-      { title: 'Part A Program', desc: 'Governance, senior accountability, employee DD, training obligations.' },
-      { title: 'Part B Program', desc: 'Customer verification procedures — the rules your team follows daily.' },
-      { title: 'CDD & EDD Policies', desc: 'Standard and enhanced due diligence with automatic workflow triggers.' },
-      { title: 'Registers & Training', desc: 'Employee DD register, training log, high-risk customer register — auto-maintained.' },
-      { title: 'Annual Review', desc: 'Automated reminder. Guided update workflow. Signed off and dated.' },
+      { title: 'ML/TF Risk Assessment', desc: 'Industry-specific risk matrix pre-populated. Customer types, products, channels, and jurisdictions scored. MLRO reviews and signs off.' },
+      { title: 'Unified AML/CTF Program', desc: 'Single program generated from your risk assessment — governance, accountability, CDD procedures, and monitoring rules in one document.' },
+      { title: 'Customer Due Diligence procedures', desc: 'CDD and EDD rules embedded in the program and enforced by the platform — not just written in a policy.' },
+      { title: 'Registers & Training', desc: 'Employee DD register, training log, and high-risk customer register maintained automatically as your team works.' },
+      { title: 'Annual Review', desc: 'Automated reminder. Guided review workflow. Risk Assessment updated first, program updated from it. Signed off and dated.' },
+      { title: 'Audit-ready output', desc: 'Current, complete program exported on demand — AUSTRAC receives a document that reflects live operations.' },
     ],
     benefits: [
-      "Your AML Program reflects how your business actually operates — not how it operated 3 years ago",
+      'Risk Assessment comes first — your program is proportionate to your actual ML/TF exposure, not a generic template',
+      'Unified program structure aligns with the AML/CTF Amendment Act 2024 — no outdated Part A / Part B references',
+      'Program updates when your risk profile changes — new products, new customer types, new corridors',
       'AUSTRAC audit requests take minutes — produce a complete, current program on demand',
       'New staff are guided by the same program your compliance team built — no knowledge gaps',
-      'Risk assessment updates automatically as your customer and transaction profile changes',
-      'Compliance registers maintained by the platform — no manual spreadsheet updates',
     ],
     industryExamples: [
-      { industry: 'Tranche 2 Law Firm', example: 'First-ever AML/CTF Program built from templates in a day — ready before the 2026 deadline.' },
-      { industry: 'Digital Currency Exchange', example: 'MLRO produces a current, complete program for AUSTRAC inspection in under an hour.' },
-      { industry: 'Remittance Provider', example: "Program updated to reflect new payment corridors without engaging a compliance consultant." },
+      { industry: 'Tranche 2 Law Firm', example: 'First-ever AML/CTF Program built from a guided Risk Assessment in a day — compliant with the new unified structure before the 2026 deadline.' },
+      { industry: 'VASP / DCE', example: 'MLRO updates the Risk Assessment to reflect new crypto products. Program regenerates automatically — AUSTRAC inspection ready in under an hour.' },
+      { industry: 'Remittance Provider', example: 'New payment corridor added. Risk Assessment updated, program reflects the change — without engaging a compliance consultant.' },
     ],
-    outcome: 'A living AML/CTF Program that reflects how your business actually operates — instantly producible for AUSTRAC.',
+    outcome: 'A living, risk-based AML/CTF Program aligned with the 2026 reforms — built from your Risk Assessment and instantly producible for AUSTRAC.',
     useCases: [
-      'Tranche 2 businesses building their first-ever AML/CTF Program before the 2026 deadline',
-      'DCEs and remittance providers updating their program to reflect operational changes',
-      'MLRO teams preparing for AUSTRAC audits with a complete, current program on demand',
+      'Tranche 2 businesses building their first-ever AML/CTF Program aligned to the new unified structure',
+      'VASPs and remittance providers updating their program to reflect the 2026 reform requirements',
+      'MLRO teams preparing for AUSTRAC audits with a complete, current risk-based program on demand',
     ],
   },
   {
@@ -854,6 +874,7 @@ function CapabilityPage({ cap }: { cap: Capability }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>> }) {
+  const IndIcon = industryIconMap[ind.id] ?? Shield
   const regimeBadge = ind.regime === 'current'
     ? { label: 'Active obligations now', cls: 'bg-green-50 text-green-700 ring-green-700/10' }
     : { label: 'Tranche 2 — obligations from 2026', cls: 'bg-amber-50 text-amber-700 ring-amber-700/10' }
@@ -874,7 +895,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
             ← All solutions
           </Link>
           <div className="flex items-start gap-6">
-            <div className="w-16 h-16 bg-white/15 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0 ring-1 ring-white/20">{ind.icon}</div>
+            <div className="w-16 h-16 bg-white/15 rounded-2xl flex items-center justify-center flex-shrink-0 ring-1 ring-white/20"><IndIcon className="w-8 h-8 text-white" /></div>
             <div>
               <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset mb-3 block w-fit ${regimeBadge.cls}`}>
                 {regimeBadge.label}
@@ -947,7 +968,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
 
           {/* Pack card */}
           <div className="bg-blue-50 ring-1 ring-blue-200 rounded-2xl p-7 flex flex-col sm:flex-row gap-6 items-start mb-8">
-            <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl flex-shrink-0`}>{ind.icon}</div>
+            <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}><IndIcon className="w-7 h-7 text-white" /></div>
             <div className="flex-1">
               <h3 className="font-bold text-slate-900 text-lg mb-1">{ind.packName}</h3>
               <p className="text-slate-600 text-sm leading-relaxed mb-4">
@@ -1019,7 +1040,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
 
         {/* 9 — BOOK DEMO */}
         <section className="bg-slate-900 rounded-3xl p-10 text-center">
-          <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5`}>{ind.icon}</div>
+          <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mx-auto mb-5`}><IndIcon className="w-7 h-7 text-white" /></div>
           <h2 className="text-3xl font-black text-white mb-3">
             Ready to get compliant as a {ind.shortLabel}?
           </h2>
