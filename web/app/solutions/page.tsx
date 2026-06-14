@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight, Shield, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX } from 'lucide-react'
 import { capabilities as libCaps } from '@/lib/capabilities'
 
+
 export const metadata = {
   title: 'AML Compliance Solutions | Verigo',
   description: 'Explore VeriGo\'s complete suite of AML/CTF compliance solutions: AML Program, customer onboarding, KYC, KYB, sanctions screening, PEP screening, adverse media, transaction monitoring, case management, and AUSTRAC reporting.',
