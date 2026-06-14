@@ -1,5 +1,6 @@
+import React from 'react'
 import Link from 'next/link'
-import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Landmark } from 'lucide-react'
+import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Landmark, TrendingUp, Briefcase, ShieldCheck, Dice5, Factory, Handshake } from 'lucide-react'
 import { industries } from '@/lib/industries'
 import { capabilities as libCaps } from '@/lib/capabilities'
 
@@ -213,36 +214,6 @@ export default function SolutionsPage() {
             </div>
           </div>
 
-          {/* Other regulated sectors */}
-          <div className="mt-16 pt-12 border-t border-slate-200">
-            <div className="flex items-center gap-3 mb-2">
-              <h2 className="text-2xl font-black text-slate-900">Other AUSTRAC-regulated sectors</h2>
-            </div>
-            <p className="text-slate-500 text-sm mb-8 max-w-2xl">
-              AUSTRAC regulates a broad range of financial services beyond those with dedicated compliance packs. These sectors are all subject to AML/CTF obligations under the AML/CTF Act 2006.
-            </p>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {[
-                { icon: '🏦', label: 'Banks & Authorised Deposit-taking Institutions' },
-                { icon: '🏠', label: 'Mortgage Brokers & Credit Providers' },
-                { icon: '📈', label: 'Stockbrokers & Securities Dealers' },
-                { icon: '💼', label: 'Financial Advisers & Planners' },
-                { icon: '🛡️', label: 'Life Insurance Providers' },
-                { icon: '🏛️', label: 'Superannuation Trustees' },
-                { icon: '🎰', label: 'Casino & Wagering Operators' },
-                { icon: '💳', label: 'Stored Value Card Providers' },
-                { icon: '🏭', label: 'Factoring & Invoice Finance Companies' },
-              ].map(s => (
-                <div key={s.label} className="flex items-center gap-3 bg-white rounded-xl px-4 py-3.5 ring-1 ring-slate-100">
-                  <span className="text-xl flex-shrink-0">{s.icon}</span>
-                  <span className="text-sm font-medium text-slate-700">{s.label}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-slate-400 mt-4">
-              Compliance packs for these sectors are on our roadmap. <Link href="/contact" className="text-blue-600 hover:underline">Contact us</Link> to register interest or discuss your specific requirements.
-            </p>
-          </div>
         </div>
       </section>
 
@@ -255,19 +226,21 @@ export default function SolutionsPage() {
               AUSTRAC regulates a broad range of financial services businesses in Australia. The following sectors are all subject to AML/CTF obligations under the AML/CTF Act 2006.
             </p>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-              {[
-                { icon: '🏦', label: 'Banks & Authorised Deposit-taking Institutions (ADIs)' },
-                { icon: '📈', label: 'Stockbrokers & Securities Dealers' },
-                { icon: '💼', label: 'Financial Advisers & Financial Planners' },
-                { icon: '🛡️', label: 'Life Insurance Providers' },
-                { icon: '🏛️', label: 'Superannuation Trustees & Fund Managers' },
-                { icon: '🎰', label: 'Casino & Wagering Operators' },
-                { icon: '💳', label: 'Stored Value Card & Prepaid Product Providers' },
-                { icon: '🏭', label: 'Factoring & Invoice Finance Companies' },
-                { icon: '🤝', label: 'Trust & Company Service Providers (TCSPs)' },
-              ].map(s => (
+              {([
+                { icon: Landmark, label: 'Banks & Authorised Deposit-taking Institutions (ADIs)' },
+                { icon: TrendingUp, label: 'Stockbrokers & Securities Dealers' },
+                { icon: Briefcase, label: 'Financial Advisers & Financial Planners' },
+                { icon: ShieldCheck, label: 'Life Insurance Providers' },
+                { icon: Building2, label: 'Superannuation Trustees & Fund Managers' },
+                { icon: Dice5, label: 'Casino & Wagering Operators' },
+                { icon: CreditCard, label: 'Stored Value Card & Prepaid Product Providers' },
+                { icon: Factory, label: 'Factoring & Invoice Finance Companies' },
+                { icon: Handshake, label: 'Trust & Company Service Providers (TCSPs)' },
+              ] as { icon: React.ComponentType<{ className?: string }>, label: string }[]).map(s => (
                 <div key={s.label} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 ring-1 ring-slate-100">
-                  <span className="text-xl flex-shrink-0">{s.icon}</span>
+                  <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center flex-shrink-0">
+                    <s.icon className="w-4 h-4 text-slate-600" />
+                  </div>
                   <span className="text-sm font-medium text-slate-700">{s.label}</span>
                 </div>
               ))}

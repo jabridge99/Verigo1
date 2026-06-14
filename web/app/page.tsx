@@ -1,9 +1,11 @@
+import React from 'react'
 import Link from 'next/link'
 import {
   Shield, CheckCircle, AlertTriangle, FileText, Users, Lock,
   ArrowRight, Building2, Activity, Database,
   UserCheck, ShieldAlert, Zap, BookOpen, ScanFace, FolderOpen,
   Package, Network, ClipboardList,
+  Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Landmark,
 } from 'lucide-react'
 import { industries } from '@/lib/industries'
 
@@ -224,11 +226,26 @@ function AMLReformTimeline() {
 // SECTION 4 — WHO WE HELP
 // ─────────────────────────────────────────────────────────────────────────────
 function WhoWeHelp() {
+  const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+    'digital-currency-exchange': Coins,
+    'remittance-provider': Globe,
+    'foreign-exchange': ArrowLeftRight,
+    'payment-service-provider': CreditCard,
+    'real-estate': Home,
+    'conveyancer': FileCheck,
+    'law-firm': Scale,
+    'accounting-firm': Calculator,
+    'precious-metals': Gem,
+    'reporting-group': Network,
+    'mortgage-broker': Landmark,
+  }
+
   const allIndustries = industries.filter(i =>
     [
       'digital-currency-exchange', 'remittance-provider', 'foreign-exchange',
       'law-firm', 'accounting-firm', 'conveyancer', 'real-estate',
       'precious-metals', 'reporting-group', 'payment-service-provider',
+      'mortgage-broker',
     ].includes(i.id)
   )
 
@@ -252,8 +269,8 @@ function WhoWeHelp() {
               href={`/solutions/${ind.id}`}
               className="pub-card-hover group flex flex-col gap-4"
             >
-              <div className={`w-12 h-12 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl flex-shrink-0`}>
-                {ind.icon}
+              <div className={`w-12 h-12 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}>
+                {(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <Icon className="w-6 h-6 text-white" /> })()}
               </div>
               <div className="flex-1">
                 <h3 className="font-bold text-slate-900 mb-1 text-sm">{ind.label}</h3>
