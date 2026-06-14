@@ -800,6 +800,84 @@ export const industries: Industry[] = [
       reason: 'Reporting Groups require multi-entity configuration, shared customer records, group-level monitoring, and consolidated reporting. Enterprise includes all of this plus a dedicated account manager and custom SLA.',
     },
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // MORTGAGE BROKER
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: 'mortgage-broker',
+    slug: 'mortgage-broker',
+    label: 'Mortgage Broker',
+    shortLabel: 'Mortgage',
+    regime: 'current',
+    icon: '🏡',
+    description: 'Mortgage brokers who arrange or provide credit facilities are reporting entities under the AML/CTF Act 2006 with obligations to verify borrowers and report suspicious activity.',
+    overview: "You sit between the borrower and the lender — and that makes you a gatekeeper for one of the largest financial transactions most Australians ever make. Mortgage brokers who provide or arrange credit are reporting entities under the AML/CTF Act 2006. Your obligation is to know who you're dealing with, verify where the funds are coming from, and report anything that doesn't add up. Property transactions are one of the most common vehicles for money laundering in Australia — AUSTRAC's data confirms it.",
+    obligations: [
+      'Enrol with AUSTRAC as a provider of designated credit services',
+      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program based on it',
+      'Conduct CDD on all borrowers before providing credit services',
+      'Verify the source of the borrower\'s deposit and other funds being applied to the transaction',
+      'Identify and verify any guarantors or third parties contributing funds',
+      'Lodge SMR reports within 3 business days of forming a suspicion',
+      'Maintain all CDD and transaction records for a minimum of 7 years',
+    ],
+    keyRisks: [
+      'Borrowers using property finance to integrate criminal proceeds into the legitimate economy',
+      'Third-party gifted deposits with no verifiable legitimate source',
+      'Income inflation or falsified employment documents used to secure larger loans',
+      'PEPs and their associates using property purchases to move significant funds',
+    ],
+    risks: [
+      'Borrowers using property finance to integrate criminal proceeds into the legitimate economy',
+      'Third-party gifted deposits with no verifiable legitimate source',
+      'Income inflation or falsified employment documents used to secure larger loans',
+      'PEPs and their associates purchasing property through mortgage arrangements',
+    ],
+    cddRequirements: [
+      'Full identity verification of all borrowers with government-issued photo ID',
+      'Source of funds verification for the deposit and any other funds being applied to the purchase',
+      'Third-party fund contributor identification and verification where gifted or contributed funds are involved',
+      'PEP and sanctions screening of all borrowers, guarantors, and material third parties at application',
+    ],
+    monitoringRequirements: [
+      'Ongoing monitoring of borrower application patterns for inconsistencies between stated income and deposit source',
+      'Periodic review of borrower risk ratings where material changes in circumstances are identified',
+      'Post-settlement review for indicators that emerge after loan approval that may require SMR filing',
+    ],
+    reportingRequirements: {
+      types: ['SMR'],
+      details: 'Mortgage brokers must lodge SMR reports within 3 business days of forming a suspicion about a borrower, application, or transaction. You must not disclose to the borrower that an SMR has been filed.',
+    },
+    howVerigoHelps: [
+      'Guided borrower CDD workflow — identity verification and document collection completed digitally before application progresses',
+      'Source of funds verification module with document upload, review, and documented approval workflow',
+      'PEP and sanctions screening of all borrowers, guarantors, and third-party fund contributors at application',
+      'Third-party fund contributor identification and KYC workflow triggered automatically when gift or contribution is declared',
+      'SMR case management and preparation tools for MLRO review and AUSTRAC lodgement',
+    ],
+    austracRef: 'AML/CTF Act 2006 — Providers of Designated Credit Services',
+    packName: 'Mortgage Broker Pack',
+    color: 'from-sky-500 to-blue-600',
+    customerRisks: [
+      "Borrowers with large unexplained cash deposits — a deposit that significantly exceeds what the borrower's declared income could plausibly support is a major red flag. Source of funds must be documented and verified before you proceed.",
+      "Third-party gifted funds — when the deposit or top-up funds come from a third party not on the application, that person must be identified and the source of their contribution documented. Undisclosed third-party contributors are a classic ML structuring method.",
+      "Borrowers from high-risk jurisdictions with offshore income — borrowers whose funds originate from countries with weak AML regimes, or whose offshore income is difficult to verify, carry elevated risk and require enhanced scrutiny.",
+      "PEP borrowers — politicians, senior government officials, and their family members seeking mortgage finance require enhanced due diligence regardless of apparent legitimacy.",
+    ],
+    exampleWorkflow: [
+      { title: 'Borrower submits application', desc: 'Application received. CDD workflow triggered immediately — digital ID check sent to borrower.' },
+      { title: 'Identity verified', desc: 'Borrower completes KYC from their phone. Document and biometric check runs automatically.' },
+      { title: 'Source of funds requested', desc: 'Borrower provides bank statements and documentation confirming the origin of the deposit and any other funds.' },
+      { title: 'Third-party contributors identified', desc: 'Gifted or contributed funds declared? Contributor identified, verified, and source of their funds documented.' },
+      { title: 'PEP and sanctions screening', desc: 'All borrowers, guarantors, and material third parties screened. PEP flag triggers EDD before application advances.' },
+      { title: 'Loan proceeds or SMR filed', desc: 'Clean application proceeds to lender. Red flags? MLRO reviews and prepares SMR if required. Records retained for 7 years.' },
+    ],
+    pricingRec: {
+      plan: 'Professional',
+      reason: 'Mortgage brokers need full KYC, source of funds workflows, third-party contributor management, PEP screening, and MLRO case management for SMR preparation. Professional covers all of this with advanced monitoring and case management built in.',
+    },
+  },
 ]
 
 export const getIndustry = (id: string) => industries.find(i => i.id === id)

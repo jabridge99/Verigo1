@@ -23,6 +23,7 @@ const industryItems = [
   { label: 'Remittance Providers', href: '/solutions/remittance-provider', emoji: '🌏' },
   { label: 'Foreign Exchange', href: '/solutions/foreign-exchange', emoji: '💱' },
   { label: 'Payment Service Providers', href: '/solutions/payment-service-provider', emoji: '💳' },
+  { label: 'Mortgage Brokers', href: '/solutions/mortgage-broker', emoji: '🏡' },
   { label: 'Real Estate Professionals', href: '/solutions/real-estate', emoji: '🏠' },
   { label: 'Conveyancers', href: '/solutions/conveyancer', emoji: '📋' },
   { label: 'Law Firms', href: '/solutions/law-firm', emoji: '⚖️' },
