@@ -127,8 +127,8 @@ VeriGo includes all of these in a single platform, pre-configured for your indus
 - **Enterprise contracts** — custom pricing for large organisations, reporting groups, or businesses with specific integration requirements.
 
 **VeriGo pricing (all plans include unlimited customers):**
-- **Essential — $299/year.** 1 industry pack. Core KYC, KYB, IFTI/SMR/TTR reporting, and essential integrations (Dropbox, email, storage).
-- **Professional — $799/year.** Everything in Essential plus advanced monitoring, case management, workflow automation, AML data connectors (Chainalysis, Greeid), and REST API access.
+- **Essential — $299/year.** 1 industry pack. Core KYC, KYB, IFTI/SMR/TTR reporting, and essential integrations (email, cloud storage).
+- **Professional — $799/year.** Everything in Essential plus advanced monitoring, case management, workflow automation, AML data connectors, and the ability to connect Verigo to your existing systems.
 - **Enterprise — Custom pricing** for reporting groups, large institutions, and SaaS resellers.
 
 All plans include a 7-day free trial with no credit card required. The AML/CTF Program included is a basic reference template — tailoring it to your specific business is available as an additional service.`,
@@ -137,15 +137,15 @@ All plans include a 7-day free trial with no credit card required. The AML/CTF P
     question: 'Can AML software integrate with existing systems?',
     answer: `Yes — integration capability is an important consideration when choosing AML software. Common integration needs include:
 
-- **Document and data storage** — cloud storage integrations (Dropbox, Google Drive, SharePoint) allow compliance documents to be synced with existing business file management systems.
+- **Document and data storage** — cloud storage integrations allow compliance documents to be synced with your existing file management systems.
 - **Communication tools** — email integrations ensure compliance alerts and KYC renewal reminders are delivered through existing channels.
-- **Core business systems** — REST API access allows AML platforms to receive customer and transaction data from your core banking system, CRM, or payment platform — so compliance checks run automatically as part of your existing workflow.
-- **Specialist AML data providers** — for businesses with higher-risk profiles (crypto exchanges, PSPs, FX dealers), integrations with blockchain analytics providers (Chainalysis), identity verification services (Greeid), and international watchlist databases add an additional layer of intelligence.
+- **Core business systems** — Verigo can connect to your core banking system, CRM, or payment platform so compliance checks run automatically as part of your existing workflow.
+- **Specialist AML data providers** — for businesses with higher-risk profiles (crypto exchanges, PSPs, FX dealers), integrations with AML data connectors and global watchlist databases add an additional layer of intelligence.
 
 **VeriGo integrations by plan:**
-- **Essential:** Dropbox, email, cloud storage
-- **Professional:** Essential integrations plus AML data connectors (Chainalysis, Greeid, and others) and full REST API access
-- **Enterprise:** All of the above with BYO API keys, custom integration support, and dedicated technical onboarding`,
+- **Essential:** Email and cloud storage
+- **Professional:** Essential integrations plus AML data connectors and the ability to connect Verigo to your existing systems
+- **Enterprise:** All of the above with BYO vendor contracts, custom integration support, and dedicated technical onboarding`,
   },
 ]
 

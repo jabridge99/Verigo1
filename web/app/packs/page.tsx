@@ -1,10 +1,25 @@
+import React from 'react'
 import Link from 'next/link'
-import { ArrowRight, Package } from 'lucide-react'
+import { ArrowRight, Package, Shield, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark } from 'lucide-react'
 import { industries } from '@/lib/industries'
 
 export const metadata = {
   title: 'Industry Compliance Packs | Verigo',
   description: 'Pre-configured AML/CTF compliance packs for every Australian regulated industry. KYC workflows, monitoring rules, AUSTRAC report templates, and AML program templates — ready to go.',
+}
+
+const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  'digital-currency-exchange': Coins,
+  'remittance-provider': Globe,
+  'foreign-exchange': ArrowLeftRight,
+  'payment-service-provider': CreditCard,
+  'real-estate': Home,
+  'conveyancer': FileCheck,
+  'law-firm': Scale,
+  'accounting-firm': Calculator,
+  'precious-metals': Gem,
+  'reporting-group': Network,
+  'mortgage-broker': Landmark,
 }
 
 export default function PacksIndexPage() {
@@ -49,7 +64,7 @@ export default function PacksIndexPage() {
               {current.map(ind => (
                 <Link key={ind.id} href={`/packs/${ind.id}`} className="pub-card-hover group">
                   <div className="flex items-center gap-4 mb-5">
-                    <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl flex-shrink-0`}>{ind.icon}</div>
+                    <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}>{(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <Icon className="w-7 h-7 text-white" /> })()}</div>
                     <div>
                       <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{ind.packName}</h3>
                       <p className="text-sm text-slate-400">{ind.shortLabel}</p>
@@ -76,7 +91,7 @@ export default function PacksIndexPage() {
               <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-700/10">Effective 2026</span>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-8 flex gap-4">
-              <span className="text-2xl">⚠️</span>
+              <Shield className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold text-amber-900 mb-1">Prepare now — the deadline is approaching</p>
                 <p className="text-amber-800 text-sm leading-relaxed">The AML/CTF Amendment Act 2024 brings real estate professionals, lawyers, accountants, conveyancers, and precious metal dealers under AUSTRAC from 2026. VeriGo&apos;s Tranche 2 packs include everything you need to enrol and comply from day one.</p>
@@ -86,7 +101,7 @@ export default function PacksIndexPage() {
               {expanded.map(ind => (
                 <Link key={ind.id} href={`/packs/${ind.id}`} className="pub-card-hover group">
                   <div className="flex items-center gap-4 mb-5">
-                    <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl flex-shrink-0`}>{ind.icon}</div>
+                    <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}>{(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <Icon className="w-7 h-7 text-white" /> })()}</div>
                     <div>
                       <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{ind.packName}</h3>
                       <p className="text-sm text-slate-400">{ind.shortLabel}</p>
