@@ -5,9 +5,29 @@ import {
   Folder, FileText, Building2, Zap, Eye, ClipboardList,
   BookOpen, ScanFace, ShieldAlert, Newspaper, Activity, Network,
   Database, RefreshCw, GraduationCap, TrendingUp, UserCheck,
+  Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck,
+  Scale, Calculator, Gem, Landmark,
 } from 'lucide-react'
 import { industries, getIndustry } from '@/lib/industries'
 import { capabilities as libCapabilities } from '@/lib/capabilities'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDUSTRY ICON MAP
+// ─────────────────────────────────────────────────────────────────────────────
+
+const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  'digital-currency-exchange': Coins,
+  'remittance-provider': Globe,
+  'foreign-exchange': ArrowLeftRight,
+  'payment-service-provider': CreditCard,
+  'real-estate': Home,
+  'conveyancer': FileCheck,
+  'law-firm': Scale,
+  'accounting-firm': Calculator,
+  'precious-metals': Gem,
+  'reporting-group': Network,
+  'mortgage-broker': Landmark,
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -854,6 +874,7 @@ function CapabilityPage({ cap }: { cap: Capability }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>> }) {
+  const IndIcon = industryIconMap[ind.id] ?? Shield
   const regimeBadge = ind.regime === 'current'
     ? { label: 'Active obligations now', cls: 'bg-green-50 text-green-700 ring-green-700/10' }
     : { label: 'Tranche 2 — obligations from 2026', cls: 'bg-amber-50 text-amber-700 ring-amber-700/10' }
@@ -874,7 +895,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
             ← All solutions
           </Link>
           <div className="flex items-start gap-6">
-            <div className="w-16 h-16 bg-white/15 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0 ring-1 ring-white/20">{ind.icon}</div>
+            <div className="w-16 h-16 bg-white/15 rounded-2xl flex items-center justify-center flex-shrink-0 ring-1 ring-white/20"><IndIcon className="w-8 h-8 text-white" /></div>
             <div>
               <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset mb-3 block w-fit ${regimeBadge.cls}`}>
                 {regimeBadge.label}
@@ -947,7 +968,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
 
           {/* Pack card */}
           <div className="bg-blue-50 ring-1 ring-blue-200 rounded-2xl p-7 flex flex-col sm:flex-row gap-6 items-start mb-8">
-            <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl flex-shrink-0`}>{ind.icon}</div>
+            <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}><IndIcon className="w-7 h-7 text-white" /></div>
             <div className="flex-1">
               <h3 className="font-bold text-slate-900 text-lg mb-1">{ind.packName}</h3>
               <p className="text-slate-600 text-sm leading-relaxed mb-4">
@@ -1019,7 +1040,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
 
         {/* 9 — BOOK DEMO */}
         <section className="bg-slate-900 rounded-3xl p-10 text-center">
-          <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5`}>{ind.icon}</div>
+          <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mx-auto mb-5`}><IndIcon className="w-7 h-7 text-white" /></div>
           <h2 className="text-3xl font-black text-white mb-3">
             Ready to get compliant as a {ind.shortLabel}?
           </h2>

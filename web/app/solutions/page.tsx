@@ -1,7 +1,21 @@
 import Link from 'next/link'
-import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX } from 'lucide-react'
+import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Landmark } from 'lucide-react'
 import { industries } from '@/lib/industries'
 import { capabilities as libCaps } from '@/lib/capabilities'
+
+const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  'digital-currency-exchange': Coins,
+  'remittance-provider': Globe,
+  'foreign-exchange': ArrowLeftRight,
+  'payment-service-provider': CreditCard,
+  'real-estate': Home,
+  'conveyancer': FileCheck,
+  'law-firm': Scale,
+  'accounting-firm': Calculator,
+  'precious-metals': Gem,
+  'reporting-group': Network,
+  'mortgage-broker': Landmark,
+}
 
 export const metadata = {
   title: 'AML Compliance Solutions | Verigo',
@@ -160,7 +174,7 @@ export default function SolutionsPage() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {current.map(ind => (
                 <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
-                  <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl mb-5`}>{ind.icon}</div>
+                  {(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}><Icon className="w-7 h-7 text-white" /></div> })()}
                   <h3 className="text-lg font-bold text-slate-900 mb-2">{ind.label}</h3>
                   <p className="text-slate-500 text-sm leading-relaxed mb-5 flex-1">{ind.description}</p>
                   <div className="flex items-center justify-between">
@@ -187,7 +201,7 @@ export default function SolutionsPage() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {expanded.map(ind => (
                 <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
-                  <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl mb-5`}>{ind.icon}</div>
+                  {(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}><Icon className="w-7 h-7 text-white" /></div> })()}
                   <h3 className="text-lg font-bold text-slate-900 mb-2">{ind.label}</h3>
                   <p className="text-slate-500 text-sm leading-relaxed mb-5 flex-1">{ind.description}</p>
                   <div className="flex items-center justify-between">
