@@ -1,21 +1,8 @@
+import React from 'react'
 import Link from 'next/link'
-import { ArrowRight, Shield, Users, Search, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Landmark } from 'lucide-react'
-import { industries } from '@/lib/industries'
+import { ArrowRight, Shield, BarChart3, Folder, FileText, Building2, Zap, UserCheck, ScanFace, ShieldAlert, Newspaper, Network, BookOpen, UserX } from 'lucide-react'
 import { capabilities as libCaps } from '@/lib/capabilities'
 
-const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'digital-currency-exchange': Coins,
-  'remittance-provider': Globe,
-  'foreign-exchange': ArrowLeftRight,
-  'payment-service-provider': CreditCard,
-  'real-estate': Home,
-  'conveyancer': FileCheck,
-  'law-firm': Scale,
-  'accounting-firm': Calculator,
-  'precious-metals': Gem,
-  'reporting-group': Network,
-  'mortgage-broker': Landmark,
-}
 
 export const metadata = {
   title: 'AML Compliance Solutions | Verigo',
@@ -60,9 +47,6 @@ const capabilities = libCaps.map(c => ({
 }))
 
 export default function SolutionsPage() {
-  const current = industries.filter(i => i.regime === 'current')
-  const expanded = industries.filter(i => i.regime === 'expanded')
-
   return (
     <div className="bg-white text-slate-900">
       {/* Hero */}
@@ -163,125 +147,14 @@ export default function SolutionsPage() {
         </div>
       </section>
 
-      {/* Industries */}
+      {/* Industries CTA */}
       <section className="pub-section bg-slate-50">
-        <div className="pub-container">
-          <div className="mb-12">
-            <div className="flex items-center gap-3 mb-6">
-              <h2 className="text-2xl font-black text-slate-900">Current Reporting Entities</h2>
-              <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-700/10">Active obligations now</span>
-            </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {current.map(ind => (
-                <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
-                  {(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}><Icon className="w-7 h-7 text-white" /></div> })()}
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">{ind.label}</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed mb-5 flex-1">{ind.description}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400">{ind.packName}</span>
-                    <span className="text-blue-600 text-sm flex items-center gap-1 group-hover:gap-2 transition-all font-semibold">View pack <ArrowRight className="w-4 h-4" /></span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-3 mb-6">
-              <h2 className="text-2xl font-black text-slate-900">Tranche 2 — Expanded Regime</h2>
-              <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-700/10">Effective 2026</span>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-8 flex gap-4">
-              <span className="text-2xl">⚠️</span>
-              <div>
-                <p className="font-semibold text-amber-900 mb-1">Prepare now — the deadline is approaching</p>
-                <p className="text-amber-800 text-sm leading-relaxed">The AML/CTF Amendment Act 2024 will bring real estate professionals, lawyers, accountants, conveyancers and precious metal dealers under AUSTRAC&apos;s regulatory umbrella from 2026.</p>
-              </div>
-            </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {expanded.map(ind => (
-                <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
-                  {(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}><Icon className="w-7 h-7 text-white" /></div> })()}
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">{ind.label}</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed mb-5 flex-1">{ind.description}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-amber-600 font-semibold">{ind.packName}</span>
-                    <span className="text-blue-600 text-sm flex items-center gap-1 group-hover:gap-2 transition-all font-semibold">View pack <ArrowRight className="w-4 h-4" /></span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Other regulated sectors */}
-          <div className="mt-16 pt-12 border-t border-slate-200">
-            <div className="flex items-center gap-3 mb-2">
-              <h2 className="text-2xl font-black text-slate-900">Other AUSTRAC-regulated sectors</h2>
-            </div>
-            <p className="text-slate-500 text-sm mb-8 max-w-2xl">
-              AUSTRAC regulates a broad range of financial services beyond those with dedicated compliance packs. These sectors are all subject to AML/CTF obligations under the AML/CTF Act 2006.
-            </p>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {[
-                { icon: '🏦', label: 'Banks & Authorised Deposit-taking Institutions' },
-                { icon: '🏠', label: 'Mortgage Brokers & Credit Providers' },
-                { icon: '📈', label: 'Stockbrokers & Securities Dealers' },
-                { icon: '💼', label: 'Financial Advisers & Planners' },
-                { icon: '🛡️', label: 'Life Insurance Providers' },
-                { icon: '🏛️', label: 'Superannuation Trustees' },
-                { icon: '🎰', label: 'Casino & Wagering Operators' },
-                { icon: '💳', label: 'Stored Value Card Providers' },
-                { icon: '🏭', label: 'Factoring & Invoice Finance Companies' },
-              ].map(s => (
-                <div key={s.label} className="flex items-center gap-3 bg-white rounded-xl px-4 py-3.5 ring-1 ring-slate-100">
-                  <span className="text-xl flex-shrink-0">{s.icon}</span>
-                  <span className="text-sm font-medium text-slate-700">{s.label}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-slate-400 mt-4">
-              Compliance packs for these sectors are on our roadmap. <Link href="/contact" className="text-blue-600 hover:underline">Contact us</Link> to register interest or discuss your specific requirements.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Other regulated sectors */}
-      <section className="pub-section bg-white">
-        <div className="pub-container">
-          <div className="border-t border-slate-100 pt-12">
-            <h2 className="text-2xl font-black text-slate-900 mb-2">Other AUSTRAC-regulated sectors</h2>
-            <p className="text-slate-500 text-sm mb-8 max-w-2xl">
-              AUSTRAC regulates a broad range of financial services businesses in Australia. The following sectors are all subject to AML/CTF obligations under the AML/CTF Act 2006.
-            </p>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-              {[
-                { icon: '🏦', label: 'Banks & Authorised Deposit-taking Institutions (ADIs)' },
-                { icon: '📈', label: 'Stockbrokers & Securities Dealers' },
-                { icon: '💼', label: 'Financial Advisers & Financial Planners' },
-                { icon: '🛡️', label: 'Life Insurance Providers' },
-                { icon: '🏛️', label: 'Superannuation Trustees & Fund Managers' },
-                { icon: '🎰', label: 'Casino & Wagering Operators' },
-                { icon: '💳', label: 'Stored Value Card & Prepaid Product Providers' },
-                { icon: '🏭', label: 'Factoring & Invoice Finance Companies' },
-                { icon: '🤝', label: 'Trust & Company Service Providers (TCSPs)' },
-              ].map(s => (
-                <div key={s.label} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 ring-1 ring-slate-100">
-                  <span className="text-xl flex-shrink-0">{s.icon}</span>
-                  <span className="text-sm font-medium text-slate-700">{s.label}</span>
-                </div>
-              ))}
-            </div>
-            <div className="bg-slate-900 rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center gap-5">
-              <div className="flex-1">
-                <p className="font-semibold text-white mb-1">Operating in one of these sectors?</p>
-                <p className="text-slate-400 text-sm">We can tailor a compliance solution to your specific obligations. Contact us to discuss your requirements.</p>
-              </div>
-              <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100 transition-colors flex-shrink-0">
-                Talk to us <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-          </div>
+        <div className="pub-container text-center">
+          <h2 className="text-2xl font-black text-slate-900 mb-3">Looking for your industry?</h2>
+          <p className="text-slate-500 mb-6 max-w-xl mx-auto">Every compliance pack is pre-configured for your sector — current reporting entities, Tranche 2 businesses, and more.</p>
+          <Link href="/industries" className="pub-btn-secondary inline-flex">
+            View all industries <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       </section>
 

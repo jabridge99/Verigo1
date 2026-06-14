@@ -174,6 +174,11 @@ export default function Navbar() {
                         <span className="text-sm font-medium text-slate-900">{item.label}</span>
                       </Link>
                     ))}
+                    <div className="pt-2 mt-1 border-t border-slate-100">
+                      <Link href="/industries" onClick={() => setActiveDropdown(null)} className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-3">
+                        View all industries →
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>
