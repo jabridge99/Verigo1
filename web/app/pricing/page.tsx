@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CheckCircle, X, ArrowRight, Shield, Zap, Database, Minus } from 'lucide-react'
+import { CheckCircle, X, ArrowRight, Shield, Zap, Database, Minus, Info } from 'lucide-react'
 
 export const metadata = {
   title: 'Pricing | Verigo',
@@ -17,10 +17,10 @@ const plans = [
     highlight: false,
     features: [
       { label: 'Full platform access for 7 days', included: true },
-      { label: 'Industry compliance pack (your sector)', included: true },
+      { label: '1 industry compliance pack (your sector)', included: true },
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
-      { label: 'AML Program templates', included: true },
+      { label: 'AML/CTF Program — basic reference template', included: true, note: true },
       { label: 'IFTI IN & OUT reporting', included: true },
       { label: 'SMR & TTR reporting', included: true },
       { label: 'Transaction monitoring', included: true },
@@ -42,7 +42,7 @@ const plans = [
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
-      { label: 'AML Program templates', included: true },
+      { label: 'AML/CTF Program — basic reference template', included: true, note: true },
       { label: 'IFTI IN, OUT & bulk import', included: true },
       { label: 'SMR & TTR reporting', included: true },
       { label: 'Basic transaction monitoring', included: true },
@@ -65,9 +65,9 @@ const plans = [
     highlight: true,
     features: [
       { label: 'Up to 5,000 customers', included: true },
-      { label: 'All industry compliance packs', included: true },
+      { label: '1 industry compliance pack', included: true },
       { label: 'KYC + KYB verification', included: true },
-      { label: 'AML Program templates', included: true },
+      { label: 'AML/CTF Program — basic reference template', included: true, note: true },
       { label: 'IFTI IN, OUT & bulk import', included: true },
       { label: 'SMR & TTR reporting', included: true },
       { label: 'Sanctions, PEP + adverse media', included: true },
@@ -93,7 +93,7 @@ const plans = [
       { label: 'Unlimited customers', included: true },
       { label: 'All compliance packs', included: true },
       { label: 'KYC, KYB + beneficial ownership', included: true },
-      { label: 'AML Program + custom templates', included: true },
+      { label: 'AML/CTF Program — tailored to your industry', included: true },
       { label: 'Full IFTI, SMR, TTR suite', included: true },
       { label: 'Premium data connectors (BYO keys)', included: true },
       { label: 'Reporting groups (multi-entity)', included: true },
@@ -114,8 +114,8 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
     group: 'Platform',
     rows: [
       { feature: 'Customer limit', values: ['Trial only', '500', '5,000', 'Unlimited'] },
-      { feature: 'Industry compliance packs', values: ['All packs (trial)', '1 pack', 'All packs', 'All packs'] },
-      { feature: 'AML/CTF Program templates', tooltip: 'Risk assessment, Part A & B, registers, training log', values: [true, true, true, 'Custom'] },
+      { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'All packs'] },
+      { feature: 'AML/CTF Program', tooltip: 'Basic reference template preloaded. Tailoring to your specific business is an additional service.', values: ['Reference only', 'Reference only', 'Reference only', 'Tailored'] },
       { feature: 'Annual review workflow', values: [true, true, true, true] },
     ],
   },
@@ -221,7 +221,7 @@ export default function PricingPage() {
             <span className="text-blue-600">Start free for 7 days.</span>
           </h1>
           <p className="text-xl text-slate-600 max-w-xl mx-auto mb-4">
-            Annual plans. No hidden fees. All plans include IFTI reporting, AML Program templates, and Australian data sovereignty.
+            Annual plans. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
           </p>
           <p className="text-sm text-slate-400">No credit card required for trial. Cancel anytime.</p>
         </div>
@@ -258,7 +258,12 @@ export default function PricingPage() {
                         ? <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                         : <X className="w-4 h-4 text-slate-200 flex-shrink-0 mt-0.5" />
                       }
-                      {f.label}
+                      <span>
+                        {f.label}
+                        {'note' in f && f.note && (
+                          <span className="ml-1 text-xs text-amber-600 font-medium">†</span>
+                        )}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -270,6 +275,17 @@ export default function PricingPage() {
                 </Link>
               </div>
             ))}
+          </div>
+
+          {/* AML program note */}
+          <div className="flex items-start gap-3 bg-amber-50 ring-1 ring-amber-200 rounded-2xl px-5 py-4 mb-8">
+            <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-amber-800 text-sm leading-relaxed">
+              <span className="font-semibold">† AML/CTF Program — basic reference template only.</span>{' '}
+              Every Essential and Professional plan includes a preloaded industry reference template to help you get started.
+              Each business must tailor its own AML/CTF Program to reflect its specific operations, customer types, and risk profile.
+              Program tailoring and review services are available as an additional engagement — <Link href="/live-demo" className="underline hover:text-amber-900">contact us</Link> to discuss.
+            </p>
           </div>
 
           {/* Platform highlights */}
