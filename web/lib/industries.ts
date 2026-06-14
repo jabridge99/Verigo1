@@ -36,12 +36,12 @@ export const industries: Industry[] = [
   {
     id: 'digital-currency-exchange',
     slug: 'digital-currency-exchange',
-    label: 'Virtual Asset Service Provider (VASP)',
+    label: 'Virtual Asset Service Provider (VASP) / DCE',
     shortLabel: 'VASP / DCE',
     regime: 'current',
     icon: '₿',
-    description: 'VASPs — including Digital Currency Exchanges (DCEs) — must register with AUSTRAC and implement full AML/CTF programs under the AML/CTF Act 2006.',
-    overview: "You're running a crypto exchange or virtual asset business in one of the most scrutinised sectors under Australian AML law. AUSTRAC watches VASPs (formerly known as Digital Currency Exchanges or DCEs) closely — and for good reason. The pseudonymous nature of blockchain transactions means your platform can be used to move money without a trace unless you have the right controls in place. The good news: with the right compliance program, you can onboard customers fast, trade compliantly, and never miss an AUSTRAC deadline.",
+    description: 'VASPs or Digital Currency Exchanges (DCEs) must register with AUSTRAC and implement full AML/CTF programs under the AML/CTF Act 2006.',
+    overview: "You're running a crypto exchange or virtual asset business in one of the most scrutinised sectors under Australian AML law. AUSTRAC watches VASPs and DCEs closely — and for good reason. The pseudonymous nature of blockchain transactions means your platform can be used to move money without a trace unless you have the right controls in place. The good news: with the right compliance program, you can onboard customers fast, trade compliantly, and never miss an AUSTRAC deadline.",
     obligations: [
       'Register with AUSTRAC before providing any digital currency exchange services',
       'Implement and maintain a written Part A and Part B AML/CTF program',
@@ -84,7 +84,7 @@ export const industries: Industry[] = [
       'IFTI, TTR, and SMR report templates pre-populated from transaction data with AUSTRAC validation',
       'Immutable audit trail for every customer interaction and compliance decision',
     ],
-    austracRef: 'AML/CTF Act 2006 — Virtual Asset Service Providers (Digital Currency Exchange Providers)',
+    austracRef: 'AML/CTF Act 2006 — Virtual Asset Service Providers (VASPs) / Digital Currency Exchange Providers (DCEs)',
     packName: 'Crypto Pack',
     color: 'from-orange-500 to-amber-500',
     customerRisks: [

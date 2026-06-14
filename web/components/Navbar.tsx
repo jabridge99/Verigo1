@@ -19,7 +19,7 @@ const solutionItems = [
 ]
 
 const industryItems = [
-  { label: 'Virtual Asset Service Providers (VASPs)', href: '/solutions/digital-currency-exchange', emoji: '₿' },
+  { label: 'VASPs / Digital Currency Exchanges (DCEs)', href: '/solutions/digital-currency-exchange', emoji: '₿' },
   { label: 'Remittance Providers', href: '/solutions/remittance-provider', emoji: '🌏' },
   { label: 'Foreign Exchange', href: '/solutions/foreign-exchange', emoji: '💱' },
   { label: 'Payment Service Providers', href: '/solutions/payment-service-provider', emoji: '💳' },
