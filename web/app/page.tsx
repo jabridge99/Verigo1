@@ -343,7 +343,7 @@ function PlatformOverview() {
       color: 'bg-blue-600',
       icon: BookOpen,
       title: 'AML Program, CDD & EDD',
-      desc: 'Build your AML/CTF Program from the ground up. Risk assessment, Part A/B policies, and due diligence procedures — all guided, all AUSTRAC-aligned.',
+      desc: 'Build your ML/TF Risk Assessment and unified AML/CTF Program — risk-based, 2026-aligned, and always current.',
       features: ['AML Program', 'Customer Due Diligence', 'Enhanced Due Diligence'],
       slug: 'aml-program',
     },
