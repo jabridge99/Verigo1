@@ -19,14 +19,14 @@ const solutionItems = [
 ]
 
 const industryItems = [
-  { label: 'Digital Currency Exchanges', href: '/solutions/digital-currency-exchange', emoji: '₿' },
+  { label: 'Virtual Asset Service Providers (VASPs)', href: '/solutions/digital-currency-exchange', emoji: '₿' },
   { label: 'Remittance Providers', href: '/solutions/remittance-provider', emoji: '🌏' },
   { label: 'Foreign Exchange', href: '/solutions/foreign-exchange', emoji: '💱' },
   { label: 'Payment Service Providers', href: '/solutions/payment-service-provider', emoji: '💳' },
   { label: 'Real Estate Professionals', href: '/solutions/real-estate', emoji: '🏠' },
   { label: 'Conveyancers', href: '/solutions/conveyancer', emoji: '📋' },
-  { label: 'Law Firms', href: '/solutions/lawyer', emoji: '⚖️' },
-  { label: 'Accounting Firms', href: '/solutions/accountant', emoji: '📊' },
+  { label: 'Law Firms', href: '/solutions/law-firm', emoji: '⚖️' },
+  { label: 'Accounting Firms', href: '/solutions/accounting-firm', emoji: '📊' },
   { label: 'Precious Metal Dealers', href: '/solutions/precious-metals', emoji: '🥇' },
 ]
 

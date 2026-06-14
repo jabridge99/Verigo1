@@ -13,11 +13,11 @@ const footerLinks = {
   ],
   Industries: [
     { label: 'Compliance Packs', href: '/packs' },
-    { label: 'Digital Currency Exchanges', href: '/packs/digital-currency-exchange' },
+    { label: 'Virtual Asset Service Providers (VASPs)', href: '/packs/digital-currency-exchange' },
     { label: 'Remittance Providers', href: '/packs/remittance-provider' },
     { label: 'Real Estate Professionals', href: '/packs/real-estate' },
-    { label: 'Law Firms', href: '/packs/lawyer' },
-    { label: 'Accounting Firms', href: '/packs/accountant' },
+    { label: 'Law Firms', href: '/packs/law-firm' },
+    { label: 'Accounting Firms', href: '/packs/accounting-firm' },
     { label: 'View all packs', href: '/packs' },
   ],
   Company: [
