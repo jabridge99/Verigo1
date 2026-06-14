@@ -957,28 +957,37 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
             </div>
           </div>
 
-          {/* Faded: How Verigo helps */}
-          <div className="opacity-60 mb-6">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">What&apos;s included</p>
+          {/* What's included */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">What&apos;s included</p>
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">System default — customisable</span>
+            </div>
             <div className="grid sm:grid-cols-2 gap-2">
               {ind.howVerigoHelps.map((h, i) => (
                 <div key={i} className="flex items-start gap-2 px-4 py-3 bg-slate-50 rounded-xl ring-1 ring-slate-100">
-                  <CheckCircle className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-slate-500 text-xs leading-relaxed">{h}</p>
+                  <CheckCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-slate-700 text-xs leading-relaxed">{h}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Faded: Example workflow */}
+          {/* Example workflow */}
           {ind.exampleWorkflow.length > 0 && (
-            <div className="opacity-50">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Example workflow</p>
-              <div className="flex flex-wrap gap-2">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Example workflow</p>
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">Default — you can modify steps</span>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {ind.exampleWorkflow.map((step, i) => (
-                  <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 ring-1 ring-slate-100">
-                    <span className="w-5 h-5 bg-slate-200 rounded-lg flex items-center justify-center text-slate-500 font-bold text-[10px] flex-shrink-0">{i + 1}</span>
-                    <span className="text-slate-500 text-xs font-medium">{step.title}</span>
+                  <div key={i} className="flex items-start gap-3 bg-slate-50 rounded-xl px-4 py-3 ring-1 ring-slate-100">
+                    <span className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-[10px] flex-shrink-0 mt-0.5">{i + 1}</span>
+                    <div>
+                      <p className="text-slate-800 text-xs font-semibold mb-0.5">{step.title}</p>
+                      <p className="text-slate-500 text-xs leading-relaxed">{step.desc}</p>
+                    </div>
                   </div>
                 ))}
               </div>
