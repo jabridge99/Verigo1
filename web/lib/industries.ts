@@ -44,7 +44,7 @@ export const industries: Industry[] = [
     overview: "You're running a crypto exchange or virtual asset business in one of the most scrutinised sectors under Australian AML law. AUSTRAC watches VASPs and DCEs closely — and for good reason. The pseudonymous nature of blockchain transactions means your platform can be used to move money without a trace unless you have the right controls in place. The good news: with the right compliance program, you can onboard customers fast, trade compliantly, and never miss an AUSTRAC deadline.",
     obligations: [
       'Register with AUSTRAC before providing any digital currency exchange services',
-      'Implement and maintain a written Part A and Part B AML/CTF program',
+      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program based on it',
       'Conduct KYC on all customers before providing any designated service',
       'Lodge IFTI reports for international transfers of $1,000 AUD equivalent or more',
       'Lodge SMR reports within 3 business days of forming a suspicion',
@@ -198,7 +198,7 @@ export const industries: Industry[] = [
     overview: "Whether you're running a CBD currency exchange counter or an online FX platform, your obligations under the AML/CTF Act 2006 are significant. Every cash transaction at or above $10,000 triggers a TTR. Every suspicious customer pattern — bulk cash, structuring, PEP customers — needs to be monitored and potentially reported. FX businesses sit at a natural intersection of cash and cross-border flows, making them a persistent focus for AUSTRAC supervision.",
     obligations: [
       'Register with AUSTRAC as a currency exchange provider',
-      'Implement and maintain a Part A and Part B AML/CTF program',
+      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program based on it',
       'Conduct KYC on all customers at the point of onboarding',
       'Lodge TTR reports within 10 business days of a cash transaction at or above $10,000 AUD',
       'Lodge IFTI reports where the FX transaction involves an international payment instruction',
