@@ -3,6 +3,7 @@ import {
   Shield, CheckCircle, AlertTriangle, FileText, Users, Lock,
   ArrowRight, Building2, Activity, Database,
   UserCheck, ShieldAlert, Zap, BookOpen, ScanFace, FolderOpen,
+  Package, Network, ClipboardList,
 } from 'lucide-react'
 import { industries } from '@/lib/industries'
 
@@ -415,12 +416,12 @@ function PlatformOverview() {
 // ─────────────────────────────────────────────────────────────────────────────
 function WhyVerigo() {
   const points = [
-    { icon: '🇦🇺', title: 'Australian AML Law', desc: 'Built for the AML/CTF Act 2006 and the 2024 Tranche 2 reforms — not adapted from a global product.' },
-    { icon: '📦', title: 'Industry Compliance Packs', desc: 'Each regulated industry gets a pre-configured pack: risk matrix, templates, and reporting workflows ready on day one.' },
-    { icon: '🏢', title: 'Reporting Groups', desc: 'Multi-entity Reporting Group structures with consolidated AML Programs and shared CDD capabilities.' },
-    { icon: '📋', title: 'AUSTRAC Workflows', desc: 'SMR, IFTI, and TTR reports built directly from your platform data. Submit with confidence.' },
-    { icon: '⚡', title: 'Fast to Deploy', desc: 'Go live in a day — not months. Pre-built workflows mean no lengthy implementation projects.' },
-    { icon: '🇦🇺', title: 'Australian Business Focus', desc: 'Designed for Australian SMEs, law firms, and financial services — not enterprise banks in New York.' },
+    { icon: Shield, color: 'bg-blue-50 text-blue-600', title: 'Australian AML Law', desc: 'Built for the AML/CTF Act 2006 and the 2024 Tranche 2 reforms — not adapted from a global product.' },
+    { icon: Package, color: 'bg-indigo-50 text-indigo-600', title: 'Industry Compliance Packs', desc: 'Each regulated industry gets a pre-configured pack: risk matrix, templates, and reporting workflows ready on day one.' },
+    { icon: Network, color: 'bg-purple-50 text-purple-600', title: 'Reporting Groups', desc: 'Multi-entity Reporting Group structures with consolidated AML Programs and shared CDD capabilities.' },
+    { icon: ClipboardList, color: 'bg-amber-50 text-amber-600', title: 'AUSTRAC Workflows', desc: 'SMR, IFTI, and TTR reports built directly from your platform data. Submit with confidence.' },
+    { icon: Zap, color: 'bg-green-50 text-green-600', title: 'Fast to Deploy', desc: 'Go live in a day — not months. Pre-built workflows mean no lengthy implementation projects.' },
+    { icon: Users, color: 'bg-slate-100 text-slate-600', title: 'Australian Business Focus', desc: 'Designed for Australian SMEs, law firms, and financial services — not enterprise banks in New York.' },
   ]
 
   return (
@@ -445,9 +446,11 @@ function WhyVerigo() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {points.map(({ icon, title, desc }) => (
+            {points.map(({ icon: Icon, color, title, desc }) => (
               <div key={title} className="pub-card flex flex-col gap-3">
-                <span className="text-2xl">{icon}</span>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
+                  <Icon className="w-4 h-4" />
+                </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-sm mb-1">{title}</h3>
                   <p className="text-slate-500 text-xs leading-relaxed">{desc}</p>
