@@ -887,38 +887,9 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
         </div>
       </section>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-20">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-16">
 
-        {/* 1 — INDUSTRY OVERVIEW */}
-        <section>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <BookOpen className="w-4 h-4 text-blue-600" />
-            </div>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Industry Overview</h2>
-          </div>
-          <p className="text-xl text-slate-700 leading-relaxed max-w-3xl">{ind.overview}</p>
-        </section>
-
-        {/* 2 — COMPLIANCE CHALLENGES */}
-        <section>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-            </div>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-amber-600">Common Compliance Challenges</h2>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {ind.risks.map((r, i) => (
-              <div key={i} className="flex items-start gap-3 bg-amber-50 rounded-2xl px-5 py-4 ring-1 ring-amber-100">
-                <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-2" />
-                <p className="text-slate-700 text-sm leading-relaxed">{r}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* 3 — AML OBLIGATIONS */}
+        {/* 1 — AML OBLIGATIONS */}
         <section className="bg-slate-900 rounded-3xl p-10">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -943,7 +914,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
           <p className="text-slate-400 text-sm mt-3 leading-relaxed">{ind.reportingRequirements.details}</p>
         </section>
 
-        {/* 4 — TYPICAL CUSTOMER RISKS */}
+        {/* 2 — TYPICAL CUSTOMER RISKS */}
         {ind.customerRisks.length > 0 && (
           <section>
             <div className="flex items-center gap-3 mb-6">
@@ -965,7 +936,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
           </section>
         )}
 
-        {/* 5 — RECOMMENDED COMPLIANCE PACK */}
+        {/* 3 — COMPLIANCE PACK + faded how verigo helps + faded workflow */}
         <section>
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -973,60 +944,47 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
             </div>
             <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Recommended Compliance Pack</h2>
           </div>
-          <div className="bg-blue-50 ring-1 ring-blue-200 rounded-2xl p-7 flex flex-col sm:flex-row gap-6 items-start">
+
+          {/* Pack card */}
+          <div className="bg-blue-50 ring-1 ring-blue-200 rounded-2xl p-7 flex flex-col sm:flex-row gap-6 items-start mb-8">
             <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-2xl flex-shrink-0`}>{ind.icon}</div>
             <div className="flex-1">
               <h3 className="font-bold text-slate-900 text-lg mb-1">{ind.packName}</h3>
               <p className="text-slate-600 text-sm leading-relaxed mb-4">
-                Pre-configured for {ind.label} — KYC rules, risk thresholds, AUSTRAC report templates, CDD workflows, and transaction monitoring rules aligned to your obligations. Ready from day one.
+                Pre-configured for {ind.label} — KYC rules, risk thresholds, AUSTRAC report templates, CDD workflows, and monitoring rules aligned to your obligations. Ready from day one.
               </p>
               <Link href={`/packs/${ind.id}`} className="pub-btn-secondary inline-flex">View pack details</Link>
             </div>
           </div>
-        </section>
 
-        {/* 6 — HOW VERIGO HELPS */}
-        <section className={`bg-gradient-to-br ${ind.color} rounded-3xl p-10`}>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="w-4 h-4 text-white" />
-            </div>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-white/80">How VeriGo Helps {ind.shortLabel}</h2>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {ind.howVerigoHelps.map((h, i) => (
-              <div key={i} className="flex items-start gap-3 bg-white/10 rounded-2xl p-4 ring-1 ring-white/15">
-                <CheckCircle className="w-5 h-5 text-white flex-shrink-0 mt-0.5" />
-                <p className="text-white text-sm leading-relaxed">{h}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* 7 — EXAMPLE WORKFLOW */}
-        {ind.exampleWorkflow.length > 0 && (
-          <section>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                <RefreshCw className="w-4 h-4 text-indigo-600" />
-              </div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-indigo-600">Example Workflow</h2>
-            </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {ind.exampleWorkflow.map((step, i) => (
-                <div key={i} className="pub-card flex gap-4">
-                  <div className="w-8 h-8 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black text-xs flex-shrink-0">
-                    {i + 1}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm mb-1">{step.title}</h3>
-                    <p className="text-slate-500 text-xs leading-relaxed">{step.desc}</p>
-                  </div>
+          {/* Faded: How Verigo helps */}
+          <div className="opacity-60 mb-6">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">What&apos;s included</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {ind.howVerigoHelps.map((h, i) => (
+                <div key={i} className="flex items-start gap-2 px-4 py-3 bg-slate-50 rounded-xl ring-1 ring-slate-100">
+                  <CheckCircle className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-slate-500 text-xs leading-relaxed">{h}</p>
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          </div>
+
+          {/* Faded: Example workflow */}
+          {ind.exampleWorkflow.length > 0 && (
+            <div className="opacity-50">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Example workflow</p>
+              <div className="flex flex-wrap gap-2">
+                {ind.exampleWorkflow.map((step, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 ring-1 ring-slate-100">
+                    <span className="w-5 h-5 bg-slate-200 rounded-lg flex items-center justify-center text-slate-500 font-bold text-[10px] flex-shrink-0">{i + 1}</span>
+                    <span className="text-slate-500 text-xs font-medium">{step.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* 8 — PRICING RECOMMENDATION */}
         <section>

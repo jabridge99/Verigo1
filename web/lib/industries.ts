@@ -36,12 +36,12 @@ export const industries: Industry[] = [
   {
     id: 'digital-currency-exchange',
     slug: 'digital-currency-exchange',
-    label: 'Digital Currency Exchange',
-    shortLabel: 'Crypto / DCE',
+    label: 'Virtual Asset Service Provider (VASP)',
+    shortLabel: 'VASP / DCE',
     regime: 'current',
     icon: '₿',
-    description: 'DCEs are required to register with AUSTRAC and implement full AML/CTF programs under the AML/CTF Act 2006.',
-    overview: "You're running a crypto exchange in one of the most scrutinised sectors under Australian AML law. AUSTRAC watches DCEs closely — and for good reason. The pseudonymous nature of blockchain transactions means your platform can be used to move money without a trace unless you have the right controls in place. The good news: with the right compliance program, you can onboard customers fast, trade compliantly, and never miss an AUSTRAC deadline.",
+    description: 'VASPs — including Digital Currency Exchanges (DCEs) — must register with AUSTRAC and implement full AML/CTF programs under the AML/CTF Act 2006.',
+    overview: "You're running a crypto exchange or virtual asset business in one of the most scrutinised sectors under Australian AML law. AUSTRAC watches VASPs (formerly known as Digital Currency Exchanges or DCEs) closely — and for good reason. The pseudonymous nature of blockchain transactions means your platform can be used to move money without a trace unless you have the right controls in place. The good news: with the right compliance program, you can onboard customers fast, trade compliantly, and never miss an AUSTRAC deadline.",
     obligations: [
       'Register with AUSTRAC before providing any digital currency exchange services',
       'Implement and maintain a written Part A and Part B AML/CTF program',
@@ -84,7 +84,7 @@ export const industries: Industry[] = [
       'IFTI, TTR, and SMR report templates pre-populated from transaction data with AUSTRAC validation',
       'Immutable audit trail for every customer interaction and compliance decision',
     ],
-    austracRef: 'AML/CTF Act 2006 — Digital Currency Exchange Providers',
+    austracRef: 'AML/CTF Act 2006 — Virtual Asset Service Providers (Digital Currency Exchange Providers)',
     packName: 'Crypto Pack',
     color: 'from-orange-500 to-amber-500',
     customerRisks: [
@@ -333,8 +333,8 @@ export const industries: Industry[] = [
       { title: 'Case resolved', desc: 'Analyst investigates, documents findings. SMR filed if suspicious. Case closed with full audit trail.' },
     ],
     pricingRec: {
-      plan: 'Professional',
-      reason: "PSPs typically have high merchant volumes and need full KYB workflows, transaction monitoring across their entire payment network, and case management for SMR preparation. Professional covers all of this.",
+      plan: 'Enterprise',
+      reason: "PSPs operate at scale across large merchant networks, often requiring multi-entity oversight, custom API integrations, AML data connectors (Chainalysis, Greeid), and dedicated compliance support. Enterprise is the right fit.",
     },
   },
 
