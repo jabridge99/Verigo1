@@ -79,6 +79,29 @@ class Settings(BaseSettings):
     gcs_bucket: str = ""
     gcs_credentials_json: str = ""
 
+    # ── Integrations ─────────────────────────────────────────────────────────
+    # AUSTRAC Online API (stub used until credentials provided)
+    austrac_api_key: str = ""
+    # ABR (register free at https://abr.business.gov.au/Tools/WebServices)
+    abr_guid: str = ""
+    # ASIC Connect API
+    asic_api_key: str = ""
+    # Sanctions screening: internal | complyadvantage | worldcheck
+    sanctions_provider: str = "internal"
+    complyadvantage_api_key: str = ""
+    # PEP screening: stub | complyadvantage | worldcheck
+    pep_provider: str = "stub"
+    # OCR / document extraction: stub | textract | google_vision
+    ocr_provider: str = "stub"
+    # Email: smtp | sendgrid | stub
+    email_provider: str = "smtp"
+    # SMS: stub | twilio | messagebird
+    sms_provider: str = "stub"
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+    sms_from_number: str = ""
+
     # ── Sentry (optional) ────────────────────────────────────────────────────
     sentry_dsn: str = ""
 
