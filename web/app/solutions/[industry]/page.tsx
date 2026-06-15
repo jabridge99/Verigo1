@@ -16,17 +16,16 @@ import { capabilities as libCapabilities } from '@/lib/capabilities'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'digital-currency-exchange': Coins,
-  'remittance-provider': Globe,
-  'foreign-exchange': ArrowLeftRight,
-  'payment-service-provider': CreditCard,
-  'real-estate': Home,
-  'conveyancer': FileCheck,
-  'law-firm': Scale,
-  'accounting-firm': Calculator,
-  'precious-metals': Gem,
-  'reporting-group': Network,
-  'mortgage-broker': Landmark,
+  'vasp': Coins,
+  'remittance': Globe,
+  'bullion_dealers': Gem,
+  'real_estate': Home,
+  'conveyancers': FileCheck,
+  'legal_professionals': Scale,
+  'accountants': Calculator,
+  'precious_metals': Gem,
+  'pubs_clubs': Building2,
+  'reporting_group': Network,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -974,7 +973,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
               <p className="text-slate-600 text-sm leading-relaxed mb-4">
                 Pre-configured for {ind.label} — KYC rules, risk thresholds, AUSTRAC report templates, CDD workflows, and monitoring rules aligned to your obligations. Ready from day one.
               </p>
-              <Link href={`/packs/${ind.id}`} className="pub-btn-secondary inline-flex">View pack details</Link>
+              <Link href={`/packs/${ind.slug}`} className="pub-btn-secondary inline-flex">View pack details</Link>
             </div>
           </div>
 
