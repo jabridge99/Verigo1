@@ -2,11 +2,10 @@
 StorageProvider factory.
 
 Resolution order:
-1. Per-tenant config from IndustryTenant.storage_config JSON column
-2. Application-wide settings (STORAGE_BACKEND env var)
-3. Default: local filesystem
+1. Application-wide settings (STORAGE_BACKEND env var)
+2. Default: local filesystem
 
-Supported backends: local, s3, azure, gcs
+Supported backends: local, supabase, s3, azure, gcs
 """
 
 from __future__ import annotations
@@ -67,51 +66,22 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
             credentials_json=cfg.get("credentials_json"),
         )
 
+    if backend == "supabase":
+        from .supabase import SupabaseStorageProvider
+
+        return SupabaseStorageProvider(bucket=cfg.get("bucket"))
+
     raise ValueError(f"Unknown storage backend: {backend}")
 
 
-def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
-    """
-    Return the appropriate StorageProvider for a tenant.
-
-    Looks up per-tenant storage_config from DB if industry_id is provided,
-    otherwise falls back to application-wide STORAGE_BACKEND setting.
-    """
-    if industry_id:
-        try:
-            from app.db.database import SessionLocal
-            from app.models.tenant import IndustryTenant
-
-            db = SessionLocal()
-            try:
-                tenant = (
-                    db.query(IndustryTenant)
-                    .filter(IndustryTenant.industry_id == industry_id)
-                    .first()
-                )
-                if tenant and getattr(tenant, "storage_config", None):
-                    sc = (
-                        json.loads(tenant.storage_config)
-                        if isinstance(tenant.storage_config, str)
-                        else tenant.storage_config
-                    )
-                    backend = sc.get("backend", "local")
-                    cache_key = f"{industry_id}:{backend}"
-                    if cache_key not in _provider_cache:
-                        _provider_cache[cache_key] = _build_provider(backend, sc)
-                    return _provider_cache[cache_key]
-            finally:
-                db.close()
-        except Exception as exc:
-            log.warning(
-                "Failed to load per-tenant storage config for %s: %s", industry_id, exc
-            )
-
-    # Application-wide default
+def get_storage_provider(org_id: Optional[str] = None) -> StorageProvider:
+    """Return the configured StorageProvider (application-wide)."""
     backend = getattr(settings, "storage_backend", "local")
     if backend not in _provider_cache:
         cfg: dict = {}
-        if backend == "s3":
+        if backend == "supabase":
+            cfg = {"bucket": getattr(settings, "document_bucket", "documents")}
+        elif backend == "s3":
             cfg = {
                 "bucket": getattr(settings, "s3_bucket", ""),
                 "region": getattr(settings, "s3_region", "us-east-1"),

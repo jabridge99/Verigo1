@@ -13,7 +13,13 @@ class Settings(BaseSettings):
     version: str = "1.0.0"
 
     # ── Database ─────────────────────────────────────────────────────────────
+    # Production: postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres
     database_url: str = "sqlite:///./tvg.db"
+
+    # ── Supabase ──────────────────────────────────────────────────────────────
+    supabase_url: str = ""               # https://[ref].supabase.co
+    supabase_anon_key: str = ""          # public anon key (frontend)
+    supabase_service_role_key: str = ""  # secret service role key (backend only)
 
     # ── Auth ─────────────────────────────────────────────────────────────────
     secret_key: str = secrets.token_urlsafe(32)
@@ -55,11 +61,14 @@ class Settings(BaseSettings):
     stripe_ent_annual_id: str = ""
 
     # ── Storage backend ───────────────────────────────────────────────────────
-    storage_backend: str = "local"  # local | s3 | azure | gcs
-    # S3 / Backblaze B2 (S3-compatible)
+    # Set to "supabase" in production; "local" for dev
+    storage_backend: str = "local"  # local | supabase | s3 | azure | gcs
+    document_bucket: str = "documents"  # Supabase Storage bucket name
+
+    # S3 / Backblaze B2 (S3-compatible) — also used by Supabase Storage internally
     s3_bucket: str = ""
     s3_region: str = "us-east-1"
-    s3_endpoint_url: str = ""  # leave blank for AWS; set for Backblaze/MinIO
+    s3_endpoint_url: str = ""
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     # Azure Blob
@@ -68,7 +77,7 @@ class Settings(BaseSettings):
     azure_container: str = "documents"
     # GCS
     gcs_bucket: str = ""
-    gcs_credentials_json: str = ""  # path to service-account JSON
+    gcs_credentials_json: str = ""
 
     # ── Sentry (optional) ────────────────────────────────────────────────────
     sentry_dsn: str = ""
