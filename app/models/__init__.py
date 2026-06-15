@@ -72,6 +72,15 @@ from app.models.risk_matrix import (
     OrgMonitoringConfig, OrgApprovalQuestion, TransactionQuestionResponse,
     QuestionAnswer,
 )
+from app.models.professional_assessment import (
+    ProfessionalAssessment, SOFAssessment, SOWAssessment,
+    TransactionPurposeAssessment, TaxRiskAssessment,
+    InvestmentLegitimacyAssessment, ProfessionalJudgmentChecklist,
+    OrgProfessionalChecklistTemplate,
+    ProfessionalServiceType, AssessmentStatus, AssessmentRiskRating,
+    SOFSourceType, SOWSourceType, TransactionPurposeType,
+    ChecklistType, ReviewOutcome,
+)
 from app.models.governance_controls import (
     GovernanceControl, ControlType, ControlRiskArea, ControlFrequency,
     ControlMethod, ControlEffectiveness, TestResult, FindingSeverity,
@@ -162,6 +171,14 @@ __all__ = [
     # Risk Matrix & Pre-Approval Questions
     "OrgMonitoringConfig", "OrgApprovalQuestion", "TransactionQuestionResponse",
     "QuestionAnswer",
+    # Professional Services Assessments
+    "ProfessionalAssessment", "SOFAssessment", "SOWAssessment",
+    "TransactionPurposeAssessment", "TaxRiskAssessment",
+    "InvestmentLegitimacyAssessment", "ProfessionalJudgmentChecklist",
+    "OrgProfessionalChecklistTemplate",
+    "ProfessionalServiceType", "AssessmentStatus", "AssessmentRiskRating",
+    "SOFSourceType", "SOWSourceType", "TransactionPurposeType",
+    "ChecklistType", "ReviewOutcome",
     # Governance Controls
     "GovernanceControl", "ControlType", "ControlRiskArea", "ControlFrequency",
     "ControlMethod", "ControlEffectiveness", "TestResult", "FindingSeverity",

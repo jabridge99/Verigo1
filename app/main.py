@@ -30,6 +30,7 @@ import app.models.ifti_receipt  # noqa: F401
 import app.models.compliance_calendar  # noqa: F401
 import app.models.regulatory_recommendation  # noqa: F401
 import app.models.risk_matrix  # noqa: F401
+import app.models.professional_assessment  # noqa: F401
 from app.api.routes import (
     analytics,
     api_keys,
@@ -62,6 +63,7 @@ from app.api.routes.ifti_receipts import router as ifti_receipts_router
 from app.api.routes.compliance_calendar import router as compliance_calendar_router
 from app.api.routes.recommendations import router as recommendations_router
 from app.api.routes.org_config import router as org_config_router
+from app.api.routes.professional_assessment import router as professional_assessment_router
 import app.models.governance  # noqa: F401
 import app.models.governance_controls  # noqa: F401
 import app.models.governance_training  # noqa: F401
@@ -200,6 +202,7 @@ app.include_router(ifti_receipts_router, prefix="/api/v1")
 app.include_router(compliance_calendar_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1")
 app.include_router(org_config_router, prefix="/api/v1")
+app.include_router(professional_assessment_router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────
