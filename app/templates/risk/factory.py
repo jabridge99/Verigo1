@@ -26,15 +26,26 @@ from app.templates.risk.base import RiskLibrary
 log = logging.getLogger("verigo.templates.risk")
 
 INDUSTRY_MODULE_MAP = {
+    # ── Tranche 1 ─────────────────────────────────────────────────────────────
     "remittance":            "remittance",
-    "designated_remittance": "remittance",
-    "cryptocurrency":        "vasp",
-    "banking":               "banking",
-    "fintech":               "fintech",
+    "vasp":                  "vasp",
+    "bullion_dealers":       "other",
+
+    # ── Tranche 2 ─────────────────────────────────────────────────────────────
+    "accountants":           "accounting",
+    "conveyancers":          "real_estate",
+    "legal_professionals":   "legal",
     "real_estate":           "real_estate",
-    "accounting":            "accounting",
-    "legal":                 "legal",
-    "insurance":             "other",
+    "precious_metals":       "other",
+    "pubs_clubs":            "other",
+
+    # ── Custom-package industries (not primary target) ─────────────────────────
+    "banking":               "banking",
+    "bookmakers_betting":    "other",
+    "casinos":               "other",
+    "financial_services":    "fintech",
+    "superannuation":        "other",
+
     "other":                 "other",
 }
 

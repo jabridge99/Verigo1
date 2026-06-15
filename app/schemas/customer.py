@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
-from app.models.customer import CustomerStatus, IndustryType, RiskLevel
+from app.models.customer import CustomerStatus, RiskLevel
 
 
 class CustomerCreate(BaseModel):
@@ -16,7 +16,7 @@ class CustomerCreate(BaseModel):
     address: str
     email: EmailStr
     phone: str
-    industry: IndustryType
+    industry: Optional[str] = None   # customer's own business sector (free-text)
     occupation: Optional[str] = None
     source_of_funds: Optional[str] = None
 
@@ -40,7 +40,7 @@ class CustomerResponse(BaseModel):
     id_type: str
     email: str
     phone: str
-    industry: IndustryType
+    industry: Optional[str]
     occupation: Optional[str]
     source_of_funds: Optional[str]
     status: CustomerStatus

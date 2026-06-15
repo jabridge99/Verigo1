@@ -38,14 +38,27 @@ def _get_industry_template(industry: str, risk_level: str) -> AMLTemplateBase:
     from app.models.organisation import IndustryType
 
     mapping = {
-        IndustryType.remittance:            "remittance",
-        IndustryType.designated_remittance: "remittance",
-        IndustryType.cryptocurrency:        "vasp",
-        IndustryType.banking:               "banking",
-        IndustryType.fintech:               "fintech",
-        IndustryType.real_estate:           "real_estate",
-        IndustryType.insurance:             "other",
-        IndustryType.other:                 "other",
+        # Tranche 1
+        IndustryType.remittance:          "remittance",
+        IndustryType.vasp:                "vasp",
+        IndustryType.bullion_dealers:     "other",
+
+        # Tranche 2
+        IndustryType.accountants:         "accounting",
+        IndustryType.conveyancers:        "real_estate",  # shares real_estate template
+        IndustryType.legal_professionals: "legal",
+        IndustryType.real_estate:         "real_estate",
+        IndustryType.precious_metals:     "other",
+        IndustryType.pubs_clubs:          "other",
+
+        # Custom-package industries — should not normally reach here
+        IndustryType.banking:             "banking",
+        IndustryType.bookmakers_betting:  "other",
+        IndustryType.casinos:             "other",
+        IndustryType.financial_services:  "fintech",
+        IndustryType.superannuation:      "other",
+
+        IndustryType.other:               "other",
     }
 
     module_name = mapping.get(industry, "other")

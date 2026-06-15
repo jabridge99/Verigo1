@@ -1,4 +1,4 @@
-from app.models.organisation import Organisation, IndustryType, OrganisationStatus
+from app.models.organisation import Organisation, IndustryType, OrganisationStatus, CUSTOM_PACKAGE_INDUSTRIES
 from app.models.user import User, UserRole, UserStatus, MagicLinkToken
 from app.models.aml_solution import (
     AMLSolution, SolutionStatus,
@@ -25,7 +25,7 @@ from app.models.risk_engine import (
 )
 
 __all__ = [
-    "Organisation", "IndustryType", "OrganisationStatus",
+    "Organisation", "IndustryType", "OrganisationStatus", "CUSTOM_PACKAGE_INDUSTRIES",
     "User", "UserRole", "UserStatus", "MagicLinkToken",
     # AML Solutions
     "AMLSolution", "SolutionStatus",

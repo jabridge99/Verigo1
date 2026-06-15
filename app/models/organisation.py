@@ -6,14 +6,45 @@ from app.db.database import Base
 
 
 class IndustryType(str, enum.Enum):
-    banking = "banking"
-    fintech = "fintech"
-    insurance = "insurance"
-    real_estate = "real_estate"
-    cryptocurrency = "cryptocurrency"
-    remittance = "remittance"
-    designated_remittance = "designated_remittance"
-    other = "other"
+    """
+    Industry types aligned exactly to AUSTRAC's reporting entity categories.
+    Source: austrac.gov.au/business/your-industry
+
+    Industries marked CUSTOM_PACKAGE_ONLY are not primary Verigo targets;
+    they are offered a tailored engagement rather than a self-serve AML Solution.
+    """
+    # ── Tranche 1 (pre-existing AML/CTF Act obligations) ─────────────────────
+    remittance          = "remittance"           # Remittance service providers
+    vasp                = "vasp"                 # Virtual asset service providers
+    bullion_dealers     = "bullion_dealers"      # Bullion dealers
+
+    # ── Tranche 2 (commenced 31 March 2026) ───────────────────────────────────
+    accountants         = "accountants"          # Accountants
+    conveyancers        = "conveyancers"         # Conveyancers
+    legal_professionals = "legal_professionals"  # Legal professionals
+    real_estate         = "real_estate"          # Real estate agents
+    precious_metals     = "precious_metals"      # Dealers in precious metals, stones and products
+    pubs_clubs          = "pubs_clubs"           # Pubs and clubs
+
+    # ── Custom package only (not primary Verigo target) ───────────────────────
+    banking             = "banking"              # Banking (ADIs)
+    bookmakers_betting  = "bookmakers_betting"   # Bookmakers and betting agencies
+    casinos             = "casinos"              # Casinos
+    financial_services  = "financial_services"   # Financial services providers
+    superannuation      = "superannuation"       # Superannuation industry
+
+    other               = "other"                # Other / not listed
+
+
+# Industries that fall outside Verigo's standard self-serve product.
+# The frontend uses this to show a "Contact us for a custom package" flow.
+CUSTOM_PACKAGE_INDUSTRIES = frozenset({
+    IndustryType.banking,
+    IndustryType.bookmakers_betting,
+    IndustryType.casinos,
+    IndustryType.financial_services,
+    IndustryType.superannuation,
+})
 
 
 class OrganisationStatus(str, enum.Enum):
