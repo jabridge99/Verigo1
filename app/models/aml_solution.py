@@ -108,13 +108,20 @@ class AMLSolution(Base):
     services = relationship("AMLService", back_populates="solution", cascade="all, delete-orphan")
 
 
-# ── AML Program (formal written program document) ────────────────────────────
+# ── AML Program ──────────────────────────────────────────────────────────────
 
 class AMLProgram(Base):
     """
-    The Organisation's formal AML/CTF Program document.
-    Based on AUSTRAC's AML/CTF Rules — Part A (general) and Part B (specific).
-    A template is pre-populated on solution creation; the org customises it.
+    The Organisation's AML/CTF Program document.
+
+    Under the AML/CTF Amendment Act 2024 and Rules 2025 (commencing 31 March 2026),
+    reporting entities must maintain a SINGLE, CONSOLIDATED risk-based program.
+    The previous Part A / Part B structure is LEGACY — applicable only to
+    previously registered entities that adopted that format before the 2026 reform.
+
+    This model reflects the new single-program structure with all required sections.
+    A template is pre-populated on AMLSolution creation based on the org's industry;
+    the organisation customises it to reflect their specific business.
     """
     __tablename__ = "aml_programs"
 
@@ -128,26 +135,83 @@ class AMLProgram(Base):
     status = Column(Enum(ProgramStatus), default=ProgramStatus.draft, nullable=False)
     risk_appetite = Column(Enum(RiskAppetite), default=RiskAppetite.medium)
 
-    # Part A — General program
-    part_a_objectives = Column(Text)
-    part_a_scope = Column(Text)
-    part_a_aml_ctf_risk = Column(Text)       # how the org identifies/assesses ML/TF risk
-    part_a_employee_due_diligence = Column(Text)
-    part_a_training_program = Column(Text)
-    part_a_independent_review = Column(Text)
+    # Legacy flag — True if this program was written under the pre-2026 Part A/B format
+    is_legacy_part_ab = Column(Boolean, default=False)
 
-    # Part B — Industry-specific (populated from template)
-    part_b_kyc_procedures = Column(Text)
-    part_b_ongoing_cdd = Column(Text)
-    part_b_transaction_monitoring = Column(Text)
-    part_b_reporting_procedures = Column(Text)   # TTR, SMR, IFTI
+    # ── Section 1: Overview & Scope ──────────────────────────────────────────
+    overview = Column(Text)              # purpose, background, AML/CTF Act obligations
+    scope = Column(Text)                 # which designated services and entities are covered
+    designated_services = Column(Text)   # specific services the org provides (items from AML/CTF Act)
+    compliance_officer_name = Column(String(255))
+    compliance_officer_role = Column(String(255))
+    compliance_officer_user_id = Column(String, ForeignKey("users.id"), nullable=True)
 
-    # Lifecycle
+    # ── Section 2: ML/TF/PF Risk Assessment ─────────────────────────────────
+    # (Enterprise-Wide Risk Assessment — reviewed at least annually)
+    ewra_summary = Column(Text)          # summary of risk factors: customer, product, channel, geography
+    risk_factors_customer = Column(Text)
+    risk_factors_product = Column(Text)
+    risk_factors_channel = Column(Text)
+    risk_factors_geography = Column(Text)
+    risk_factors_proliferation = Column(Text)  # proliferation financing (new under 2026 reform)
+
+    # ── Section 3: Customer Due Diligence (CDD) ──────────────────────────────
+    # Previously "Part B — Customer Identification" under legacy format
+    cdd_individuals = Column(Text)       # ID & verification for individuals
+    cdd_companies = Column(Text)         # ID & verification for companies
+    cdd_trusts = Column(Text)
+    cdd_partnerships = Column(Text)
+    cdd_government_bodies = Column(Text)
+    cdd_simplified_procedures = Column(Text)  # when simplified CDD applies
+    cdd_enhanced_procedures = Column(Text)    # ECDD for high-risk customers
+
+    # ── Section 4: Ongoing CDD & Transaction Monitoring ──────────────────────
+    ongoing_cdd = Column(Text)           # ongoing monitoring of existing customers
+    transaction_monitoring = Column(Text)  # rules, thresholds, escalation
+
+    # ── Section 5: Beneficial Ownership ──────────────────────────────────────
+    beneficial_ownership_procedures = Column(Text)
+
+    # ── Section 6: PEP Procedures ────────────────────────────────────────────
+    pep_procedures = Column(Text)        # identification, ECDD, ongoing monitoring
+
+    # ── Section 7: Targeted Financial Sanctions ──────────────────────────────
+    sanctions_procedures = Column(Text)  # asset freezing, screening, reporting
+
+    # ── Section 8: Travel Rule ───────────────────────────────────────────────
+    # New under 2026 reform — applies to virtual asset transfers and remittances
+    travel_rule_procedures = Column(Text)
+
+    # ── Section 9: Reporting Obligations ─────────────────────────────────────
+    smr_procedures = Column(Text)        # Suspicious Matter Reporting
+    ttr_procedures = Column(Text)        # Threshold Transaction Reports (>= $10k cash)
+    ifti_procedures = Column(Text)       # International Funds Transfer Instructions
+    annual_compliance_report = Column(Text)   # AML/CTF Compliance Report (annual to AUSTRAC)
+
+    # ── Section 10: Employee Due Diligence ───────────────────────────────────
+    employee_due_diligence = Column(Text)  # screening of staff with AML/CTF responsibilities
+
+    # ── Section 11: Training ─────────────────────────────────────────────────
+    training_program_summary = Column(Text)  # overview (detail in TrainingRecord)
+
+    # ── Section 12: Record Keeping ───────────────────────────────────────────
+    record_keeping = Column(Text)        # 7-year retention, what records to keep
+
+    # ── Section 13: Independent Review ───────────────────────────────────────
+    independent_review = Column(Text)    # frequency, scope, reporting to senior management
+
+    # ── Section 14: AUSTRAC Registration ─────────────────────────────────────
+    austrac_enrolment_date = Column(Date)
+    austrac_registration_date = Column(Date)
+    austrac_registration_expiry = Column(Date)   # renew every 3 years
+    designated_business_group = Column(String(255))  # DBG name if applicable
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
     effective_date = Column(Date)
-    review_due_date = Column(Date)           # AUSTRAC requires annual review
+    review_due_date = Column(Date)       # must review at least annually
     last_reviewed_at = Column(DateTime(timezone=True))
-    reviewed_by = Column(String)             # user id
-    approved_by = Column(String)             # user id (MLRO)
+    reviewed_by = Column(String)         # user id
+    approved_by = Column(String)         # user id (AML/CTF Compliance Officer or Board)
     approved_at = Column(DateTime(timezone=True))
     created_by = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
