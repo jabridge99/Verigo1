@@ -17,6 +17,12 @@ from app.models.case import Case, CaseNote, CaseSeverity, CaseStatus
 from app.models.report import IFTIReport, TTRReport, SMRReport, ReportStatus, IFTIDirection
 from app.models.audit_log import AuditLog
 from app.models.document import Document, DocumentCategory, DocumentStatus
+from app.models.risk_engine import (
+    RiskCategoryType, MitigationStatus,
+    RiskLibraryFactor,
+    RiskFramework, RiskCategory, RiskFactor, RiskControl,
+    RiskAssessmentRun, RiskFactorScore, RiskMitigation, RiskScoreHistory,
+)
 
 __all__ = [
     "Organisation", "IndustryType", "OrganisationStatus",
@@ -39,4 +45,9 @@ __all__ = [
     "IFTIReport", "TTRReport", "SMRReport", "ReportStatus", "IFTIDirection",
     "AuditLog",
     "Document", "DocumentCategory", "DocumentStatus",
+    # Risk Engine
+    "RiskCategoryType", "MitigationStatus",
+    "RiskLibraryFactor",
+    "RiskFramework", "RiskCategory", "RiskFactor", "RiskControl",
+    "RiskAssessmentRun", "RiskFactorScore", "RiskMitigation", "RiskScoreHistory",
 ]
