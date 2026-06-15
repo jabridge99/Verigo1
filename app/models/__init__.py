@@ -25,6 +25,24 @@ from app.models.transaction import Transaction, TransactionAlert, TransactionTyp
 from app.models.case import Case, CaseNote, CaseSeverity, CaseStatus
 from app.models.report import IFTIReport, TTRReport, SMRReport, ReportStatus, IFTIDirection
 from app.models.audit_log import AuditLog
+from app.models.governance_controls import (
+    GovernanceControl, ControlType, ControlRiskArea, ControlFrequency,
+    ControlMethod, ControlEffectiveness, TestResult, FindingSeverity,
+    RemediationStatus,
+    ControlTest, ControlTestFinding, ControlRemediationAction, ControlEvidenceItem,
+    DEFAULT_SEVERITY_DEDUCTIONS, DEFAULT_EFFECTIVENESS_THRESHOLDS,
+    DEFAULT_REMEDIATION_SLA_DAYS, CONTROL_REF_PREFIX,
+)
+from app.models.governance_training import (
+    TrainingCourse, GovernanceTrainingRecord, TrainingAssignment,
+    TrainingType as GovTrainingType, TrainingStatus as GovTrainingStatus,
+    AssignmentTrigger, STANDARD_TRAINING_COURSES,
+)
+from app.models.governance_customisation import (
+    GovernanceCustomField, GovernanceCustomList, GovernanceCustomWorkflow,
+    GovernanceCustomScoring, GovernanceApprovalMatrix, GovernanceDashboardMetric,
+    EntityType, CustomFieldType, ApprovalRole, ListCategory,
+)
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.models.risk_engine import (
     RiskCategoryType, MitigationStatus,
@@ -61,6 +79,21 @@ __all__ = [
     "Case", "CaseNote", "CaseSeverity", "CaseStatus",
     "IFTIReport", "TTRReport", "SMRReport", "ReportStatus", "IFTIDirection",
     "AuditLog",
+    # Governance Controls
+    "GovernanceControl", "ControlType", "ControlRiskArea", "ControlFrequency",
+    "ControlMethod", "ControlEffectiveness", "TestResult", "FindingSeverity",
+    "RemediationStatus",
+    "ControlTest", "ControlTestFinding", "ControlRemediationAction", "ControlEvidenceItem",
+    "DEFAULT_SEVERITY_DEDUCTIONS", "DEFAULT_EFFECTIVENESS_THRESHOLDS",
+    "DEFAULT_REMEDIATION_SLA_DAYS", "CONTROL_REF_PREFIX",
+    # Governance Training
+    "TrainingCourse", "GovernanceTrainingRecord", "TrainingAssignment",
+    "GovTrainingType", "GovTrainingStatus", "AssignmentTrigger", "STANDARD_TRAINING_COURSES",
+    # Governance Customisation
+    "GovernanceCustomField", "GovernanceCustomList", "GovernanceCustomWorkflow",
+    "GovernanceCustomScoring", "GovernanceApprovalMatrix", "GovernanceDashboardMetric",
+    "EntityType", "CustomFieldType", "ApprovalRole", "ListCategory",
+    # Documents
     "Document", "DocumentCategory", "DocumentStatus",
     # Risk Engine
     "RiskCategoryType", "MitigationStatus",
