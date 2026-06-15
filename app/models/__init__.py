@@ -64,6 +64,10 @@ from app.models.compliance_calendar import (
     ComplianceCalendarItem, ComplianceReminder,
     CalendarItemType, CalendarItemStatus, ReminderStage,
 )
+from app.models.regulatory_recommendation import (
+    RegulatoryRecommendation,
+    RecommendationType, RecommendationStatus, RecommendationPriority,
+)
 from app.models.governance_controls import (
     GovernanceControl, ControlType, ControlRiskArea, ControlFrequency,
     ControlMethod, ControlEffectiveness, TestResult, FindingSeverity,
@@ -148,6 +152,9 @@ __all__ = [
     "IFTIReceipt", "ReceiptStatus",
     "ComplianceCalendarItem", "ComplianceReminder",
     "CalendarItemType", "CalendarItemStatus", "ReminderStage",
+    # Regulatory Recommendations
+    "RegulatoryRecommendation",
+    "RecommendationType", "RecommendationStatus", "RecommendationPriority",
     # Governance Controls
     "GovernanceControl", "ControlType", "ControlRiskArea", "ControlFrequency",
     "ControlMethod", "ControlEffectiveness", "TestResult", "FindingSeverity",

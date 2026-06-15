@@ -903,6 +903,13 @@ def run_monitoring(
     # 5. Update (or create) the customer behaviour profile with this transaction's data
     update_behaviour_profile(transaction, customer, db)
 
+    # 6. Generate regulatory recommendations based on transaction signals + alerts
+    if alerts:
+        from app.services.recommendation_engine import generate_recommendations
+        recommendations = generate_recommendations(transaction, customer, alerts, db)
+        for rec in recommendations:
+            db.add(rec)
+
     return alerts
 
 

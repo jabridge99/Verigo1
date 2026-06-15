@@ -293,6 +293,10 @@ class TransactionAlert(Base):
     is_false_positive   = Column(Boolean, default=False)
     is_smr_candidate    = Column(Boolean, default=False, index=True)
 
+    # Decision support — populated by recommendation engine after alert generation
+    suggested_next_action = Column(String(100))     # consider_ifti | consider_ttr | consider_smr | create_case | no_action_required
+    recommendation_text   = Column(Text)            # plain-English guidance surfaced in the UI
+
     trigger_date    = Column(DateTime(timezone=True), server_default=func.now())
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     updated_at      = Column(DateTime(timezone=True), onupdate=func.now())

@@ -40,6 +40,7 @@ from app.schemas.transaction import (
     TransactionOut,
     TransactionUpdate,
 )
+from app.models.regulatory_recommendation import RegulatoryRecommendation, RecommendationStatus
 from app.schemas.transaction_receipt import TransactionReceipt, build_receipt
 from app.services.monitoring_engine import run_monitoring
 
@@ -329,5 +330,61 @@ def get_transaction_summary(
         "disclaimer": (
             "This summary is for compliance workflow support only. "
             "It does not constitute a report to AUSTRAC or any regulator."
+        ),
+    }
+
+
+@router.get("/{txn_id}/recommendations")
+def get_transaction_recommendations(
+    txn_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Regulatory decision support recommendations for this transaction.
+    Generated automatically after monitoring runs — surfaces what the compliance
+    officer should consider next based on transaction signals, customer risk,
+    and alert outputs.
+
+    DISCLAIMER: Recommendations are compliance workflow guidance only.
+    The reporting entity bears sole responsibility for all regulatory decisions.
+    """
+    org_id = org_id_for(current_user)
+    _get_transaction_or_404(txn_id, org_id, db)  # 404 if not found or wrong org
+
+    recs = (
+        db.query(RegulatoryRecommendation)
+        .filter(
+            RegulatoryRecommendation.transaction_id == txn_id,
+            RegulatoryRecommendation.org_id == org_id,
+        )
+        .order_by(RegulatoryRecommendation.created_at.desc())
+        .all()
+    )
+
+    return {
+        "transaction_id": txn_id,
+        "recommendation_count": len(recs),
+        "pending_count": sum(1 for r in recs if r.status == RecommendationStatus.pending),
+        "recommendations": [
+            {
+                "id": r.id,
+                "recommendation_type": r.recommendation_type.value,
+                "priority": r.priority.value,
+                "status": r.status.value,
+                "title": r.title,
+                "recommendation_text": r.recommendation_text,
+                "regulatory_basis": r.regulatory_basis,
+                "rationale": r.rationale,
+                "alert_id": r.alert_id,
+                "actioned_by": r.actioned_by,
+                "actioned_at": r.actioned_at,
+                "created_at": r.created_at,
+            }
+            for r in recs
+        ],
+        "disclaimer": (
+            "Recommendations are compliance workflow guidance only. "
+            "The reporting entity bears sole responsibility for all regulatory decisions."
         ),
     }

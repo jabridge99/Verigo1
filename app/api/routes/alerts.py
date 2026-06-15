@@ -26,6 +26,7 @@ from app.api.deps import (
     require_mlro_or_above,
 )
 from app.db.database import get_db
+from app.models.case import Case, CaseAlert
 from app.models.monitoring import (
     AlertCategory,
     AlertSeverity,
@@ -246,3 +247,120 @@ def flag_smr_candidate(
     db.commit()
     db.refresh(alert)
     return alert
+
+
+@router.post("/{alert_id}/create-case", status_code=201)
+def create_case_from_alert(
+    alert_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Convenience endpoint — create a compliance case pre-linked to this alert.
+
+    Creates the Case, links the alert via CaseAlert, and sets the alert status
+    to escalated. The case is opened in 'open' state for further investigation.
+
+    DISCLAIMER: Opening a case does not constitute suspicion of criminal activity.
+    Case management supports the compliance workflow only.
+    """
+    from datetime import datetime, timezone
+    from uuid import uuid4
+    from app.models.case import CaseStatus, CaseType, CaseSeverity
+
+    org_id = org_id_for(current_user)
+    alert = _get_alert_or_404(alert_id, org_id, db)
+
+    if alert.status in (AlertStatus.dismissed, AlertStatus.resolved):
+        raise HTTPException(409, "Cannot create a case from a closed alert.")
+
+    # Derive severity from alert
+    sev_map = {"low": "low", "medium": "medium", "high": "high", "critical": "critical"}
+    case_severity = CaseSeverity(sev_map.get(alert.severity.value, "medium"))
+
+    case_ref = f"CASE-{uuid4().hex[:8].upper()}"
+    case = Case(
+        id=f"case_{uuid4().hex[:12]}",
+        case_ref=case_ref,
+        org_id=org_id,
+        customer_id=alert.customer_id,
+        case_type=CaseType.smr_candidate if alert.is_smr_candidate else CaseType.internal_investigation,
+        severity=case_severity,
+        title=title or f"Investigation — {alert.title}",
+        description=description or (
+            f"Case opened from alert {alert.alert_ref}. "
+            f"Alert category: {alert.category.value}. "
+            f"Alert score: {alert.alert_score:.1f}/100."
+        ),
+        is_smr_candidate=alert.is_smr_candidate,
+        created_by=current_user.id,
+    )
+    db.add(case)
+
+    link = CaseAlert(
+        id=f"cal_{uuid4().hex[:10]}",
+        case_id=case.id,
+        alert_id=alert.id,
+        transaction_id=alert.transaction_id,
+        org_id=org_id,
+        added_by=current_user.id,
+        notes=f"Alert linked at case creation via /alerts/{alert_id}/create-case",
+    )
+    db.add(link)
+
+    alert.status = AlertStatus.escalated
+    alert.escalated_at = datetime.now(timezone.utc)
+    alert.escalation_reason = f"Case {case_ref} opened"
+
+    db.commit()
+    db.refresh(case)
+
+    return {
+        "case_id": case.id,
+        "case_ref": case_ref,
+        "alert_id": alert_id,
+        "status": "open",
+        "message": f"Case {case_ref} created and linked to alert {alert.alert_ref}.",
+        "disclaimer": DISCLAIMER,
+    }
+
+
+@router.get("/{alert_id}/recommendations")
+def get_alert_recommendations(
+    alert_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """Regulatory recommendations linked to this alert."""
+    from app.models.regulatory_recommendation import RegulatoryRecommendation
+    org_id = org_id_for(current_user)
+    _get_alert_or_404(alert_id, org_id, db)
+
+    recs = (
+        db.query(RegulatoryRecommendation)
+        .filter(
+            RegulatoryRecommendation.alert_id == alert_id,
+            RegulatoryRecommendation.org_id == org_id,
+        )
+        .order_by(RegulatoryRecommendation.created_at.desc())
+        .all()
+    )
+    return {
+        "alert_id": alert_id,
+        "recommendations": [
+            {
+                "id": r.id,
+                "recommendation_type": r.recommendation_type.value,
+                "priority": r.priority.value,
+                "status": r.status.value,
+                "title": r.title,
+                "recommendation_text": r.recommendation_text,
+                "regulatory_basis": r.regulatory_basis,
+                "created_at": r.created_at,
+            }
+            for r in recs
+        ],
+        "disclaimer": DISCLAIMER,
+    }
