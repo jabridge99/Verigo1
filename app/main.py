@@ -22,6 +22,8 @@ import app.models.retention  # noqa: F401
 import app.models.security_event  # noqa: F401
 import app.models.tenant  # noqa: F401
 import app.models.transaction  # noqa: F401
+import app.models.monitoring  # noqa: F401
+import app.models.case  # noqa: F401
 import app.models.user  # noqa: F401
 from app.api.routes import (
     analytics,
@@ -44,6 +46,19 @@ from app.api.routes import (
     tenants,
     transactions,
 )
+from app.api.routes.monitoring import router as monitoring_router
+from app.api.routes.alerts import router as alerts_router
+from app.api.routes.cases import router as cases_router
+from app.api.routes.customer_workflow import router as customer_workflow_router
+from app.api.routes.risk_assessment import router as risk_assessment_router
+from app.api.routes.governance.policies import router as governance_policies_router
+from app.api.routes.governance.controls import router as governance_controls_router
+import app.models.governance  # noqa: F401
+import app.models.governance_controls  # noqa: F401
+import app.models.governance_training  # noqa: F401
+import app.models.governance_customisation  # noqa: F401
+import app.models.customer_workflow  # noqa: F401
+import app.models.risk_engine  # noqa: F401
 from app.config import settings
 from app.db.database import Base, SessionLocal, engine
 from app.logging_config import setup_logging
@@ -165,6 +180,13 @@ app.include_router(connectors.router, prefix="/api/v1")
 app.include_router(retention.router, prefix="/api/v1")
 app.include_router(security_monitor.router, prefix="/api/v1")
 app.include_router(ifti.router, prefix="/api/v1")
+app.include_router(monitoring_router, prefix="/api/v1")
+app.include_router(alerts_router, prefix="/api/v1")
+app.include_router(cases_router, prefix="/api/v1")
+app.include_router(customer_workflow_router, prefix="/api/v1")
+app.include_router(risk_assessment_router, prefix="/api/v1")
+app.include_router(governance_policies_router, prefix="/api/v1")
+app.include_router(governance_controls_router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

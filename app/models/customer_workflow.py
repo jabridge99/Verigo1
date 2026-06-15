@@ -206,7 +206,7 @@ class CustomerWorkflowEvent(Base):
     actor_id = Column(String)                       # user_id or "system"
     actor_role = Column(String(50))
     comments = Column(Text)
-    metadata = Column(JSON)                         # action-specific data (risk scores, triggers, etc.)
+    event_metadata = Column(JSON)                   # action-specific data (risk scores, triggers, etc.)
     occurred_at = Column(DateTime(timezone=True), nullable=False)
 
     workflow = relationship("CustomerWorkflow", back_populates="events")

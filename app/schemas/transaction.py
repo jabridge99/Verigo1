@@ -1,125 +1,194 @@
-from datetime import datetime
-from typing import Optional
+"""Pydantic schemas for Transaction and related models."""
+from datetime import date, datetime
+from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.transaction import (
-    AlertSeverity,
-    AlertStatus,
+    CryptoNetwork,
+    DeliveryChannel,
+    PaymentMethod,
+    TransactionDirection,
+    TransactionStatus,
     TransactionType,
 )
 
 
+# ── Crypto Detail ──────────────────────────────────────────────────────────────
+
+class CryptoDetailCreate(BaseModel):
+    network: CryptoNetwork
+    asset: str
+    token_contract: Optional[str] = None
+    source_wallet: Optional[str] = None
+    destination_wallet: Optional[str] = None
+    transaction_hash: Optional[str] = None
+    source_wallet_type: Optional[str] = None      # self_hosted | exchange | unknown
+    destination_wallet_type: Optional[str] = None
+
+
+class CryptoDetailOut(BaseModel):
+    id: str
+    network: CryptoNetwork
+    asset: str
+    source_wallet: Optional[str] = None
+    destination_wallet: Optional[str] = None
+    transaction_hash: Optional[str] = None
+    block_number: Optional[int] = None
+    block_timestamp: Optional[datetime] = None
+    confirmations: Optional[int] = None
+    source_wallet_type: Optional[str] = None
+    destination_wallet_type: Optional[str] = None
+    source_wallet_risk_score: Optional[float] = None
+    source_wallet_risk_category: Optional[str] = None
+    destination_wallet_risk_score: Optional[float] = None
+    destination_wallet_risk_category: Optional[str] = None
+    sanctioned_exposure_pct: float = 0.0
+    darknet_exposure_pct: float = 0.0
+    mixer_exposure_pct: float = 0.0
+    high_risk_exchange_pct: float = 0.0
+    scam_exposure_pct: float = 0.0
+    provider: Optional[str] = None
+    screened_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ── Transaction ────────────────────────────────────────────────────────────────
+
 class TransactionCreate(BaseModel):
-    customer_id: int
+    transaction_ref: str = Field(..., max_length=50)
+    customer_id: str
+    customer_type: Optional[str] = None
+
     transaction_type: TransactionType
+    direction: TransactionDirection
+    payment_method: PaymentMethod
+    delivery_channel: Optional[DeliveryChannel] = None
+
+    currency: str = Field("AUD", max_length=3)
     amount: float
-    currency: str = "AUD"
     amount_aud: Optional[float] = None
-    counterparty_name: Optional[str] = None
-    counterparty_account: Optional[str] = None
-    counterparty_country: Optional[str] = None
-    counterparty_bank: Optional[str] = None
+    exchange_rate: Optional[float] = None
+    foreign_currency: Optional[str] = Field(None, max_length=3)
+    foreign_amount: Optional[float] = None
+
+    purpose: Optional[str] = Field(None, max_length=500)
+    description: Optional[str] = None
+    reference: Optional[str] = Field(None, max_length=255)
+    customer_reference: Optional[str] = Field(None, max_length=255)
+
+    # Source
+    source_account_name: Optional[str] = Field(None, max_length=255)
+    source_account_number: Optional[str] = Field(None, max_length=50)
+    source_bsb: Optional[str] = Field(None, max_length=10)
+    source_bank_name: Optional[str] = Field(None, max_length=255)
+    source_bank_bic: Optional[str] = Field(None, max_length=11)
+    source_iban: Optional[str] = Field(None, max_length=34)
+    source_country: Optional[str] = Field(None, max_length=2)
+
+    # Destination
+    destination_account_name: Optional[str] = Field(None, max_length=255)
+    destination_account_number: Optional[str] = Field(None, max_length=50)
+    destination_bsb: Optional[str] = Field(None, max_length=10)
+    destination_bank_name: Optional[str] = Field(None, max_length=255)
+    destination_bank_bic: Optional[str] = Field(None, max_length=11)
+    destination_iban: Optional[str] = Field(None, max_length=34)
+    destination_country: Optional[str] = Field(None, max_length=2)
+
+    country_origin: Optional[str] = Field(None, max_length=2)
+    country_destination: Optional[str] = Field(None, max_length=2)
     is_cross_border: bool = False
+
+    merchant_name: Optional[str] = Field(None, max_length=255)
+    merchant_category_code: Optional[str] = Field(None, max_length=10)
+    counterparty_name: Optional[str] = Field(None, max_length=255)
+    counterparty_type: Optional[str] = Field(None, max_length=50)
+
+    transaction_date: datetime
+    value_date: Optional[date] = None
+
+    crypto_detail: Optional[CryptoDetailCreate] = None
+
+
+class TransactionUpdate(BaseModel):
+    """Only non-risk, non-scoring fields may be updated after creation."""
+    purpose: Optional[str] = Field(None, max_length=500)
+    description: Optional[str] = None
+    reference: Optional[str] = Field(None, max_length=255)
+    status: Optional[TransactionStatus] = None
+
+
+class TransactionOut(BaseModel):
+    id: str
+    transaction_ref: str
+    org_id: str
+    customer_id: str
+    transaction_type: TransactionType
+    direction: TransactionDirection
+    payment_method: PaymentMethod
+    delivery_channel: Optional[DeliveryChannel] = None
+    status: TransactionStatus
+
+    currency: str
+    amount: float
+    amount_aud: Optional[float] = None
+    exchange_rate: Optional[float] = None
+    foreign_currency: Optional[str] = None
+    foreign_amount: Optional[float] = None
+
+    purpose: Optional[str] = None
     description: Optional[str] = None
     reference: Optional[str] = None
-    channel: Optional[str] = None
-    industry_id: Optional[str] = None
-    transaction_date: datetime
 
+    source_account_name: Optional[str] = None
+    source_country: Optional[str] = None
+    destination_account_name: Optional[str] = None
+    destination_country: Optional[str] = None
+    is_cross_border: bool
 
-class TransactionResponse(BaseModel):
-    id: int
-    transaction_id: str
-    customer_id: int
-    transaction_type: str
-    amount: float
-    currency: str
-    amount_aud: Optional[float]
-    counterparty_name: Optional[str]
-    counterparty_country: Optional[str]
-    is_cross_border: Optional[bool]
-    status: str
+    counterparty_name: Optional[str] = None
+    counterparty_type: Optional[str] = None
+
+    is_near_threshold: bool
+    is_round_number: bool
+    is_structuring_suspect: bool
+    is_cash_intensive: bool
+
     risk_score: float
-    is_suspicious: int
-    alert_type: Optional[str]
-    alert_details: Optional[str]
-    industry_id: Optional[str]
+    behaviour_score: float
+    geo_risk_score: float
+    alerts_generated: int
+    rules_matched: list[str]
+    behaviour_signals: dict[str, Any]
+
     transaction_date: datetime
-    created_at: Optional[datetime]
+    value_date: Optional[date] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    crypto_detail: Optional[CryptoDetailOut] = None
 
     class Config:
         from_attributes = True
 
 
-class AlertResponse(BaseModel):
-    id: int
-    alert_id: str
-    transaction_id: int
-    customer_id: Optional[int]
-    industry_id: Optional[str]
-    alert_type: str
-    severity: str
-    status: str
-    description: str
-    rule_id: Optional[str]
-    rule_name: Optional[str]
-    action_taken: Optional[str]
-    notes: Optional[str]
-    assigned_to: Optional[str]
-    is_resolved: int
-    resolved_by: Optional[str]
-    resolution_notes: Optional[str]
-    created_at: Optional[datetime]
-    resolved_at: Optional[datetime]
+class TransactionListOut(BaseModel):
+    id: str
+    transaction_ref: str
+    customer_id: str
+    transaction_type: TransactionType
+    direction: TransactionDirection
+    payment_method: PaymentMethod
+    status: TransactionStatus
+    currency: str
+    amount: float
+    amount_aud: Optional[float] = None
+    is_cross_border: bool
+    risk_score: float
+    alerts_generated: int
+    transaction_date: datetime
 
     class Config:
         from_attributes = True
-
-
-class AlertUpdate(BaseModel):
-    status: Optional[AlertStatus] = None
-    notes: Optional[str] = None
-    action_taken: Optional[str] = None
-    assigned_to: Optional[str] = None
-    escalated_to: Optional[str] = None
-    resolved_by: Optional[str] = None
-    resolution_notes: Optional[str] = None
-
-
-class CaseCreate(BaseModel):
-    customer_id: int
-    industry_id: Optional[str] = None
-    title: str
-    description: Optional[str] = None
-    severity: AlertSeverity = AlertSeverity.medium
-    alert_ids: list[str] = []
-    assigned_to: Optional[str] = None
-    created_by: Optional[str] = None
-
-
-class CaseResponse(BaseModel):
-    id: int
-    case_id: str
-    customer_id: int
-    industry_id: Optional[str]
-    title: str
-    description: Optional[str]
-    severity: str
-    status: str
-    assigned_to: Optional[str]
-    alert_ids: Optional[list]
-    created_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
-
-
-class MonitoringStats(BaseModel):
-    total_alerts: int
-    open_alerts: int
-    by_severity: dict
-    by_type: dict
-    by_status: dict
-    total_transactions: int
-    flagged_transactions: int

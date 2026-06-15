@@ -8,6 +8,7 @@ import enum
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Column, Date, DateTime, Enum, Float, ForeignKey, String, Text, func
+from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 

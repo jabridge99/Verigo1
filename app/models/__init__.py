@@ -38,8 +38,22 @@ from app.models.screening import (
     AlertSeverity, AlertStatus, CryptoNetwork, WalletRiskCategory,
     AdverseMediaCategory,
 )
-from app.models.transaction import Transaction, TransactionAlert, TransactionType, TransactionStatus, AlertType, AlertSeverity, AlertStatus
-from app.models.case import Case, CaseNote, CaseSeverity, CaseStatus
+from app.models.transaction import (
+    Transaction, TransactionCryptoDetail, CustomerBehaviourProfile,
+    TransactionType, TransactionStatus, TransactionDirection,
+    PaymentMethod, DeliveryChannel, CryptoNetwork,
+)
+from app.models.monitoring import (
+    MonitoringRule, RuleConditionGroup, RuleCondition, RuleExecution,
+    TransactionAlert, AlertEvidence,
+    AlertCategory, AlertType, AlertStatus, AlertSeverity,
+    RuleStatus, RuleConditionOperator,
+)
+from app.models.case import (
+    Case, CaseAlert, CaseNote, CaseEvidence,
+    CaseType, CaseStatus, CaseSeverity, CaseOutcome,
+    NoteType, EvidenceType,
+)
 from app.models.report import IFTIReport, TTRReport, SMRReport, ReportStatus, IFTIDirection
 from app.models.audit_log import AuditLog
 from app.models.governance_controls import (
@@ -107,9 +121,19 @@ __all__ = [
     "ScreeningRecord", "ScreeningAlert", "CryptoWalletScreening", "AdverseMediaResult",
     "ScreeningType", "ScreeningStatus", "ScreeningProvider", "ScreeningEntityType",
     "AlertSeverity", "AlertStatus", "CryptoNetwork", "WalletRiskCategory", "AdverseMediaCategory",
-    "Transaction", "TransactionAlert", "TransactionType", "TransactionStatus",
-    "AlertType", "AlertSeverity", "AlertStatus",
-    "Case", "CaseNote", "CaseSeverity", "CaseStatus",
+    # Transactions
+    "Transaction", "TransactionCryptoDetail", "CustomerBehaviourProfile",
+    "TransactionType", "TransactionStatus", "TransactionDirection",
+    "PaymentMethod", "DeliveryChannel",
+    # Monitoring
+    "MonitoringRule", "RuleConditionGroup", "RuleCondition", "RuleExecution",
+    "TransactionAlert", "AlertEvidence",
+    "AlertCategory", "AlertType", "AlertStatus", "AlertSeverity",
+    "RuleStatus", "RuleConditionOperator",
+    # Cases
+    "Case", "CaseAlert", "CaseNote", "CaseEvidence",
+    "CaseType", "CaseStatus", "CaseSeverity", "CaseOutcome",
+    "NoteType", "EvidenceType",
     "IFTIReport", "TTRReport", "SMRReport", "ReportStatus", "IFTIDirection",
     "AuditLog",
     # Governance Controls
