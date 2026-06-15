@@ -60,6 +60,11 @@ from app.models.governance_customisation import (
     GovernanceCustomScoring, GovernanceApprovalMatrix, GovernanceDashboardMetric,
     EntityType, CustomFieldType, ApprovalRole, ListCategory,
 )
+from app.models.customer_workflow import (
+    CustomerWorkflow, CustomerWorkflowEvent, CustomerRiskProfile,
+    WorkflowState, WorkflowAction, EDDTrigger,
+    WORKFLOW_TRANSITIONS, ACTION_TO_STATE,
+)
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.models.risk_engine import (
     RiskCategoryType, MitigationStatus,
