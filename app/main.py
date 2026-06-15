@@ -25,6 +25,9 @@ import app.models.transaction  # noqa: F401
 import app.models.monitoring  # noqa: F401
 import app.models.case  # noqa: F401
 import app.models.user  # noqa: F401
+import app.models.audit_log  # noqa: F401
+import app.models.ifti_receipt  # noqa: F401
+import app.models.compliance_calendar  # noqa: F401
 from app.api.routes import (
     analytics,
     api_keys,
@@ -53,6 +56,8 @@ from app.api.routes.customer_workflow import router as customer_workflow_router
 from app.api.routes.risk_assessment import router as risk_assessment_router
 from app.api.routes.governance.policies import router as governance_policies_router
 from app.api.routes.governance.controls import router as governance_controls_router
+from app.api.routes.ifti_receipts import router as ifti_receipts_router
+from app.api.routes.compliance_calendar import router as compliance_calendar_router
 import app.models.governance  # noqa: F401
 import app.models.governance_controls  # noqa: F401
 import app.models.governance_training  # noqa: F401
@@ -187,6 +192,8 @@ app.include_router(customer_workflow_router, prefix="/api/v1")
 app.include_router(risk_assessment_router, prefix="/api/v1")
 app.include_router(governance_policies_router, prefix="/api/v1")
 app.include_router(governance_controls_router, prefix="/api/v1")
+app.include_router(ifti_receipts_router, prefix="/api/v1")
+app.include_router(compliance_calendar_router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

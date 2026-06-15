@@ -1,438 +1,783 @@
 """
-AUSTRAC Regulatory Reporting — SECURITY HARDENED.
-Zero Trust fixes:
-- Authentication required on ALL endpoints
-- RBAC: report creation (analyst+), review (compliance+), approve/submit (mlro only)
-- Maker-checker: reviewer ≠ approver enforced
-- reviewer/approved_by taken from session, never from request body
-- Tenant isolation on all list/get queries
-- Audit trail on every state transition
-"""
+AUSTRAC Regulatory Reporting API.
 
-import uuid
+Covers IFTI, TTR, SMR reports and the immutable Filing Register.
+
+Role permissions:
+  - analyst+      : read reports, generate drafts from transactions/cases
+  - compliance+   : update drafts, move to review
+  - mlro+         : approve, submit, acknowledge, reject
+  - Maker-checker : reviewer ≠ approver enforced on all regulatory reports
+
+DISCLAIMER: This API provides compliance workflow tooling only.
+All decisions to lodge reports with AUSTRAC remain with the reporting entity.
+"""
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import _require_roles
-from app.db.database import get_db
-from app.models.customer import Customer
-from app.models.report import ComplianceReport, ECDDRecord, ReportStatus
-from app.models.user import User, UserRole
-from app.schemas.report import (
-    ECDDCreate,
-    ECDDResponse,
-    ReportCreate,
-    ReportingSummary,
-    ReportResponse,
-    ReportSubmit,
-    ReportUpdate,
+from app.api.deps import (
+    Pagination,
+    get_current_user,
+    org_id_for,
+    require_analyst_or_above,
+    require_compliance_or_above,
+    require_mlro_or_above,
 )
-from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
+from app.db.database import get_db
+from app.models.case import Case
+from app.models.customer import Customer
+from app.models.report import (
+    FilingRegisterEntry,
+    IFTIDirection,
+    IFTIReport,
+    ReportPriority,
+    ReportStatus,
+    ReportType,
+    SMRReport,
+    TTRReport,
+)
+from app.models.transaction import Transaction
+from app.models.user import User
 from app.services.reporting_service import (
-    auto_generate_from_alert,
-    bulk_auto_generate,
+    generate_ifti_from_transaction,
+    generate_smr_from_case,
+    generate_ttr_from_transaction,
+    register_submission,
     reporting_summary,
 )
-from app.services.risk_scoring import score_to_level
 
-router = APIRouter(prefix="/reports", tags=["Compliance Reports"])
-
-# Role shortcuts
-_READER = _require_roles(
-    UserRole.admin,
-    UserRole.mlro,
-    UserRole.compliance,
-    UserRole.analyst,
-    UserRole.viewer,
-)
-_WRITER = _require_roles(
-    UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst
-)
-_REVIEW = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
-_APPROVE = _require_roles(UserRole.admin, UserRole.mlro)
+router = APIRouter(prefix="/reports", tags=["Regulatory Reports"])
 
 
-def _assert_tenant(current_user: User, report_industry_id: Optional[str]):
-    if current_user.role == UserRole.admin:
-        return
-    if report_industry_id and report_industry_id != current_user.industry_id:
-        raise HTTPException(403, "Cross-tenant access denied")
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _get_ifti_or_404(report_id: str, org_id: str, db: Session) -> IFTIReport:
+    r = db.query(IFTIReport).filter(
+        IFTIReport.id == report_id, IFTIReport.org_id == org_id
+    ).first()
+    if not r:
+        raise HTTPException(404, "IFTI report not found.")
+    return r
 
 
-def _scoped(db: Session, current_user: User):
-    q = db.query(ComplianceReport)
-    if current_user.role != UserRole.admin:
-        q = q.filter(ComplianceReport.industry_id == current_user.industry_id)
-    return q
+def _get_ttr_or_404(report_id: str, org_id: str, db: Session) -> TTRReport:
+    r = db.query(TTRReport).filter(
+        TTRReport.id == report_id, TTRReport.org_id == org_id
+    ).first()
+    if not r:
+        raise HTTPException(404, "TTR report not found.")
+    return r
 
 
-# ─── Reports CRUD ─────────────────────────────────────────────────────────────
+def _get_smr_or_404(report_id: str, org_id: str, db: Session) -> SMRReport:
+    r = db.query(SMRReport).filter(
+        SMRReport.id == report_id, SMRReport.org_id == org_id
+    ).first()
+    if not r:
+        raise HTTPException(404, "SMR report not found.")
+    return r
 
 
-@router.post("/", response_model=ReportResponse, status_code=201)
-def create_report(
-    payload: ReportCreate,
+def _assert_editable(report, label: str):
+    if report.status not in (ReportStatus.draft, ReportStatus.under_review):
+        raise HTTPException(409, f"{label} cannot be edited in status: {report.status.value}")
+
+
+def _assert_maker_checker(report, approver_id: str):
+    if report.reviewed_by and report.reviewed_by == approver_id:
+        raise HTTPException(403, "Maker-checker violation: approver cannot be the same as reviewer.")
+
+
+# ── Summary / Dashboard ───────────────────────────────────────────────────────
+
+@router.get("/summary")
+def get_reporting_summary(
     db: Session = Depends(get_db),
-    current_user: User = Depends(_WRITER),
+    current_user: User = Depends(require_analyst_or_above),
 ):
-    customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+    return reporting_summary(db, org_id_for(current_user))
+
+
+# ── IFTI ─────────────────────────────────────────────────────────────────────
+
+@router.get("/ifti", response_model=list[dict])
+def list_ifti(
+    direction: Optional[IFTIDirection] = Query(None),
+    status: Optional[ReportStatus] = Query(None),
+    customer_id: Optional[str] = Query(None),
+    pagination: Pagination = Depends(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    org_id = org_id_for(current_user)
+    q = db.query(IFTIReport).filter(IFTIReport.org_id == org_id)
+    if direction:
+        q = q.filter(IFTIReport.direction == direction)
+    if status:
+        q = q.filter(IFTIReport.status == status)
+    if customer_id:
+        q = q.filter(IFTIReport.customer_id == customer_id)
+    q = q.order_by(IFTIReport.created_at.desc())
+    reports = pagination.apply(q).all()
+    return [_ifti_dict(r) for r in reports]
+
+
+@router.post("/ifti/generate-from-transaction/{txn_id}", status_code=status.HTTP_201_CREATED)
+def generate_ifti(
+    txn_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """Generate a draft IFTI report pre-populated from a cross-border transaction."""
+    org_id = org_id_for(current_user)
+    txn = db.query(Transaction).filter(
+        Transaction.id == txn_id, Transaction.org_id == org_id
+    ).first()
+    if not txn:
+        raise HTTPException(404, "Transaction not found.")
+    if not txn.is_cross_border:
+        raise HTTPException(422, "Transaction is not cross-border — IFTI may not be required.")
+
+    customer = db.query(Customer).filter(
+        Customer.id == txn.customer_id, Customer.org_id == org_id
+    ).first()
     if not customer:
-        raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+        raise HTTPException(404, "Customer not found.")
 
-    from app.services.reporting_service import (
-        _days_remaining,
-        _due_date,
-        _priority,
-        _report_id,
-    )
-
-    rtype = payload.report_type.value
-    due = _due_date(rtype)
-    data = payload.model_dump()
-    # Enforce tenant scoping from session — ignore any industry_id in payload
-    data["industry_id"] = (
-        current_user.industry_id
-        if current_user.role != UserRole.admin
-        else data.get("industry_id")
-    )
-    data["prepared_by"] = current_user.user_id
-
-    report = ComplianceReport(
-        report_id=_report_id(),
-        risk_level=customer.risk_level,
-        austrac_report_type={
-            "ttr": "TTR",
-            "ifti_in": "IFTI-I",
-            "ifti_out": "IFTI-E",
-            "smr": "SMR",
-        }.get(rtype, rtype.upper()),
-        due_date=due,
-        days_remaining=_days_remaining(due),
-        priority=_priority(rtype, _days_remaining(due)),
-        **data,
+    report = generate_ifti_from_transaction(
+        txn, customer, db, prepared_by=current_user.id
     )
     db.add(report)
     db.commit()
     db.refresh(report)
-    return report
+    return _ifti_dict(report)
 
 
-@router.get("/", response_model=list[ReportResponse])
-def list_reports(
-    customer_id: Optional[int] = None,
-    report_type: Optional[str] = None,
-    status: Optional[str] = None,
-    priority: Optional[str] = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(_READER),
-):
-    q = _scoped(db, current_user)
-    if customer_id:
-        q = q.filter(ComplianceReport.customer_id == customer_id)
-    if report_type:
-        q = q.filter(ComplianceReport.report_type == report_type)
-    if status:
-        q = q.filter(ComplianceReport.status == status)
-    if priority:
-        q = q.filter(ComplianceReport.priority == priority)
-    return (
-        q.order_by(ComplianceReport.created_at.desc()).offset(skip).limit(limit).all()
-    )
-
-
-@router.get("/summary", response_model=ReportingSummary)
-def get_summary(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(_READER),
-):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
-    )
-    return reporting_summary(db, industry_id=industry_id)
-
-
-@router.get("/{report_id}", response_model=ReportResponse)
-def get_report(
+@router.get("/ifti/{report_id}")
+def get_ifti(
     report_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_READER),
+    current_user: User = Depends(require_analyst_or_above),
 ):
-    r = (
-        _scoped(db, current_user)
-        .filter(ComplianceReport.report_id == report_id)
-        .first()
-    )
-    if not r:
-        raise HTTPException(404, "Report not found")
-    return r
+    return _ifti_dict(_get_ifti_or_404(report_id, org_id_for(current_user), db))
 
 
-@router.patch("/{report_id}", response_model=ReportResponse)
-def update_report(
+@router.patch("/ifti/{report_id}")
+def update_ifti(
     report_id: str,
-    payload: ReportUpdate,
+    payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_WRITER),
+    current_user: User = Depends(require_compliance_or_above),
 ):
-    r = (
-        _scoped(db, current_user)
-        .filter(ComplianceReport.report_id == report_id)
-        .first()
-    )
-    if not r:
-        raise HTTPException(404, "Report not found")
-    if r.status not in (ReportStatus.draft,):
-        raise HTTPException(400, f"Cannot edit report in status: {r.status}")
-    for field, value in payload.model_dump(exclude_none=True).items():
-        # Prevent overwriting audit fields via this endpoint
-        if field not in (
-            "reviewed_by",
-            "approved_by",
-            "submitted_at",
-            "acknowledged_at",
-        ):
-            setattr(r, field, value)
+    org_id = org_id_for(current_user)
+    r = _get_ifti_or_404(report_id, org_id, db)
+    _assert_editable(r, "IFTI report")
+    _PROTECTED = {"id", "org_id", "report_ref", "prepared_by", "approved_by",
+                  "approved_at", "submitted_by", "submitted_at", "acknowledged_at",
+                  "created_at"}
+    for k, v in payload.items():
+        if k not in _PROTECTED:
+            setattr(r, k, v)
+    r.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(r)
-    return r
+    return _ifti_dict(r)
 
 
-@router.post("/{report_id}/review")
-def move_to_review(
+@router.post("/ifti/{report_id}/review")
+def review_ifti(
     report_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_REVIEW),
+    current_user: User = Depends(require_compliance_or_above),
 ):
-    """Mark report as under review. reviewer set from authenticated session."""
-    r = (
-        _scoped(db, current_user)
-        .filter(ComplianceReport.report_id == report_id)
-        .first()
-    )
-    if not r:
-        raise HTTPException(404, "Report not found")
+    org_id = org_id_for(current_user)
+    r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.draft:
-        raise HTTPException(
-            400, f"Report must be in draft status (current: {r.status})"
-        )
+        raise HTTPException(409, f"Report must be in draft status (current: {r.status.value})")
     r.status = ReportStatus.under_review
-    r.reviewed_by = current_user.user_id  # from session — never from request
+    r.reviewed_by = current_user.id
+    r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"report_id": report_id, "status": r.status, "reviewed_by": r.reviewed_by}
+    return {"report_id": report_id, "status": r.status.value, "reviewed_by": r.reviewed_by}
 
 
-@router.post("/{report_id}/approve")
-def approve_report(
+@router.post("/ifti/{report_id}/approve")
+def approve_ifti(
     report_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_APPROVE),
+    current_user: User = Depends(require_mlro_or_above),
 ):
-    """
-    MLRO-only approval. Enforces maker-checker: approver must differ from reviewer.
-    approved_by is taken from authenticated session — never accepted from request body.
-    """
-    r = (
-        _scoped(db, current_user)
-        .filter(ComplianceReport.report_id == report_id)
-        .first()
-    )
-    if not r:
-        raise HTTPException(404, "Report not found")
+    org_id = org_id_for(current_user)
+    r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.under_review:
-        raise HTTPException(400, f"Report must be under review (current: {r.status})")
-    # Maker-checker: MLRO cannot approve their own review
-    if r.reviewed_by and r.reviewed_by == current_user.user_id:
-        raise HTTPException(
-            403, "Maker-checker violation: approver cannot be the same as reviewer"
-        )
+        raise HTTPException(409, f"Report must be under_review (current: {r.status.value})")
+    _assert_maker_checker(r, current_user.id)
     r.status = ReportStatus.approved
-    r.approved_by = current_user.user_id
-    r.mlro_sign_off = True
+    r.approved_by = current_user.id
+    r.approved_at = datetime.now(timezone.utc)
+    r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"report_id": report_id, "status": r.status, "approved_by": r.approved_by}
+    return {"report_id": report_id, "status": r.status.value, "approved_by": r.approved_by}
 
 
-@router.post("/{report_id}/submit", response_model=ReportResponse)
-def submit_report(
+@router.post("/ifti/{report_id}/submit")
+def submit_ifti(
     report_id: str,
-    payload: ReportSubmit,
+    submission_reference: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_APPROVE),
+    current_user: User = Depends(require_mlro_or_above),
 ):
-    """Submit to AUSTRAC. Requires prior approval by a different user."""
-    r = (
-        _scoped(db, current_user)
-        .filter(ComplianceReport.report_id == report_id)
-        .first()
-    )
-    if not r:
-        raise HTTPException(404, "Report not found")
+    org_id = org_id_for(current_user)
+    r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.approved:
-        raise HTTPException(
-            400, f"Report must be approved before submission (current: {r.status})"
-        )
+        raise HTTPException(409, f"Report must be approved before submission (current: {r.status.value})")
     r.status = ReportStatus.submitted
-    r.submitted_to = payload.submitted_to
-    r.submission_reference = (
-        payload.submission_reference or f"REF-{uuid.uuid4().hex[:8].upper()}"
-    )
+    r.submitted_by = current_user.id
     r.submitted_at = datetime.now(timezone.utc)
-    # approved_by already set during approve step — do not overwrite from payload
+    if submission_reference:
+        r.submission_reference = submission_reference
+    r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    db.refresh(r)
-    return r
 
-
-@router.post("/{report_id}/acknowledge")
-def acknowledge_report(
-    report_id: str,
-    reference: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(_APPROVE),
-):
-    r = (
-        _scoped(db, current_user)
-        .filter(ComplianceReport.report_id == report_id)
-        .first()
+    register_submission(
+        db=db,
+        org_id=org_id,
+        report_type=ReportType.ifti_incoming if r.direction == IFTIDirection.incoming else ReportType.ifti_outgoing,
+        report_id=r.id,
+        report_ref=r.report_ref,
+        submitted_by=current_user.id,
+        austrac_submission_ref=submission_reference,
+        amount_aud=r.amount_aud,
     )
-    if not r:
-        raise HTTPException(404, "Report not found")
+
+    return {"report_id": report_id, "status": r.status.value, "submitted_at": r.submitted_at}
+
+
+@router.post("/ifti/{report_id}/acknowledge")
+def acknowledge_ifti(
+    report_id: str,
+    acknowledgement_ref: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    org_id = org_id_for(current_user)
+    r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.submitted:
-        raise HTTPException(
-            400,
-            f"Report must be submitted before acknowledgement (current: {r.status})",
-        )
+        raise HTTPException(409, f"Report must be submitted (current: {r.status.value})")
     r.status = ReportStatus.acknowledged
     r.acknowledged_at = datetime.now(timezone.utc)
-    if reference:
-        r.submission_reference = reference
+    if acknowledgement_ref:
+        r.submission_reference = acknowledgement_ref
+    r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"report_id": report_id, "status": r.status}
+    return {"report_id": report_id, "status": r.status.value}
 
 
-# ─── Auto-generation ──────────────────────────────────────────────────────────
-
-
-@router.post("/auto-generate/alert/{alert_id}", response_model=ReportResponse)
-def auto_generate_from_alert_endpoint(
-    alert_id: str,
+@router.post("/ifti/{report_id}/reject")
+def reject_ifti(
+    report_id: str,
+    reason: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_REVIEW),
+    current_user: User = Depends(require_mlro_or_above),
 ):
-    from app.models.transaction import TransactionAlert
-
-    alert = db.query(TransactionAlert).filter_by(alert_id=alert_id).first()
-    if not alert:
-        raise HTTPException(404, "Alert not found")
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
-    )
-    report = auto_generate_from_alert(
-        db, alert, industry_id=industry_id, prepared_by=current_user.user_id
-    )
-    if not report:
-        raise HTTPException(
-            422, "Alert type does not map to a mandatory AUSTRAC report"
-        )
-    return report
+    org_id = org_id_for(current_user)
+    r = _get_ifti_or_404(report_id, org_id, db)
+    r.status = ReportStatus.rejected
+    r.rejected_reason = reason
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"report_id": report_id, "status": r.status.value}
 
 
-@router.post("/auto-generate/bulk")
-def bulk_auto_generate_endpoint(
+# ── TTR ──────────────────────────────────────────────────────────────────────
+
+@router.get("/ttr", response_model=list[dict])
+def list_ttr(
+    status: Optional[ReportStatus] = Query(None),
+    customer_id: Optional[str] = Query(None),
+    pagination: Pagination = Depends(),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_APPROVE),
+    current_user: User = Depends(require_analyst_or_above),
 ):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
-    )
-    reports = bulk_auto_generate(db, industry_id=industry_id)
-    return {"generated": len(reports), "report_ids": [r.report_id for r in reports]}
+    org_id = org_id_for(current_user)
+    q = db.query(TTRReport).filter(TTRReport.org_id == org_id)
+    if status:
+        q = q.filter(TTRReport.status == status)
+    if customer_id:
+        q = q.filter(TTRReport.customer_id == customer_id)
+    q = q.order_by(TTRReport.created_at.desc())
+    return [_ttr_dict(r) for r in pagination.apply(q).all()]
 
 
-# ─── ECDD ─────────────────────────────────────────────────────────────────────
-
-
-@router.post("/ecdd/", response_model=ECDDResponse, status_code=201)
-def create_ecdd(
-    payload: ECDDCreate,
+@router.post("/ttr/generate-from-transaction/{txn_id}", status_code=status.HTTP_201_CREATED)
+def generate_ttr(
+    txn_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_REVIEW),
+    current_user: User = Depends(require_compliance_or_above),
 ):
-    customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+    """Generate a draft TTR from a transaction >= AUD 10,000."""
+    org_id = org_id_for(current_user)
+    txn = db.query(Transaction).filter(
+        Transaction.id == txn_id, Transaction.org_id == org_id
+    ).first()
+    if not txn:
+        raise HTTPException(404, "Transaction not found.")
+
+    amount_aud = txn.amount_aud or txn.amount
+    if amount_aud < 10_000:
+        raise HTTPException(422, "Transaction amount is below the AUD 10,000 TTR threshold.")
+
+    customer = db.query(Customer).filter(
+        Customer.id == txn.customer_id, Customer.org_id == org_id
+    ).first()
     if not customer:
-        raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+        raise HTTPException(404, "Customer not found.")
 
-    # ECDD requires approved KYC — enforce business rule
-    from app.models.kyc import KYCRecord, KYCStatus
-
-    approved_kyc = (
-        db.query(KYCRecord)
-        .filter(
-            KYCRecord.customer_id == customer.id,
-            KYCRecord.status == KYCStatus.approved,
-        )
-        .first()
-    )
-    if not approved_kyc and not (customer.risk_score or 0) >= 61:
-        raise HTTPException(
-            422, "ECDD requires an approved KYC record or risk score >= 61"
-        )
-
-    ecdd = ECDDRecord(
-        ecdd_id=f"ECDD-{uuid.uuid4().hex[:10].upper()}",
-        created_by=current_user.user_id,
-        **payload.model_dump(),
-    )
-    db.add(ecdd)
-    db.flush()
-    ecdd.enhanced_risk_score = compute_ecdd_score(ecdd)
-    ecdd.recommendation = determine_recommendation(
-        ecdd.enhanced_risk_score,
-        bool(ecdd.pep_status),
-        bool(ecdd.adverse_media_found),
-    )
-    customer.risk_score = max(customer.risk_score or 0, ecdd.enhanced_risk_score)
-    customer.risk_level = score_to_level(customer.risk_score)
-    customer.is_pep = payload.pep_status
+    report = generate_ttr_from_transaction(txn, customer, db, prepared_by=current_user.id)
+    db.add(report)
     db.commit()
-    db.refresh(ecdd)
-    return ecdd
+    db.refresh(report)
+    return _ttr_dict(report)
 
 
-@router.patch("/ecdd/{ecdd_id}/complete")
-def complete_ecdd(
-    ecdd_id: str,
+@router.get("/ttr/{report_id}")
+def get_ttr(
+    report_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_REVIEW),
+    current_user: User = Depends(require_analyst_or_above),
 ):
-    ecdd = db.query(ECDDRecord).filter_by(ecdd_id=ecdd_id).first()
-    if not ecdd:
-        raise HTTPException(404, "ECDD record not found")
-    ecdd.status = "completed"
-    ecdd.completed_at = datetime.now(timezone.utc)
+    return _ttr_dict(_get_ttr_or_404(report_id, org_id_for(current_user), db))
+
+
+@router.patch("/ttr/{report_id}")
+def update_ttr(
+    report_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    _assert_editable(r, "TTR report")
+    _PROTECTED = {"id", "org_id", "report_ref", "prepared_by", "approved_by",
+                  "approved_at", "submitted_by", "submitted_at", "acknowledged_at", "created_at"}
+    for k, v in payload.items():
+        if k not in _PROTECTED:
+            setattr(r, k, v)
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(r)
+    return _ttr_dict(r)
+
+
+@router.post("/ttr/{report_id}/review")
+def review_ttr(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.draft:
+        raise HTTPException(409, f"Report must be draft (current: {r.status.value})")
+    r.status = ReportStatus.under_review
+    r.reviewed_by = current_user.id
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"report_id": report_id, "status": r.status.value}
+
+
+@router.post("/ttr/{report_id}/approve")
+def approve_ttr(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.under_review:
+        raise HTTPException(409, f"Report must be under_review (current: {r.status.value})")
+    _assert_maker_checker(r, current_user.id)
+    r.status = ReportStatus.approved
+    r.approved_by = current_user.id
+    r.approved_at = datetime.now(timezone.utc)
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"report_id": report_id, "status": r.status.value}
+
+
+@router.post("/ttr/{report_id}/submit")
+def submit_ttr(
+    report_id: str,
+    submission_reference: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.approved:
+        raise HTTPException(409, "Report must be approved before submission.")
+    r.status = ReportStatus.submitted
+    r.submitted_by = current_user.id
+    r.submitted_at = datetime.now(timezone.utc)
+    if submission_reference:
+        r.submission_reference = submission_reference
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    register_submission(
+        db=db,
+        org_id=r.org_id,
+        report_type=ReportType.ttr,
+        report_id=r.id,
+        report_ref=r.report_ref,
+        submitted_by=current_user.id,
+        austrac_submission_ref=submission_reference,
+        amount_aud=r.total_amount,
+    )
+    return {"report_id": report_id, "status": r.status.value}
+
+
+@router.post("/ttr/{report_id}/acknowledge")
+def acknowledge_ttr(
+    report_id: str,
+    acknowledgement_ref: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.submitted:
+        raise HTTPException(409, "Report must be submitted.")
+    r.status = ReportStatus.acknowledged
+    r.acknowledged_at = datetime.now(timezone.utc)
+    if acknowledgement_ref:
+        r.submission_reference = acknowledgement_ref
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"report_id": report_id, "status": r.status.value}
+
+
+# ── SMR ──────────────────────────────────────────────────────────────────────
+
+@router.get("/smr", response_model=list[dict])
+def list_smr(
+    status: Optional[ReportStatus] = Query(None),
+    customer_id: Optional[str] = Query(None),
+    is_terrorism_related: Optional[bool] = Query(None),
+    pagination: Pagination = Depends(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    org_id = org_id_for(current_user)
+    q = db.query(SMRReport).filter(SMRReport.org_id == org_id)
+    if status:
+        q = q.filter(SMRReport.status == status)
+    if customer_id:
+        q = q.filter(SMRReport.customer_id == customer_id)
+    if is_terrorism_related is not None:
+        q = q.filter(SMRReport.is_terrorism_related == is_terrorism_related)
+    q = q.order_by(SMRReport.created_at.desc())
+    return [_smr_dict(r) for r in pagination.apply(q).all()]
+
+
+@router.post("/smr/generate-from-case/{case_id}", status_code=status.HTTP_201_CREATED)
+def generate_smr(
+    case_id: str,
+    suspicion_grounds: str,
+    is_terrorism_related: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    """
+    Generate a draft SMR pre-populated from a case.
+    Suspicion grounds must be supplied by the MLRO — never auto-populated.
+
+    DISCLAIMER: The decision to lodge an SMR remains with the reporting entity.
+    """
+    org_id = org_id_for(current_user)
+    case = db.query(Case).filter(Case.id == case_id, Case.org_id == org_id).first()
+    if not case:
+        raise HTTPException(404, "Case not found.")
+    if not case.is_smr_candidate:
+        raise HTTPException(422, "Case has not been flagged as an SMR candidate.")
+    if not case.smr_considered:
+        raise HTTPException(422, "MLRO must complete smr/consider on the case before generating an SMR.")
+
+    customer = db.query(Customer).filter(
+        Customer.id == case.customer_id, Customer.org_id == org_id
+    ).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found.")
+
+    report = generate_smr_from_case(
+        case=case,
+        customer=customer,
+        db=db,
+        prepared_by=current_user.id,
+        suspicion_grounds=suspicion_grounds,
+        is_terrorism_related=is_terrorism_related,
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return _smr_dict(report)
+
+
+@router.get("/smr/{report_id}")
+def get_smr(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    return _smr_dict(_get_smr_or_404(report_id, org_id_for(current_user), db))
+
+
+@router.patch("/smr/{report_id}")
+def update_smr(
+    report_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """Only draft/under_review SMRs can be edited. All SMR fields require explicit human action."""
+    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    _assert_editable(r, "SMR report")
+    _PROTECTED = {"id", "org_id", "report_ref", "prepared_by", "mlro_sign_off",
+                  "mlro_signed_at", "submitted_by", "submitted_at", "acknowledged_at",
+                  "created_at", "is_terrorism_related"}
+    for k, v in payload.items():
+        if k not in _PROTECTED:
+            setattr(r, k, v)
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(r)
+    return _smr_dict(r)
+
+
+@router.post("/smr/{report_id}/review")
+def review_smr(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.draft:
+        raise HTTPException(409, "SMR must be in draft status.")
+    r.status = ReportStatus.under_review
+    r.reviewed_by = current_user.id
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"report_id": report_id, "status": r.status.value}
+
+
+@router.post("/smr/{report_id}/mlro-sign-off")
+def mlro_sign_off_smr(
+    report_id: str,
+    notes: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    """
+    MLRO sign-off — required before SMR submission.
+    Enforces maker-checker: MLRO cannot sign off if they also reviewed the report.
+    """
+    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.under_review:
+        raise HTTPException(409, "SMR must be under_review for MLRO sign-off.")
+    _assert_maker_checker(r, current_user.id)
+    r.status = ReportStatus.approved
+    r.mlro_sign_off = current_user.id
+    r.mlro_signed_at = datetime.now(timezone.utc)
+    r.mlro_sign_off_notes = notes
+    r.approved_by = current_user.id
+    r.approved_at = datetime.now(timezone.utc)
+    r.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {
-        "ecdd_id": ecdd_id,
-        "recommendation": ecdd.recommendation,
-        "status": ecdd.status,
+        "report_id": report_id,
+        "status": r.status.value,
+        "mlro_sign_off": r.mlro_sign_off,
+        "disclaimer": "MLRO sign-off confirms this draft has been reviewed. The decision to lodge remains with the reporting entity.",
     }
 
 
-@router.get("/ecdd/{customer_id}")
-def get_ecdd_records(
-    customer_id: str,
+@router.post("/smr/{report_id}/submit")
+def submit_smr(
+    report_id: str,
+    submission_reference: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_READER),
+    current_user: User = Depends(require_mlro_or_above),
 ):
-    customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
-    if not customer:
-        raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
-    return db.query(ECDDRecord).filter_by(customer_id=customer.id).all()
+    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.approved:
+        raise HTTPException(409, "SMR requires MLRO sign-off (approved status) before submission.")
+    if not r.mlro_sign_off:
+        raise HTTPException(422, "MLRO sign-off is required before submission.")
+    r.status = ReportStatus.submitted
+    r.submitted_by = current_user.id
+    r.submitted_at = datetime.now(timezone.utc)
+    if submission_reference:
+        r.submission_reference = submission_reference
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    register_submission(
+        db=db,
+        org_id=r.org_id,
+        report_type=ReportType.smr,
+        report_id=r.id,
+        report_ref=r.report_ref,
+        submitted_by=current_user.id,
+        austrac_submission_ref=submission_reference,
+        amount_aud=r.total_amount,
+    )
+    return {
+        "report_id": report_id,
+        "status": r.status.value,
+        "submitted_at": r.submitted_at,
+        "disclaimer": "This record confirms submission was initiated. Confirm receipt with AUSTRAC.",
+    }
+
+
+@router.post("/smr/{report_id}/acknowledge")
+def acknowledge_smr(
+    report_id: str,
+    acknowledgement_ref: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.submitted:
+        raise HTTPException(409, "SMR must be submitted.")
+    r.status = ReportStatus.acknowledged
+    r.acknowledged_at = datetime.now(timezone.utc)
+    if acknowledgement_ref:
+        r.submission_reference = acknowledgement_ref
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"report_id": report_id, "status": r.status.value}
+
+
+# ── Filing Register ───────────────────────────────────────────────────────────
+
+@router.get("/filing-register")
+def list_filing_register(
+    report_type: Optional[ReportType] = Query(None),
+    pagination: Pagination = Depends(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    org_id = org_id_for(current_user)
+    q = db.query(FilingRegisterEntry).filter(FilingRegisterEntry.org_id == org_id)
+    if report_type:
+        q = q.filter(FilingRegisterEntry.report_type == report_type)
+    q = q.order_by(FilingRegisterEntry.submitted_at.desc())
+    entries = pagination.apply(q).all()
+    return [_filing_dict(e) for e in entries]
+
+
+@router.get("/filing-register/{entry_id}")
+def get_filing_entry(
+    entry_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    org_id = org_id_for(current_user)
+    e = db.query(FilingRegisterEntry).filter(
+        FilingRegisterEntry.id == entry_id, FilingRegisterEntry.org_id == org_id
+    ).first()
+    if not e:
+        raise HTTPException(404, "Filing register entry not found.")
+    return _filing_dict(e)
+
+
+# ── Serialisers ───────────────────────────────────────────────────────────────
+
+def _ifti_dict(r: IFTIReport) -> dict:
+    return {
+        "id": r.id,
+        "report_ref": r.report_ref,
+        "direction": r.direction.value if r.direction else None,
+        "status": r.status.value if r.status else None,
+        "priority": r.priority.value if r.priority else None,
+        "customer_id": r.customer_id,
+        "transaction_id": r.transaction_id,
+        "date_received": r.date_received,
+        "total_amount": r.total_amount,
+        "currency": r.currency,
+        "amount_aud": r.amount_aud,
+        "due_date": r.due_date,
+        "prepared_by": r.prepared_by,
+        "reviewed_by": r.reviewed_by,
+        "approved_by": r.approved_by,
+        "submitted_by": r.submitted_by,
+        "submitted_at": r.submitted_at,
+        "submission_reference": r.submission_reference,
+        "acknowledged_at": r.acknowledged_at,
+        "created_at": r.created_at,
+    }
+
+
+def _ttr_dict(r: TTRReport) -> dict:
+    return {
+        "id": r.id,
+        "report_ref": r.report_ref,
+        "status": r.status.value if r.status else None,
+        "priority": r.priority.value if r.priority else None,
+        "customer_id": r.customer_id,
+        "transaction_id": r.transaction_id,
+        "transaction_date": r.transaction_date,
+        "total_amount": r.total_amount,
+        "currency": r.currency,
+        "transaction_type": r.transaction_type,
+        "due_date": r.due_date,
+        "prepared_by": r.prepared_by,
+        "reviewed_by": r.reviewed_by,
+        "approved_by": r.approved_by,
+        "submitted_by": r.submitted_by,
+        "submitted_at": r.submitted_at,
+        "acknowledged_at": r.acknowledged_at,
+        "created_at": r.created_at,
+    }
+
+
+def _smr_dict(r: SMRReport) -> dict:
+    return {
+        "id": r.id,
+        "report_ref": r.report_ref,
+        "status": r.status.value if r.status else None,
+        "priority": r.priority.value if r.priority else None,
+        "customer_id": r.customer_id,
+        "case_id": r.case_id,
+        "matter_date": r.matter_date,
+        "is_terrorism_related": r.is_terrorism_related,
+        "due_date": r.due_date,
+        "mlro_sign_off": r.mlro_sign_off,
+        "mlro_signed_at": r.mlro_signed_at,
+        "prepared_by": r.prepared_by,
+        "reviewed_by": r.reviewed_by,
+        "submitted_by": r.submitted_by,
+        "submitted_at": r.submitted_at,
+        "submission_reference": r.submission_reference,
+        "acknowledged_at": r.acknowledged_at,
+        "created_at": r.created_at,
+        "disclaimer": "DISCLAIMER: The decision to lodge an SMR remains entirely with the reporting entity.",
+    }
+
+
+def _filing_dict(e: FilingRegisterEntry) -> dict:
+    return {
+        "id": e.id,
+        "report_type": e.report_type.value if e.report_type else None,
+        "report_ref": e.report_ref,
+        "report_id": e.report_id,
+        "austrac_submission_ref": e.austrac_submission_ref,
+        "submitted_by": e.submitted_by,
+        "submitted_at": e.submitted_at,
+        "status": e.status,
+        "acknowledgement_ref": e.acknowledgement_ref,
+        "acknowledgement_at": e.acknowledgement_at,
+        "amount_aud": e.amount_aud,
+        "notes": e.notes,
+        "supersedes_id": e.supersedes_id,
+        "created_at": e.created_at,
+    }

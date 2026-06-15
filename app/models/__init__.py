@@ -54,8 +54,16 @@ from app.models.case import (
     CaseType, CaseStatus, CaseSeverity, CaseOutcome,
     NoteType, EvidenceType,
 )
-from app.models.report import IFTIReport, TTRReport, SMRReport, ReportStatus, IFTIDirection
-from app.models.audit_log import AuditLog
+from app.models.report import (
+    IFTIReport, TTRReport, SMRReport, FilingRegisterEntry,
+    ReportStatus, ReportType, ReportPriority, IFTIDirection,
+)
+from app.models.audit_log import AuditLog, AuditEventType
+from app.models.ifti_receipt import IFTIReceipt, ReceiptStatus
+from app.models.compliance_calendar import (
+    ComplianceCalendarItem, ComplianceReminder,
+    CalendarItemType, CalendarItemStatus, ReminderStage,
+)
 from app.models.governance_controls import (
     GovernanceControl, ControlType, ControlRiskArea, ControlFrequency,
     ControlMethod, ControlEffectiveness, TestResult, FindingSeverity,
@@ -134,8 +142,12 @@ __all__ = [
     "Case", "CaseAlert", "CaseNote", "CaseEvidence",
     "CaseType", "CaseStatus", "CaseSeverity", "CaseOutcome",
     "NoteType", "EvidenceType",
-    "IFTIReport", "TTRReport", "SMRReport", "ReportStatus", "IFTIDirection",
-    "AuditLog",
+    "IFTIReport", "TTRReport", "SMRReport", "FilingRegisterEntry",
+    "ReportStatus", "ReportType", "ReportPriority", "IFTIDirection",
+    "AuditLog", "AuditEventType",
+    "IFTIReceipt", "ReceiptStatus",
+    "ComplianceCalendarItem", "ComplianceReminder",
+    "CalendarItemType", "CalendarItemStatus", "ReminderStage",
     # Governance Controls
     "GovernanceControl", "ControlType", "ControlRiskArea", "ControlFrequency",
     "ControlMethod", "ControlEffectiveness", "TestResult", "FindingSeverity",
