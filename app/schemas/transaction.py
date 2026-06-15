@@ -1,8 +1,8 @@
 """Pydantic schemas for Transaction and related models."""
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.transaction import (
     CryptoNetwork,
@@ -110,6 +110,13 @@ class TransactionCreate(BaseModel):
     value_date: Optional[date] = None
 
     crypto_detail: Optional[CryptoDetailCreate] = None
+
+    @field_validator("transaction_date", mode="before")
+    @classmethod
+    def ensure_tz_aware(cls, v: Any) -> datetime:
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
 
 
 class TransactionUpdate(BaseModel):

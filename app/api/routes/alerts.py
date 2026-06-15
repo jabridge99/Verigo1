@@ -103,7 +103,7 @@ def alert_dashboard(
 
     total = q.count()
     open_alerts = q.filter(
-        TransactionAlert.status.not_in([
+        TransactionAlert.status.notin_([
             AlertStatus.dismissed, AlertStatus.resolved,
         ])
     ).count()

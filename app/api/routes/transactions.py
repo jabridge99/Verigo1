@@ -7,6 +7,8 @@ Roles:
   GET  /transactions/{id} — analyst+
   PATCH /transactions/{id} — compliance+
   POST /transactions/{id}/run-monitoring — compliance+
+  GET  /transactions/{id}/receipt — analyst+  (full receipt for reporting)
+  GET  /transactions/{id}/summary — analyst+  (lightweight summary)
 """
 from datetime import datetime, timezone
 from typing import Optional
@@ -23,6 +25,7 @@ from app.api.deps import (
     require_compliance_or_above,
 )
 from app.db.database import get_db
+from app.models.case import Case, CaseAlert
 from app.models.customer import Customer
 from app.models.monitoring import TransactionAlert
 from app.models.transaction import (
@@ -37,6 +40,7 @@ from app.schemas.transaction import (
     TransactionOut,
     TransactionUpdate,
 )
+from app.schemas.transaction_receipt import TransactionReceipt, build_receipt
 from app.services.monitoring_engine import run_monitoring
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
@@ -198,5 +202,132 @@ def run_monitoring_on_transaction(
         "disclaimer": (
             "Alerts are generated for human review only. "
             "No alert constitutes a finding of suspicious activity or criminal conduct."
+        ),
+    }
+
+
+@router.get("/{txn_id}/receipt", response_model=TransactionReceipt)
+def get_transaction_receipt(
+    txn_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Full transaction receipt — includes all AML flags, linked alerts, linked cases,
+    crypto screening detail, customer snapshot, and the AUSTRAC reporting block.
+
+    Use this endpoint to:
+    - Print or export a transaction record for compliance files
+    - Pre-populate AUSTRAC report forms (TTR, IFTI, SMR supplementary)
+    - Attach to case files as evidence
+
+    DISCLAIMER: This receipt is a structured compliance workflow document.
+    It does not constitute a report to AUSTRAC or any regulator.
+    """
+    org_id = org_id_for(current_user)
+    txn = _get_transaction_or_404(txn_id, org_id, db)
+
+    customer = db.query(Customer).filter(
+        Customer.id == txn.customer_id,
+        Customer.org_id == org_id,
+    ).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+
+    # Load all alerts linked to this transaction
+    alerts = db.query(TransactionAlert).filter(
+        TransactionAlert.transaction_id == txn_id,
+        TransactionAlert.org_id == org_id,
+    ).order_by(TransactionAlert.trigger_date.desc()).all()
+
+    # Load all cases linked via CaseAlert
+    case_ids = db.query(CaseAlert.case_id).filter(
+        CaseAlert.transaction_id == txn_id,
+    ).distinct().all()
+    case_ids_list = [r[0] for r in case_ids]
+
+    # Also get cases linked via alert
+    alert_ids = [a.id for a in alerts]
+    if alert_ids:
+        alert_case_ids = db.query(CaseAlert.case_id).filter(
+            CaseAlert.alert_id.in_(alert_ids),
+        ).distinct().all()
+        case_ids_list = list(set(case_ids_list + [r[0] for r in alert_case_ids]))
+
+    cases = []
+    if case_ids_list:
+        cases = db.query(Case).filter(
+            Case.id.in_(case_ids_list),
+            Case.org_id == org_id,
+        ).all()
+
+    return build_receipt(txn, customer, alerts, cases, generated_by=current_user.id)
+
+
+@router.get("/{txn_id}/summary")
+def get_transaction_summary(
+    txn_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Lightweight transaction summary — key fields, AML flags, and alert/case counts.
+    Suitable for display in dashboards and list views.
+    """
+    org_id = org_id_for(current_user)
+    txn = _get_transaction_or_404(txn_id, org_id, db)
+
+    alert_count = db.query(TransactionAlert).filter(
+        TransactionAlert.transaction_id == txn_id,
+        TransactionAlert.org_id == org_id,
+    ).count()
+
+    open_alert_count = db.query(TransactionAlert).filter(
+        TransactionAlert.transaction_id == txn_id,
+        TransactionAlert.org_id == org_id,
+        TransactionAlert.status.notin_(["dismissed", "resolved"]),
+    ).count()
+
+    smr_candidate_count = db.query(TransactionAlert).filter(
+        TransactionAlert.transaction_id == txn_id,
+        TransactionAlert.org_id == org_id,
+        TransactionAlert.is_smr_candidate == True,
+    ).count()
+
+    amount_aud = txn.amount_aud or txn.amount
+    TTR_THRESHOLD = 10_000.0
+
+    return {
+        "transaction_id": txn.id,
+        "transaction_ref": txn.transaction_ref,
+        "transaction_date": txn.transaction_date,
+        "transaction_type": txn.transaction_type.value,
+        "direction": txn.direction.value,
+        "payment_method": txn.payment_method.value,
+        "status": txn.status.value,
+        "currency": txn.currency,
+        "amount": txn.amount,
+        "amount_aud": amount_aud,
+        "is_cross_border": txn.is_cross_border,
+        "source_country": txn.source_country,
+        "destination_country": txn.destination_country,
+        "counterparty_name": txn.counterparty_name,
+        "aml_flags": {
+            "is_near_threshold": txn.is_near_threshold,
+            "is_round_number": txn.is_round_number,
+            "is_structuring_suspect": txn.is_structuring_suspect,
+            "is_cash_intensive": txn.is_cash_intensive,
+            "is_ttr_reportable": amount_aud >= TTR_THRESHOLD,
+            "is_ifti_reportable": txn.is_cross_border,
+        },
+        "risk_score": txn.risk_score,
+        "behaviour_score": txn.behaviour_score,
+        "alert_count": alert_count,
+        "open_alert_count": open_alert_count,
+        "smr_candidate_count": smr_candidate_count,
+        "customer_id": txn.customer_id,
+        "disclaimer": (
+            "This summary is for compliance workflow support only. "
+            "It does not constitute a report to AUSTRAC or any regulator."
         ),
     }

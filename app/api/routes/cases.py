@@ -104,8 +104,8 @@ def _get_case_or_404(case_id: str, org_id: str, db: Session) -> Case:
 
 
 def _next_case_ref(db: Session, org_id: str) -> str:
-    count = db.query(Case).filter(Case.org_id == org_id).count()
-    return f"CASE-{(count + 1):06d}"
+    # Use uuid segment for uniqueness — avoids race on COUNT(*) with unique constraint
+    return f"CASE-{uuid4().hex[:8].upper()}"
 
 
 @router.post("", response_model=CaseOut, status_code=status.HTTP_201_CREATED)
@@ -192,7 +192,7 @@ def case_dashboard(
     q = db.query(Case).filter(Case.org_id == org_id)
 
     total = q.count()
-    open_cases = q.filter(Case.status.not_in(list(CLOSED_STATUSES))).count()
+    open_cases = q.filter(Case.status.notin_(list(CLOSED_STATUSES))).count()
     smr_candidates = q.filter(Case.is_smr_candidate == True).count()
     overdue = q.filter(Case.is_overdue == True).count()
     smr_lodged = q.filter(Case.smr_lodged == True).count()
