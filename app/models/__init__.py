@@ -68,6 +68,10 @@ from app.models.regulatory_recommendation import (
     RegulatoryRecommendation,
     RecommendationType, RecommendationStatus, RecommendationPriority,
 )
+from app.models.risk_matrix import (
+    OrgMonitoringConfig, OrgApprovalQuestion, TransactionQuestionResponse,
+    QuestionAnswer,
+)
 from app.models.governance_controls import (
     GovernanceControl, ControlType, ControlRiskArea, ControlFrequency,
     ControlMethod, ControlEffectiveness, TestResult, FindingSeverity,
@@ -155,6 +159,9 @@ __all__ = [
     # Regulatory Recommendations
     "RegulatoryRecommendation",
     "RecommendationType", "RecommendationStatus", "RecommendationPriority",
+    # Risk Matrix & Pre-Approval Questions
+    "OrgMonitoringConfig", "OrgApprovalQuestion", "TransactionQuestionResponse",
+    "QuestionAnswer",
     # Governance Controls
     "GovernanceControl", "ControlType", "ControlRiskArea", "ControlFrequency",
     "ControlMethod", "ControlEffectiveness", "TestResult", "FindingSeverity",

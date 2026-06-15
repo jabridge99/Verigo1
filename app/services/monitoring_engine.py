@@ -636,23 +636,38 @@ def calculate_alert_score(
     signals: BehaviourSignals,
     rule_score: float,
     customer_risk_score: float,
+    risk_matrix_score: float = 0.0,
+    weights: Optional[dict[str, float]] = None,
 ) -> tuple[float, dict[str, float]]:
     """
-    Composite alert score:
-      behaviour  50%
-      rule       35%
-      customer   15%
+    Composite alert score integrating AUSTRAC/FATF risk matrix:
+      behaviour     default 30%
+      rule          default 25%
+      customer_risk default 10%
+      risk_matrix   default 35%
+
+    Weights can be overridden per-org via OrgMonitoringConfig.
+    The custom question weight is applied separately at approval time.
     """
-    behaviour_contrib = signals.combined_score * 0.50
-    rule_contrib = rule_score * 0.35
-    customer_contrib = min(customer_risk_score, 100.0) * 0.15
-    total = min(behaviour_contrib + rule_contrib + customer_contrib, 100.0)
+    w = weights or {
+        "behaviour": 0.30,
+        "rule": 0.25,
+        "customer_risk": 0.10,
+        "risk_matrix": 0.35,
+    }
+    behaviour_contrib = signals.combined_score * w.get("behaviour", 0.30)
+    rule_contrib = rule_score * w.get("rule", 0.25)
+    customer_contrib = min(customer_risk_score, 100.0) * w.get("customer_risk", 0.10)
+    matrix_contrib = min(risk_matrix_score, 100.0) * w.get("risk_matrix", 0.35)
+    total = min(behaviour_contrib + rule_contrib + customer_contrib + matrix_contrib, 100.0)
 
     breakdown = {
         "behaviour": round(behaviour_contrib, 2),
         "rule": round(rule_contrib, 2),
         "customer_risk": round(customer_contrib, 2),
+        "risk_matrix": round(matrix_contrib, 2),
         "total": round(total, 2),
+        "weights_used": w,
     }
     return round(total, 2), breakdown
 
@@ -822,8 +837,28 @@ def run_monitoring(
 
     # 2. Load active rules for this org, filtered by applicable_industries
     from app.models.organisation import Organisation
+    from app.models.risk_matrix import OrgMonitoringConfig
     org = db.query(Organisation).filter(Organisation.id == transaction.org_id).first()
     org_industry = org.industry_type.value if org and org.industry_type else None
+
+    # Load org weight config (use defaults if not configured)
+    org_config = (
+        db.query(OrgMonitoringConfig)
+        .filter(OrgMonitoringConfig.org_id == transaction.org_id)
+        .first()
+    )
+    score_weights = {
+        "behaviour":     getattr(org_config, "behaviour_weight",     0.30) if org_config else 0.30,
+        "rule":          getattr(org_config, "rule_weight",          0.25) if org_config else 0.25,
+        "customer_risk": getattr(org_config, "customer_risk_weight", 0.10) if org_config else 0.10,
+        "risk_matrix":   getattr(org_config, "risk_matrix_weight",   0.35) if org_config else 0.35,
+    }
+    matrix_weights = {
+        "customer":    getattr(org_config, "matrix_customer_weight",   0.30) if org_config else 0.30,
+        "geographic":  getattr(org_config, "matrix_geographic_weight", 0.25) if org_config else 0.25,
+        "product":     getattr(org_config, "matrix_product_weight",    0.20) if org_config else 0.20,
+        "transaction": getattr(org_config, "matrix_transaction_weight",0.25) if org_config else 0.25,
+    }
 
     all_active_rules = (
         db.query(MonitoringRule)
@@ -843,15 +878,27 @@ def run_monitoring(
     # 3. Evaluate rules — logs RuleExecution immutably
     matched_rules = evaluate_rules(transaction, customer, profile, signals, active_rules, db)
 
+    # 3b. Compute AUSTRAC/FATF risk matrix
+    from app.services.risk_matrix_service import compute_risk_matrix
+    matrix_result = compute_risk_matrix(
+        transaction, customer, db,
+        customer_weight=matrix_weights["customer"],
+        geographic_weight=matrix_weights["geographic"],
+        product_weight=matrix_weights["product"],
+        transaction_weight=matrix_weights["transaction"],
+    )
+
     # 4. Emit one alert if signals or any rule matched
     alerts: list[TransactionAlert] = []
     customer_risk_score = getattr(customer, "risk_score", 0) or 0
 
-    # Always emit if behaviour signals are non-trivial
-    if signals.combined_score >= 20.0 or matched_rules:
+    # Always emit if behaviour signals are non-trivial OR risk matrix is elevated
+    if signals.combined_score >= 20.0 or matched_rules or matrix_result.overall_score >= 30.0:
         rule_score = max((r["alert_score"] for r in matched_rules), default=0.0)
         alert_score, score_breakdown = calculate_alert_score(
-            signals, rule_score, customer_risk_score
+            signals, rule_score, customer_risk_score,
+            risk_matrix_score=matrix_result.overall_score,
+            weights=score_weights,
         )
         severity = alert_severity_from_score(alert_score)
 
@@ -884,6 +931,9 @@ def run_monitoring(
             title=title,
             behaviour_signals=signals.to_dict(),
             is_smr_candidate=False,
+            risk_matrix_score=matrix_result.overall_score,
+            risk_matrix_level=matrix_result.risk_level,
+            risk_matrix_detail=matrix_result.to_dict(),
         )
         db.add(alert)
         alerts.append(alert)

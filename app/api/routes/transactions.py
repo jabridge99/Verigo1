@@ -15,6 +15,7 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -41,8 +42,10 @@ from app.schemas.transaction import (
     TransactionUpdate,
 )
 from app.models.regulatory_recommendation import RegulatoryRecommendation, RecommendationStatus
+from app.models.risk_matrix import OrgApprovalQuestion, OrgMonitoringConfig, QuestionAnswer, TransactionQuestionResponse
 from app.schemas.transaction_receipt import TransactionReceipt, build_receipt
 from app.services.monitoring_engine import run_monitoring
+from app.services.risk_matrix_service import compute_final_approval_score, compute_question_score
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -386,5 +389,243 @@ def get_transaction_recommendations(
         "disclaimer": (
             "Recommendations are compliance workflow guidance only. "
             "The reporting entity bears sole responsibility for all regulatory decisions."
+        ),
+    }
+
+
+# ── Pre-Approval Question Checklist ───────────────────────────────────────────
+
+class QuestionAnswerItem(BaseModel):
+    question_id: str
+    answer: QuestionAnswer
+    notes: Optional[str] = None
+
+
+class AnswerQuestionsRequest(BaseModel):
+    answers: list[QuestionAnswerItem]
+
+
+@router.get("/{txn_id}/approval-checklist")
+def get_approval_checklist(
+    txn_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Return the org's pre-approval checklist questions and any existing answers
+    for this transaction, plus the computed final approval score.
+
+    The checklist is answered before approving/resolving a transaction.
+    The question_score contributes custom_question_weight % of the final score.
+
+    DISCLAIMER: Approval scores support the compliance workflow only.
+    All regulatory decisions remain with the reporting entity.
+    """
+    org_id = org_id_for(current_user)
+    txn = _get_transaction_or_404(txn_id, org_id, db)
+
+    questions = (
+        db.query(OrgApprovalQuestion)
+        .filter(
+            OrgApprovalQuestion.org_id == org_id,
+            OrgApprovalQuestion.is_active == True,
+        )
+        .order_by(OrgApprovalQuestion.question_order)
+        .all()
+    )
+
+    responses = (
+        db.query(TransactionQuestionResponse)
+        .filter(
+            TransactionQuestionResponse.transaction_id == txn_id,
+            TransactionQuestionResponse.org_id == org_id,
+        )
+        .all()
+    )
+    response_map = {r.question_id: r for r in responses}
+
+    config = db.query(OrgMonitoringConfig).filter(
+        OrgMonitoringConfig.org_id == org_id
+    ).first()
+    q_weight = getattr(config, "custom_question_weight", 0.20) if config else 0.20
+
+    # Get the latest alert score for this transaction
+    from app.models.monitoring import TransactionAlert, AlertStatus
+    latest_alert = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.transaction_id == txn_id,
+            TransactionAlert.org_id == org_id,
+        )
+        .order_by(TransactionAlert.trigger_date.desc())
+        .first()
+    )
+    base_alert_score = (latest_alert.alert_score if latest_alert else 0.0) or 0.0
+    risk_matrix_score = getattr(latest_alert, "risk_matrix_score", None) if latest_alert else None
+    risk_matrix_level = getattr(latest_alert, "risk_matrix_level", None) if latest_alert else None
+
+    question_score = compute_question_score(responses) if responses else None
+    final_score, score_detail = compute_final_approval_score(
+        base_alert_score, question_score, q_weight
+    )
+
+    items = []
+    for q in questions:
+        r = response_map.get(q.id)
+        items.append({
+            "question_id": q.id,
+            "question_order": q.question_order,
+            "question_text": q.question_text,
+            "help_text": q.help_text,
+            "industry_context": q.industry_context,
+            "is_required": q.is_required,
+            "compliant_answer": q.compliant_answer.value if q.compliant_answer else "yes",
+            "answer": r.answer.value if r else None,
+            "notes": r.notes if r else None,
+            "answered_by": r.answered_by if r else None,
+            "answered_at": r.answered_at if r else None,
+        })
+
+    return {
+        "transaction_id": txn_id,
+        "questions_configured": len(questions),
+        "questions_answered": len([i for i in items if i["answer"] is not None]),
+        "checklist_complete": len(questions) > 0 and all(
+            i["answer"] is not None for i in items if i["is_required"]
+        ),
+        "base_alert_score": base_alert_score,
+        "risk_matrix_score": risk_matrix_score,
+        "risk_matrix_level": risk_matrix_level,
+        "question_score": question_score,
+        "custom_question_weight": q_weight,
+        "final_approval_score": final_score,
+        "score_detail": score_detail,
+        "questions": items,
+        "disclaimer": (
+            "Approval scores support the compliance workflow only. "
+            "All regulatory decisions remain with the reporting entity."
+        ),
+    }
+
+
+@router.post("/{txn_id}/answer-questions", status_code=200)
+def answer_approval_questions(
+    txn_id: str,
+    payload: AnswerQuestionsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Submit or update answers to the pre-approval checklist questions.
+
+    Each answer is upserted (existing answer updated if already submitted).
+    After all required questions are answered, the final_approval_score is
+    computed and stored on the most recent alert for this transaction.
+
+    Answer semantics:
+      yes             — compliant (lower risk contribution)
+      no              — non-compliant (flags a concern, higher risk)
+      not_applicable  — excluded from score calculation
+
+    DISCLAIMER: Answers are compliance workflow records only.
+    """
+    org_id = org_id_for(current_user)
+    _get_transaction_or_404(txn_id, org_id, db)
+
+    # Validate all question IDs belong to this org
+    question_ids = [a.question_id for a in payload.answers]
+    valid_questions = (
+        db.query(OrgApprovalQuestion)
+        .filter(
+            OrgApprovalQuestion.id.in_(question_ids),
+            OrgApprovalQuestion.org_id == org_id,
+            OrgApprovalQuestion.is_active == True,
+        )
+        .all()
+    )
+    valid_ids = {q.id for q in valid_questions}
+    invalid = [qid for qid in question_ids if qid not in valid_ids]
+    if invalid:
+        raise HTTPException(400, f"Unknown or inactive question IDs: {invalid}")
+
+    now = datetime.now(timezone.utc)
+    saved = []
+    for item in payload.answers:
+        existing = (
+            db.query(TransactionQuestionResponse)
+            .filter(
+                TransactionQuestionResponse.transaction_id == txn_id,
+                TransactionQuestionResponse.question_id == item.question_id,
+            )
+            .first()
+        )
+        if existing:
+            existing.answer = item.answer
+            existing.notes = item.notes
+            existing.answered_by = current_user.id
+            existing.answered_at = now
+            saved.append(existing)
+        else:
+            r = TransactionQuestionResponse(
+                id=f"tqr_{uuid4().hex[:10]}",
+                transaction_id=txn_id,
+                question_id=item.question_id,
+                org_id=org_id,
+                answer=item.answer,
+                notes=item.notes,
+                answered_by=current_user.id,
+                answered_at=now,
+            )
+            db.add(r)
+            saved.append(r)
+
+    db.flush()
+
+    # Recompute final approval score and persist to the latest alert
+    all_responses = (
+        db.query(TransactionQuestionResponse)
+        .filter(
+            TransactionQuestionResponse.transaction_id == txn_id,
+            TransactionQuestionResponse.org_id == org_id,
+        )
+        .all()
+    )
+    config = db.query(OrgMonitoringConfig).filter(
+        OrgMonitoringConfig.org_id == org_id
+    ).first()
+    q_weight = getattr(config, "custom_question_weight", 0.20) if config else 0.20
+
+    from app.models.monitoring import TransactionAlert
+    latest_alert = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.transaction_id == txn_id,
+            TransactionAlert.org_id == org_id,
+        )
+        .order_by(TransactionAlert.trigger_date.desc())
+        .first()
+    )
+
+    question_score = compute_question_score(all_responses)
+    base_alert_score = (latest_alert.alert_score if latest_alert else 0.0) or 0.0
+    final_score, score_detail = compute_final_approval_score(base_alert_score, question_score, q_weight)
+
+    if latest_alert:
+        latest_alert.question_score = question_score
+        latest_alert.final_approval_score = final_score
+        latest_alert.approval_score_detail = score_detail
+
+    db.commit()
+
+    return {
+        "transaction_id": txn_id,
+        "answers_submitted": len(saved),
+        "question_score": question_score,
+        "base_alert_score": base_alert_score,
+        "final_approval_score": final_score,
+        "score_detail": score_detail,
+        "disclaimer": (
+            "Approval scores support the compliance workflow only. "
+            "All regulatory decisions remain with the reporting entity."
         ),
     }

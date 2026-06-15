@@ -297,6 +297,26 @@ class TransactionAlert(Base):
     suggested_next_action = Column(String(100))     # consider_ifti | consider_ttr | consider_smr | create_case | no_action_required
     recommendation_text   = Column(Text)            # plain-English guidance surfaced in the UI
 
+    # ── AUSTRAC/FATF Risk Matrix ───────────────────────────────────────────────
+    # Computed by risk_matrix_service.compute_risk_matrix() during run_monitoring().
+    risk_matrix_score   = Column(Float)             # 0–100 weighted composite
+    risk_matrix_level   = Column(String(20))        # low | medium | high | critical
+    risk_matrix_detail  = Column(JSON)              # full per-dimension breakdown
+
+    # ── Pre-Approval Custom Questions ─────────────────────────────────────────
+    # Populated after compliance officer answers org approval questions.
+    question_score          = Column(Float)         # 0–100 (% compliant answers)
+    final_approval_score    = Column(Float)         # alert_score * base_wt + question_risk * q_wt
+    approval_score_detail   = Column(JSON)          # breakdown dict from compute_final_approval_score
+
+    # ── AI Narrative (Placeholder — future implementation) ────────────────────
+    # Reserved for Stage 6: AI-assisted narrative drafting.
+    # NOT populated by any current code path. Will be populated by an LLM
+    # service in a future release after human-in-the-loop review gates are built.
+    ai_narrative_draft      = Column(Text)          # placeholder — not yet populated
+    ai_narrative_reviewed   = Column(Boolean, default=False)  # placeholder
+    ai_narrative_reviewed_by = Column(String)       # placeholder
+
     trigger_date    = Column(DateTime(timezone=True), server_default=func.now())
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
