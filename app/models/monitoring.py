@@ -150,6 +150,7 @@ class MonitoringRule(Base):
     tags            = Column(JSON, default=list)
     applicable_customer_types   = Column(JSON, default=list)    # [] = all
     applicable_payment_methods  = Column(JSON, default=list)    # [] = all
+    applicable_industries       = Column(JSON, default=list)    # [] = all industry types
 
     # Statistics
     total_alerts_generated  = Column(Integer, default=0)

@@ -175,6 +175,8 @@ class CryptoNetwork(str, enum.Enum):
     usdt_erc20  = "usdt_erc20"
     usdt_trc20  = "usdt_trc20"
     usdc        = "usdc"
+    bnb         = "bnb"
+    polygon     = "polygon"
     other       = "other"
 
 

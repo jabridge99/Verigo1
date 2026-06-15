@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.models.case import Case
 from app.models.customer import Customer
+from app.models.organisation import Organisation
 from app.models.report import (
     FilingRegisterEntry,
     IFTIDirection,
@@ -41,7 +42,27 @@ IFTI_DEADLINE_DAYS = 14
 SMR_DEADLINE_DAYS = 4        # 3 business ≈ 4 calendar
 SMR_TERRORISM_DEADLINE_HOURS = 24
 TTR_THRESHOLD_AUD = 10_000.0
-ENTITY_CODE = "PSPE"         # override per org in production
+_FALLBACK_ENTITY_CODE = "PSPE"
+
+
+def _org_code(db: Session, org_id: str) -> str:
+    """Resolve AUSTRAC entity code from the Organisation record; fall back to PSPE."""
+    org = db.query(Organisation).filter(Organisation.id == org_id).first()
+    if org and getattr(org, "austrac_id", None):
+        # Use first 8 chars of AUSTRAC ID as a safe reference prefix
+        return org.austrac_id[:8].upper().replace(" ", "")
+    return _FALLBACK_ENTITY_CODE
+
+
+def _customer_abn(customer: Customer) -> Optional[str]:
+    """
+    ABN lives on BusinessDetail for companies/trusts, not on Customer directly.
+    Returns None gracefully for individual customers.
+    """
+    bd = getattr(customer, "business_detail", None)
+    if bd:
+        return getattr(bd, "abn", None)
+    return None
 
 
 def _next_report_ref(db: Session, org_code: str, report_type: str, direction: str = "") -> str:
@@ -79,19 +100,20 @@ def generate_ifti_from_transaction(
     customer: Customer,
     db: Session,
     prepared_by: str,
-    org_code: str = ENTITY_CODE,
+    org_code: Optional[str] = None,
 ) -> IFTIReport:
     """
     Populate a draft IFTIReport from transaction data.
     Returns unsaved ORM object — caller must db.add() and db.commit().
     """
+    resolved_code = org_code or _org_code(db, txn.org_id)
     direction = (
         IFTIDirection.incoming
         if txn.direction.value == "incoming"
         else IFTIDirection.outgoing
     )
     dir_code = "I" if direction == IFTIDirection.incoming else "O"
-    report_ref = _next_report_ref(db, org_code, "IFTI", dir_code)
+    report_ref = _next_report_ref(db, resolved_code, "IFTI", dir_code)
     due = _due_date_from_today(IFTI_DEADLINE_DAYS)
 
     amount_aud = txn.amount_aud or txn.amount
@@ -122,7 +144,7 @@ def generate_ifti_from_transaction(
         oc_phone=getattr(customer, "phone", None),
         oc_email=getattr(customer, "email", None),
         oc_occupation=getattr(customer, "occupation", None),
-        oc_abn=getattr(customer, "abn", None),
+        oc_abn=_customer_abn(customer),
         oc_account_number=txn.source_account_number,
 
         # Beneficiary from transaction destination fields
@@ -148,13 +170,13 @@ def generate_ttr_from_transaction(
     customer: Customer,
     db: Session,
     prepared_by: str,
-    org_code: str = ENTITY_CODE,
+    org_code: Optional[str] = None,
 ) -> TTRReport:
     """
     Populate a draft TTRReport from transaction data.
     Returns unsaved ORM object — caller must db.add() and db.commit().
     """
-    report_ref = _next_report_ref(db, org_code, "TTR")
+    report_ref = _next_report_ref(db, org_code or _org_code(db, txn.org_id), "TTR")
     due = _due_date_from_today(TTR_DEADLINE_DAYS)
     amount_aud = txn.amount_aud or txn.amount
 
@@ -176,7 +198,7 @@ def generate_ttr_from_transaction(
         customer_dob=getattr(customer, "date_of_birth", None),
         customer_address=getattr(customer, "address_line1", None),
         customer_occupation=getattr(customer, "occupation", None),
-        customer_abn=getattr(customer, "abn", None),
+        customer_abn=_customer_abn(customer),
 
         account_name=txn.source_account_name or txn.destination_account_name,
         account_number=txn.source_account_number or txn.destination_account_number,
@@ -198,7 +220,7 @@ def generate_smr_from_case(
     prepared_by: str,
     suspicion_grounds: str,
     is_terrorism_related: bool = False,
-    org_code: str = ENTITY_CODE,
+    org_code: Optional[str] = None,
 ) -> SMRReport:
     """
     Populate a draft SMRReport from a case.
@@ -207,12 +229,14 @@ def generate_smr_from_case(
     DISCLAIMER: Grounds for suspicion and the decision to lodge must be
     supplied by the reporting entity. This function pre-populates fields only.
     """
-    report_ref = _next_report_ref(db, org_code, "SMR")
+    report_ref = _next_report_ref(db, org_code or _org_code(db, case.org_id), "SMR")
     deadline_days = 1 if is_terrorism_related else SMR_DEADLINE_DAYS
     due = _due_date_from_today(deadline_days)
     priority = ReportPriority.urgent if is_terrorism_related else _priority_from_due(due)
 
-    matter_date = case.opened_at.date() if isinstance(case.opened_at, datetime) else date.today()
+    # Bug fix: Case model has created_at, not opened_at
+    case_date = getattr(case, "created_at", None) or datetime.now(timezone.utc)
+    matter_date = case_date.date() if isinstance(case_date, datetime) else date.today()
 
     report = SMRReport(
         org_id=case.org_id,
@@ -229,7 +253,7 @@ def generate_smr_from_case(
         subject_dob=getattr(customer, "date_of_birth", None),
         subject_address=getattr(customer, "address_line1", None),
         subject_occupation=getattr(customer, "occupation", None),
-        subject_abn=getattr(customer, "abn", None),
+        subject_abn=_customer_abn(customer),
 
         due_date=due,
         prepared_by=prepared_by,

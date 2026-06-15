@@ -299,6 +299,22 @@ def _score_geographic(txn: Transaction) -> tuple[float, dict]:
     return min(score, 100.0), signals
 
 
+# Occupations that are inconsistent with high-value / cross-border / crypto activity
+_LOW_INCOME_OCCUPATIONS = frozenset({
+    "student", "retiree", "retired", "pensioner", "unemployed", "homemaker",
+    "home maker", "cleaner", "labourer", "laborer", "driver", "tradesperson",
+    "apprentice", "volunteer", "carer", "caretaker", "part time", "casual",
+})
+
+# Transaction types that are high-risk when paired with a low-income occupation profile
+_HIGH_RISK_TXN_TYPES = frozenset({
+    "remittance", "crypto_transfer", "crypto_purchase", "real_estate_settlement",
+    "cross_border_transfer",
+})
+
+_OCCUPATION_MISMATCH_AMOUNT_AUD = 5_000.0
+
+
 def _score_behaviour(
     txn: Transaction,
     customer: Customer,
@@ -313,6 +329,23 @@ def _score_behaviour(
     if customer.is_pep:
         score += 20.0
         signals["factors"].append("pep_customer")
+
+    # Occupation mismatch — high-risk transaction inconsistent with declared occupation
+    occupation = (getattr(customer, "occupation", None) or "").lower().strip()
+    if occupation:
+        is_low_income_occupation = any(o in occupation for o in _LOW_INCOME_OCCUPATIONS)
+        amount_aud = txn.amount_aud or txn.amount
+        if (
+            is_low_income_occupation
+            and txn.transaction_type.value in _HIGH_RISK_TXN_TYPES
+            and amount_aud >= _OCCUPATION_MISMATCH_AMOUNT_AUD
+        ):
+            score += 25.0
+            signals["occupation_mismatch"] = True
+            signals["factors"].append(
+                f"occupation_mismatch:occupation={occupation},"
+                f"txn_type={txn.transaction_type.value},amount=AUD${amount_aud:,.0f}"
+            )
 
     if profile:
         usual_methods = profile.usual_payment_methods or []
@@ -660,6 +693,109 @@ def _alert_category_from_signals(signals: BehaviourSignals, rule_category: Optio
     return AlertCategory.unusual_behaviour
 
 
+# ── Behaviour Profile Updater ──────────────────────────────────────────────────
+
+def update_behaviour_profile(
+    transaction: Transaction,
+    customer: Customer,
+    db: Session,
+) -> CustomerBehaviourProfile:
+    """
+    Update or create the rolling CustomerBehaviourProfile after a transaction is processed.
+    Called at the end of run_monitoring() to keep baselines current.
+
+    Uses a lightweight recalculation over the last 30/90 days rather than
+    recomputing the entire history on every transaction.
+    """
+    from uuid import uuid4
+
+    profile = (
+        db.query(CustomerBehaviourProfile)
+        .filter(
+            CustomerBehaviourProfile.customer_id == transaction.customer_id,
+            CustomerBehaviourProfile.org_id == transaction.org_id,
+        )
+        .first()
+    )
+
+    now = datetime.now(timezone.utc)
+    cutoff_30d = now - timedelta(days=30)
+    cutoff_90d = now - timedelta(days=90)
+
+    # Load recent transactions for recalculation (exclude current — it may not be committed)
+    recent_90d = (
+        db.query(Transaction)
+        .filter(
+            Transaction.customer_id == transaction.customer_id,
+            Transaction.org_id == transaction.org_id,
+            Transaction.transaction_date >= cutoff_90d,
+            Transaction.id != transaction.id,
+        )
+        .all()
+    )
+    recent_30d = [t for t in recent_90d if t.transaction_date >= cutoff_30d]
+
+    # Include the current transaction in rolling counts
+    all_30d_amounts = [t.amount_aud or t.amount for t in recent_30d] + [transaction.amount_aud or transaction.amount]
+    all_90d_amounts = [t.amount_aud or t.amount for t in recent_90d] + [transaction.amount_aud or transaction.amount]
+
+    volume_30d = sum(all_30d_amounts)
+    volume_90d = sum(all_90d_amounts)
+    count_30d = len(recent_30d) + 1
+    count_90d = len(recent_90d) + 1
+
+    avg_amount = volume_30d / count_30d if count_30d else 0.0
+    avg_per_day = count_30d / 30.0
+    avg_per_week = count_30d / 4.0
+    avg_per_month = float(count_30d)
+
+    # Aggregate countries and channels
+    all_txns_sample = recent_30d + [transaction]
+    dest_countries = list({t.destination_country for t in all_txns_sample if t.destination_country})
+    src_countries = list({t.source_country for t in all_txns_sample if t.source_country})
+    channels = list({t.payment_method.value for t in all_txns_sample})
+
+    # Dormancy: was previously dormant if last_transaction_date > 90 days ago
+    was_dormant = False
+    if profile and profile.last_transaction_date:
+        last_dt = profile.last_transaction_date
+        if not last_dt.tzinfo:
+            last_dt = last_dt.replace(tzinfo=timezone.utc)
+        was_dormant = (now - last_dt).days > 90
+
+    if profile is None:
+        profile = CustomerBehaviourProfile(
+            id=f"cbp_{uuid4().hex[:10]}",
+            customer_id=transaction.customer_id,
+            org_id=transaction.org_id,
+            observation_start_date=now.date(),
+        )
+        db.add(profile)
+
+    profile.avg_txn_per_day = round(avg_per_day, 4)
+    profile.avg_txn_per_week = round(avg_per_week, 4)
+    profile.avg_txn_per_month = round(avg_per_month, 2)
+    profile.avg_txn_amount_aud = round(avg_amount, 2)
+    profile.max_txn_amount_aud = max(
+        profile.max_txn_amount_aud or 0.0,
+        transaction.amount_aud or transaction.amount,
+    )
+    profile.total_volume_30d_aud = round(volume_30d, 2)
+    profile.total_volume_90d_aud = round(volume_90d, 2)
+    profile.total_txn_count_30d = count_30d
+    profile.total_txn_count_90d = count_90d
+    profile.usual_destination_countries = dest_countries
+    profile.usual_source_countries = src_countries
+    profile.usual_payment_methods = channels
+    profile.last_transaction_date = now
+    profile.dormancy_reactivated = was_dormant
+    profile.is_dormant = False   # receiving a transaction ends dormancy
+    profile.txn_count_total = (profile.txn_count_total or 0) + 1
+    profile.last_calculated_at = now
+
+    return profile
+
+
 # ── Main Entry Point ───────────────────────────────────────────────────────────
 
 def run_monitoring(
@@ -684,8 +820,12 @@ def run_monitoring(
     # 1. Evaluate behaviour signals
     signals = evaluate_behaviour_signals(transaction, customer, profile, db)
 
-    # 2. Load active rules for this org
-    active_rules = (
+    # 2. Load active rules for this org, filtered by applicable_industries
+    from app.models.organisation import Organisation
+    org = db.query(Organisation).filter(Organisation.id == transaction.org_id).first()
+    org_industry = org.industry_type.value if org and org.industry_type else None
+
+    all_active_rules = (
         db.query(MonitoringRule)
         .filter(
             MonitoringRule.org_id == transaction.org_id,
@@ -693,6 +833,12 @@ def run_monitoring(
         )
         .all()
     )
+    # A rule with an empty applicable_industries list applies to all industries
+    active_rules = [
+        r for r in all_active_rules
+        if not (r.applicable_industries or [])
+        or org_industry in (r.applicable_industries or [])
+    ]
 
     # 3. Evaluate rules — logs RuleExecution immutably
     matched_rules = evaluate_rules(transaction, customer, profile, signals, active_rules, db)
@@ -753,6 +899,9 @@ def run_monitoring(
             if rule_obj:
                 rule_obj.total_alerts_generated = (rule_obj.total_alerts_generated or 0) + 1
                 rule_obj.last_triggered_at = datetime.now(timezone.utc)
+
+    # 5. Update (or create) the customer behaviour profile with this transaction's data
+    update_behaviour_profile(transaction, customer, db)
 
     return alerts
 
