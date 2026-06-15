@@ -49,7 +49,7 @@ class Organisation(Base):
 
     users = relationship("User", back_populates="organisation", cascade="all, delete-orphan")
     customers = relationship("Customer", back_populates="organisation")
-    aml_programs = relationship("AMLProgram", back_populates="organisation")
+    aml_solution = relationship("AMLSolution", back_populates="organisation", uselist=False)
     transactions = relationship("Transaction", back_populates="organisation")
     cases = relationship("Case", back_populates="organisation")
     audit_logs = relationship("AuditLog", back_populates="organisation")

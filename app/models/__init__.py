@@ -1,6 +1,14 @@
 from app.models.organisation import Organisation, IndustryType, OrganisationStatus
 from app.models.user import User, UserRole, UserStatus, MagicLinkToken
-from app.models.aml_program import AMLProgram, RiskAssessment, ProgramStatus, AssessmentStatus, RiskAppetite
+from app.models.aml_solution import (
+    AMLSolution, SolutionStatus,
+    AMLProgram, ProgramStatus, RiskAppetite,
+    RiskAssessment, AssessmentStatus,
+    Policy, PolicyStatus,
+    Control, ControlStatus,
+    TrainingRecord, TrainingStatus,
+    AMLService, ServiceType, ServiceStatus,
+)
 from app.models.customer import Customer, CustomerType, CustomerStatus, RiskLevel, IDType
 from app.models.beneficial_owner import BeneficialOwner, OwnershipType
 from app.models.screening import PEPScreening, SanctionsScreening, ScreeningStatus, ScreeningEntityType
@@ -13,7 +21,15 @@ from app.models.document import Document, DocumentCategory, DocumentStatus
 __all__ = [
     "Organisation", "IndustryType", "OrganisationStatus",
     "User", "UserRole", "UserStatus", "MagicLinkToken",
-    "AMLProgram", "RiskAssessment", "ProgramStatus", "AssessmentStatus", "RiskAppetite",
+    # AML Solutions
+    "AMLSolution", "SolutionStatus",
+    "AMLProgram", "ProgramStatus", "RiskAppetite",
+    "RiskAssessment", "AssessmentStatus",
+    "Policy", "PolicyStatus",
+    "Control", "ControlStatus",
+    "TrainingRecord", "TrainingStatus",
+    "AMLService", "ServiceType", "ServiceStatus",
+    # Core domain
     "Customer", "CustomerType", "CustomerStatus", "RiskLevel", "IDType",
     "BeneficialOwner", "OwnershipType",
     "PEPScreening", "SanctionsScreening", "ScreeningStatus", "ScreeningEntityType",
