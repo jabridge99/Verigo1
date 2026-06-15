@@ -1,31 +1,8 @@
 import enum
-
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    Column,
-    DateTime,
-    Enum,
-    Float,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-)
+from uuid import uuid4
+from sqlalchemy import Column, String, Enum, DateTime, Float, Text, JSON, Date, ForeignKey, func
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-
 from app.db.database import Base
-
-
-class ReportType(str, enum.Enum):
-    ttr = "ttr"  # Threshold Transaction Report (≥ AUD $10,000 cash)
-    ifti_in = "ifti_in"  # International Funds Transfer Instruction — inbound
-    ifti_out = "ifti_out"  # International Funds Transfer Instruction — outbound
-    smr = "smr"  # Suspicious Matter Report
-    sar = "sar"  # Suspicious Activity Report (legacy alias)
-    ctr = "ctr"  # Currency Transaction Report (legacy)
-    ecdd = "ecdd"  # Enhanced Customer Due Diligence summary
 
 
 class ReportStatus(str, enum.Enum):
@@ -37,75 +14,158 @@ class ReportStatus(str, enum.Enum):
     rejected = "rejected"
 
 
-class ReportPriority(str, enum.Enum):
-    low = "low"
-    medium = "medium"
-    high = "high"
-    urgent = "urgent"
+class IFTIDirection(str, enum.Enum):
+    incoming = "incoming"
+    outgoing = "outgoing"
 
 
-class ComplianceReport(Base):
-    __tablename__ = "compliance_reports"
+class IFTIReport(Base):
+    """AUSTRAC International Funds Transfer Instruction report."""
+    __tablename__ = "ifti_reports"
 
-    id = Column(Integer, primary_key=True, index=True)
-    report_id = Column(String(50), unique=True, index=True, nullable=False)
-    industry_id = Column(String(100))
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
-    report_type = Column(Enum(ReportType), nullable=False)
-    status = Column(Enum(ReportStatus), default=ReportStatus.draft)
-    priority = Column(Enum(ReportPriority), default=ReportPriority.medium)
-    title = Column(String(500), nullable=False)
-    summary = Column(Text, nullable=False)
-    findings = Column(Text)
-    narrative = Column(Text)  # MLRO narrative for SMR/SAR
-    risk_level = Column(String(20))
-    total_amount_flagged = Column(Float, default=0.0)
-    transaction_count = Column(Integer, default=0)
-    transaction_ids = Column(JSON)  # list of transaction_id strings
-    alert_ids = Column(JSON)  # linked alert_ids
-    # AUSTRAC-specific fields
-    austrac_report_type = Column(
-        String(50)
-    )  # AUSTRAC form code e.g. TTR, IFTI-E, IFTI-I, SMR
-    reporting_entity = Column(String(300))
-    reporting_entity_abn = Column(String(20))
-    due_date = Column(DateTime(timezone=True))  # statutory deadline
-    days_remaining = Column(Integer)
+    id = Column(String, primary_key=True, default=lambda: f"ifti_{uuid4().hex[:12]}")
+    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
+    transaction_id = Column(String, ForeignKey("transactions.id"), nullable=True)
+
+    direction = Column(Enum(IFTIDirection), nullable=False)
+    status = Column(Enum(ReportStatus), default=ReportStatus.draft, nullable=False)
+
+    # Core transfer details
+    date_received = Column(Date, nullable=False)
+    date_available = Column(Date)
+    total_amount = Column(Float, nullable=False)
+    currency = Column(String(3), nullable=False, default="AUD")
+    transfer_type = Column(String(50))
+    transfer_reference = Column(String(100))
+
+    # Ordering Customer (OC)
+    oc_name = Column(String(255))
+    oc_dob = Column(Date)
+    oc_address = Column(String(500))
+    oc_postal_address = Column(String(500))
+    oc_contact = Column(String(255))
+    oc_occupation = Column(String(255))
+    oc_abn = Column(String(11))
+    oc_account_number = Column(String(50))
+    oc_business_structure = Column(String(50))
+    oc_id1_type = Column(String(50))
+    oc_id1_number = Column(String(50))
+    oc_id1_country = Column(String(2))
+    oc_id2_type = Column(String(50))
+    oc_id2_number = Column(String(50))
+    oc_id2_country = Column(String(2))
+    oc_electronic_source = Column(String(255))
+
+    # Beneficiary Customer (BC)
+    bc_name = Column(String(255))
+    bc_dob = Column(Date)
+    bc_business_name = Column(String(255))
+    bc_address = Column(String(500))
+    bc_postal_address = Column(String(500))
+    bc_account_number = Column(String(50))
+    bc_institution_name = Column(String(255))
+    bc_institution_country = Column(String(2))
+    bc_swift_bic = Column(String(11))
+
+    reason_for_transfer = Column(String(500))
+
+    # Reporter (the regulated entity submitting)
+    reporter_name = Column(String(255))
+    reporter_abn = Column(String(11))
+    reporter_austrac_id = Column(String(50))
+    reporter_contact = Column(String(255))
+
     # Workflow
-    prepared_by = Column(String(100))
-    reviewed_by = Column(String(100))
-    approved_by = Column(String(100))
-    mlro_sign_off = Column(Boolean, default=False)
-    submitted_to = Column(String(200))
+    prepared_by = Column(String)
+    reviewed_by = Column(String)
+    approved_by = Column(String)
+    approved_at = Column(DateTime(timezone=True))
+    submitted_at = Column(DateTime(timezone=True))
     submission_reference = Column(String(100))
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    customer = relationship("Customer")
+
+
+class TTRReport(Base):
+    """Threshold Transaction Report — cash transactions >= $10,000 AUD."""
+    __tablename__ = "ttr_reports"
+
+    id = Column(String, primary_key=True, default=lambda: f"ttr_{uuid4().hex[:12]}")
+    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
+    transaction_id = Column(String, ForeignKey("transactions.id"), nullable=True)
+
+    status = Column(Enum(ReportStatus), default=ReportStatus.draft, nullable=False)
+
+    transaction_date = Column(Date, nullable=False)
+    total_amount = Column(Float, nullable=False)
+    currency = Column(String(3), default="AUD")
+    transaction_type = Column(String(50))
+
+    customer_name = Column(String(255))
+    customer_dob = Column(Date)
+    customer_address = Column(String(500))
+    customer_occupation = Column(String(255))
+    customer_id_type = Column(String(50))
+    customer_id_number = Column(String(50))
+
+    branch_name = Column(String(255))
+    branch_address = Column(String(500))
+
+    summary = Column(Text)
+    due_date = Column(Date)  # 15 business days from transaction date
+
+    prepared_by = Column(String)
+    reviewed_by = Column(String)
+    approved_by = Column(String)
+    approved_at = Column(DateTime(timezone=True))
     submitted_at = Column(DateTime(timezone=True))
-    acknowledged_at = Column(DateTime(timezone=True))
+    submission_reference = Column(String(100))
 
-    customer = relationship("Customer", back_populates="reports")
-
-
-class ECDDRecord(Base):
-    __tablename__ = "ecdd_records"
-
-    id = Column(Integer, primary_key=True, index=True)
-    ecdd_id = Column(String(50), unique=True, index=True, nullable=False)
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
-    industry_id = Column(String(100))
-    trigger_reason = Column(Text, nullable=False)
-    pep_status = Column(Integer, default=0)
-    adverse_media_found = Column(Integer, default=0)
-    adverse_media_details = Column(Text)
-    beneficial_owner_verified = Column(Integer, default=0)
-    beneficial_owner_details = Column(Text)
-    source_of_wealth_verified = Column(Integer, default=0)
-    source_of_wealth_details = Column(Text)
-    enhanced_risk_score = Column(Float, default=0.0)
-    recommendation = Column(String(50))
-    analyst_notes = Column(Text)
-    status = Column(String(50), default="pending")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    completed_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    customer = relationship("Customer", back_populates="ecdd_records")
+    customer = relationship("Customer")
+
+
+class SMRReport(Base):
+    """Suspicious Matter Report."""
+    __tablename__ = "smr_reports"
+
+    id = Column(String, primary_key=True, default=lambda: f"smr_{uuid4().hex[:12]}")
+    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
+    case_id = Column(String, ForeignKey("cases.id"), nullable=True, index=True)
+
+    status = Column(Enum(ReportStatus), default=ReportStatus.draft, nullable=False)
+
+    matter_date = Column(Date, nullable=False)
+    suspicion_grounds = Column(Text, nullable=False)
+    transaction_ids = Column(JSON, default=list)
+    total_amount = Column(Float)
+    currency = Column(String(3), default="AUD")
+
+    subject_name = Column(String(255))
+    subject_dob = Column(Date)
+    subject_address = Column(String(500))
+    subject_occupation = Column(String(255))
+
+    narrative = Column(Text)  # MLRO sign-off narrative
+    due_date = Column(Date)   # typically 3 business days for proceeds of crime
+
+    prepared_by = Column(String)
+    reviewed_by = Column(String)
+    mlro_sign_off = Column(String)   # MLRO user id
+    mlro_signed_at = Column(DateTime(timezone=True))
+    submitted_at = Column(DateTime(timezone=True))
+    submission_reference = Column(String(100))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    customer = relationship("Customer")
+    case = relationship("Case")
