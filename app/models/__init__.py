@@ -18,9 +18,26 @@ from app.models.governance import (
     ANNUAL_ATTESTATION_POLICY_TYPES,
     DEFAULT_REVIEW_MONTHS, POLICY_NUMBER_PREFIX,
 )
-from app.models.customer import Customer, CustomerType, CustomerStatus, RiskLevel, IDType
-from app.models.beneficial_owner import BeneficialOwner, OwnershipType
-from app.models.screening import PEPScreening, SanctionsScreening, ScreeningStatus, ScreeningEntityType
+from app.models.customer import (
+    Customer, CustomerType, CustomerStatus, RiskLevel, CDDLevel, PEPType,
+    OnboardingChannel, NoteType, UBOType, CorporateDocumentType,
+    BeneficialOwner, BusinessDetail, CorporateDocument,
+    CustomerPreviousName, CustomerNote, CustomerRiskScoreHistory,
+    CustomerReview, CustomerOnboardingChecklist, ReviewOutcome,
+)
+from app.models.kyc import (
+    CustomerIdentityDocument, CustomerSelfieVerification,
+    CustomerAddressVerification, CustomerPhoneVerification,
+    CustomerEmailVerification,
+    IdentityDocumentType, AddressDocumentType, LivenessCheckType,
+    VerificationResult, VerificationSource, VerificationProvider,
+)
+from app.models.screening import (
+    ScreeningRecord, ScreeningAlert, CryptoWalletScreening, AdverseMediaResult,
+    ScreeningType, ScreeningStatus, ScreeningProvider, ScreeningEntityType,
+    AlertSeverity, AlertStatus, CryptoNetwork, WalletRiskCategory,
+    AdverseMediaCategory,
+)
 from app.models.transaction import Transaction, TransactionAlert, TransactionType, TransactionStatus, AlertType, AlertSeverity, AlertStatus
 from app.models.case import Case, CaseNote, CaseSeverity, CaseStatus
 from app.models.report import IFTIReport, TTRReport, SMRReport, ReportStatus, IFTIDirection
@@ -70,10 +87,21 @@ __all__ = [
     "MANDATORY_ATTESTATION_POLICY_TYPES",
     "ANNUAL_ATTESTATION_POLICY_TYPES",
     "DEFAULT_REVIEW_MONTHS", "POLICY_NUMBER_PREFIX",
-    # Core domain
-    "Customer", "CustomerType", "CustomerStatus", "RiskLevel", "IDType",
-    "BeneficialOwner", "OwnershipType",
-    "PEPScreening", "SanctionsScreening", "ScreeningStatus", "ScreeningEntityType",
+    # Core domain — Customer
+    "Customer", "CustomerType", "CustomerStatus", "RiskLevel", "CDDLevel", "PEPType",
+    "OnboardingChannel", "NoteType", "UBOType", "CorporateDocumentType",
+    "BeneficialOwner", "BusinessDetail", "CorporateDocument",
+    "CustomerPreviousName", "CustomerNote", "CustomerRiskScoreHistory",
+    "CustomerReview", "CustomerOnboardingChecklist", "ReviewOutcome",
+    # KYC Verification
+    "CustomerIdentityDocument", "CustomerSelfieVerification",
+    "CustomerAddressVerification", "CustomerPhoneVerification", "CustomerEmailVerification",
+    "IdentityDocumentType", "AddressDocumentType", "LivenessCheckType",
+    "VerificationResult", "VerificationSource", "VerificationProvider",
+    # Screening
+    "ScreeningRecord", "ScreeningAlert", "CryptoWalletScreening", "AdverseMediaResult",
+    "ScreeningType", "ScreeningStatus", "ScreeningProvider", "ScreeningEntityType",
+    "AlertSeverity", "AlertStatus", "CryptoNetwork", "WalletRiskCategory", "AdverseMediaCategory",
     "Transaction", "TransactionAlert", "TransactionType", "TransactionStatus",
     "AlertType", "AlertSeverity", "AlertStatus",
     "Case", "CaseNote", "CaseSeverity", "CaseStatus",
