@@ -102,7 +102,7 @@ class AMLSolution(Base):
     organisation = relationship("Organisation", back_populates="aml_solution")
     programs = relationship("AMLProgram", back_populates="solution", cascade="all, delete-orphan")
     risk_assessments = relationship("RiskAssessment", back_populates="solution", cascade="all, delete-orphan")
-    policies = relationship("Policy", back_populates="solution", cascade="all, delete-orphan")
+    policies = relationship("AMLPolicy", back_populates="solution", cascade="all, delete-orphan")
     controls = relationship("Control", back_populates="solution", cascade="all, delete-orphan")
     training_records = relationship("TrainingRecord", back_populates="solution", cascade="all, delete-orphan")
     services = relationship("AMLService", back_populates="solution", cascade="all, delete-orphan")
@@ -266,10 +266,11 @@ class RiskAssessment(Base):
 
 # ── Policies ──────────────────────────────────────────────────────────────────
 
-class Policy(Base):
+class AMLPolicy(Base):
     """
-    Individual AML/CTF policy document (e.g. KYC Policy, Transaction Monitoring Policy).
-    Templates provided per industry; orgs customise as needed.
+    Lightweight policy seed record created on AMLSolution initialisation.
+    For full governance lifecycle (versioning, attestation, approval workflow)
+    see app.models.governance.Policy.
     """
     __tablename__ = "policies"
 
@@ -280,12 +281,11 @@ class Policy(Base):
                     nullable=False, index=True)
 
     title = Column(String(255), nullable=False)
-    policy_type = Column(String(100))    # kyc, transaction_monitoring, record_keeping,
-                                         # sanctions, pep, reporting, staff_training, etc.
+    policy_type = Column(String(100))
     version = Column(String(20), default="1.0")
     status = Column(Enum(PolicyStatus), default=PolicyStatus.draft, nullable=False)
-    content = Column(Text)               # full policy text (Markdown)
-    summary = Column(Text)               # brief summary
+    content = Column(Text)
+    summary = Column(Text)
 
     effective_date = Column(Date)
     review_due_date = Column(Date)

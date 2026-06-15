@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.models.aml_solution import (
     AMLService, AMLSolution, Control, ControlStatus, AMLProgram,
-    Policy, PolicyStatus, ProgramStatus, RiskAppetite, ServiceType,
+    AMLPolicy, PolicyStatus, ProgramStatus, RiskAppetite, ServiceType,
     ServiceStatus, SolutionStatus,
 )
 from app.models.organisation import Organisation
@@ -177,7 +177,7 @@ def seed_aml_solution(
     # ── 3. Policies ───────────────────────────────────────────────────────────
     policies_data = getattr(tmpl, "_policies", [])
     for i, p in enumerate(policies_data):
-        policy = Policy(
+        policy = AMLPolicy(
             solution_id=solution.id,
             org_id=org.id,
             title=p["title"],

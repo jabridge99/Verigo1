@@ -4,10 +4,19 @@ from app.models.aml_solution import (
     AMLSolution, SolutionStatus,
     AMLProgram, ProgramStatus, RiskAppetite,
     RiskAssessment, AssessmentStatus,
-    Policy, PolicyStatus,
+    AMLPolicy, PolicyStatus,
     Control, ControlStatus,
     TrainingRecord, TrainingStatus,
     AMLService, ServiceType, ServiceStatus,
+)
+from app.models.governance import (
+    Policy, PolicyType, PolicyCategory, PolicyLifecycleStatus,
+    AttestationType, ReminderType, ALLOWED_TRANSITIONS,
+    PolicyVersion, PolicyWorkflowEvent,
+    PolicyAttestation, PolicyReviewReminder,
+    MANDATORY_ATTESTATION_POLICY_TYPES,
+    ANNUAL_ATTESTATION_POLICY_TYPES,
+    DEFAULT_REVIEW_MONTHS, POLICY_NUMBER_PREFIX,
 )
 from app.models.customer import Customer, CustomerType, CustomerStatus, RiskLevel, IDType
 from app.models.beneficial_owner import BeneficialOwner, OwnershipType
@@ -31,10 +40,18 @@ __all__ = [
     "AMLSolution", "SolutionStatus",
     "AMLProgram", "ProgramStatus", "RiskAppetite",
     "RiskAssessment", "AssessmentStatus",
-    "Policy", "PolicyStatus",
+    "AMLPolicy", "PolicyStatus",
     "Control", "ControlStatus",
     "TrainingRecord", "TrainingStatus",
     "AMLService", "ServiceType", "ServiceStatus",
+    # Governance
+    "Policy", "PolicyType", "PolicyCategory", "PolicyLifecycleStatus",
+    "AttestationType", "ReminderType", "ALLOWED_TRANSITIONS",
+    "PolicyVersion", "PolicyWorkflowEvent",
+    "PolicyAttestation", "PolicyReviewReminder",
+    "MANDATORY_ATTESTATION_POLICY_TYPES",
+    "ANNUAL_ATTESTATION_POLICY_TYPES",
+    "DEFAULT_REVIEW_MONTHS", "POLICY_NUMBER_PREFIX",
     # Core domain
     "Customer", "CustomerType", "CustomerStatus", "RiskLevel", "IDType",
     "BeneficialOwner", "OwnershipType",
