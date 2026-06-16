@@ -57,6 +57,7 @@ from app.models.case import (
 from app.models.report import (
     IFTIReport, TTRReport, SMRReport, FilingRegisterEntry,
     ReportStatus, ReportType, ReportPriority, IFTIDirection, TTRIndustryType,
+    SMRDesignatedSvc, SMRSuspReason, SMROffenceType,
 )
 from app.models.audit_log import AuditLog, AuditEventType
 from app.models.ifti_receipt import IFTIReceipt, ReceiptStatus
@@ -175,6 +176,7 @@ __all__ = [
     "NoteType", "EvidenceType",
     "IFTIReport", "TTRReport", "SMRReport", "FilingRegisterEntry",
     "ReportStatus", "ReportType", "ReportPriority", "IFTIDirection", "TTRIndustryType",
+    "SMRDesignatedSvc", "SMRSuspReason", "SMROffenceType",
     "AuditLog", "AuditEventType",
     "IFTIReceipt", "ReceiptStatus",
     "ComplianceCalendarItem", "ComplianceReminder",

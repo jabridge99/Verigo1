@@ -72,6 +72,75 @@ class TTRIndustryType(str, enum.Enum):
     MSB = "MSB"   # Money Services Business — remittance, currency exchange
 
 
+class SMRDesignatedSvc(str, enum.Enum):
+    """
+    AUSTRAC SMR-2-0 designatedSvc enum (section smDetails).
+    27 valid codes; AFSL_ARR is SMR-only (absent from TTR schemas).
+    Mandatory: 1..26 per report.
+    """
+    ACC_DEP  = "ACC_DEP"   # Accepting deposits
+    AFSL_ARR = "AFSL_ARR"  # Arranging financial products (AFSL — SMR only)
+    BET_ACC  = "BET_ACC"   # Betting accounts
+    BULSER   = "BULSER"    # Bullion services
+    BUS_LOAN = "BUS_LOAN"  # Business loans
+    BUS_RSA  = "BUS_RSA"   # Business/RSA accounts
+    CHQACCSS = "CHQACCSS"  # Cheque access
+    CRDACCSS = "CRDACCSS"  # Credit access
+    CUR_EXCH = "CUR_EXCH"  # Currency exchange
+    CUST_DEP = "CUST_DEP"  # Custodian/depository
+    DCE      = "DCE"       # Digital currency exchange
+    DEBTINST = "DEBTINST"  # Debt instruments
+    FIN_EFT  = "FIN_EFT"   # Financial EFT
+    GAMCHSKL = "GAMCHSKL"  # Gaming — chance/skill
+    GAM_BETT = "GAM_BETT"  # Gaming — betting
+    GAM_EXCH = "GAM_EXCH"  # Gaming — exchange
+    GAM_MACH = "GAM_MACH"  # Gaming — machine
+    LEASING  = "LEASING"   # Leasing
+    LIFE_INS = "LIFE_INS"  # Life insurance
+    PAYORDRS = "PAYORDRS"  # Payment orders
+    PAYROLL  = "PAYROLL"   # Payroll services
+    PENSIONS = "PENSIONS"  # Pensions/annuities
+    RS       = "RS"        # Remittance services
+    SECURITY = "SECURITY"  # Securities
+    SUPERANN = "SUPERANN"  # Superannuation
+    TRAVLCHQ = "TRAVLCHQ"  # Traveller's cheques
+    VALCARDS = "VALCARDS"  # Value-stored cards
+
+
+class SMRSuspReason(str, enum.Enum):
+    """
+    AUSTRAC SMR-2-0 suspReason enum (section smDetails).
+    One or more reasons MUST be selected. Requires explicit human selection.
+    """
+    PROCEEDS   = "PROCEEDS"    # Proceeds of crime
+    TERRORISM  = "TERRORISM"   # Terrorism financing
+    EVASION    = "EVASION"     # Tax evasion
+    FRAUD      = "FRAUD"       # Fraud
+    BRIBERY    = "BRIBERY"     # Bribery/corruption
+    DRUG       = "DRUG"        # Drug trafficking
+    PEOPLE     = "PEOPLE"      # People smuggling/trafficking
+    WEAPON     = "WEAPON"      # Weapons proliferation
+    ENVIRON    = "ENVIRON"     # Environmental crime
+    OTHER      = "OTHER"       # Other
+
+
+class SMROffenceType(str, enum.Enum):
+    """
+    AUSTRAC SMR-2-0 additionalDetails.offence enum (MANDATORY, exactly 1).
+    Requires explicit human selection — never auto-set.
+    """
+    PROCEEDS   = "PROCEEDS"    # Proceeds of crime
+    TERRORISM  = "TERRORISM"   # Terrorism financing
+    EVASION    = "EVASION"     # Tax evasion
+    FRAUD      = "FRAUD"       # Fraud
+    BRIBERY    = "BRIBERY"     # Bribery/corruption
+    DRUG       = "DRUG"        # Drug trafficking
+    PEOPLE     = "PEOPLE"      # People smuggling/trafficking
+    WEAPON     = "WEAPON"      # Weapons proliferation
+    ENVIRON    = "ENVIRON"     # Environmental crime
+    OTHER      = "OTHER"       # Other
+
+
 # ── IFTI Report ───────────────────────────────────────────────────────────────
 
 class IFTIReport(Base):
@@ -256,9 +325,10 @@ class TTRReport(Base):
 
 class SMRReport(Base):
     """
-    Suspicious Matter Report.
+    Suspicious Matter Report — aligned to AUSTRAC SMR-2-0.xsd.
     Lifecycle: draft → under_review → approved (MLRO sign-off) → submitted → acknowledged
     DISCLAIMER: The decision to lodge an SMR remains entirely with the reporting entity.
+    All SMR fields require explicit human action — never auto-set.
     """
     __tablename__ = "smr_reports"
 
@@ -272,31 +342,97 @@ class SMRReport(Base):
     status = Column(Enum(ReportStatus), default=ReportStatus.draft, nullable=False, index=True)
     priority = Column(Enum(ReportPriority), default=ReportPriority.high)
 
+    # ── <header> ─────────────────────────────────────────────────────────────────
+    re_report_ref = Column(String(100))          # reReportRef — reference to original report if re-lodging
+    intercept_flag = Column(String(3))           # interceptFlag YesNo — law enforcement intercept
+    reporting_branch_id = Column(String(100))    # reportingBranch.branchId (optional)
+    reporting_branch_name = Column(String(255))  # reportingBranch.name (MANDATORY if branch supplied)
+
+    # ── <smDetails> — MANDATORY ───────────────────────────────────────────────────
+    # designated_svcs: list of SMRDesignatedSvc codes — 1..26 entries MANDATORY
+    # All values must be valid SMRDesignatedSvc enum members (validated at service layer)
+    designated_svcs = Column(JSON, default=list)
+    designated_svc_provided = Column(String(3))   # YesNo — service was provided
+    designated_svc_requested = Column(String(3))  # YesNo — service was requested
+    designated_svc_enquiry = Column(String(3))    # YesNo — enquiry only
+
+    # susp_reason_codes: list of SMRSuspReason codes — 1..* MANDATORY
+    # Requires explicit human selection — never auto-populate
+    susp_reason_codes = Column(JSON, default=list)
+    grand_total = Column(Float)                   # smDetails.grandTotal (MANDATORY Amount)
+    grand_total_currency = Column(String(3), default="AUD")
+
     matter_date = Column(Date, nullable=False)
-    suspicion_grounds = Column(Text, nullable=False)
-    suspicion_categories = Column(JSON, default=list)  # proceeds_of_crime | terrorism_financing
+    suspicion_grounds = Column(Text, nullable=False)   # <suspGrounds> — MANDATORY free text
+
+    # ── Primary suspect — <suspPerson> (first entry; additional via susp_persons JSON) ───
+    # Retains legacy single-subject fields for backwards compat; additional persons in JSON
+    subject_name = Column(String(255))
+    subject_dob = Column(Date)
+    subject_address = Column(String(500))
+    subject_city = Column(String(100))
+    subject_state = Column(String(50))
+    subject_postcode = Column(String(20))
+    subject_country = Column(String(100))
+    subject_email = Column(String(255))
+    subject_occupation = Column(String(255))
+    subject_abn = Column(String(11))
+    subject_acn = Column(String(9))
+    subject_arbn = Column(String(9))
+    subject_id_type = Column(String(100))
+    subject_id_number = Column(String(100))
+    subject_id_issue_date = Column(Date)     # SMR Identification extends base with idIssueDate
+    subject_id_expiry_date = Column(Date)    # SMR Identification extends base with idExpiryDate
+    subject_id_issuer = Column(String(255))
+    subject_electronic_source = Column(String(255))
+    subject_device_identifier = Column(String(255))
+    subject_business_name = Column(String(255))
+    subject_business_struct = Column(String(100))
+    subject_business_ben_name = Column(String(255))   # beneficiary/holder name
+    subject_business_holder_name = Column(String(255))
+    subject_incorp_country = Column(String(100))
+    subject_citizen_countries = Column(JSON, default=list)  # citizenCountry 0..* (multiple citizenships)
+    subject_digital_currency_wallets = Column(JSON, default=list)  # [{network, address}]
+    subject_account_number = Column(String(100))
+    subject_account_bsb = Column(String(10))
+    subject_account_name = Column(String(255))
+    subject_account_institution = Column(String(255))
+    subject_is_customer = Column(String(3))   # personIsCustomer YesNo
+
+    # ── Additional persons — stored as JSON arrays ──────────────────────────────
+    # susp_persons: [{name, dob, address, abn, acn, id_type, id_number, ...}] — suspPerson[1..*]
+    # other_persons: [{name, relationship, partyIsCustomer, partyIsAgent, ...}] — otherPerson[0..*]
+    # unident_persons: [{descOfPerson, descOfDocs}] — unidentPerson[0..*]
+    # Structure validated at service layer; all entries require explicit human input.
+    susp_persons = Column(JSON, default=list)
+    other_persons = Column(JSON, default=list)
+    unident_persons = Column(JSON, default=list)
+
+    # ── <txnDetail> (0..*) — structured transaction details ────────────────────
+    # Each entry: {txnDate, txnType (1..59), tfrType, txnCompleted (YesNo MANDATORY),
+    #   txnRefNo, txnAmount, cashAmount, foreignCurr, digitalCurrency,
+    #   senderDrawerIssuer, payee, beneficiary, otherInstitution}
+    txn_details = Column(JSON, default=list)
+
+    # Retained for legacy association — use txn_details for structured AUSTRAC output
     transaction_ids = Column(JSON, default=list)
     total_amount = Column(Float)
     currency = Column(String(3), default="AUD")
 
-    # Subject snapshot
-    subject_name = Column(String(255))
-    subject_dob = Column(Date)
-    subject_address = Column(String(500))
-    subject_occupation = Column(String(255))
-    subject_id_type = Column(String(50))
-    subject_id_number = Column(String(50))
-    subject_business_name = Column(String(255))
-    subject_abn = Column(String(11))
+    # ── <additionalDetails> — MANDATORY ─────────────────────────────────────────
+    # offence_type: SMROffenceType enum value — MANDATORY, exactly 1, human-selected
+    offence_type = Column(String(50))
+    is_terrorism_related = Column(Boolean, default=False)  # derived from offence_type == TERRORISM; 24h deadline
+    prev_reported_refs = Column(JSON, default=list)        # prevReported — prior AUSTRAC report refs
+    other_aus_gov_reports = Column(JSON, default=list)     # otherAusGov — other Australian gov agency reports
 
-    # MLRO-authored narrative
+    # ── MLRO-authored narrative ──────────────────────────────────────────────────
     narrative = Column(Text)
     evidence_summary = Column(Text)
     related_smr_refs = Column(JSON, default=list)
     supporting_documents = Column(JSON, default=list)
 
     due_date = Column(Date, index=True)
-    is_terrorism_related = Column(Boolean, default=False)  # 24h deadline applies
 
     reporter_name = Column(String(255))
     reporter_abn = Column(String(11))
