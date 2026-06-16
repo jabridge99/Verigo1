@@ -7,6 +7,8 @@ export interface BrandingConfig {
   primary_color: string;
   accent_color: string;
   bg_color: string;
+  surface_color: string;
+  text_color: string;
   custom_domain?: string | null;
   support_email: string;
   footer_text: string;
@@ -20,6 +22,8 @@ export const DEFAULT_BRANDING: BrandingConfig = {
   primary_color: "#2563eb",
   accent_color: "#f59e0b",
   bg_color: "#060d1a",
+  surface_color: "#0d1526",
+  text_color: "#f1f5f9",
   support_email: "support@verigo.com.au",
   footer_text: "Australian Compliance Operating System",
   hide_verigo_badge: false,
@@ -64,4 +68,6 @@ export function applyBrandingToDOM(b: BrandingConfig) {
   root.style.setProperty("--brand-primary", b.primary_color);
   root.style.setProperty("--brand-accent", b.accent_color);
   root.style.setProperty("--brand-bg", b.bg_color);
+  root.style.setProperty("--brand-surface", b.surface_color);
+  root.style.setProperty("--brand-text", b.text_color);
 }
