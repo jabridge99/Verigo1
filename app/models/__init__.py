@@ -46,7 +46,7 @@ from app.models.transaction import (
 from app.models.monitoring import (
     MonitoringRule, RuleConditionGroup, RuleCondition, RuleExecution,
     TransactionAlert, AlertEvidence,
-    AlertCategory, AlertType, AlertStatus, AlertSeverity,
+    AlertCategory, AlertType, AlertStatus, AlertSeverity, AlertResult,
     RuleStatus, RuleConditionOperator,
 )
 from app.models.case import (
@@ -167,7 +167,7 @@ __all__ = [
     # Monitoring
     "MonitoringRule", "RuleConditionGroup", "RuleCondition", "RuleExecution",
     "TransactionAlert", "AlertEvidence",
-    "AlertCategory", "AlertType", "AlertStatus", "AlertSeverity",
+    "AlertCategory", "AlertType", "AlertStatus", "AlertSeverity", "AlertResult",
     "RuleStatus", "RuleConditionOperator",
     # Cases
     "Case", "CaseAlert", "CaseNote", "CaseEvidence",

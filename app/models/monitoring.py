@@ -114,6 +114,37 @@ class AlertSeverity(str, enum.Enum):
     critical    = "critical"
 
 
+class AlertResult(str, enum.Enum):
+    """
+    What happened AFTER the monitoring review decision was made.
+
+    Distinct from AlertStatus (which tracks the review workflow state).
+    Set by compliance / MLRO only after the alert is reviewed.
+
+    DISCLAIMER: Setting a result is a compliance workflow action only.
+    No result value constitutes a regulatory determination.
+    All obligations (SMR lodgement, AUSTRAC reporting) remain with the reporting entity.
+    """
+    pending                 = "pending"             # default — not yet determined
+    # ── Approved outcomes ──────────────────────────────────────────────────────
+    no_action_required      = "no_action_required"  # reviewed, no concern identified
+    transaction_released    = "transaction_released" # transaction approved to proceed
+    # ── Rejected / Actioned outcomes ──────────────────────────────────────────
+    transaction_blocked     = "transaction_blocked"  # transaction stopped / funds held
+    transaction_returned    = "transaction_returned" # funds returned to sender
+    # ── Escalation outcomes ────────────────────────────────────────────────────
+    edd_initiated           = "edd_initiated"        # Enhanced Due Diligence triggered
+    case_opened             = "case_opened"          # formal case investigation opened
+    smr_filed               = "smr_filed"            # Suspicious Matter Report lodged with AUSTRAC
+    ttr_lodged              = "ttr_lodged"           # Threshold Transaction Report lodged
+    ifti_reported           = "ifti_reported"        # IFTI reported to AUSTRAC
+    referred_law_enforcement = "referred_law_enforcement"  # referred to AFP / state police
+    # ── Customer outcomes ──────────────────────────────────────────────────────
+    customer_exited         = "customer_exited"      # customer relationship terminated
+    customer_restricted     = "customer_restricted"  # services restricted (not exited)
+    # ── Other ──────────────────────────────────────────────────────────────────
+    other                   = "other"               # see result_notes for detail
+
 # ── Monitoring Rule ────────────────────────────────────────────────────────────
 
 class MonitoringRule(Base):
@@ -288,6 +319,16 @@ class TransactionAlert(Base):
     resolved_by     = Column(String)
     resolved_at     = Column(DateTime(timezone=True))
     resolution      = Column(String(100))       # dismissed | escalated_to_case | smr_filed | cleared
+
+    # ── Post-Decision Result ───────────────────────────────────────────────────
+    # Distinct from status (workflow state). Set AFTER the monitoring decision.
+    # status  = where the review is in the workflow
+    # result  = what action was taken as a consequence of the decision
+    result          = Column(Enum(AlertResult), default=AlertResult.pending, nullable=False, index=True)
+    result_notes    = Column(Text)              # mandatory when result = other
+    result_set_by   = Column(String)            # user_id
+    result_set_at   = Column(DateTime(timezone=True))
+
     resolution_notes = Column(Text)
 
     is_false_positive   = Column(Boolean, default=False)

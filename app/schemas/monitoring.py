@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.models.monitoring import (
     AlertCategory,
+    AlertResult,
     AlertSeverity,
     AlertStatus,
     AlertType,
@@ -173,11 +174,25 @@ class AlertOut(BaseModel):
     resolution_notes: Optional[str] = None
     is_false_positive: bool
     is_smr_candidate: bool
+    # Post-decision result — what happened after the monitoring review
+    result: AlertResult
+    result_notes: Optional[str] = None
+    result_set_by: Optional[str] = None
+    result_set_at: Optional[datetime] = None
     trigger_date: datetime
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class AlertResultRequest(BaseModel):
+    result: AlertResult
+    result_notes: Optional[str] = None
+
+    def model_post_init(self, __context) -> None:
+        if self.result == AlertResult.other and not self.result_notes:
+            raise ValueError("result_notes is required when result is 'other'.")
 
 
 class AlertListOut(BaseModel):
@@ -187,6 +202,7 @@ class AlertListOut(BaseModel):
     category: AlertCategory
     severity: AlertSeverity
     status: AlertStatus
+    result: AlertResult
     alert_score: float
     title: str
     is_smr_candidate: bool

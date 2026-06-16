@@ -29,6 +29,7 @@ from app.db.database import get_db
 from app.models.case import Case, CaseAlert
 from app.models.monitoring import (
     AlertCategory,
+    AlertResult,
     AlertSeverity,
     AlertStatus,
     TransactionAlert,
@@ -39,6 +40,7 @@ from app.schemas.monitoring import (
     AlertEscalateRequest,
     AlertListOut,
     AlertOut,
+    AlertResultRequest,
     AlertReviewRequest,
 )
 
@@ -244,6 +246,63 @@ def flag_smr_candidate(
 
     alert.is_smr_candidate = True
     alert.status = AlertStatus.smr_candidate
+    db.commit()
+    db.refresh(alert)
+    return alert
+
+
+@router.post("/{alert_id}/record-result", response_model=AlertOut)
+def record_result(
+    alert_id: str,
+    payload: AlertResultRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Record what happened AFTER the monitoring review decision.
+
+    This is separate from `status` (workflow state):
+      status  — where the alert is in the review workflow
+                (generated → assigned → under_review → resolved / dismissed)
+      result  — what action was taken as a consequence of the decision
+                (no_action_required, transaction_released, transaction_blocked,
+                 edd_initiated, case_opened, smr_filed, ttr_lodged, customer_exited, ...)
+
+    The result can be set or updated at any point after review begins.
+    Changing a result is audit-logged via result_set_by / result_set_at.
+
+    DISCLAIMER: Recording a result is a compliance workflow action only.
+    It does not constitute a regulatory determination or submission.
+    SMR lodgement, TTR/IFTI reporting, and all AUSTRAC obligations remain
+    with the reporting entity.
+    """
+    alert = _get_alert_or_404(alert_id, org_id_for(current_user), db)
+
+    alert.result = payload.result
+    alert.result_notes = payload.result_notes
+    alert.result_set_by = current_user.id
+    alert.result_set_at = datetime.now(timezone.utc)
+
+    # Auto-advance status to resolved when a definitive result is recorded
+    _definitive = {
+        AlertResult.no_action_required,
+        AlertResult.transaction_released,
+        AlertResult.transaction_blocked,
+        AlertResult.transaction_returned,
+        AlertResult.smr_filed,
+        AlertResult.ttr_lodged,
+        AlertResult.ifti_reported,
+        AlertResult.referred_law_enforcement,
+        AlertResult.customer_exited,
+        AlertResult.customer_restricted,
+    }
+    if payload.result in _definitive and alert.status not in (
+        AlertStatus.dismissed, AlertStatus.resolved
+    ):
+        alert.status = AlertStatus.resolved
+        alert.resolved_by = current_user.id
+        alert.resolved_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(alert)
     return alert
