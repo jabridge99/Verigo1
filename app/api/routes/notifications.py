@@ -69,3 +69,21 @@ def create_notification(
     if current_user.role not in ("admin", "mlro"):
         raise HTTPException(403, "Insufficient permissions")
     return svc.create_notification(db, data, send_email=data.send_email)
+
+
+@router.post("/run-deadline-check",
+             summary="Run all compliance deadline checks and fire due notifications (admin/MLRO — call from cron)")
+def run_deadline_check(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    if current_user.role not in ("admin", "mlro"):
+        raise HTTPException(403, "MLRO or Admin required")
+    from app.services.notification_scheduler import run_all_deadline_checks
+    return run_all_deadline_checks(db)
+
+
+@router.get("/types", summary="List all notification types")
+def list_notification_types():
+    from app.models.notification import NotificationType
+    return {"types": [e.value for e in NotificationType]}

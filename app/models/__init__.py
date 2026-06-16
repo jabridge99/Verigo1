@@ -131,6 +131,9 @@ from app.models.risk_engine import (
 from app.models.board_report import (
     BoardReport, BoardReportType, BoardReportStatus, ReportPeriod,
 )
+from app.models.examination_pack import (
+    ExaminationPack, ExaminationPackStatus, EXAMINATION_SECTIONS,
+)
 from app.models.training_trigger import (
     TrainingTriggerRule, TrainingTriggerLog, RegulatoryUpdateEvent,
     AssessmentOutcomeFlag,
@@ -257,6 +260,8 @@ __all__ = [
     "RiskAssessmentRun", "RiskFactorScore", "RiskMitigation", "RiskScoreHistory",
     # Board & Executive Reporting
     "BoardReport", "BoardReportType", "BoardReportStatus", "ReportPeriod",
+    # Examination Pack
+    "ExaminationPack", "ExaminationPackStatus", "EXAMINATION_SECTIONS",
     # Risk-Triggered Training
     "TrainingTriggerRule", "TrainingTriggerLog", "RegulatoryUpdateEvent",
     "AssessmentOutcomeFlag",
