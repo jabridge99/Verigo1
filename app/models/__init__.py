@@ -81,6 +81,20 @@ from app.models.professional_assessment import (
     SOFSourceType, SOWSourceType, TransactionPurposeType,
     ChecklistType, ReviewOutcome,
 )
+from app.models.risk_matrix_config import (
+    OrgRiskFactor, OrgRiskProfile, OrgRiskMatrixVersion,
+    RiskFactorCategory,
+)
+from app.models.integration import (
+    IntegrationProvider, OrgIntegration, IntegrationAuditLog,
+    IntegrationCategory, IntegrationType, IntegrationHealthStatus,
+)
+from app.models.automation_rule import (
+    AutomationRule, AutomationRuleExecution,
+    DecisionSupportPanel, ApprovalWorkflowStep,
+    RuleEventType, RuleActionType, AutomationRuleStatus,
+    ApprovalDecisionType, ApprovalStepType,
+)
 from app.models.governance_controls import (
     GovernanceControl, ControlType, ControlRiskArea, ControlFrequency,
     ControlMethod, ControlEffectiveness, TestResult, FindingSeverity,
@@ -179,6 +193,16 @@ __all__ = [
     "ProfessionalServiceType", "AssessmentStatus", "AssessmentRiskRating",
     "SOFSourceType", "SOWSourceType", "TransactionPurposeType",
     "ChecklistType", "ReviewOutcome",
+    # Risk Matrix Config
+    "OrgRiskFactor", "OrgRiskProfile", "OrgRiskMatrixVersion", "RiskFactorCategory",
+    # Integration Hub
+    "IntegrationProvider", "OrgIntegration", "IntegrationAuditLog",
+    "IntegrationCategory", "IntegrationType", "IntegrationHealthStatus",
+    # Rule Builder & Automation
+    "AutomationRule", "AutomationRuleExecution",
+    "DecisionSupportPanel", "ApprovalWorkflowStep",
+    "RuleEventType", "RuleActionType", "AutomationRuleStatus",
+    "ApprovalDecisionType", "ApprovalStepType",
     # Governance Controls
     "GovernanceControl", "ControlType", "ControlRiskArea", "ControlFrequency",
     "ControlMethod", "ControlEffectiveness", "TestResult", "FindingSeverity",
