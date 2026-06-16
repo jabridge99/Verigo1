@@ -80,6 +80,7 @@ from app.api.routes.aml_program import router as aml_program_router
 from app.api.routes.governance.training import router as governance_training_router
 from app.api.routes.health import router as health_router
 from app.api.routes.tasks import router as tasks_router
+from app.api.routes.independent_review import router as independent_review_router
 import app.models.task  # noqa: F401
 import app.models.governance  # noqa: F401
 import app.models.governance_controls  # noqa: F401
@@ -87,6 +88,7 @@ import app.models.governance_training  # noqa: F401
 import app.models.governance_customisation  # noqa: F401
 import app.models.customer_workflow  # noqa: F401
 import app.models.risk_engine  # noqa: F401
+import app.models.independent_review  # noqa: F401
 from app.config import settings
 from app.db.database import Base, SessionLocal, engine
 from app.logging_config import setup_logging
@@ -230,6 +232,7 @@ app.include_router(rule_builder_router, prefix="/api/v1")
 app.include_router(screening_router, prefix="/api/v1")
 app.include_router(aml_program_router, prefix="/api/v1")
 app.include_router(governance_training_router, prefix="/api/v1")
+app.include_router(independent_review_router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

@@ -128,6 +128,13 @@ from app.models.risk_engine import (
     RiskFramework, RiskCategory, RiskFactor, RiskControl,
     RiskAssessmentRun, RiskFactorScore, RiskMitigation, RiskScoreHistory,
 )
+from app.models.independent_review import (
+    IndependentReview, ReviewFinding, ReviewRecommendation, ReviewAction,
+    ReviewType, ReviewScope, ReviewStatus, ReviewRating,
+    FindingRisk, FindingCategory, FindingStatus,
+    RecommendationPriority, RecommendationStatus,
+    ActionType, ActionStatus,
+)
 
 __all__ = [
     "Organisation", "IndustryType", "OrganisationStatus", "CUSTOM_PACKAGE_INDUSTRIES",
@@ -230,4 +237,10 @@ __all__ = [
     "RiskLibraryFactor",
     "RiskFramework", "RiskCategory", "RiskFactor", "RiskControl",
     "RiskAssessmentRun", "RiskFactorScore", "RiskMitigation", "RiskScoreHistory",
+    # Independent Review
+    "IndependentReview", "ReviewFinding", "ReviewRecommendation", "ReviewAction",
+    "ReviewType", "ReviewScope", "ReviewStatus", "ReviewRating",
+    "FindingRisk", "FindingCategory", "FindingStatus",
+    "RecommendationPriority", "RecommendationStatus",
+    "ActionType", "ActionStatus",
 ]
