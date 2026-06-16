@@ -60,6 +60,7 @@ from app.models.report import (
     SMRDesignatedSvc, SMRSuspReason, SMROffenceType,
 )
 from app.models.audit_log import AuditLog, AuditEventType
+from app.models.ifti_e import IFTIERecord, IFTIEDirection, IFTIEMode, IFTIEStatus
 from app.models.ifti_receipt import IFTIReceipt, ReceiptStatus
 from app.models.compliance_calendar import (
     ComplianceCalendarItem, ComplianceReminder,
@@ -178,6 +179,7 @@ __all__ = [
     "ReportStatus", "ReportType", "ReportPriority", "IFTIDirection", "TTRIndustryType",
     "SMRDesignatedSvc", "SMRSuspReason", "SMROffenceType",
     "AuditLog", "AuditEventType",
+    "IFTIERecord", "IFTIEDirection", "IFTIEMode", "IFTIEStatus",
     "IFTIReceipt", "ReceiptStatus",
     "ComplianceCalendarItem", "ComplianceReminder",
     "CalendarItemType", "CalendarItemStatus", "ReminderStage",

@@ -14,6 +14,7 @@ import app.models.connector  # noqa: F401
 import app.models.customer  # noqa: F401
 import app.models.document  # noqa: F401
 import app.models.ifti  # noqa: F401
+import app.models.ifti_e  # noqa: F401
 import app.models.kyc  # noqa: F401
 import app.models.notification  # noqa: F401
 import app.models.onboarding  # noqa: F401
@@ -65,6 +66,7 @@ from app.api.routes.risk_assessment import router as risk_assessment_router
 from app.api.routes.governance.policies import router as governance_policies_router
 from app.api.routes.governance.controls import router as governance_controls_router
 from app.api.routes.ifti_receipts import router as ifti_receipts_router
+from app.api.routes.ifti_e import router as ifti_e_router
 from app.api.routes.compliance_calendar import router as compliance_calendar_router
 from app.api.routes.recommendations import router as recommendations_router
 from app.api.routes.org_config import router as org_config_router
@@ -211,6 +213,7 @@ app.include_router(risk_assessment_router, prefix="/api/v1")
 app.include_router(governance_policies_router, prefix="/api/v1")
 app.include_router(governance_controls_router, prefix="/api/v1")
 app.include_router(ifti_receipts_router, prefix="/api/v1")
+app.include_router(ifti_e_router, prefix="/api/v1")
 app.include_router(compliance_calendar_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1")
 app.include_router(org_config_router, prefix="/api/v1")
