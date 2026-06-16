@@ -34,6 +34,8 @@ import app.models.professional_assessment  # noqa: F401
 import app.models.risk_matrix_config  # noqa: F401
 import app.models.integration  # noqa: F401
 import app.models.automation_rule  # noqa: F401
+import app.models.screening  # noqa: F401
+import app.models.aml_solution  # noqa: F401
 from app.api.routes import (
     analytics,
     api_keys,
@@ -71,6 +73,8 @@ from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.risk_matrix_config import router as risk_matrix_config_router
 from app.api.routes.integrations import router as integrations_router
 from app.api.routes.rule_builder import router as rule_builder_router
+from app.api.routes.screening import router as screening_router
+from app.api.routes.aml_program import router as aml_program_router
 import app.models.governance  # noqa: F401
 import app.models.governance_controls  # noqa: F401
 import app.models.governance_training  # noqa: F401
@@ -214,6 +218,8 @@ app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(risk_matrix_config_router, prefix="/api/v1")
 app.include_router(integrations_router, prefix="/api/v1")
 app.include_router(rule_builder_router, prefix="/api/v1")
+app.include_router(screening_router, prefix="/api/v1")
+app.include_router(aml_program_router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────
