@@ -92,9 +92,11 @@ async def upload_document(
     description: Optional[str] = Form(None),
     entity_type: Optional[str] = Form(None),
     entity_id: Optional[str] = Form(None),
+    retention_category: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
+    import hashlib
     content = await file.read()
     if len(content) > MAX_SIZE:
         raise HTTPException(413, f"File exceeds {MAX_SIZE // (1024 * 1024)} MB limit")
@@ -115,6 +117,9 @@ async def upload_document(
     if not _verify_magic(content, mime):
         raise HTTPException(415, "File content does not match declared content type")
 
+    # Server-side SHA-256 — never trusted from client
+    sha256_hash = hashlib.sha256(content).hexdigest()
+
     return svc.create_document(
         db,
         filename=file.filename or "upload",
@@ -126,6 +131,8 @@ async def upload_document(
         description=description,
         entity_type=entity_type,
         entity_id=entity_id,
+        sha256_hash=sha256_hash,
+        retention_category=retention_category,
     )
 
 
@@ -228,5 +235,166 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
+    doc = svc.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    if doc.legal_hold:
+        raise HTTPException(409, "Document is under legal hold and cannot be deleted.")
     if not svc.delete_document(db, doc_id, _industry_scope(current_user)):
         raise HTTPException(404, "Document not found")
+
+
+# ── Legal hold ────────────────────────────────────────────────────────────────
+
+class LegalHoldPayload(BaseModel):
+    reason: str
+
+
+from pydantic import BaseModel as _BaseModel  # already imported above; alias for clarity
+
+
+@router.post("/{doc_id}/legal-hold")
+def place_legal_hold(
+    doc_id: str,
+    payload: LegalHoldPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
+):
+    """Place a legal hold on a document — blocks deletion and archival."""
+    from datetime import datetime, timezone
+    doc = svc.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
+    if doc.legal_hold:
+        raise HTTPException(409, "Document is already under legal hold.")
+
+    doc.legal_hold = True
+    doc.legal_hold_reason = payload.reason
+    doc.legal_hold_by = current_user.user_id
+    doc.legal_hold_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"doc_id": doc_id, "legal_hold": True, "reason": payload.reason}
+
+
+@router.delete("/{doc_id}/legal-hold", status_code=200)
+def release_legal_hold(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
+):
+    """Release legal hold — MLRO/admin only."""
+    doc = svc.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
+    if not doc.legal_hold:
+        raise HTTPException(409, "Document is not under legal hold.")
+
+    doc.legal_hold = False
+    doc.legal_hold_reason = None
+    doc.legal_hold_by = None
+    doc.legal_hold_at = None
+    db.commit()
+    return {"doc_id": doc_id, "legal_hold": False}
+
+
+# ── Versioning ────────────────────────────────────────────────────────────────
+
+@router.get("/{doc_id}/versions")
+def get_versions(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    """Return the full version chain for a document (oldest first)."""
+    from app.models.document import Document
+
+    doc = svc.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
+
+    # Walk back to root then collect chain
+    chain = []
+    current = doc
+    while current:
+        chain.append(current)
+        if current.previous_version_id:
+            current = db.query(Document).filter(
+                Document.id == current.previous_version_id
+            ).first()
+        else:
+            break
+    chain.reverse()
+
+    return [
+        {
+            "id": d.id,
+            "doc_id": d.doc_id,
+            "version": d.version,
+            "filename": d.filename,
+            "size_bytes": d.size_bytes,
+            "sha256_hash": d.sha256_hash,
+            "uploaded_by": d.uploaded_by,
+            "created_at": d.created_at,
+            "legal_hold": d.legal_hold,
+        }
+        for d in chain
+    ]
+
+
+@router.post("/{doc_id}/new-version", response_model=DocumentResponse, status_code=201)
+async def upload_new_version(
+    doc_id: str,
+    file: UploadFile = File(...),
+    description: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    """
+    Upload a new version of an existing document.
+    Creates a new Document row with previous_version_id pointing to the current version.
+    The old version is retained (never deleted).
+    """
+    import hashlib
+    from app.models.document import Document
+
+    existing = svc.get_document(db, doc_id)
+    if not existing:
+        raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, existing.industry_id)
+    if existing.legal_hold:
+        raise HTTPException(409, "Cannot version a document under legal hold.")
+
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(413, f"File exceeds {MAX_SIZE // (1024 * 1024)} MB limit")
+
+    mime = file.content_type or existing.mime_type or "application/octet-stream"
+    if mime not in ALLOWED_MIME:
+        raise HTTPException(415, f"Unsupported file type: {mime}")
+    if not _verify_magic(content, mime):
+        raise HTTPException(415, "File content does not match declared content type")
+
+    sha256_hash = hashlib.sha256(content).hexdigest()
+
+    new_doc = svc.create_document(
+        db,
+        filename=file.filename or existing.filename,
+        content=content,
+        mime_type=mime,
+        uploaded_by=current_user.user_id,
+        industry_id=existing.industry_id,
+        category=existing.category,
+        description=description or existing.description,
+        entity_type=existing.entity_type,
+        entity_id=existing.entity_id,
+        sha256_hash=sha256_hash,
+        retention_category=existing.retention_category,
+        previous_version_id=existing.id,
+        version=existing.version + 1,
+    )
+    return new_doc

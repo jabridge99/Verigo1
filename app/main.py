@@ -79,6 +79,8 @@ from app.api.routes.screening import router as screening_router
 from app.api.routes.aml_program import router as aml_program_router
 from app.api.routes.governance.training import router as governance_training_router
 from app.api.routes.health import router as health_router
+from app.api.routes.tasks import router as tasks_router
+import app.models.task  # noqa: F401
 import app.models.governance  # noqa: F401
 import app.models.governance_controls  # noqa: F401
 import app.models.governance_training  # noqa: F401
@@ -216,6 +218,7 @@ app.include_router(governance_controls_router, prefix="/api/v1")
 app.include_router(ifti_receipts_router, prefix="/api/v1")
 app.include_router(ifti_e_router, prefix="/api/v1")
 app.include_router(health_router)  # no /api/v1 prefix — probes at /health
+app.include_router(tasks_router, prefix="/api/v1")
 app.include_router(compliance_calendar_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1")
 app.include_router(org_config_router, prefix="/api/v1")

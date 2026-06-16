@@ -120,7 +120,8 @@ from app.models.customer_workflow import (
     WorkflowState, WorkflowAction, EDDTrigger,
     WORKFLOW_TRANSITIONS, ACTION_TO_STATE,
 )
-from app.models.document import Document, DocumentCategory, DocumentStatus
+from app.models.document import Document, DocumentCategory, DocumentStatus, RETENTION_CATEGORIES
+from app.models.task import Task, TaskEvent, TaskStatus, TaskType, TaskPriority
 from app.models.risk_engine import (
     RiskCategoryType, MitigationStatus,
     RiskLibraryFactor,
@@ -222,7 +223,8 @@ __all__ = [
     "GovernanceCustomScoring", "GovernanceApprovalMatrix", "GovernanceDashboardMetric",
     "EntityType", "CustomFieldType", "ApprovalRole", "ListCategory",
     # Documents
-    "Document", "DocumentCategory", "DocumentStatus",
+    "Document", "DocumentCategory", "DocumentStatus", "RETENTION_CATEGORIES",
+    "Task", "TaskEvent", "TaskStatus", "TaskType", "TaskPriority",
     # Risk Engine
     "RiskCategoryType", "MitigationStatus",
     "RiskLibraryFactor",

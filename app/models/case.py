@@ -23,7 +23,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     JSON, Boolean, Column, Date, DateTime, Enum,
-    ForeignKey, String, Text, func,
+    ForeignKey, Integer, String, Text, func,
 )
 from sqlalchemy.orm import relationship
 
@@ -89,22 +89,29 @@ class NoteType(str, enum.Enum):
 
 
 class EvidenceType(str, enum.Enum):
-    identity_document           = "identity_document"
-    source_of_funds             = "source_of_funds"
-    source_of_wealth            = "source_of_wealth"
-    bank_statement              = "bank_statement"
-    transaction_record          = "transaction_record"
-    wallet_analysis_report      = "wallet_analysis_report"
-    adverse_media_report        = "adverse_media_report"
-    screening_report            = "screening_report"
-    contract                    = "contract"
-    property_purchase_document  = "property_purchase_document"
-    corporate_document          = "corporate_document"
-    third_party_report          = "third_party_report"
-    austrac_correspondence      = "austrac_correspondence"
-    law_enforcement_request     = "law_enforcement_request"
-    correspondence              = "correspondence"
-    other                       = "other"
+    identity_document                   = "identity_document"
+    source_of_funds                     = "source_of_funds"
+    source_of_wealth                    = "source_of_wealth"
+    bank_statement                      = "bank_statement"
+    transaction_record                  = "transaction_record"
+    wallet_analysis_report              = "wallet_analysis_report"
+    adverse_media_report                = "adverse_media_report"
+    screening_report                    = "screening_report"
+    contract                            = "contract"
+    property_purchase_document          = "property_purchase_document"
+    corporate_document                  = "corporate_document"
+    third_party_report                  = "third_party_report"
+    austrac_correspondence              = "austrac_correspondence"
+    law_enforcement_request             = "law_enforcement_request"
+    correspondence                      = "correspondence"
+    trust_deed                          = "trust_deed"
+    asic_extract                        = "asic_extract"
+    company_constitution                = "company_constitution"
+    share_register                      = "share_register"
+    beneficial_ownership_declaration    = "beneficial_ownership_declaration"
+    rfi_response                        = "rfi_response"
+    interview_transcript                = "interview_transcript"
+    other                               = "other"
 
 
 # ── Case ──────────────────────────────────────────────────────────────────────
@@ -220,6 +227,7 @@ class CaseNote(Base):
     content         = Column(Text, nullable=False)
     is_confidential = Column(Boolean, default=False)    # MLRO-only (tipping-off protection)
     is_legal_privilege = Column(Boolean, default=False) # legal professional privilege
+    workflow_stage  = Column(String(100))               # e.g. "evidence_review", "compliance_approval", "mlro_review"
 
     author_id   = Column(String, nullable=False)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
@@ -248,6 +256,15 @@ class CaseEvidence(Base):
     is_verified     = Column(Boolean, default=False)
     verified_by     = Column(String)
     verified_at     = Column(DateTime(timezone=True))
+
+    # ── Integrity & versioning ─────────────────────────────────────────────────
+    sha256_hash         = Column(String(64))     # content hash; server-computed
+    version             = Column(Integer, default=1)
+    previous_version_id = Column(String, nullable=True)   # id of prior version
+
+    # ── Legal hold ─────────────────────────────────────────────────────────────
+    legal_hold          = Column(Boolean, default=False)
+    retention_category  = Column(String(50))     # e.g. "aml_7year"
 
     uploaded_by     = Column(String, nullable=False)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
