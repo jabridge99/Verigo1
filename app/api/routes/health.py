@@ -47,7 +47,7 @@ def _require_admin(authorization: Optional[str] = Header(None)):
             user = get_user_by_id(db, payload.get("sub", ""))
             if not user or user.status != UserStatus.active:
                 raise HTTPException(status_code=401, detail="User not found or inactive")
-            if user.role not in (UserRole.admin, UserRole.super_admin):
+            if user.role not in (UserRole.admin,):
                 raise HTTPException(status_code=403, detail="Admin role required")
             return user
         finally:

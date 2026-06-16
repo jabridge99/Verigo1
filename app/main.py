@@ -237,43 +237,4 @@ def root():
     return {"system": settings.app_name, "version": settings.version}
 
 
-@app.get("/health", tags=["system"])
-def health():
-    """Basic liveness probe — returns immediately."""
-    return {
-        "status": "ok",
-        "version": settings.version,
-        "environment": settings.environment,
-    }
-
-
-@app.get("/health/ready", tags=["system"])
-def readiness():
-    """
-    Readiness probe — verifies DB connectivity.
-    Returns 503 if the database is unreachable.
-    """
-    from fastapi import HTTPException
-    from sqlalchemy import text
-
-    db = SessionLocal()
-    try:
-        db.execute(text("SELECT 1"))
-        db_ok = True
-    except Exception as e:
-        db_ok = False
-        import logging
-
-        logging.getLogger("tvg").error("Readiness check DB failure: %s", e)
-    finally:
-        db.close()
-
-    if not db_ok:
-        raise HTTPException(status_code=503, detail="Database not ready")
-
-    return {
-        "status": "ready",
-        "version": settings.version,
-        "environment": settings.environment,
-        "database": "ok",
-    }
+# Health endpoints are registered via health_router (imported above at /health)
