@@ -66,6 +66,8 @@ class IFTICreate(BaseModel):
     oc_email: Optional[str] = None
     oc_occupation: Optional[str] = None
     oc_abn: Optional[str] = None
+    oc_acn: Optional[str] = None
+    oc_arbn: Optional[str] = None
     oc_customer_number: Optional[str] = None
     oc_account_number: Optional[str] = None
     oc_business_structure: Optional[str] = None
@@ -98,10 +100,12 @@ class IFTICreate(BaseModel):
     bc_email: Optional[str] = None
     bc_occupation: Optional[str] = None
     bc_abn: Optional[str] = None
+    bc_acn: Optional[str] = None
+    bc_arbn: Optional[str] = None
     bc_business_structure: Optional[str] = None
     bc_account_number: Optional[str] = None
-    bc_institution_name: Optional[str] = None
-    bc_institution_city: Optional[str] = None
+    bc_institution_name: Optional[str] = None    # InstitutionWithAccount.name (MANDATORY)
+    bc_institution_city: Optional[str] = None    # InstitutionWithAccount.city (MANDATORY)
     bc_institution_country: Optional[str] = None
 
     # Accept block
@@ -123,6 +127,10 @@ class IFTICreate(BaseModel):
     accept_email: Optional[str] = None
     accept_occupation: Optional[str] = None
     accept_abn: Optional[str] = None
+    accept_acn: Optional[str] = None
+    # orderingInstn.foreignBased — MANDATORY per IFTI-DRA-1-2 schema
+    # "Yes" if ordering institution is foreign-based, "No" if Australian
+    accept_foreign_based: Optional[str] = "No"
     accept_business_structure: Optional[str] = None
     is_accepting_money: Optional[str] = "Yes"
     is_sending_instruction: Optional[str] = "Yes"
@@ -152,6 +160,8 @@ class IFTICreate(BaseModel):
     send_email: Optional[str] = None
     send_occupation: Optional[str] = None
     send_abn: Optional[str] = None
+    send_acn: Optional[str] = None
+    send_arbn: Optional[str] = None
     send_business_structure: Optional[str] = None
 
     # Receive block
@@ -179,6 +189,13 @@ class IFTICreate(BaseModel):
     retail_state: Optional[str] = None
     retail_postcode: Optional[str] = None
     retail_country: Optional[str] = None
+
+    # initiatingInstn (optional intermediate institution — IFTI-DRA section 7.6)
+    init_instn_same_as_ordering: Optional[str] = None   # Yes | No
+    init_instn_full_name: Optional[str] = None
+    init_instn_address: Optional[str] = None
+    init_instn_city: Optional[str] = None
+    init_instn_country: Optional[str] = None
 
     # Reason + reporter
     reason_for_transfer: Optional[str] = None

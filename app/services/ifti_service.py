@@ -4,6 +4,19 @@ IFTI (International Funds Transfer Instruction) Service.
 Generates AUSTRAC-compatible Excel spreadsheets in the exact format
 of IFTI-DRA IN and IFTI-DRA OUT official AUSTRAC templates.
 
+Schema: IFTI-DRA v1.2 (Domestic Recipient Agent)
+Namespace: http://austrac.gov.au/schema/reporting/IFTI-DRA-1-2
+
+Party mapping (XML element → model prefix):
+  transferor       → oc_*   (ordering/sending customer)
+  orderingInstn    → accept_* (institution accepting the instruction)
+  sendingInstn     → send_*
+  receivingInstn   → recv_*
+  beneficiaryInstn → dist_*
+  transferee       → bc_*   (beneficiary customer)
+
+IFTI-E v1.3 (E-currency / SWIFT) requires a separate implementation.
+
 Structure matches the official AUSTRAC spreadsheet:
   Row 0  — Section headers (with merged cell labels)
   Row 1  — Column sub-headers
