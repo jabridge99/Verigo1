@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Verigo — Colour Palette Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #111; color: #fff; padding: 2rem; }
+  h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 1.5rem; color: #e2e8f0; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
+
+  .card {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .card-header {
+    padding: 1rem 1.2rem 0.8rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+  }
+
+  .swatches {
+    display: flex;
+    height: 56px;
+  }
+  .swatch {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 4px;
+  }
+  .swatch span {
+    font-size: 0.6rem;
+    font-family: monospace;
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .ui-preview {
+    padding: 1rem 1.2rem 1.2rem;
+  }
+  .ui-preview .topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+  }
+  .ui-preview .logo {
+    width: 28px; height: 28px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 800; color: #fff;
+  }
+  .ui-preview .app-name { font-weight: 700; font-size: 0.9rem; }
+
+  .ui-preview .panel {
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.7rem;
+  }
+  .ui-preview .panel-title { font-size: 0.75rem; font-weight: 600; margin-bottom: 0.2rem; }
+  .ui-preview .panel-body  { font-size: 0.7rem; opacity: 0.65; }
+
+  .ui-preview .btns { display: flex; gap: 0.5rem; }
+  .ui-preview .btn {
+    padding: 0.35rem 0.85rem;
+    border-radius: 7px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+    border: none;
+    cursor: default;
+  }
+
+  .labels {
+    display: flex;
+    padding: 0 1.2rem 1rem;
+    gap: 0;
+  }
+  .labels span {
+    flex: 1;
+    font-size: 0.6rem;
+    color: #888;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>Verigo — Colour Palette Preview (5 colours each)</h1>
+<div class="grid" id="grid"></div>
+
+<script>
+const PALETTES = [
+  { name: "Verigo",         primary: "#2563eb", accent: "#f59e0b", bg: "#060d1a", surface: "#0d1526", text: "#f1f5f9" },
+  { name: "Midnight Green", primary: "#059669", accent: "#34d399", bg: "#022c22", surface: "#064e3b", text: "#ecfdf5" },
+  { name: "Royal Purple",   primary: "#7c3aed", accent: "#a78bfa", bg: "#0d0414", surface: "#1e0533", text: "#f5f3ff" },
+  { name: "Crimson",        primary: "#dc2626", accent: "#fbbf24", bg: "#0c0303", surface: "#2d0a0a", text: "#fef2f2" },
+  { name: "Ocean",          primary: "#0284c7", accent: "#38bdf8", bg: "#020b14", surface: "#082035", text: "#f0f9ff" },
+  { name: "Slate Pro",      primary: "#475569", accent: "#94a3b8", bg: "#0a0d12", surface: "#1e293b", text: "#f8fafc" },
+];
+
+const grid = document.getElementById("grid");
+
+PALETTES.forEach(p => {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.background = p.bg;
+
+  card.innerHTML = `
+    <div class="card-header" style="color:${p.text}">${p.name}</div>
+
+    <div class="swatches">
+      <div class="swatch" style="background:${p.primary}"><span>${p.primary}</span></div>
+      <div class="swatch" style="background:${p.accent}"><span>${p.accent}</span></div>
+      <div class="swatch" style="background:${p.bg}"><span>${p.bg}</span></div>
+      <div class="swatch" style="background:${p.surface}"><span>${p.surface}</span></div>
+      <div class="swatch" style="background:${p.text}"><span style="color:#111">${p.text}</span></div>
+    </div>
+
+    <div class="labels">
+      <span>Primary</span>
+      <span>Accent</span>
+      <span>Background</span>
+      <span>Surface</span>
+      <span>Text</span>
+    </div>
+
+    <div class="ui-preview">
+      <div class="topbar">
+        <div class="logo" style="background:${p.primary}">V</div>
+        <span class="app-name" style="color:${p.text}">Verigo</span>
+      </div>
+      <div class="panel" style="background:${p.surface}; border:1px solid rgba(255,255,255,0.07)">
+        <div class="panel-title" style="color:${p.text}">Compliance Dashboard</div>
+        <div class="panel-body"  style="color:${p.text}">All obligations are up to date.</div>
+      </div>
+      <div class="btns">
+        <button class="btn" style="background:${p.primary}">Primary</button>
+        <button class="btn" style="background:${p.accent}">Accent</button>
+      </div>
+    </div>
+  `;
+
+  grid.appendChild(card);
+});
+</script>
+</body>
+</html>
