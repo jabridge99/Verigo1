@@ -561,6 +561,8 @@ def acknowledge_ttr(
 
 # ── SMR ──────────────────────────────────────────────────────────────────────
 
+# IMPORTANT: /smr/enums MUST be registered before /smr/{report_id} — FastAPI matches
+# routes in declaration order and "enums" would otherwise be treated as a report_id.
 @router.get("/smr/enums")
 def smr_enums():
     """Return valid enum values for SMR designated service codes, suspicion reasons, and offence types."""
@@ -660,6 +662,8 @@ def update_smr(
     for k, v in payload.items():
         if k not in _PROTECTED:
             setattr(r, k, v)
+    # Derive 24h deadline flag from offence_type — never trust the caller to set it
+    r.is_terrorism_related = (r.offence_type == SMROffenceType.TERRORISM.value)
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(r)

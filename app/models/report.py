@@ -124,21 +124,9 @@ class SMRSuspReason(str, enum.Enum):
     OTHER      = "OTHER"       # Other
 
 
-class SMROffenceType(str, enum.Enum):
-    """
-    AUSTRAC SMR-2-0 additionalDetails.offence enum (MANDATORY, exactly 1).
-    Requires explicit human selection — never auto-set.
-    """
-    PROCEEDS   = "PROCEEDS"    # Proceeds of crime
-    TERRORISM  = "TERRORISM"   # Terrorism financing
-    EVASION    = "EVASION"     # Tax evasion
-    FRAUD      = "FRAUD"       # Fraud
-    BRIBERY    = "BRIBERY"     # Bribery/corruption
-    DRUG       = "DRUG"        # Drug trafficking
-    PEOPLE     = "PEOPLE"      # People smuggling/trafficking
-    WEAPON     = "WEAPON"      # Weapons proliferation
-    ENVIRON    = "ENVIRON"     # Environmental crime
-    OTHER      = "OTHER"       # Other
+# SMR-2-0 uses the same offence categories for both suspReason and additionalDetails.offence.
+# A single enum is shared so values stay in sync if AUSTRAC ever updates the list.
+SMROffenceType = SMRSuspReason
 
 
 # ── IFTI Report ───────────────────────────────────────────────────────────────
