@@ -155,6 +155,48 @@ A KYC record for <strong style="color:#fff;">{customer_name}</strong> requires y
     return _send(to, f"KYC review required: {customer_name} — Verigo", html)
 
 
+def send_compliance_notification(
+    to: str,
+    full_name: str,
+    subject: str,
+    title: str,
+    body: str,
+    action_label: str = "Open Verigo",
+    action_url: str | None = None,
+    urgency: str = "info",
+) -> bool:
+    """Generic compliance notification — used by compliance_event_notifier for all event types."""
+    color_map = {"critical": "#ef4444", "high": "#f97316", "warning": "#f59e0b", "info": "#60a5fa"}
+    accent = color_map.get(urgency, "#60a5fa")
+    url = action_url or APP_URL
+    badge = (
+        f'<div style="background:{accent}22;border:1px solid {accent}55;border-radius:8px;'
+        f'padding:10px 16px;margin-bottom:20px;"><span style="color:{accent};font-weight:700;'
+        f'font-size:13px;">{urgency.upper()}</span></div>'
+        if urgency in ("critical", "high", "warning")
+        else ""
+    )
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+{badge}
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">{title}</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {full_name},<br><br>{body}</p>
+<a href="{url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:16px 0;">{action_label}</a>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(to, subject, html)
+
+
+def send_portal_invite(to: str, customer_name: str, portal_url: str, expires_hours: int = 72) -> bool:
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Complete your compliance verification</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {customer_name},<br><br>
+You have been invited to complete your identity verification and compliance documentation. This secure link expires in <strong style="color:#fff;">{expires_hours} hours</strong>.</p>
+<p style="color:#94a3b8;font-size:14px;">You will be asked to upload identity documents and answer a short questionnaire. This typically takes 5–10 minutes.</p>
+<a href="{portal_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Start Verification</a>
+<p style="color:#64748b;font-size:12px;margin-top:20px;">If you did not expect this email, please contact the organisation that sent it. Do not click the link if you are unsure.</p>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(to, "Action required: Complete your compliance verification — Verigo", html)
+
+
 def send_aml_alert(
     to: str, full_name: str, alert_type: str, customer_name: str, amount: float
 ) -> bool:

@@ -16,3 +16,5 @@ pytest==8.2.0
 pytest-asyncio==0.23.6
 pytest-cov==5.0.0
 redis==5.0.4
+apscheduler==3.10.4
+sentry-sdk[fastapi]==2.8.0

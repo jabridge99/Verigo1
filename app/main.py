@@ -105,6 +105,7 @@ import app.models.board_report  # noqa: F401
 from app.config import settings
 from app.db.database import Base, SessionLocal, engine
 from app.logging_config import setup_logging
+from app.scheduler import start_scheduler, stop_scheduler
 from app.middleware import (
     RateLimitMiddleware,
     RequestLoggingMiddleware,
@@ -142,7 +143,12 @@ async def lifespan(app: FastAPI):
     except ImportError:
         log.debug("pack_engine not available — skipping pack seeding")
 
+    start_scheduler()
+    log.info("Background scheduler started")
+
     yield
+
+    stop_scheduler()
     log.info("Shutdown complete")
 
 
