@@ -244,6 +244,9 @@ def submit_ifti(
     r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.approved:
         raise HTTPException(409, f"Report must be approved before submission (current: {r.status.value})")
+    errors = _validate_ifti(r)
+    if errors:
+        raise HTTPException(422, {"detail": "Validation failed — fix errors before submitting", "errors": errors})
     r.status = ReportStatus.submitted
     r.submitted_by = current_user.id
     r.submitted_at = datetime.now(timezone.utc)
@@ -519,6 +522,9 @@ def submit_ttr(
     r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
     if r.status != ReportStatus.approved:
         raise HTTPException(409, "Report must be approved before submission.")
+    errors = _validate_ttr(r)
+    if errors:
+        raise HTTPException(422, {"detail": "Validation failed — fix errors before submitting", "errors": errors})
     r.status = ReportStatus.submitted
     r.submitted_by = current_user.id
     r.submitted_at = datetime.now(timezone.utc)
@@ -727,8 +733,9 @@ def submit_smr(
     r = _get_smr_or_404(report_id, org_id_for(current_user), db)
     if r.status != ReportStatus.approved:
         raise HTTPException(409, "SMR requires MLRO sign-off (approved status) before submission.")
-    if not r.mlro_sign_off:
-        raise HTTPException(422, "MLRO sign-off is required before submission.")
+    errors = _validate_smr(r)
+    if errors:
+        raise HTTPException(422, {"detail": "Validation failed — fix errors before submitting", "errors": errors})
     r.status = ReportStatus.submitted
     r.submitted_by = current_user.id
     r.submitted_at = datetime.now(timezone.utc)
@@ -805,6 +812,236 @@ def get_filing_entry(
     if not e:
         raise HTTPException(404, "Filing register entry not found.")
     return _filing_dict(e)
+
+
+# IMPORTANT: /filing-register/export-csv must be registered before /filing-register/{entry_id}
+@router.get("/filing-register/export-csv")
+def export_filing_register_csv(
+    report_type: Optional[ReportType] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """Export the full filing register as CSV — one row per AUSTRAC submission."""
+    import csv
+    import io
+    org_id = org_id_for(current_user)
+    q = db.query(FilingRegisterEntry).filter(FilingRegisterEntry.org_id == org_id)
+    if report_type:
+        q = q.filter(FilingRegisterEntry.report_type == report_type)
+    entries = q.order_by(FilingRegisterEntry.submitted_at.desc()).all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\r\n")
+    writer.writerow([
+        "id", "report_type", "report_ref", "report_id",
+        "austrac_submission_ref", "submitted_by", "submitted_at",
+        "status", "acknowledgement_ref", "acknowledgement_at",
+        "amount_aud", "notes", "supersedes_id", "created_at",
+    ])
+    for e in entries:
+        writer.writerow([
+            e.id, e.report_type.value if e.report_type else "",
+            e.report_ref or "", e.report_id or "",
+            e.austrac_submission_ref or "", e.submitted_by or "",
+            e.submitted_at or "", e.status or "",
+            e.acknowledgement_ref or "", e.acknowledgement_at or "",
+            e.amount_aud or "", e.notes or "",
+            e.supersedes_id or "", e.created_at or "",
+        ])
+
+    buf.seek(0)
+    filename = f"filing-register-{org_id}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Pre-submission validation ─────────────────────────────────────────────────
+
+def _validate_ifti(r: IFTIReport) -> list[str]:
+    errors = []
+    if not r.date_received:
+        errors.append("date_received is required")
+    if not r.date_available:
+        errors.append("date_available is required")
+    if not r.total_amount or r.total_amount <= 0:
+        errors.append("total_amount must be > 0")
+    if not r.currency:
+        errors.append("currency is required")
+    if not r.direction:
+        errors.append("direction (incoming/outgoing) is required")
+    if not r.reporter_name:
+        errors.append("reporter_name is required")
+    if not r.reporter_austrac_id:
+        errors.append("reporter_austrac_id is required (your AUSTRAC reporting entity ID)")
+    return errors
+
+
+def _validate_ttr(r: TTRReport) -> list[str]:
+    errors = []
+    if not r.transaction_date:
+        errors.append("transaction_date is required")
+    if not r.total_amount or r.total_amount < 10000:
+        errors.append("total_amount must be >= AUD 10,000 for a TTR")
+    if not r.customer_name:
+        errors.append("customer_name is required")
+    if not r.reporter_name:
+        errors.append("reporter_name is required")
+    if not r.reporter_austrac_id:
+        errors.append("reporter_austrac_id is required")
+    return errors
+
+
+def _validate_smr(r: SMRReport) -> list[str]:
+    errors = []
+    if not r.matter_date:
+        errors.append("matter_date is required")
+    if not r.suspicion_grounds or len(r.suspicion_grounds.strip()) < 10:
+        errors.append("suspicion_grounds must be provided (minimum 10 characters)")
+    if not r.designated_svcs:
+        errors.append("designated_svcs is required (at least 1 AUSTRAC service code, per SMR-2-0)")
+    if not r.susp_reason_codes:
+        errors.append("susp_reason_codes is required (at least 1 suspicion reason)")
+    if not r.offence_type:
+        errors.append("offence_type is required (additionalDetails.offence — MANDATORY per SMR-2-0)")
+    if not r.grand_total or r.grand_total <= 0:
+        errors.append("grand_total is required (smDetails.grandTotal — MANDATORY per SMR-2-0)")
+    if not r.mlro_sign_off:
+        errors.append("MLRO sign-off is required before submission")
+    if not r.reporter_name:
+        errors.append("reporter_name is required")
+    if not r.reporter_austrac_id:
+        errors.append("reporter_austrac_id is required")
+    return errors
+
+
+@router.get("/ifti/{report_id}/validate")
+def validate_ifti(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """Validate mandatory AUSTRAC fields before submission. Returns error list."""
+    r = _get_ifti_or_404(report_id, org_id_for(current_user), db)
+    errors = _validate_ifti(r)
+    return {"report_id": report_id, "valid": len(errors) == 0,
+            "errors": errors, "error_count": len(errors)}
+
+
+@router.get("/ttr/{report_id}/validate")
+def validate_ttr(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """Validate mandatory AUSTRAC fields before submission."""
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    errors = _validate_ttr(r)
+    return {"report_id": report_id, "valid": len(errors) == 0,
+            "errors": errors, "error_count": len(errors)}
+
+
+@router.get("/smr/{report_id}/validate")
+def validate_smr_report(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Validate all mandatory AUSTRAC SMR-2-0 fields before submission.
+    Includes MLRO sign-off check. Decision to lodge remains with the reporting entity.
+    """
+    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    errors = _validate_smr(r)
+    return {
+        "report_id": report_id,
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "error_count": len(errors),
+        "disclaimer": "Validation checks mandatory fields only. Decisions to lodge with AUSTRAC remain with the reporting entity.",
+    }
+
+
+# ── Rejection → re-draft ──────────────────────────────────────────────────────
+
+@router.post("/ifti/{report_id}/redraft")
+def redraft_ifti(
+    report_id: str,
+    reason: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """Reset a rejected IFTI to draft for correction and resubmission."""
+    r = _get_ifti_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.rejected:
+        raise HTTPException(409, f"Only rejected reports can be redrafted (current: {r.status.value})")
+    r.status = ReportStatus.draft
+    r.rejected_reason = None
+    r.approved_by = None
+    r.approved_at = None
+    r.submitted_by = None
+    r.submitted_at = None
+    r.submission_reference = None
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"report_id": report_id, "status": r.status.value,
+            "note": reason or "Redrafted for correction after rejection"}
+
+
+@router.post("/ttr/{report_id}/redraft")
+def redraft_ttr(
+    report_id: str,
+    reason: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """Reset a rejected TTR to draft for correction."""
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.rejected:
+        raise HTTPException(409, f"Only rejected reports can be redrafted (current: {r.status.value})")
+    r.status = ReportStatus.draft
+    r.rejected_reason = None
+    r.approved_by = None
+    r.approved_at = None
+    r.submitted_by = None
+    r.submitted_at = None
+    r.submission_reference = None
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"report_id": report_id, "status": r.status.value}
+
+
+@router.post("/smr/{report_id}/redraft")
+def redraft_smr(
+    report_id: str,
+    reason: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Reset a rejected SMR to draft for correction.
+    MLRO sign-off is cleared and must be re-obtained before resubmission.
+    """
+    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    if r.status != ReportStatus.rejected:
+        raise HTTPException(409, f"Only rejected reports can be redrafted (current: {r.status.value})")
+    r.status = ReportStatus.draft
+    r.rejected_reason = None
+    r.mlro_sign_off = None
+    r.mlro_signed_at = None
+    r.mlro_sign_off_notes = None
+    r.submitted_by = None
+    r.submitted_at = None
+    r.submission_reference = None
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {
+        "report_id": report_id,
+        "status": r.status.value,
+        "note": "MLRO sign-off cleared — must be re-obtained before resubmission.",
+    }
 
 
 # ── Serialisers ───────────────────────────────────────────────────────────────
