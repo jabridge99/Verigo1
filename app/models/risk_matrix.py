@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum, Float,
-    ForeignKey, Integer, String, Text, UniqueConstraint, func,
+    ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func,
 )
 
 from app.db.database import Base
@@ -23,6 +23,15 @@ class QuestionAnswer(str, enum.Enum):
     yes             = "yes"
     no              = "no"
     not_applicable  = "not_applicable"
+
+
+class QuestionCategory(str, enum.Enum):
+    customer_risk    = "customer_risk"    # PEP, complexity, identity
+    transaction_risk = "transaction_risk" # consistency, threshold, third-party
+    geographic_risk  = "geographic_risk"  # FATF grey/black, sanctions, corruption
+    crypto_risk      = "crypto_risk"      # wallet type, mixer, sanctions
+    source_of_funds  = "source_of_funds"  # SOF/SOW verification
+    general          = "general"          # catch-all / org-specific
 
 
 class OrgMonitoringConfig(Base):
@@ -97,6 +106,13 @@ class OrgApprovalQuestion(Base):
     # A "yes" answer means compliant (lower risk); "no" means non-compliant (flag).
     # "not_applicable" is excluded from the score calculation.
     compliant_answer    = Column(Enum(QuestionAnswer), default=QuestionAnswer.yes)
+
+    category            = Column(Enum(QuestionCategory), default=QuestionCategory.general,
+                                 nullable=False, index=True)
+    risk_weight         = Column(Float, default=1.0)        # relative weight within category
+    applicable_industries = Column(JSON, default=list)      # [] = all industries
+    template_ref        = Column(String(100))               # e.g. "fatf_crypto_v1"
+    is_system           = Column(Boolean, default=False)    # seeded by platform
 
     created_by  = Column(String)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())

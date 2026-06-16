@@ -629,3 +629,256 @@ def answer_approval_questions(
             "All regulatory decisions remain with the reporting entity."
         ),
     }
+
+
+# ── Live Decision Support Panel ───────────────────────────────────────────────
+
+@router.get("/{txn_id}/live-panel")
+def get_live_decision_panel(
+    txn_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Real-time decision support panel for a transaction.
+
+    Computes weighted risk scores from the org's OrgRiskFactor configuration
+    and evaluates AUSTRAC regulatory obligation indicators in real time.
+
+    Answers: "What should the compliance officer consider next?"
+
+    Use cases:
+      - Display alongside the transaction entry screen
+      - Show before approving / releasing a transaction
+      - Refresh after adding evidence or answering questions
+
+    Risk dimensions:
+      customer | geographic | product | transaction | behaviour | crypto
+
+    Regulatory indicators (never auto-submitted):
+      Potential IFTI | Potential TTR | Potential SMR | Potential EDD
+      Source of Funds request | Customer Review
+
+    DISCLAIMER: This panel is decision support guidance only.
+    All compliance decisions remain with the reporting entity.
+    """
+    from app.services.decision_support_service import build_live_panel
+    from app.models.transaction import CustomerBehaviourProfile
+    from app.models.organisation import Organisation
+
+    org_id = org_id_for(current_user)
+    txn = _get_transaction_or_404(txn_id, org_id, db)
+
+    customer = db.query(Customer).filter_by(id=txn.customer_id, org_id=org_id).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found for this transaction")
+
+    org = db.query(Organisation).filter_by(id=org_id).first()
+
+    crypto_detail = db.query(TransactionCryptoDetail).filter_by(transaction_id=txn_id).first()
+    behaviour_profile = db.query(CustomerBehaviourProfile).filter_by(
+        customer_id=txn.customer_id, org_id=org_id
+    ).first()
+
+    # Get latest alert score for this transaction
+    latest_alert = (
+        db.query(TransactionAlert)
+        .filter_by(transaction_id=txn_id, org_id=org_id)
+        .order_by(TransactionAlert.trigger_date.desc())
+        .first()
+    )
+    alert_score = float(latest_alert.alert_score or 0) if latest_alert else 0.0
+    alert_breakdown = (latest_alert.score_breakdown or {}) if latest_alert else {}
+
+    panel = build_live_panel(
+        db=db,
+        org_id=org_id,
+        transaction=txn,
+        customer=customer,
+        org=org,
+        crypto_detail=crypto_detail,
+        behaviour_profile=behaviour_profile,
+        alert_score=alert_score,
+        alert_breakdown=alert_breakdown,
+    )
+
+    # Enrich with transaction and customer context
+    panel["transaction_context"] = {
+        "transaction_ref": txn.transaction_ref,
+        "amount": txn.amount,
+        "amount_aud": txn.amount_aud,
+        "currency": txn.currency,
+        "transaction_type": txn.transaction_type.value if txn.transaction_type else None,
+        "payment_method": txn.payment_method.value if txn.payment_method else None,
+        "direction": txn.direction.value if txn.direction else None,
+        "source_country": txn.source_country,
+        "destination_country": txn.destination_country,
+        "is_cross_border": txn.is_cross_border,
+        "is_near_threshold": txn.is_near_threshold,
+        "is_structuring_suspect": txn.is_structuring_suspect,
+        "transaction_date": txn.transaction_date.isoformat() if txn.transaction_date else None,
+    }
+    panel["customer_context"] = {
+        "customer_id": customer.id,
+        "risk_level": customer.risk_level.value if customer.risk_level else None,
+        "is_pep": customer.is_pep,
+        "is_sanctions_match": customer.is_sanctions_match,
+        "cdd_level": customer.cdd_level.value if customer.cdd_level else None,
+    }
+    if latest_alert:
+        panel["latest_alert"] = {
+            "alert_id": latest_alert.id,
+            "alert_ref": latest_alert.alert_ref,
+            "severity": latest_alert.severity.value if latest_alert.severity else None,
+            "status": latest_alert.status.value if latest_alert.status else None,
+            "alert_score": latest_alert.alert_score,
+        }
+
+    return panel
+
+
+# ── Draft Report Prefill ──────────────────────────────────────────────────────
+
+@router.get("/{txn_id}/draft-report-prefill/{report_type}")
+def get_draft_report_prefill(
+    txn_id: str,
+    report_type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Pre-populate a draft regulatory report from transaction data.
+
+    report_type: "ifti" | "ttr" | "smr"
+
+    The system pre-fills available fields — the compliance officer must:
+      1. Review and edit all pre-filled data
+      2. Obtain MLRO sign-off (SMR)
+      3. Make the final lodgement decision
+
+    The system NEVER submits reports automatically.
+
+    DISCLAIMER: Pre-filled data is a workflow assistance tool.
+    The reporting entity bears sole responsibility for the accuracy of
+    all reports lodged with AUSTRAC. This system does not make
+    regulatory determinations.
+    """
+    from app.services.regulatory_decision_service import (
+        prefill_ifti_data, prefill_ttr_data, prefill_smr_data, evaluate_transaction
+    )
+    from app.models.transaction import CustomerBehaviourProfile
+    from app.models.organisation import Organisation
+
+    if report_type not in ("ifti", "ttr", "smr"):
+        raise HTTPException(422, "report_type must be one of: ifti, ttr, smr")
+
+    org_id = org_id_for(current_user)
+    txn = _get_transaction_or_404(txn_id, org_id, db)
+
+    customer = db.query(Customer).filter_by(id=txn.customer_id, org_id=org_id).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    org = db.query(Organisation).filter_by(id=org_id).first()
+    crypto_detail = db.query(TransactionCryptoDetail).filter_by(transaction_id=txn_id).first()
+
+    latest_alert = (
+        db.query(TransactionAlert)
+        .filter_by(transaction_id=txn_id, org_id=org_id)
+        .order_by(TransactionAlert.trigger_date.desc())
+        .first()
+    )
+    alert_score = float(latest_alert.alert_score or 0) if latest_alert else 0.0
+
+    if report_type == "ifti":
+        prefill = prefill_ifti_data(txn, customer, org)
+    elif report_type == "ttr":
+        prefill = prefill_ttr_data(txn, customer, org)
+    else:
+        # SMR — include indicator analysis
+        reg_result = evaluate_transaction(
+            transaction=txn, customer=customer, org=org,
+            alert_score=alert_score, crypto_detail=crypto_detail,
+        )
+        prefill = prefill_smr_data(txn, customer, org, reg_result.indicators)
+
+    prefill["transaction_id"] = txn_id
+    prefill["transaction_ref"] = txn.transaction_ref
+    prefill["customer_id"] = str(customer.id)
+    prefill["report_type"] = report_type
+    prefill["next_step"] = f"Create a draft {report_type.upper()} report and link this transaction"
+
+    return prefill
+
+
+# ── Questionnaire template management ─────────────────────────────────────────
+
+@router.post("/questionnaire/seed-industry-template")
+def seed_industry_questionnaire(
+    industry: str,
+    template_keys: Optional[list[str]] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Seed FATF-aligned pre-approval questionnaire templates for this organisation's industry.
+
+    Available templates:
+      fatf_general_v1   — General FATF R.10/12/13 questions (all industries)
+      remittance_v1     — FATF R.14/16 remittance-specific
+      crypto_v1         — FATF VA Guidance 2021 crypto/VASP
+      legal_trust_v1    — FATF R.22/23 legal and trust accounts
+      real_estate_v1    — FATF R.22 real estate
+      psp_v1            — Payment service provider
+
+    Questions are seeded as system questions (is_system=True) — editable and
+    deactivatable by the organisation without developer involvement.
+
+    No developer involvement required after initial setup.
+
+    DISCLAIMER: Templates are compliance workflow prompts.
+    All decisions remain with the reporting entity.
+    """
+    from app.services.questionnaire_seed_service import (
+        seed_questionnaire_for_org, get_available_templates
+    )
+
+    org_id = org_id_for(current_user)
+
+    result = seed_questionnaire_for_org(
+        db=db,
+        org_id=org_id,
+        industry=industry,
+        created_by=current_user.id,
+        template_keys=template_keys,
+        skip_if_exists=False,  # Allow re-seeding with override
+    )
+    return {
+        **result,
+        "available_templates": get_available_templates(),
+        "disclaimer": (
+            "Seeded questions are compliance workflow prompts. "
+            "All decisions remain with the reporting entity."
+        ),
+    }
+
+
+@router.get("/questionnaire/templates")
+def list_questionnaire_templates(
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    List all available FATF-based questionnaire templates with question counts and categories.
+    """
+    from app.services.questionnaire_seed_service import get_available_templates
+    return {
+        "templates": get_available_templates(),
+        "industry_template_map": {
+            "remittance":               ["fatf_general_v1", "remittance_v1"],
+            "cryptocurrency":           ["fatf_general_v1", "crypto_v1"],
+            "payment_service_provider": ["fatf_general_v1", "psp_v1"],
+            "legal":                    ["fatf_general_v1", "legal_trust_v1"],
+            "real_estate":              ["fatf_general_v1", "real_estate_v1"],
+            "general":                  ["fatf_general_v1"],
+        },
+    }

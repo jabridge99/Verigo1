@@ -72,7 +72,7 @@ from app.models.regulatory_recommendation import (
 )
 from app.models.risk_matrix import (
     OrgMonitoringConfig, OrgApprovalQuestion, TransactionQuestionResponse,
-    QuestionAnswer,
+    QuestionAnswer, QuestionCategory,
 )
 from app.models.professional_assessment import (
     ProfessionalAssessment, SOFAssessment, SOWAssessment,
@@ -199,7 +199,7 @@ __all__ = [
     "RecommendationType", "RecommendationStatus", "RecommendationPriority",
     # Risk Matrix & Pre-Approval Questions
     "OrgMonitoringConfig", "OrgApprovalQuestion", "TransactionQuestionResponse",
-    "QuestionAnswer",
+    "QuestionAnswer", "QuestionCategory",
     # Professional Services Assessments
     "ProfessionalAssessment", "SOFAssessment", "SOWAssessment",
     "TransactionPurposeAssessment", "TaxRiskAssessment",
