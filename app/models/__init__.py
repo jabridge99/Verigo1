@@ -131,6 +131,13 @@ from app.models.risk_engine import (
 from app.models.board_report import (
     BoardReport, BoardReportType, BoardReportStatus, ReportPeriod,
 )
+from app.models.training_trigger import (
+    TrainingTriggerRule, TrainingTriggerLog, RegulatoryUpdateEvent,
+    AssessmentOutcomeFlag,
+    TriggerEventType, TriggerTargetType, TriggerStatus,
+    RegulatoryUpdateStatus, IssuingBody, AssessmentFlagStatus,
+    SYSTEM_TRIGGER_RULES,
+)
 from app.models.reporting_group import (
     ReportingGroup, ReportingGroupMember,
     ReportingGroupStatus, GroupType, GroupMemberRole,
@@ -250,6 +257,12 @@ __all__ = [
     "RiskAssessmentRun", "RiskFactorScore", "RiskMitigation", "RiskScoreHistory",
     # Board & Executive Reporting
     "BoardReport", "BoardReportType", "BoardReportStatus", "ReportPeriod",
+    # Risk-Triggered Training
+    "TrainingTriggerRule", "TrainingTriggerLog", "RegulatoryUpdateEvent",
+    "AssessmentOutcomeFlag",
+    "TriggerEventType", "TriggerTargetType", "TriggerStatus",
+    "RegulatoryUpdateStatus", "IssuingBody", "AssessmentFlagStatus",
+    "SYSTEM_TRIGGER_RULES",
     # Reporting Groups
     "ReportingGroup", "ReportingGroupMember",
     "ReportingGroupStatus", "GroupType", "GroupMemberRole",
