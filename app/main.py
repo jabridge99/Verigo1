@@ -82,6 +82,11 @@ from app.api.routes.health import router as health_router
 from app.api.routes.tasks import router as tasks_router
 from app.api.routes.independent_review import router as independent_review_router
 from app.api.routes.board_reporting import router as board_reporting_router
+from app.api.routes.reporting_groups import router as reporting_groups_router
+from app.api.routes.customer_portal_staff import router as customer_portal_staff_router
+from app.api.routes.customer_portal_public import router as customer_portal_public_router
+import app.models.reporting_group  # noqa: F401
+import app.models.customer_portal  # noqa: F401
 import app.models.task  # noqa: F401
 import app.models.governance  # noqa: F401
 import app.models.governance_controls  # noqa: F401
@@ -236,6 +241,9 @@ app.include_router(aml_program_router, prefix="/api/v1")
 app.include_router(governance_training_router, prefix="/api/v1")
 app.include_router(independent_review_router, prefix="/api/v1")
 app.include_router(board_reporting_router, prefix="/api/v1")
+app.include_router(reporting_groups_router, prefix="/api/v1")
+app.include_router(customer_portal_staff_router, prefix="/api/v1")
+app.include_router(customer_portal_public_router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

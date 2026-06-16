@@ -131,6 +131,14 @@ from app.models.risk_engine import (
 from app.models.board_report import (
     BoardReport, BoardReportType, BoardReportStatus, ReportPeriod,
 )
+from app.models.reporting_group import (
+    ReportingGroup, ReportingGroupMember,
+    ReportingGroupStatus, GroupType, GroupMemberRole,
+)
+from app.models.customer_portal import (
+    CustomerPortalSession, CustomerPortalDocument, CustomerPortalQuestionnaireResponse,
+    PortalSessionStatus, PortalType, PortalDocumentStatus,
+)
 from app.models.independent_review import (
     IndependentReview, ReviewFinding, ReviewRecommendation, ReviewAction,
     ReviewType, ReviewScope, ReviewStatus, ReviewRating,
@@ -242,6 +250,12 @@ __all__ = [
     "RiskAssessmentRun", "RiskFactorScore", "RiskMitigation", "RiskScoreHistory",
     # Board & Executive Reporting
     "BoardReport", "BoardReportType", "BoardReportStatus", "ReportPeriod",
+    # Reporting Groups
+    "ReportingGroup", "ReportingGroupMember",
+    "ReportingGroupStatus", "GroupType", "GroupMemberRole",
+    # Customer Portal
+    "CustomerPortalSession", "CustomerPortalDocument", "CustomerPortalQuestionnaireResponse",
+    "PortalSessionStatus", "PortalType", "PortalDocumentStatus",
     # Independent Review
     "IndependentReview", "ReviewFinding", "ReviewRecommendation", "ReviewAction",
     "ReviewType", "ReviewScope", "ReviewStatus", "ReviewRating",
