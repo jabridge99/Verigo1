@@ -128,6 +128,9 @@ from app.models.risk_engine import (
     RiskFramework, RiskCategory, RiskFactor, RiskControl,
     RiskAssessmentRun, RiskFactorScore, RiskMitigation, RiskScoreHistory,
 )
+from app.models.board_report import (
+    BoardReport, BoardReportType, BoardReportStatus, ReportPeriod,
+)
 from app.models.independent_review import (
     IndependentReview, ReviewFinding, ReviewRecommendation, ReviewAction,
     ReviewType, ReviewScope, ReviewStatus, ReviewRating,
@@ -237,6 +240,8 @@ __all__ = [
     "RiskLibraryFactor",
     "RiskFramework", "RiskCategory", "RiskFactor", "RiskControl",
     "RiskAssessmentRun", "RiskFactorScore", "RiskMitigation", "RiskScoreHistory",
+    # Board & Executive Reporting
+    "BoardReport", "BoardReportType", "BoardReportStatus", "ReportPeriod",
     # Independent Review
     "IndependentReview", "ReviewFinding", "ReviewRecommendation", "ReviewAction",
     "ReviewType", "ReviewScope", "ReviewStatus", "ReviewRating",
