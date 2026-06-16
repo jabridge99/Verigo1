@@ -131,6 +131,11 @@ from app.models.risk_engine import (
 from app.models.board_report import (
     BoardReport, BoardReportType, BoardReportStatus, ReportPeriod,
 )
+from app.models.benchmark import (
+    OrgMetricsSnapshot, IndustryBenchmark,
+    BenchmarkMetric, SnapshotPeriod, METRIC_META,
+    MIN_ORG_COUNT_FOR_BENCHMARK, HIGHER_IS_BETTER,
+)
 from app.models.examination_pack import (
     ExaminationPack, ExaminationPackStatus, EXAMINATION_SECTIONS,
 )
@@ -260,6 +265,10 @@ __all__ = [
     "RiskAssessmentRun", "RiskFactorScore", "RiskMitigation", "RiskScoreHistory",
     # Board & Executive Reporting
     "BoardReport", "BoardReportType", "BoardReportStatus", "ReportPeriod",
+    # Benchmarking
+    "OrgMetricsSnapshot", "IndustryBenchmark",
+    "BenchmarkMetric", "SnapshotPeriod", "METRIC_META",
+    "MIN_ORG_COUNT_FOR_BENCHMARK", "HIGHER_IS_BETTER",
     # Examination Pack
     "ExaminationPack", "ExaminationPackStatus", "EXAMINATION_SECTIONS",
     # Risk-Triggered Training

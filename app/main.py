@@ -87,10 +87,12 @@ from app.api.routes.customer_portal_staff import router as customer_portal_staff
 from app.api.routes.customer_portal_public import router as customer_portal_public_router
 from app.api.routes.training_triggers import router as training_triggers_router
 from app.api.routes.examination_packs import router as examination_packs_router
+from app.api.routes.benchmark import router as benchmark_router
 import app.models.reporting_group  # noqa: F401
 import app.models.customer_portal  # noqa: F401
 import app.models.training_trigger  # noqa: F401
 import app.models.examination_pack  # noqa: F401
+import app.models.benchmark  # noqa: F401
 import app.models.task  # noqa: F401
 import app.models.governance  # noqa: F401
 import app.models.governance_controls  # noqa: F401
@@ -250,6 +252,7 @@ app.include_router(customer_portal_staff_router, prefix="/api/v1")
 app.include_router(customer_portal_public_router, prefix="/api/v1")
 app.include_router(training_triggers_router, prefix="/api/v1")
 app.include_router(examination_packs_router, prefix="/api/v1")
+app.include_router(benchmark_router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────
