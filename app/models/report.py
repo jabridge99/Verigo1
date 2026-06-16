@@ -61,6 +61,17 @@ class IFTIDirection(str, enum.Enum):
     outgoing = "outgoing"
 
 
+class TTRIndustryType(str, enum.Enum):
+    """
+    AUSTRAC-defined industry classifications for TTR reporting.
+    Each industry has a distinct set of mandatory and optional fields.
+    """
+    FBS = "FBS"   # Financial and Bullion Services — banks, financial institutions, bullion dealers
+    GS  = "GS"    # Gambling Services — casinos, betting agencies, gaming operators
+    ISI = "ISI"   # Investment/Superannuation/Insurance — wealth management, super funds, life insurance
+    MSB = "MSB"   # Money Services Business — remittance, currency exchange
+
+
 # ── IFTI Report ───────────────────────────────────────────────────────────────
 
 class IFTIReport(Base):
@@ -206,6 +217,18 @@ class TTRReport(Base):
 
     summary = Column(Text)
     due_date = Column(Date, index=True)
+
+    # ── Industry classification ────────────────────────────────────────────────
+    # Determines which AUSTRAC TTR form fields are required and how CSV is structured.
+    industry_type = Column(Enum(TTRIndustryType), nullable=True, index=True)
+
+    # Industry-specific fields (stored as JSON — schema varies per industry_type).
+    # FBS: denomination_breakdown, cash_type, foreign_currency_details
+    # GS:  venue_name, patron_id, gaming_licence, game_type, chip_buy_in, chip_redemption
+    # ISI: policy_number, fund_name, trustee_name, investment_type, beneficiary_name
+    # MSB: send_country, receive_country, exchange_rate_applied, settlement_method,
+    #      agent_name, agent_austrac_id, sender_details, receiver_details
+    industry_detail = Column(JSON, default=dict)
 
     reporter_name = Column(String(255))
     reporter_abn = Column(String(11))

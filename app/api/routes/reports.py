@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -37,6 +38,7 @@ from app.models.report import (
     ReportStatus,
     ReportType,
     SMRReport,
+    TTRIndustryType,
     TTRReport,
 )
 from app.models.transaction import Transaction
@@ -47,6 +49,11 @@ from app.services.reporting_service import (
     generate_ttr_from_transaction,
     register_submission,
     reporting_summary,
+)
+from app.services.ttr_service import (
+    build_industry_detail,
+    build_austrac_submission_payload,
+    generate_ttr_csv,
 )
 
 router = APIRouter(prefix="/reports", tags=["Regulatory Reports"])
@@ -341,6 +348,99 @@ def generate_ttr(
     db.commit()
     db.refresh(report)
     return _ttr_dict(report)
+
+
+@router.post("/ttr/auto-draft/{txn_id}", status_code=status.HTTP_201_CREATED)
+def auto_draft_ttr(
+    txn_id: str,
+    industry_type: TTRIndustryType = Query(..., description="AUSTRAC industry classification: FBS | GS | ISI | MSB"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Generate an industry-specific TTR draft pre-populated with AUSTRAC-format fields.
+    industry_type determines which metadata schema is applied (FBS/GS/ISI/MSB).
+    """
+    org_id = org_id_for(current_user)
+    txn = db.query(Transaction).filter(
+        Transaction.id == txn_id, Transaction.org_id == org_id
+    ).first()
+    if not txn:
+        raise HTTPException(404, "Transaction not found.")
+
+    amount_aud = txn.amount_aud or txn.amount
+    if amount_aud < 10_000:
+        raise HTTPException(422, "Transaction amount is below the AUD 10,000 TTR threshold.")
+
+    customer = db.query(Customer).filter(
+        Customer.id == txn.customer_id, Customer.org_id == org_id
+    ).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found.")
+
+    report = generate_ttr_from_transaction(txn, customer, db, prepared_by=current_user.id)
+    report.industry_type = industry_type
+    report.industry_detail = build_industry_detail(txn, customer, industry_type)
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return _ttr_dict(report)
+
+
+@router.get("/ttr/{report_id}/export-csv")
+def export_ttr_csv(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Export an approved TTR as AUSTRAC-format CSV (CRLF line endings).
+    Requires industry_type to be set on the report.
+    DISCLAIMER: Review the export carefully before lodging with AUSTRAC.
+    """
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    if not r.industry_type:
+        raise HTTPException(422, "Report has no industry_type set. Update the report first.")
+
+    csv_bytes = generate_ttr_csv(r).encode("utf-8")
+    filename = f"TTR_{r.report_ref or r.id}.csv"
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/ttr/{report_id}/submit-austrac")
+def submit_ttr_austrac(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    """
+    Build the AUSTRAC Connect API v2 submission payload.
+    Returns the payload for review — actual HTTP submission requires a
+    Data Exchange Agreement and OAuth 2.0 credentials with AUSTRAC Connect.
+    DISCLAIMER: All decisions to lodge with AUSTRAC remain with the reporting entity.
+    """
+    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    if r.status not in (ReportStatus.approved, ReportStatus.submitted):
+        raise HTTPException(409, "Report must be approved before AUSTRAC submission.")
+    if not r.industry_type:
+        raise HTTPException(422, "Report has no industry_type set.")
+
+    payload = build_austrac_submission_payload(r)
+    return {
+        "report_id": r.id,
+        "report_ref": r.report_ref,
+        "industry_type": r.industry_type.value if r.industry_type else None,
+        "austrac_payload": payload,
+        "disclaimer": (
+            "This payload is for review only. Actual lodgement with AUSTRAC requires "
+            "a valid Data Exchange Agreement and AUSTRAC Connect OAuth 2.0 credentials. "
+            "All decisions to lodge remain with the reporting entity."
+        ),
+    }
 
 
 @router.get("/ttr/{report_id}")
