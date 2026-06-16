@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_default: str = "200/minute"
     rate_limit_auth: str = "20/minute"
+    redis_url: str = ""  # e.g. redis://localhost:6379/0 — optional, enables Redis-backed rate limiting & cache
 
     # ── Document storage ──────────────────────────────────────────────────────
     document_store_path: str = "./uploads"
