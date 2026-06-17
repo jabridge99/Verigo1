@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     storage_encryption_key: str = ""
 
     # ── Email ─────────────────────────────────────────────────────────────────
+    # console (dev logging) | smtp | resend
+    email_backend: str = "console"
+    resend_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

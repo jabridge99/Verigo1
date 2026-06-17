@@ -338,6 +338,9 @@ def request_email_verification(
         record_security_event(
             db, "email_verification_requested", user.user_id, ip=_client_ip(request)
         )
+        from app.services.email_service import send_email_verification
+
+        send_email_verification(user.email, user.full_name, token)
         if not settings.is_production:
             return {"detail": "Verification email sent", "dev_token": token}
     # Always same response — prevents user enumeration
@@ -373,6 +376,9 @@ def request_password_reset(
         record_security_event(
             db, "password_reset_requested", user.user_id, ip=_client_ip(request)
         )
+        from app.services.email_service import send_password_reset
+
+        send_password_reset(user.email, user.full_name, token)
         if not settings.is_production:
             return {"detail": "Password reset email sent", "dev_token": token}
     # Always same response — prevents user enumeration
