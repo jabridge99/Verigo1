@@ -179,6 +179,18 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
     rows: [
       { feature: 'Essential integrations (Email, Cloud Storage)', values: [true, true, true, true] },
       { feature: 'AML data connectors', values: [false, false, true, true] },
+      { feature: 'API access & webhooks', values: [false, false, true, true] },
+      { feature: 'API calls / month', values: ['—', '10,000', '100,000', 'Unlimited'] },
+      { feature: 'Custom domain', values: [false, false, false, true] },
+    ],
+  },
+  {
+    group: 'Compliance Records',
+    rows: [
+      { feature: 'Immutable audit log', values: [true, true, true, true] },
+      { feature: 'Document vault storage', values: ['1 GB', '5 GB', '50 GB', '500 GB'] },
+      { feature: 'AUSTRAC-aligned data retention (7–10 yr)', values: [true, true, true, true] },
+      { feature: 'Legal hold management', values: [false, false, false, true] },
     ],
   },
   {
