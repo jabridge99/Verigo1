@@ -5,7 +5,10 @@ from app.db.database import Base
 
 
 class AuditLog(Base):
-    __tablename__ = "audit_logs"
+    """Legacy simple audit log — superseded by app.models.audit_log.AuditLog.
+    Kept only for existing analytics_service/audit_service/routes.audit consumers;
+    table renamed to avoid colliding with the canonical audit_logs table."""
+    __tablename__ = "legacy_audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
     log_id = Column(String(60), unique=True, index=True, nullable=False)

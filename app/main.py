@@ -114,6 +114,15 @@ from app.middleware import (
 
 setup_logging()
 
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        traces_sample_rate=0.1 if settings.is_production else 0.0,
+    )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

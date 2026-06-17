@@ -129,10 +129,22 @@ class Settings(BaseSettings):
             if self.secret_key == "change-me-in-production":
                 raise ValueError("SECRET_KEY must be changed in production")
             if self.database_url.startswith("sqlite"):
+                raise ValueError(
+                    "SQLite is not supported in production — set DATABASE_URL to a "
+                    "PostgreSQL connection string (data loss / no concurrency guarantees)"
+                )
+            if self.cors_origins == "*":
+                raise ValueError(
+                    "CORS_ORIGINS must be set to explicit origin(s) in production — "
+                    "wildcard '*' combined with allow_credentials is unsafe"
+                )
+            if not self.redis_url:
                 import warnings
 
                 warnings.warn(
-                    "SQLite not recommended for production — set DATABASE_URL to PostgreSQL"
+                    "REDIS_URL not set in production — JWT revocation and rate "
+                    "limiting will be per-process only and will not work correctly "
+                    "across multiple workers/instances."
                 )
         return self
 

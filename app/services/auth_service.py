@@ -2,7 +2,7 @@
 SECURITY-HARDENED Authentication Service.
 
 Changes vs original:
- - TOKEN_BLACKLIST: in-process set for JWT revocation (upgrade to Redis in prod)
+ - TOKEN_BLACKLIST: Redis-backed JWT revocation (see app.services.token_blacklist)
  - record_security_event(): writes to security_events table
  - create_magic_link(): tokens now SHA-256 hashed before DB storage
  - verify_magic_link(): compares hash, not plaintext
@@ -23,14 +23,12 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.user import MagicLinkToken, User, UserStatus
+from app.services.token_blacklist import TOKEN_BLACKLIST  # noqa: F401 — re-exported for callers
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 MAGIC_LINK_EXPIRY_MINUTES = 15
 ACCESS_TOKEN_EXPIRY_MINUTES = 60 * 4 if settings.is_production else 60 * 8
-
-# In-process JWT blacklist — upgrade to Redis for multi-worker deployments
-TOKEN_BLACKLIST: set[str] = set()
 
 
 # ── Password ──────────────────────────────────────────────────────────────────

@@ -159,7 +159,12 @@ def logout(
 ):
     if authorization:
         raw = authorization.removeprefix("Bearer ").strip()
-        TOKEN_BLACKLIST.add(hashlib.sha256(raw.encode()).hexdigest()[:16])
+        from app.services.auth_service import ACCESS_TOKEN_EXPIRY_MINUTES
+
+        TOKEN_BLACKLIST.add(
+            hashlib.sha256(raw.encode()).hexdigest()[:16],
+            ttl_seconds=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+        )
     return {"detail": "Logged out successfully"}
 
 
