@@ -42,6 +42,12 @@ class OrgStatus(str, enum.Enum):
     trial = "trial"
 
 
+class RiskProfile(str, enum.Enum):
+    low = "low"
+    standard = "standard"
+    high = "high"
+
+
 class MembershipStatus(str, enum.Enum):
     active = "active"
     invited = "invited"
@@ -56,6 +62,7 @@ class Organisation(Base):
     name = Column(String(200), nullable=False)
     slug = Column(String(100), unique=True, index=True, nullable=False)
     industry_id = Column(String(100), index=True)  # links to an IndustryTenant pack
+    risk_profile = Column(Enum(RiskProfile))  # set during self-service sign-up
     status = Column(Enum(OrgStatus), default=OrgStatus.trial)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

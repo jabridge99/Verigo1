@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+import app.models.aml_program  # noqa: F401
 import app.models.api_key  # noqa: F401
 import app.models.audit  # noqa: F401
 import app.models.billing  # noqa: F401

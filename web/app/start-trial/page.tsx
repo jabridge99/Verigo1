@@ -1,6 +1,5 @@
-import Link from 'next/link'
-import { CheckCircle, ArrowRight, Shield } from 'lucide-react'
-import { industries } from '@/lib/industries'
+import { CheckCircle, Shield } from 'lucide-react'
+import SignupWizard from '@/components/SignupWizard'
 
 export const metadata = {
   title: 'Start Free Trial | Verigo',
@@ -44,54 +43,8 @@ export default function StartTrialPage() {
               </div>
             </div>
 
-            {/* Right column — form */}
-            <div className="pub-card">
-              <h2 className="text-xl font-bold text-slate-900 mb-6">Create your account</h2>
-              <form className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">First name</label>
-                    <input type="text" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Jane" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Last name</label>
-                    <input type="text" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Smith" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Work email</label>
-                  <input type="email" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="jane@company.com.au" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Company name</label>
-                  <input type="text" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Acme Pty Ltd" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Industry</label>
-                  <select className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
-                    <option value="">Select your industry</option>
-                    {industries.map(i => (
-                      <option key={i.id} value={i.id}>
-                        {i.label}{i.regime === 'expanded' ? ' (Tranche 2 — 2026)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
-                  <input type="password" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Minimum 12 characters" />
-                </div>
-                <button type="submit" className="pub-btn-primary w-full justify-center py-3">
-                  Create Account & Start Trial <ArrowRight className="w-4 h-4" />
-                </button>
-                <p className="text-slate-400 text-xs text-center">
-                  By creating an account you agree to our{' '}
-                  <Link href="#" className="underline hover:text-slate-600">Terms of Service</Link>{' '}
-                  and{' '}
-                  <Link href="#" className="underline hover:text-slate-600">Privacy Policy</Link>.
-                </p>
-              </form>
-            </div>
+            {/* Right column — sign-up wizard */}
+            <SignupWizard />
           </div>
         </div>
       </section>

@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
-from app.models.organisation import MembershipStatus, OrgStatus
+from app.models.organisation import MembershipStatus, OrgStatus, RiskProfile
 
 
 class OrganisationCreate(BaseModel):
@@ -15,6 +15,7 @@ class OrganisationUpdate(BaseModel):
     name: Optional[str] = None
     status: Optional[OrgStatus] = None
     industry_id: Optional[str] = None
+    risk_profile: Optional[RiskProfile] = None
 
 
 class OrganisationResponse(BaseModel):
@@ -23,6 +24,7 @@ class OrganisationResponse(BaseModel):
     name: str
     slug: str
     industry_id: Optional[str] = None
+    risk_profile: Optional[RiskProfile] = None
     status: OrgStatus
     created_at: Optional[datetime] = None
 

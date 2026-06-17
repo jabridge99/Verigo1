@@ -9,6 +9,7 @@ from app.api.routes.auth import _current_user
 from app.db.database import get_db
 from app.models.organisation import MembershipStatus, Organisation, OrganisationUser, Permission, Role
 from app.models.user import User
+from app.schemas.aml_program import AMLProgramResponse
 from app.schemas.organisation import (
     MemberAdd,
     MemberResponse,
@@ -19,6 +20,7 @@ from app.schemas.organisation import (
     PermissionResponse,
     RoleResponse,
 )
+from app.services import aml_program_service
 from app.services.auth_service import get_user_by_email
 from app.services.org_service import (
     SYSTEM_ROLE_TEMPLATES,
@@ -101,6 +103,51 @@ def update(
     db.commit()
     db.refresh(org)
     return org
+
+
+# ── AML/CTF Program (Phase C self-service sign-up) ─────────────────────────────
+
+
+def _program_response(db: Session, program) -> AMLProgramResponse:
+    items = aml_program_service.get_program_items(db, program)
+    return AMLProgramResponse(
+        program_id=program.program_id,
+        industry_id=program.industry_id,
+        risk_profile=program.risk_profile,
+        status=program.status,
+        version=program.version,
+        generated_at=program.generated_at,
+        items=items,
+    )
+
+
+@router.post("/{org_id}/aml-program/generate", response_model=AMLProgramResponse, status_code=201)
+def generate_aml_program(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    try:
+        program = aml_program_service.generate_program(db, org)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _program_response(db, program)
+
+
+@router.get("/{org_id}/aml-program", response_model=AMLProgramResponse)
+def get_aml_program(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    org = _get_org_or_404(db, org_id)
+    _require_member(db, org, current_user)
+    program = aml_program_service.get_program(db, org)
+    if not program:
+        raise HTTPException(404, "No AML program generated yet")
+    return _program_response(db, program)
 
 
 # ── Members ──────────────────────────────────────────────────────────────────
