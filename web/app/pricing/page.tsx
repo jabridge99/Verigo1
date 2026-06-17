@@ -45,10 +45,12 @@ const plans = [
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
       { label: 'AML/CTF Program — basic reference template', included: true, note: true },
-      { label: 'IFTI IN, OUT & bulk import', included: true },
       { label: 'SMR & TTR reporting', included: true },
       { label: 'Basic transaction monitoring', included: true },
       { label: 'Essential integrations (Email, Cloud Storage)', included: true },
+      { label: 'IFTI IN & OUT reporting', included: false },
+      { label: 'IFTI bulk import', included: false },
+      { label: 'Report review & MLRO sign-off', included: false },
       { label: 'Sanctions & PEP screening', included: false },
       { label: 'Adverse media screening', included: false },
       { label: 'Case management', included: false },
@@ -152,11 +154,11 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
   {
     group: 'AUSTRAC Reporting',
     rows: [
-      { feature: 'IFTI IN & OUT reporting', values: [true, true, true, true] },
-      { feature: 'IFTI bulk import', values: [true, true, true, true] },
+      { feature: 'IFTI IN & OUT reporting', values: [true, false, true, true] },
+      { feature: 'IFTI bulk import', values: [true, false, true, true] },
       { feature: 'SMR reporting', values: [true, true, true, true] },
       { feature: 'TTR reporting', values: [true, true, true, true] },
-      { feature: 'Report review & MLRO sign-off', values: [true, true, true, true] },
+      { feature: 'Report review & MLRO sign-off', values: [true, false, true, true] },
     ],
   },
   {
