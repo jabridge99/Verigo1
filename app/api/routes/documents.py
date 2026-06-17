@@ -23,6 +23,7 @@ from app.models.user import User, UserRole
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.services import document_service as svc
 from app.services.document_service import ALLOWED_MIME, MAX_SIZE
+from app.services.tenant_scope import assert_tenant
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -72,17 +73,17 @@ def _verify_magic(content: bytes, declared_mime: str) -> bool:
     return False
 
 
-def _assert_tenant(current_user: User, doc_industry_id: Optional[str]):
-    """Explicit check — admin sees all, non-admin must match their industry_id."""
-    if current_user.role == UserRole.admin:
-        return  # admin has cross-tenant read access by design
-    if doc_industry_id and doc_industry_id != current_user.industry_id:
-        raise HTTPException(403, "Cross-tenant document access denied")
+def _assert_tenant(current_user: User, doc) -> None:
+    assert_tenant(current_user, doc.organisation_id, doc.industry_id)
 
 
 def _industry_scope(current_user: User) -> Optional[str]:
     """Return the industry_id to filter on, or None for admin (no filter)."""
     return None if current_user.role == UserRole.admin else current_user.industry_id
+
+
+def _org_scope(current_user: User) -> Optional[int]:
+    return None if current_user.role == UserRole.admin else current_user.primary_organisation_id
 
 
 @router.post("", response_model=DocumentResponse, status_code=201)
@@ -122,6 +123,7 @@ async def upload_document(
         mime_type=mime,
         uploaded_by=current_user.user_id,
         industry_id=current_user.industry_id,
+        organisation_id=current_user.primary_organisation_id,
         category=category,
         description=description,
         entity_type=entity_type,
@@ -142,6 +144,7 @@ def list_documents(
     return svc.list_documents(
         db,
         industry_id=_industry_scope(current_user),
+        organisation_id=_org_scope(current_user),
         category=category,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -155,7 +158,7 @@ def document_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.document_stats(db, _industry_scope(current_user))
+    return svc.document_stats(db, _industry_scope(current_user), _org_scope(current_user))
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)
@@ -167,7 +170,7 @@ def get_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    _assert_tenant(current_user, doc.industry_id)
+    _assert_tenant(current_user, doc)
     return doc
 
 
@@ -180,7 +183,7 @@ def download_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    _assert_tenant(current_user, doc.industry_id)
+    _assert_tenant(current_user, doc)
     path = svc.get_file_path(doc)
     if not path.exists():
         raise HTTPException(404, "File not found on storage")
@@ -202,7 +205,9 @@ def update_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    doc = svc.update_document(db, doc_id, data, _industry_scope(current_user))
+    doc = svc.update_document(
+        db, doc_id, data, _industry_scope(current_user), _org_scope(current_user)
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc
@@ -216,7 +221,9 @@ def archive_document(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    doc = svc.archive_document(db, doc_id, _industry_scope(current_user))
+    doc = svc.archive_document(
+        db, doc_id, _industry_scope(current_user), _org_scope(current_user)
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc
@@ -228,5 +235,5 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    if not svc.delete_document(db, doc_id, _industry_scope(current_user)):
+    if not svc.delete_document(db, doc_id, _industry_scope(current_user), _org_scope(current_user)):
         raise HTTPException(404, "Document not found")

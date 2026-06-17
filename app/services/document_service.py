@@ -8,8 +8,8 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from sqlalchemy import desc
-from sqlalchemy.orm import Session
+from sqlalchemy import desc, or_
+from sqlalchemy.orm import Session, Query
 
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.schemas.document import DocumentUpdate
@@ -39,6 +39,19 @@ def _doc_id() -> str:
     return f"DOC-{uuid.uuid4().hex[:12].upper()}"
 
 
+def _scope(q: Query, industry_id: Optional[str], organisation_id: Optional[int]) -> Query:
+    if organisation_id:
+        return q.filter(
+            or_(
+                Document.organisation_id == organisation_id,
+                (Document.organisation_id.is_(None)) & (Document.industry_id == industry_id),
+            )
+        )
+    if industry_id:
+        return q.filter(Document.industry_id == industry_id)
+    return q
+
+
 def save_file(content: bytes, original_name: str) -> tuple[str, int]:
     ext = Path(original_name).suffix.lower()
     stored = f"{uuid.uuid4().hex}{ext}"
@@ -54,6 +67,7 @@ def create_document(
     mime_type: str,
     uploaded_by: str,
     industry_id: Optional[str],
+    organisation_id: Optional[int] = None,
     category: DocumentCategory = DocumentCategory.other,
     description: Optional[str] = None,
     entity_type: Optional[str] = None,
@@ -72,6 +86,7 @@ def create_document(
         entity_id=entity_id,
         uploaded_by=uploaded_by,
         industry_id=industry_id,
+        organisation_id=organisation_id,
     )
     db.add(doc)
     db.commit()
@@ -82,6 +97,7 @@ def create_document(
 def list_documents(
     db: Session,
     industry_id: Optional[str] = None,
+    organisation_id: Optional[int] = None,
     category: Optional[DocumentCategory] = None,
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
@@ -90,8 +106,7 @@ def list_documents(
     offset: int = 0,
 ) -> List[Document]:
     q = db.query(Document).filter(Document.status == DocumentStatus.active)
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     if category:
         q = q.filter(Document.category == category)
     if entity_type:
@@ -119,13 +134,16 @@ def get_file_path(doc: Document) -> Path:
 
 
 def update_document(
-    db: Session, doc_id: str, data: DocumentUpdate, industry_id: Optional[str]
+    db: Session,
+    doc_id: str,
+    data: DocumentUpdate,
+    industry_id: Optional[str],
+    organisation_id: Optional[int] = None,
 ) -> Optional[Document]:
     q = db.query(Document).filter(
         Document.doc_id == doc_id, Document.status == DocumentStatus.active
     )
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     doc = q.first()
     if not doc:
         return None
@@ -137,13 +155,12 @@ def update_document(
 
 
 def archive_document(
-    db: Session, doc_id: str, industry_id: Optional[str]
+    db: Session, doc_id: str, industry_id: Optional[str], organisation_id: Optional[int] = None
 ) -> Optional[Document]:
     q = db.query(Document).filter(
         Document.doc_id == doc_id, Document.status == DocumentStatus.active
     )
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     doc = q.first()
     if not doc:
         return None
@@ -153,10 +170,11 @@ def archive_document(
     return doc
 
 
-def delete_document(db: Session, doc_id: str, industry_id: Optional[str]) -> bool:
+def delete_document(
+    db: Session, doc_id: str, industry_id: Optional[str], organisation_id: Optional[int] = None
+) -> bool:
     q = db.query(Document).filter(Document.doc_id == doc_id)
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     doc = q.first()
     if not doc:
         return False
@@ -169,10 +187,11 @@ def delete_document(db: Session, doc_id: str, industry_id: Optional[str]) -> boo
     return True
 
 
-def document_stats(db: Session, industry_id: Optional[str] = None) -> dict:
+def document_stats(
+    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+) -> dict:
     q = db.query(Document).filter(Document.status == DocumentStatus.active)
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     total = q.count()
     total_bytes = sum(d.size_bytes or 0 for d in q.all())
     by_category: dict = {}

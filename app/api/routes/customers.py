@@ -18,6 +18,7 @@ from app.models.user import User, UserRole
 from app.schemas.customer import CustomerCreate, CustomerResponse, CustomerUpdate
 from app.services.risk_scoring import score_customer, score_to_level
 from app.services.sanctions_screening import screen_name
+from app.services.tenant_scope import assert_tenant, scope_fields, scope_query
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -26,11 +27,8 @@ _PRIVILEGED_FIELDS = {"status", "risk_score", "risk_level", "is_pep"}
 _PRIVILEGED_ROLES = {UserRole.admin, UserRole.mlro, UserRole.compliance}
 
 
-def _assert_tenant(current_user: User, customer_industry_id):
-    if current_user.role == UserRole.admin:
-        return
-    if customer_industry_id and customer_industry_id != current_user.industry_id:
-        raise HTTPException(403, "Cross-tenant access denied")
+def _assert_tenant(current_user: User, customer: Customer):
+    assert_tenant(current_user, customer.organisation_id, customer.industry_id)
 
 
 @router.post("/", response_model=CustomerResponse, status_code=201)
@@ -49,9 +47,7 @@ def onboard_customer(
 
     customer = Customer(
         customer_id=f"CUST-{uuid.uuid4().hex[:10].upper()}",
-        industry_id=current_user.industry_id
-        if current_user.role != UserRole.admin
-        else None,
+        **scope_fields(current_user),
         **payload.model_dump(),
     )
     sanctions = screen_name(payload.full_name)
@@ -79,10 +75,7 @@ def list_customers(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    query = db.query(Customer)
-    # Non-admin users only see their own tenant's customers
-    if current_user.role != UserRole.admin:
-        query = query.filter(Customer.industry_id == current_user.industry_id)
+    query = scope_query(db.query(Customer), Customer, current_user)
     if status:
         query = query.filter(Customer.status == status)
     if risk_level:
@@ -99,7 +92,7 @@ def get_customer(
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
     return customer
 
 
@@ -113,7 +106,7 @@ def update_customer(
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
 
     updates = payload.model_dump(exclude_none=True)
 
@@ -143,7 +136,7 @@ def rescore_customer(
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
 
     sanctions = screen_name(customer.full_name)
     if sanctions["match_found"]:
