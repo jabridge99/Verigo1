@@ -22,7 +22,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import MagicLinkToken, User, UserStatus
+from app.models.user import EmailActionToken, MagicLinkToken, User, UserStatus
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -159,7 +159,7 @@ def create_magic_link(db: Session, email: str) -> str:
     # Invalidate previous unused tokens for this email
     db.query(MagicLinkToken).filter(
         MagicLinkToken.email == email.lower(),
-        not MagicLinkToken.used,
+        MagicLinkToken.used.is_(False),
     ).update({"used": True})
     ml = MagicLinkToken(token=hashed, email=email.lower(), expires_at=expires_at)
     db.add(ml)
@@ -173,7 +173,7 @@ def verify_magic_link(db: Session, plain_token: str) -> Optional[str]:
         db.query(MagicLinkToken)
         .filter(
             MagicLinkToken.token == hashed,
-            not MagicLinkToken.used,
+            MagicLinkToken.used.is_(False),
         )
         .first()
     )
@@ -184,6 +184,73 @@ def verify_magic_link(db: Session, plain_token: str) -> Optional[str]:
     ml.used = True
     db.commit()
     return ml.email
+
+
+# ── Email verification & password reset (hashed, single-use tokens) ──────────
+
+EMAIL_ACTION_EXPIRY_MINUTES = {"verify_email": 60 * 24, "password_reset": 30}
+
+
+def _hash_action_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_email_action_token(db: Session, email: str, purpose: str) -> str:
+    plain = secrets.token_urlsafe(32)
+    hashed = _hash_action_token(plain)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=EMAIL_ACTION_EXPIRY_MINUTES[purpose]
+    )
+    db.query(EmailActionToken).filter(
+        EmailActionToken.email == email.lower(),
+        EmailActionToken.purpose == purpose,
+        EmailActionToken.used.is_(False),
+    ).update({"used": True})
+    rec = EmailActionToken(
+        token=hashed, email=email.lower(), purpose=purpose, expires_at=expires_at
+    )
+    db.add(rec)
+    db.commit()
+    return plain
+
+
+def consume_email_action_token(db: Session, plain_token: str, purpose: str) -> Optional[str]:
+    hashed = _hash_action_token(plain_token)
+    rec = (
+        db.query(EmailActionToken)
+        .filter(
+            EmailActionToken.token == hashed,
+            EmailActionToken.purpose == purpose,
+            EmailActionToken.used.is_(False),
+        )
+        .first()
+    )
+    if not rec:
+        return None
+    if rec.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        return None
+    rec.used = True
+    db.commit()
+    return rec.email
+
+
+# ── Session cookie helpers ───────────────────────────────────────────────────
+
+
+def set_session_cookie(response, token: str) -> None:
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=token,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+        path="/",
+    )
+
+
+def clear_session_cookie(response) -> None:
+    response.delete_cookie(key=settings.session_cookie_name, path="/")
 
 
 # ── Security event logging ────────────────────────────────────────────────────

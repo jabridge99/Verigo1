@@ -39,6 +39,7 @@ export function getToken(): string | null {
 export async function loginWithPassword(email: string, password: string): Promise<AuthUser> {
   const r = await fetch(`${API}/api/v1/auth/login`, {
     method: 'POST',
+    credentials: 'include', // receives the httpOnly session cookie
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   })
@@ -65,6 +66,7 @@ export async function requestMagicLink(email: string): Promise<{ dev_token?: str
 export async function verifyMagicLink(token: string): Promise<AuthUser> {
   const r = await fetch(`${API}/api/v1/auth/magic-link/verify`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   })
@@ -76,6 +78,55 @@ export async function verifyMagicLink(token: string): Promise<AuthUser> {
   const user: AuthUser = { ...data, access_token: data.access_token }
   storeUser(user)
   return user
+}
+
+export async function requestEmailVerification(email: string): Promise<{ dev_token?: string }> {
+  const r = await fetch(`${API}/api/v1/auth/email/verify/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!r.ok) throw new Error('Failed to send verification email')
+  return r.json()
+}
+
+export async function confirmEmailVerification(token: string): Promise<void> {
+  const r = await fetch(`${API}/api/v1/auth/email/verify/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Invalid verification link')
+  }
+}
+
+export async function requestPasswordReset(email: string): Promise<{ dev_token?: string }> {
+  const r = await fetch(`${API}/api/v1/auth/password-reset/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!r.ok) throw new Error('Failed to send password reset email')
+  return r.json()
+}
+
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+  const r = await fetch(`${API}/api/v1/auth/password-reset/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Failed to reset password')
+  }
+}
+
+/** Redirect the browser to start a social login flow. */
+export function oauthLoginUrl(provider: 'google' | 'microsoft'): string {
+  return `${API}/api/v1/auth/oauth/${provider}/login`
 }
 
 // Role hierarchy — higher index = more access

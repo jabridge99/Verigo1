@@ -44,6 +44,16 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:3000"
     api_url: str = "http://localhost:8000"
 
+    # ── OAuth (social login) ─────────────────────────────────────────────────
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_tenant: str = "common"  # or your Azure AD tenant id
+
+    # ── Session cookie ───────────────────────────────────────────────────────
+    session_cookie_name: str = "tvg_session"
+
     # ── Stripe ────────────────────────────────────────────────────────────────
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
