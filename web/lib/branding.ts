@@ -42,10 +42,11 @@ export async function fetchBranding(industryId?: string): Promise<BrandingConfig
   }
 }
 
-export async function saveBranding(token: string, data: Partial<BrandingConfig>): Promise<BrandingConfig> {
+export async function saveBranding(data: Partial<BrandingConfig>): Promise<BrandingConfig> {
   const res = await fetch(`${API}/api/v1/branding`, {
     method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -55,10 +56,10 @@ export async function saveBranding(token: string, data: Partial<BrandingConfig>)
   return res.json();
 }
 
-export async function resetBranding(token: string): Promise<void> {
+export async function resetBranding(): Promise<void> {
   await fetch(`${API}/api/v1/branding`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
   });
 }
 

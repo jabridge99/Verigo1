@@ -4,15 +4,8 @@ import { useState, useEffect } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-function getToken() {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("token") || "";
-}
-
 async function apiFetch(path: string) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  });
+  const res = await fetch(`${API}${path}`, { credentials: "include" });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }

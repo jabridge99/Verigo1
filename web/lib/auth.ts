@@ -1,8 +1,7 @@
 'use client'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-const TOKEN_KEY = 'tvg_token'
-const USER_KEY  = 'tvg_user'
+const USER_KEY = 'tvg_user'
 
 export interface AuthUser {
   user_id: string
@@ -10,7 +9,6 @@ export interface AuthUser {
   full_name: string
   role: 'admin' | 'mlro' | 'compliance' | 'analyst' | 'viewer'
   industry_id?: string
-  access_token: string
 }
 
 export function getStoredUser(): AuthUser | null {
@@ -23,17 +21,10 @@ export function getStoredUser(): AuthUser | null {
 
 export function storeUser(user: AuthUser) {
   localStorage.setItem(USER_KEY, JSON.stringify(user))
-  localStorage.setItem(TOKEN_KEY, user.access_token)
 }
 
 export function clearUser() {
   localStorage.removeItem(USER_KEY)
-  localStorage.removeItem(TOKEN_KEY)
-}
-
-export function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem(TOKEN_KEY)
 }
 
 export async function loginWithPassword(email: string, password: string): Promise<AuthUser> {
@@ -48,7 +39,7 @@ export async function loginWithPassword(email: string, password: string): Promis
     throw new Error(err.detail ?? 'Login failed')
   }
   const data = await r.json()
-  const user: AuthUser = { ...data, access_token: data.access_token }
+  const user: AuthUser = data
   storeUser(user)
   return user
 }
@@ -75,7 +66,7 @@ export async function verifyMagicLink(token: string): Promise<AuthUser> {
     throw new Error(err.detail ?? 'Invalid magic link')
   }
   const data = await r.json()
-  const user: AuthUser = { ...data, access_token: data.access_token }
+  const user: AuthUser = data
   storeUser(user)
   return user
 }

@@ -5,7 +5,7 @@ import {
   Palette, Save, RotateCcw, Eye, Shield, CheckCircle,
   AlertTriangle, Globe, Mail, Type, Image,
 } from "lucide-react";
-import { getStoredUser, getToken } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { fetchBranding, saveBranding, resetBranding, applyBrandingToDOM, DEFAULT_BRANDING, BrandingConfig } from "@/lib/branding";
 import { useRouter } from "next/navigation";
 
@@ -74,7 +74,7 @@ export default function BrandingPage() {
     setSaving(true);
     setError("");
     try {
-      const updated = await saveBranding(getToken()!, config);
+      const updated = await saveBranding(config);
       setConfig(updated);
       applyBrandingToDOM(updated);
       setSaved(true);
@@ -89,7 +89,7 @@ export default function BrandingPage() {
   const handleReset = async () => {
     if (!confirm("Reset all branding to Verigo defaults?")) return;
     try {
-      await resetBranding(getToken()!);
+      await resetBranding();
       setConfig(DEFAULT_BRANDING);
       applyBrandingToDOM(DEFAULT_BRANDING);
     } catch {

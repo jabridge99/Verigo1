@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, ExternalLink, AlertTriangle,
   Calendar, Receipt, Settings, ArrowRight, Sparkles,
 } from "lucide-react";
-import { getStoredUser, getToken } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -97,7 +97,8 @@ function AdminPricingPanel({ sub, onUpdate }: { sub: Subscription | null; onUpda
       if (discountPct)   body.annual_discount_pct = parseFloat(discountPct);
       const res = await fetch(`${API}/api/v1/billing/admin/${industryId}`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json()).detail ?? "Save failed");
@@ -232,15 +233,15 @@ function BillingContent() {
     load();
   }, [interval]);
 
-  const auth = () => ({ Authorization: `Bearer ${getToken()}` });
+  
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [pr, sr, ir] = await Promise.all([
         fetch(`${API}/api/v1/billing/plans?discount_pct=${interval === "annual" ? 20 : 0}`),
-        fetch(`${API}/api/v1/billing/subscription`, { headers: auth() }),
-        fetch(`${API}/api/v1/billing/invoices`, { headers: auth() }),
+        fetch(`${API}/api/v1/billing/subscription`, { credentials: "include" }),
+        fetch(`${API}/api/v1/billing/invoices`, { credentials: "include" }),
       ]);
       if (!pr.ok || !sr.ok) throw new Error("api");
       setPlans(await pr.json());
@@ -262,7 +263,8 @@ function BillingContent() {
     try {
       const res = await fetch(`${API}/api/v1/billing/checkout`, {
         method: "POST",
-        headers: { ...auth(), "Content-Type": "application/json" },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plan: planKey,
           interval,
@@ -283,7 +285,7 @@ function BillingContent() {
 
   const openPortal = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/billing/portal?return_url=${encodeURIComponent(APP_URL + "/billing")}`, { headers: auth() });
+      const res = await fetch(`${API}/api/v1/billing/portal?return_url=${encodeURIComponent(APP_URL + "/billing")}`, { credentials: "include" });
       if (!res.ok) throw new Error();
       const { portal_url } = await res.json();
       window.location.href = portal_url;
@@ -294,7 +296,7 @@ function BillingContent() {
 
   const cancelSub = async () => {
     try {
-      await fetch(`${API}/api/v1/billing/subscription/cancel?at_period_end=true`, { method: "POST", headers: auth() });
+      await fetch(`${API}/api/v1/billing/subscription/cancel?at_period_end=true`, { method: "POST", credentials: "include" });
       setSub(prev => prev ? { ...prev, cancel_at_period_end: true } : prev);
     } catch {
       setSub(prev => prev ? { ...prev, cancel_at_period_end: true } : prev);
@@ -584,7 +586,7 @@ function AllSubscriptions() {
     setLoading(true);
     try {
       const res = await fetch(`${API}/api/v1/billing/admin/all`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        credentials: "include",
       });
       if (!res.ok) throw new Error();
       setSubs(await res.json());

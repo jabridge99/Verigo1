@@ -71,9 +71,8 @@ export default function DashboardPage() {
     setUser(stored)
 
     // Try to fetch live stats
-    const token = stored.access_token
     Promise.allSettled([
-      fetch(`${API}/api/v1/transactions/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API}/api/v1/transactions/alerts`, { credentials: 'include' }),
     ]).catch(() => {})
   }, [router])
 
