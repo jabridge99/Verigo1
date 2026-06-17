@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # ── Session cookie ───────────────────────────────────────────────────────
     session_cookie_name: str = "tvg_session"
 
+    # ── Master admin (seeded on startup if set, idempotent) ────────────────────
+    master_admin_email: str = ""
+    master_admin_password: str = ""
+
     # ── Stripe ────────────────────────────────────────────────────────────────
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""

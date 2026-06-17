@@ -100,6 +100,43 @@ def create_user(
     return user
 
 
+def seed_master_admin(db: Session) -> Optional[User]:
+    """
+    Idempotently ensure a global super-admin account exists, from
+    settings.master_admin_email / master_admin_password. No-op if either
+    is unset, or if a user with that email already exists (in which case
+    it's promoted to super-admin if it isn't already, but its password is
+    left untouched).
+    """
+    email = settings.master_admin_email.strip().lower()
+    if not email or not settings.master_admin_password:
+        return None
+
+    user = get_user_by_email(db, email)
+    if user:
+        if not user.is_super_admin or user.role != "admin":
+            user.is_super_admin = True
+            user.role = "admin"
+            db.commit()
+            db.refresh(user)
+        return user
+
+    user = User(
+        user_id=f"USR-{uuid.uuid4().hex[:10].upper()}",
+        email=email,
+        full_name="Master Admin",
+        hashed_password=hash_password(settings.master_admin_password),
+        role="admin",
+        status=UserStatus.active,
+        email_verified=True,
+        is_super_admin=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email.lower().strip()).first()
 
@@ -140,6 +177,7 @@ def build_token_response(user: User, mfa_pending: bool = False) -> dict:
         "role": user.role.value if hasattr(user.role, "value") else user.role,
         "industry_id": user.industry_id,
         "mfa_required": mfa_pending,
+        "is_super_admin": bool(user.is_super_admin),
     }
 
 

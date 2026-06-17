@@ -33,6 +33,7 @@ class User(Base):
     status = Column(Enum(UserStatus), default=UserStatus.active)
     industry_id = Column(String(100))  # tenant scope
     tenant_id = Column(String(60))
+    is_super_admin = Column(Boolean, default=False)  # global master account, not tenant-scoped
     mfa_enabled = Column(Boolean, default=False)
     mfa_secret = Column(String(200))
     email_verified = Column(Boolean, default=False)

@@ -84,6 +84,16 @@ async def lifespan(app: FastAPI):
     except ImportError:
         log.debug("pack_engine not available — skipping pack seeding")
 
+    from app.services.auth_service import seed_master_admin
+
+    db = SessionLocal()
+    try:
+        admin = seed_master_admin(db)
+        if admin:
+            log.info("Master admin ensured: %s", admin.email)
+    finally:
+        db.close()
+
     yield
     log.info("Shutdown complete")
 

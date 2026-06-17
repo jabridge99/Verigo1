@@ -45,6 +45,7 @@ class TokenResponse(BaseModel):
     industry_id: Optional[str] = None
     mfa_required: bool = False
     dev_verify_email_token: Optional[str] = None
+    is_super_admin: bool = False
 
 
 class UserResponse(BaseModel):
@@ -59,6 +60,7 @@ class UserResponse(BaseModel):
     mfa_enabled: bool
     email_verified: bool
     oauth_provider: Optional[str] = None
+    is_super_admin: bool = False
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 

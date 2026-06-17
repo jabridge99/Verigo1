@@ -9,6 +9,7 @@ export interface AuthUser {
   full_name: string
   role: 'admin' | 'mlro' | 'compliance' | 'analyst' | 'viewer'
   industry_id?: string
+  is_super_admin?: boolean
 }
 
 export function getStoredUser(): AuthUser | null {
