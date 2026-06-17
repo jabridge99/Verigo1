@@ -70,6 +70,20 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
     raise ValueError(f"Unknown storage backend: {backend}")
 
 
+def invalidate_tenant_cache(industry_id: str) -> None:
+    """Drop any cached provider for this tenant — call after storage_config changes
+    so credential rotations / backend switches take effect immediately."""
+    for key in [k for k in _provider_cache if k.startswith(f"{industry_id}:")]:
+        del _provider_cache[key]
+
+
+def build_provider_from_config(cfg: dict) -> StorageProvider:
+    """Build (uncached) a provider directly from a storage_config dict — used to
+    validate a tenant's custom storage settings before persisting them."""
+    backend = cfg.get("backend", "local")
+    return _build_provider(backend, cfg)
+
+
 def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
     """
     Return the appropriate StorageProvider for a tenant.
@@ -108,6 +122,10 @@ def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
             )
 
     # Application-wide default
+    return _default_provider()
+
+
+def _default_provider() -> StorageProvider:
     backend = getattr(settings, "storage_backend", "local")
     if backend not in _provider_cache:
         cfg: dict = {}

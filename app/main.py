@@ -44,6 +44,7 @@ from app.api.routes import (
     retention,
     sanctions,
     security_monitor,
+    storage,
     tenants,
     transactions,
 )
@@ -182,6 +183,7 @@ app.include_router(retention.router, prefix="/api/v1")
 app.include_router(security_monitor.router, prefix="/api/v1")
 app.include_router(ifti.router, prefix="/api/v1")
 app.include_router(organisations.router, prefix="/api/v1")
+app.include_router(storage.router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────
