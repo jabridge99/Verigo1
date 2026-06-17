@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
 from app.models.billing import (
@@ -126,13 +126,21 @@ def catalogue_with_custom(
 # ── Subscription CRUD ──────────────────────────────────────────────────────────
 
 
-def get_subscription(db: Session, industry_id: str) -> Optional[Subscription]:
-    return (
-        db.query(Subscription)
-        .filter(Subscription.industry_id == industry_id)
-        .order_by(desc(Subscription.created_at))
-        .first()
-    )
+def get_subscription(
+    db: Session, industry_id: str, organisation_id: Optional[int] = None
+) -> Optional[Subscription]:
+    q = db.query(Subscription)
+    if organisation_id:
+        q = q.filter(
+            or_(
+                Subscription.organisation_id == organisation_id,
+                (Subscription.organisation_id.is_(None))
+                & (Subscription.industry_id == industry_id),
+            )
+        )
+    else:
+        q = q.filter(Subscription.industry_id == industry_id)
+    return q.order_by(desc(Subscription.created_at)).first()
 
 
 def list_subscriptions(db: Session, limit: int = 100) -> List[Subscription]:
@@ -145,11 +153,15 @@ def list_subscriptions(db: Session, limit: int = 100) -> List[Subscription]:
 
 
 def create_trial(
-    db: Session, industry_id: str, tenant_id: Optional[str] = None
+    db: Session,
+    industry_id: str,
+    tenant_id: Optional[str] = None,
+    organisation_id: Optional[int] = None,
 ) -> Subscription:
     sub = Subscription(
         subscription_id=_sub_id(),
         industry_id=industry_id,
+        organisation_id=organisation_id,
         tenant_id=tenant_id,
         plan=BillingPlan.free_trial,
         interval=BillingInterval.monthly,
@@ -164,9 +176,12 @@ def create_trial(
 
 
 def admin_update(
-    db: Session, industry_id: str, data: SubscriptionAdminUpdate
+    db: Session,
+    industry_id: str,
+    data: SubscriptionAdminUpdate,
+    organisation_id: Optional[int] = None,
 ) -> Optional[Subscription]:
-    sub = get_subscription(db, industry_id)
+    sub = get_subscription(db, industry_id, organisation_id)
     if not sub:
         return None
     for field, val in data.model_dump(exclude_unset=True).items():
@@ -179,9 +194,12 @@ def admin_update(
 
 
 def cancel_subscription(
-    db: Session, industry_id: str, at_period_end: bool = True
+    db: Session,
+    industry_id: str,
+    at_period_end: bool = True,
+    organisation_id: Optional[int] = None,
 ) -> Optional[Subscription]:
-    sub = get_subscription(db, industry_id)
+    sub = get_subscription(db, industry_id, organisation_id)
     if not sub:
         return None
     stripe = _stripe()
@@ -210,6 +228,7 @@ def create_checkout_session(
     industry_id: str,
     req: CheckoutSessionRequest,
     customer_email: str,
+    organisation_id: Optional[int] = None,
 ) -> dict:
     stripe = _stripe()
     price_id = _PRICE_IDS.get((req.plan, req.interval), "")
@@ -221,13 +240,14 @@ def create_checkout_session(
             "session_id": f"cs_mock_{uuid.uuid4().hex[:16]}",
         }
 
-    sub = get_subscription(db, industry_id)
+    sub = get_subscription(db, industry_id, organisation_id)
     stripe_customer_id = sub.stripe_customer_id if sub else None
 
     # Create or reuse Stripe customer
     if not stripe_customer_id:
         customer = stripe.Customer.create(
-            email=customer_email, metadata={"industry_id": industry_id}
+            email=customer_email,
+            metadata={"industry_id": industry_id, "organisation_id": organisation_id},
         )
         stripe_customer_id = customer.id
         if sub:
@@ -243,6 +263,7 @@ def create_checkout_session(
         cancel_url=req.cancel_url,
         metadata={
             "industry_id": industry_id,
+            "organisation_id": organisation_id,
             "plan": req.plan,
             "interval": req.interval,
         },
@@ -252,9 +273,11 @@ def create_checkout_session(
     return {"checkout_url": session.url, "session_id": session.id}
 
 
-def create_customer_portal(db: Session, industry_id: str, return_url: str) -> str:
+def create_customer_portal(
+    db: Session, industry_id: str, return_url: str, organisation_id: Optional[int] = None
+) -> str:
     stripe = _stripe()
-    sub = get_subscription(db, industry_id)
+    sub = get_subscription(db, industry_id, organisation_id)
     if not stripe or not (sub and sub.stripe_customer_id):
         return f"{APP_URL}/billing"
 
@@ -294,17 +317,21 @@ def handle_stripe_webhook(db: Session, payload: bytes, sig_header: str) -> dict:
 
 
 def _handle_checkout_completed(db: Session, session: dict):
-    industry_id = session.get("metadata", {}).get("industry_id")
-    plan_str = session.get("metadata", {}).get("plan", "starter")
-    interval_str = session.get("metadata", {}).get("interval", "monthly")
+    metadata = session.get("metadata", {})
+    industry_id = metadata.get("industry_id")
+    organisation_id = metadata.get("organisation_id")
+    organisation_id = int(organisation_id) if organisation_id else None
+    plan_str = metadata.get("plan", "starter")
+    interval_str = metadata.get("interval", "monthly")
     if not industry_id:
         return
 
-    sub = get_subscription(db, industry_id)
+    sub = get_subscription(db, industry_id, organisation_id)
     if not sub:
         sub = Subscription(
             subscription_id=_sub_id(),
             industry_id=industry_id,
+            organisation_id=organisation_id,
             annual_discount_pct=20.0,
         )
         db.add(sub)
@@ -390,6 +417,7 @@ def _handle_invoice_event(db: Session, inv_obj: dict, etype: str):
             invoice_id=_inv_id(),
             subscription_id=sub.subscription_id if sub else None,
             industry_id=sub.industry_id if sub else None,
+            organisation_id=sub.organisation_id if sub else None,
             stripe_invoice_id=stripe_inv_id,
             amount_aud=amount,
             tax_aud=tax,
@@ -417,11 +445,17 @@ def _handle_invoice_event(db: Session, inv_obj: dict, etype: str):
 # ── Invoice queries ────────────────────────────────────────────────────────────
 
 
-def list_invoices(db: Session, industry_id: str, limit: int = 20) -> List[Invoice]:
-    return (
-        db.query(Invoice)
-        .filter(Invoice.industry_id == industry_id)
-        .order_by(desc(Invoice.created_at))
-        .limit(limit)
-        .all()
-    )
+def list_invoices(
+    db: Session, industry_id: str, limit: int = 20, organisation_id: Optional[int] = None
+) -> List[Invoice]:
+    q = db.query(Invoice)
+    if organisation_id:
+        q = q.filter(
+            or_(
+                Invoice.organisation_id == organisation_id,
+                (Invoice.organisation_id.is_(None)) & (Invoice.industry_id == industry_id),
+            )
+        )
+    else:
+        q = q.filter(Invoice.industry_id == industry_id)
+    return q.order_by(desc(Invoice.created_at)).limit(limit).all()

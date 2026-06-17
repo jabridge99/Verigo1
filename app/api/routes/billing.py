@@ -17,9 +17,9 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import _current_user
+from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.billing import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
@@ -31,6 +31,8 @@ from app.schemas.billing import (
 from app.services import billing_service as svc
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+
+_ADMIN = _require_roles(UserRole.admin)
 
 
 # ── Public ────────────────────────────────────────────────────────────────────
@@ -50,7 +52,8 @@ def my_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    sub = svc.get_subscription(db, current_user.industry_id or "")
+    org_id = getattr(current_user, "primary_organisation_id", None)
+    sub = svc.get_subscription(db, current_user.industry_id or "", org_id)
     if not sub:
         # Auto-create a trial for new tenants
         if current_user.industry_id:
@@ -58,6 +61,7 @@ def my_subscription(
                 db,
                 current_user.industry_id,
                 current_user.tenant_id if hasattr(current_user, "tenant_id") else None,
+                org_id,
             )
         else:
             raise HTTPException(404, "No subscription found")
@@ -73,7 +77,11 @@ def create_checkout(
     if not current_user.industry_id:
         raise HTTPException(400, "User has no industry_id")
     result = svc.create_checkout_session(
-        db, current_user.industry_id, req, current_user.email
+        db,
+        current_user.industry_id,
+        req,
+        current_user.email,
+        getattr(current_user, "primary_organisation_id", None),
     )
     return result
 
@@ -90,6 +98,7 @@ def customer_portal(
         db,
         current_user.industry_id,
         return_url or f"{svc.APP_URL}/billing",
+        getattr(current_user, "primary_organisation_id", None),
     )
     return {"portal_url": url}
 
@@ -100,7 +109,8 @@ def cancel_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    sub = svc.cancel_subscription(db, current_user.industry_id or "", at_period_end)
+    org_id = getattr(current_user, "primary_organisation_id", None)
+    sub = svc.cancel_subscription(db, current_user.industry_id or "", at_period_end, org_id)
     if not sub:
         raise HTTPException(404, "Subscription not found")
     return sub
@@ -112,7 +122,8 @@ def list_invoices(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.list_invoices(db, current_user.industry_id or "", limit)
+    org_id = getattr(current_user, "primary_organisation_id", None)
+    return svc.list_invoices(db, current_user.industry_id or "", limit, org_id)
 
 
 # ── Stripe Webhook (no auth — verified by signature) ──────────────────────────
@@ -132,18 +143,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 # ── Admin routes ──────────────────────────────────────────────────────────────
 
 
-def _require_admin(current_user: User):
-    if current_user.role != "admin":
-        raise HTTPException(403, "Admin only")
-
-
 @router.get("/admin/all", response_model=List[SubscriptionResponse])
 def admin_list_all(
     limit: int = Query(100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ADMIN),
 ):
-    _require_admin(current_user)
     return svc.list_subscriptions(db, limit)
 
 
@@ -151,32 +156,31 @@ def admin_list_all(
 def admin_update_subscription(
     industry_id: str,
     data: SubscriptionAdminUpdate,
+    organisation_id: int = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ADMIN),
 ):
     """
     Admin override — change plan, apply VVIP custom pricing, adjust annual discount,
-    or add notes about deal terms.
+    or add notes about deal terms. Pass organisation_id to target a specific
+    organisation when more than one shares the same industry_id.
     """
-    _require_admin(current_user)
-    sub = svc.admin_update(db, industry_id, data)
+    sub = svc.admin_update(db, industry_id, data, organisation_id)
     if not sub:
         # Create one if it doesn't exist yet
-        from app.services.billing_service import create_trial
-
-        create_trial(db, industry_id)
-        sub = svc.admin_update(db, industry_id, data)
+        svc.create_trial(db, industry_id, organisation_id=organisation_id)
+        sub = svc.admin_update(db, industry_id, data, organisation_id)
     return sub
 
 
 @router.post("/admin/{industry_id}/trial", response_model=SubscriptionResponse)
 def admin_create_trial(
     industry_id: str,
+    organisation_id: int = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ADMIN),
 ):
-    _require_admin(current_user)
-    existing = svc.get_subscription(db, industry_id)
+    existing = svc.get_subscription(db, industry_id, organisation_id)
     if existing:
         return existing
-    return svc.create_trial(db, industry_id)
+    return svc.create_trial(db, industry_id, organisation_id=organisation_id)
