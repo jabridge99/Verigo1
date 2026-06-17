@@ -21,4 +21,4 @@ def test_health_readiness(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ready"
-    assert data["database"] == "ok"
+    assert data["checks"]["database"] == "ok"

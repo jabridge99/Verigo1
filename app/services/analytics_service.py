@@ -8,12 +8,12 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.audit import AuditLog
+from app.models.audit import LegacyAuditLog as AuditLog
 from app.models.customer import Customer, RiskLevel
-from app.models.kyc import KYCRecord, KYCStatus
-from app.models.report import ComplianceReport as Report
+from app.models.kyc import CustomerIdentityDocument, VerificationResult
+from app.models.report import FilingRegisterEntry as Report
 from app.models.report import ReportStatus, ReportType
-from app.models.transaction import Transaction
+from app.models.transaction import Transaction, TransactionStatus
 
 
 def _now():
@@ -30,7 +30,7 @@ def _days_ago(n: int):
 def customer_risk_breakdown(db: Session, industry_id: Optional[str] = None):
     q = db.query(Customer)
     if industry_id:
-        q = q.filter(Customer.industry_id == industry_id)
+        q = q.filter(Customer.org_id == industry_id)
     total = q.count()
     breakdown = {}
     for level in RiskLevel:
@@ -47,7 +47,7 @@ def customer_onboarding_trend(
         func.count().label("count"),
     ).filter(Customer.created_at >= since)
     if industry_id:
-        q = q.filter(Customer.industry_id == industry_id)
+        q = q.filter(Customer.org_id == industry_id)
     rows = q.group_by(func.date(Customer.created_at)).order_by("day").all()
     return [{"date": str(r.day), "count": r.count} for r in rows]
 
@@ -65,7 +65,7 @@ def transaction_volume_trend(
         func.coalesce(func.sum(Transaction.amount), 0).label("volume"),
     ).filter(Transaction.created_at >= since)
     if industry_id:
-        q = q.filter(Transaction.industry_id == industry_id)
+        q = q.filter(Transaction.org_id == industry_id)
     rows = q.group_by(func.date(Transaction.created_at)).order_by("day").all()
     return [
         {"date": str(r.day), "count": r.count, "volume": float(r.volume)} for r in rows
@@ -75,9 +75,11 @@ def transaction_volume_trend(
 def flagged_transaction_stats(db: Session, industry_id: Optional[str] = None):
     q = db.query(Transaction)
     if industry_id:
-        q = q.filter(Transaction.industry_id == industry_id)
+        q = q.filter(Transaction.org_id == industry_id)
     total = q.count()
-    suspicious = q.filter(Transaction.is_suspicious == 1).count()
+    # `is_suspicious` boolean no longer exists; TransactionStatus.flagged is the current
+    # equivalent ("monitoring flag; not blocked").
+    suspicious = q.filter(Transaction.status == TransactionStatus.flagged).count()
     return {
         "total": total,
         "flagged": suspicious,
@@ -89,12 +91,24 @@ def flagged_transaction_stats(db: Session, industry_id: Optional[str] = None):
 
 
 def kyc_status_breakdown(db: Session, industry_id: Optional[str] = None):
-    q = db.query(KYCRecord)
+    # AMBIGUOUS: the old single `KYCRecord`/`KYCStatus` model was split into several
+    # per-verification-type tables (CustomerIdentityDocument, CustomerSelfieVerification,
+    # CustomerAddressVerification, CustomerPhoneVerification, CustomerEmailVerification),
+    # each carrying its own `verification_result` (VerificationResult: pass/fail/refer/
+    # not_performed) rather than a single aggregate KYC status (which previously included
+    # values like "pending_review"). There is no clear current equivalent for an overall
+    # "KYC status" breakdown across a customer. CustomerIdentityDocument was chosen here as
+    # the representative/primary verification record since identity document verification is
+    # the core KYC step, but CustomerSelfieVerification or a combination of all five tables
+    # are equally plausible candidates. The "pending_review" status used downstream in
+    # dashboard_summary() does not exist in VerificationResult; it is approximated to
+    # VerificationResult.refer (manual review required) below.
+    q = db.query(CustomerIdentityDocument)
     if industry_id:
-        q = q.filter(KYCRecord.industry_id == industry_id)
+        q = q.filter(CustomerIdentityDocument.org_id == industry_id)
     breakdown = {}
-    for status in KYCStatus:
-        breakdown[status.value] = q.filter(KYCRecord.status == status).count()
+    for status in VerificationResult:
+        breakdown[status.value] = q.filter(CustomerIdentityDocument.verification_result == status).count()
     return {"total": q.count(), "by_status": breakdown}
 
 
@@ -102,13 +116,20 @@ def kyc_status_breakdown(db: Session, industry_id: Optional[str] = None):
 
 
 def report_stats(db: Session, industry_id: Optional[str] = None):
+    # AMBIGUOUS: the old single `ComplianceReport` model no longer exists — reports are now
+    # split across IFTIReport/TTRReport/SMRReport, with FilingRegisterEntry as the immutable,
+    # cross-type submission register (org_id, report_type, status, created_at all present).
+    # FilingRegisterEntry was chosen as the closest aggregate replacement, but note its
+    # `status` column is a plain String with only "submitted|acknowledged|rejected" values
+    # (no "draft"/"under_review"/"approved" — those only exist on the individual report
+    # tables before they reach the register). `industry_id` filtering is now `org_id`.
     q = db.query(Report)
     if industry_id:
-        q = q.filter(Report.industry_id == industry_id)
+        q = q.filter(Report.org_id == industry_id)
     total = q.count()
     by_status = {}
     for s in ReportStatus:
-        by_status[s.value] = q.filter(Report.status == s).count()
+        by_status[s.value] = q.filter(Report.status == s.value).count()
     by_type = {}
     for t in ReportType:
         by_type[t.value] = q.filter(Report.report_type == t).count()
@@ -124,7 +145,7 @@ def report_submission_trend(
         func.count().label("count"),
     ).filter(Report.created_at >= since)
     if industry_id:
-        q = q.filter(Report.industry_id == industry_id)
+        q = q.filter(Report.org_id == industry_id)
     rows = q.group_by(func.date(Report.created_at)).order_by("day").all()
     return [{"date": str(r.day), "count": r.count} for r in rows]
 
@@ -155,8 +176,11 @@ def dashboard_summary(db: Session, industry_id: Optional[str] = None):
     kyc = kyc_status_breakdown(db, industry_id)
     rpt = report_stats(db, industry_id)
 
-    pending_kyc = kyc["by_status"].get("pending_review", 0)
-    overdue_reports = rpt["by_status"].get("draft", 0)
+    # "pending_review" no longer exists on VerificationResult; VerificationResult.refer
+    # ("manual review required") is the closest current equivalent — see ambiguity note
+    # in kyc_status_breakdown().
+    pending_kyc = kyc["by_status"].get(VerificationResult.refer.value, 0)
+    overdue_reports = rpt["by_status"].get(ReportStatus.draft.value, 0)
 
     return {
         "customers": customers,
@@ -166,7 +190,8 @@ def dashboard_summary(db: Session, industry_id: Optional[str] = None):
         "alerts": {
             "pending_kyc_reviews": pending_kyc,
             "overdue_reports": overdue_reports,
+            # RiskLevel no longer has "very_high" — "critical" is the closest current tier.
             "high_risk_customers": customers["by_risk"].get("high", 0)
-            + customers["by_risk"].get("very_high", 0),
+            + customers["by_risk"].get("critical", 0),
         },
     }

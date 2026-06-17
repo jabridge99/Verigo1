@@ -82,9 +82,9 @@ def list_connectors(
     ),
 ):
     industry_id = (
-        current_user.industry_id
+        current_user.org_id
         if current_user.role != UserRole.admin
-        else current_user.industry_id
+        else current_user.org_id
     )
     return get_credentials(db, industry_id, provider)
 
@@ -99,16 +99,16 @@ def add_connector(
         raise HTTPException(400, "credentials must not be empty")
     cred = create_credential(
         db,
-        industry_id=current_user.industry_id,
+        industry_id=current_user.org_id,
         provider=payload.provider,
         credentials=payload.credentials,
         label=payload.label,
-        created_by=current_user.user_id,
+        created_by=current_user.id,
     )
     if payload.is_default:
         from app.services.connector_service import update_credential as uc
 
-        uc(db, cred.credential_id, current_user.industry_id, is_default=True)
+        uc(db, cred.credential_id, current_user.org_id, is_default=True)
         db.refresh(cred)
     return cred
 
@@ -124,7 +124,7 @@ def update_connector(
         return update_credential(
             db,
             credential_id,
-            current_user.industry_id,
+            current_user.org_id,
             credentials=payload.credentials,
             label=payload.label,
             is_default=payload.is_default,
@@ -139,7 +139,7 @@ def remove_connector(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    delete_credential(db, credential_id, current_user.industry_id)
+    delete_credential(db, credential_id, current_user.org_id)
 
 
 @router.post("/{credential_id}/test")
@@ -149,6 +149,6 @@ def test_connector(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     try:
-        return test_credential(db, credential_id, current_user.industry_id)
+        return test_credential(db, credential_id, current_user.org_id)
     except ValueError as e:
         raise HTTPException(404, str(e))

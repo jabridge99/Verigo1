@@ -9,12 +9,14 @@ import uuid as _uuid
 from datetime import datetime as _dt
 
 TXN_PAYLOAD = {
+    "transaction_ref": "TXN-TEST-001",
     "customer_id": 1,
     "transaction_type": "transfer",
+    "direction": "outgoing",
+    "payment_method": "bank_transfer",
     "amount": 50000.00,
     "currency": "AUD",
     "is_cross_border": True,
-    "channel": "wire_transfer",
     "description": "Business payment",
     "counterparty_name": "ACME Corp",
     "counterparty_account": "123456789",
@@ -30,8 +32,8 @@ CUSTOMER_PAYLOAD = {
     "email": "txn-customer@example.com",
     "phone": "+61400000088",
     "date_of_birth": "1980-05-10",
-    "nationality": "Australian",
-    "country_of_residence": "Australia",
+    "nationality": "AU",
+    "country_of_residence": "AU",
     "id_number": "PP12345678",
     "id_type": "passport",
     "address": "88 Transaction Ave, Sydney NSW 2000",
@@ -58,13 +60,13 @@ class TestTransactionCreate:
         resp = client.post("/api/v1/transactions/", json={**TXN_PAYLOAD, "customer_id": cid}, headers=analyst_headers)
         assert resp.status_code == 201
         data = resp.json()
-        assert "transaction_id" in data
+        assert "id" in data
 
     def test_industry_id_from_session(self, client, analyst_user, analyst_headers):
         cid = _create_customer(client, analyst_headers)
         resp = client.post("/api/v1/transactions/", json={**TXN_PAYLOAD, "customer_id": cid}, headers=analyst_headers)
         assert resp.status_code == 201
-        assert resp.json().get("industry_id") == analyst_user.industry_id
+        assert resp.json().get("org_id") == analyst_user.org_id
 
 
 class TestTransactionList:
@@ -72,24 +74,24 @@ class TestTransactionList:
         resp = client.get("/api/v1/transactions/")
         assert resp.status_code == 401
 
-    def test_viewer_can_list(self, client, viewer_headers):
+    def test_viewer_cannot_list(self, client, viewer_headers):
         resp = client.get("/api/v1/transactions/", headers=viewer_headers)
-        assert resp.status_code == 200
+        assert resp.status_code == 403
 
     def test_tenant_isolation(self, client, db, analyst_headers):
         from tests.conftest import _make_user, _auth
         from app.models.user import UserRole
 
-        other_user = _make_user(db, UserRole.analyst, industry_id="IND-TXN-OTHER")
+        other_user = _make_user(db, UserRole.analyst)
         other_headers = _auth(other_user)
 
         cid = _create_customer(client, other_headers)
         resp = client.post("/api/v1/transactions/", json={**TXN_PAYLOAD, "customer_id": cid, "reference": "TXN-OTHER-001"}, headers=other_headers)
         assert resp.status_code == 201
-        other_txn_id = resp.json()["transaction_id"]
+        other_txn_id = resp.json()["id"]
 
         list_resp = client.get("/api/v1/transactions/", headers=analyst_headers)
-        ids = [t["transaction_id"] for t in list_resp.json()]
+        ids = [t["id"] for t in list_resp.json()]
         assert other_txn_id not in ids
 
 

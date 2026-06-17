@@ -50,13 +50,13 @@ def my_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    sub = svc.get_subscription(db, current_user.industry_id or "")
+    sub = svc.get_subscription(db, current_user.org_id or "")
     if not sub:
         # Auto-create a trial for new tenants
-        if current_user.industry_id:
+        if current_user.org_id:
             sub = svc.create_trial(
                 db,
-                current_user.industry_id,
+                current_user.org_id,
                 current_user.tenant_id if hasattr(current_user, "tenant_id") else None,
             )
         else:
@@ -70,10 +70,10 @@ def create_checkout(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    if not current_user.industry_id:
+    if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
     result = svc.create_checkout_session(
-        db, current_user.industry_id, req, current_user.email
+        db, current_user.org_id, req, current_user.email
     )
     return result
 
@@ -84,11 +84,11 @@ def customer_portal(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    if not current_user.industry_id:
+    if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
     url = svc.create_customer_portal(
         db,
-        current_user.industry_id,
+        current_user.org_id,
         return_url or f"{svc.APP_URL}/billing",
     )
     return {"portal_url": url}
@@ -100,7 +100,7 @@ def cancel_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    sub = svc.cancel_subscription(db, current_user.industry_id or "", at_period_end)
+    sub = svc.cancel_subscription(db, current_user.org_id or "", at_period_end)
     if not sub:
         raise HTTPException(404, "Subscription not found")
     return sub
@@ -112,7 +112,7 @@ def list_invoices(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.list_invoices(db, current_user.industry_id or "", limit)
+    return svc.list_invoices(db, current_user.org_id or "", limit)
 
 
 # ── Stripe Webhook (no auth — verified by signature) ──────────────────────────

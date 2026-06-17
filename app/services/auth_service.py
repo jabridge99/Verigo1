@@ -80,17 +80,14 @@ def create_user(
     full_name: str,
     password: str,
     role: str = "analyst",
-    industry_id: Optional[str] = None,
-    tenant_id: Optional[str] = None,
+    org_id: Optional[str] = None,
 ) -> User:
     user = User(
-        user_id=f"USR-{uuid.uuid4().hex[:10].upper()}",
         email=email.lower().strip(),
         full_name=full_name,
         hashed_password=hash_password(password),
         role=role,
-        industry_id=industry_id,
-        tenant_id=tenant_id,
+        org_id=org_id,
     )
     db.add(user)
     db.commit()
@@ -103,7 +100,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
 
 
 def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
-    return db.query(User).filter(User.user_id == user_id).first()
+    return db.query(User).filter(User.id == user_id).first()
 
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
@@ -122,21 +119,21 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
 def build_token_response(user: User, mfa_pending: bool = False) -> dict:
     token = create_access_token(
         {
-            "sub": user.user_id,
+            "sub": user.id,
             "email": user.email,
             "role": user.role.value if hasattr(user.role, "value") else user.role,
-            "industry_id": user.industry_id,
+            "org_id": user.org_id,
         },
         mfa_pending=mfa_pending,
     )
     return {
         "access_token": token,
         "token_type": "bearer",
-        "user_id": user.user_id,
+        "user_id": user.id,
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role.value if hasattr(user.role, "value") else user.role,
-        "industry_id": user.industry_id,
+        "org_id": user.org_id,
         "mfa_required": mfa_pending,
     }
 
@@ -157,9 +154,9 @@ def create_magic_link(db: Session, email: str) -> str:
     # Invalidate previous unused tokens for this email
     db.query(MagicLinkToken).filter(
         MagicLinkToken.email == email.lower(),
-        not MagicLinkToken.used,
+        MagicLinkToken.used.is_(False),
     ).update({"used": True})
-    ml = MagicLinkToken(token=hashed, email=email.lower(), expires_at=expires_at)
+    ml = MagicLinkToken(token_hash=hashed, email=email.lower(), expires_at=expires_at)
     db.add(ml)
     db.commit()
     return plain  # only the plaintext is returned (sent via email, never stored)
@@ -170,8 +167,8 @@ def verify_magic_link(db: Session, plain_token: str) -> Optional[str]:
     ml = (
         db.query(MagicLinkToken)
         .filter(
-            MagicLinkToken.token == hashed,
-            not MagicLinkToken.used,
+            MagicLinkToken.token_hash == hashed,
+            MagicLinkToken.used.is_(False),
         )
         .first()
     )

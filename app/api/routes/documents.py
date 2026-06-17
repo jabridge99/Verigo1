@@ -14,6 +14,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
@@ -76,13 +77,13 @@ def _assert_tenant(current_user: User, doc_industry_id: Optional[str]):
     """Explicit check — admin sees all, non-admin must match their industry_id."""
     if current_user.role == UserRole.admin:
         return  # admin has cross-tenant read access by design
-    if doc_industry_id and doc_industry_id != current_user.industry_id:
+    if doc_industry_id and doc_industry_id != current_user.org_id:
         raise HTTPException(403, "Cross-tenant document access denied")
 
 
 def _industry_scope(current_user: User) -> Optional[str]:
     """Return the industry_id to filter on, or None for admin (no filter)."""
-    return None if current_user.role == UserRole.admin else current_user.industry_id
+    return None if current_user.role == UserRole.admin else current_user.org_id
 
 
 @router.post("", response_model=DocumentResponse, status_code=201)
@@ -125,8 +126,8 @@ async def upload_document(
         filename=file.filename or "upload",
         content=content,
         mime_type=mime,
-        uploaded_by=current_user.user_id,
-        industry_id=current_user.industry_id,
+        uploaded_by=current_user.id,
+        industry_id=current_user.org_id,
         category=category,
         description=description,
         entity_type=entity_type,
@@ -249,9 +250,6 @@ class LegalHoldPayload(BaseModel):
     reason: str
 
 
-from pydantic import BaseModel as _BaseModel  # already imported above; alias for clarity
-
-
 @router.post("/{doc_id}/legal-hold")
 def place_legal_hold(
     doc_id: str,
@@ -272,7 +270,7 @@ def place_legal_hold(
 
     doc.legal_hold = True
     doc.legal_hold_reason = payload.reason
-    doc.legal_hold_by = current_user.user_id
+    doc.legal_hold_by = current_user.id
     doc.legal_hold_at = datetime.now(timezone.utc)
     db.commit()
     return {"doc_id": doc_id, "legal_hold": True, "reason": payload.reason}
@@ -385,7 +383,7 @@ async def upload_new_version(
         filename=file.filename or existing.filename,
         content=content,
         mime_type=mime,
-        uploaded_by=current_user.user_id,
+        uploaded_by=current_user.id,
         industry_id=existing.industry_id,
         category=existing.category,
         description=description or existing.description,

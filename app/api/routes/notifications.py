@@ -25,7 +25,7 @@ def get_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.get_summary(db, current_user.user_id)
+    return svc.get_summary(db, current_user.id)
 
 
 @router.get("", response_model=List[NotificationResponse])
@@ -36,7 +36,7 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.list_notifications(db, current_user.user_id, unread_only, limit, offset)
+    return svc.list_notifications(db, current_user.id, unread_only, limit, offset)
 
 
 @router.post("/{notif_id}/read", response_model=NotificationResponse)
@@ -45,7 +45,7 @@ def mark_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    notif = svc.mark_read(db, notif_id, current_user.user_id)
+    notif = svc.mark_read(db, notif_id, current_user.id)
     if not notif:
         raise HTTPException(404, "Notification not found")
     return notif
@@ -56,7 +56,7 @@ def mark_all_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    count = svc.mark_all_read(db, current_user.user_id)
+    count = svc.mark_all_read(db, current_user.id)
     return {"marked_read": count}
 
 

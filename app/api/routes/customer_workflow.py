@@ -27,7 +27,7 @@ from app.api.deps import (
     require_analyst_or_above, require_compliance_or_above, require_mlro_or_above,
 )
 from app.db.database import get_db
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.customer import Customer, CDDLevel, RiskLevel
 from app.models.customer_workflow import (
     ACTION_TO_STATE, CustomerRiskProfile, CustomerWorkflow,
@@ -423,12 +423,13 @@ def run_risk_assessment(
         ))
 
     db.add(AuditLog(
+        event_type=AuditEventType.other,
         org_id=customer.org_id,
         actor_id=current_user.id,
         action="customer.risk_assessment",
-        entity_type="Customer",
-        entity_id=customer_id,
-        detail={
+        object_type="Customer",
+        object_id=customer_id,
+        new_value={
             "score": result.overall_score,
             "level": result.overall_level,
             "gateway": result.gateway_decision,
@@ -545,12 +546,13 @@ def approve_edd(
                     payload.return_reason or payload.notes)
 
     db.add(AuditLog(
+        event_type=AuditEventType.other,
         org_id=customer.org_id,
         actor_id=current_user.id,
         action="customer.edd.approved" if payload.approved else "customer.edd.returned",
-        entity_type="Customer",
-        entity_id=customer_id,
-        detail={"approved": payload.approved, "notes": payload.notes},
+        object_type="Customer",
+        object_id=customer_id,
+        new_value={"approved": payload.approved, "notes": payload.notes},
     ))
     db.commit()
     db.refresh(workflow)
@@ -649,12 +651,13 @@ def final_decision(
     customer.status = CustomerStatus.active if payload.decision == "approve" else CustomerStatus.rejected
 
     db.add(AuditLog(
+        event_type=AuditEventType.other,
         org_id=customer.org_id,
         actor_id=current_user.id,
         action=f"customer.{payload.decision}",
-        entity_type="Customer",
-        entity_id=customer_id,
-        detail={
+        object_type="Customer",
+        object_id=customer_id,
+        new_value={
             "decision": payload.decision,
             "notes": payload.notes,
             "rejection_reason": payload.rejection_reason,

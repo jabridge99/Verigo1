@@ -26,7 +26,7 @@ from app.api.deps import (
     require_analyst_or_above, require_compliance_or_above, require_mlro_or_above,
 )
 from app.db.database import get_db
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.customer import (
     BeneficialOwner, CDDLevel, CorporateDocument,
     Customer, CustomerNote, CustomerOnboardingChecklist,
@@ -201,10 +201,11 @@ def create_customer(
     db.add(AuditLog(
         org_id=oid,
         actor_id=current_user.id,
+        event_type=AuditEventType.customer_created,
         action="customer.create",
-        entity_type="Customer",
-        entity_id=customer.id,
-        detail={"customer_ref": customer.customer_ref, "type": payload.customer_type.value},
+        object_type="Customer",
+        object_id=customer.id,
+        new_value={"customer_ref": customer.customer_ref, "type": payload.customer_type.value},
     ))
     db.commit()
     db.refresh(customer)
@@ -270,10 +271,11 @@ def update_customer(
     db.add(AuditLog(
         org_id=customer.org_id,
         actor_id=current_user.id,
+        event_type=AuditEventType.customer_updated,
         action="customer.update",
-        entity_type="Customer",
-        entity_id=customer.id,
-        detail={"fields": list(payload.model_dump(exclude_none=True).keys())},
+        object_type="Customer",
+        object_id=customer.id,
+        new_value={"fields": list(payload.model_dump(exclude_none=True).keys())},
     ))
     db.commit()
     db.refresh(customer)
@@ -314,10 +316,12 @@ def update_customer_status(
     db.add(AuditLog(
         org_id=customer.org_id,
         actor_id=current_user.id,
+        event_type=AuditEventType.customer_status_changed,
         action="customer.status_change",
-        entity_type="Customer",
-        entity_id=customer.id,
-        detail={"from": old_status.value, "to": payload.status.value, "reason": payload.reason},
+        object_type="Customer",
+        object_id=customer.id,
+        old_value={"status": old_status.value},
+        new_value={"status": payload.status.value, "reason": payload.reason},
     ))
     db.commit()
     db.refresh(customer)
@@ -770,10 +774,11 @@ def trigger_screening(
     db.add(AuditLog(
         org_id=customer.org_id,
         actor_id=current_user.id,
+        event_type=AuditEventType.screening_completed,
         action="customer.screening.triggered",
-        entity_type="Customer",
-        entity_id=customer.id,
-        detail={"types": [t.value for t in payload.screening_types], "provider": payload.provider.value},
+        object_type="Customer",
+        object_id=customer.id,
+        new_value={"types": [t.value for t in payload.screening_types], "provider": payload.provider.value},
     ))
     db.commit()
     for r in results:

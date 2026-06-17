@@ -1,17 +1,20 @@
 """
-Tests for AML report creation, maker-checker enforcement, and tenant isolation.
+Tests for SMR report generation, maker-checker enforcement, and tenant isolation.
 """
+
+import uuid
 
 import pytest
 
+from app.models.case import Case, CaseType, CaseSeverity
 
 CUSTOMER_PAYLOAD = {
     "full_name": "Report Test Customer",
     "email": "report-customer@example.com",
     "phone": "+61400000099",
     "date_of_birth": "1985-03-20",
-    "nationality": "Australian",
-    "country_of_residence": "Australia",
+    "nationality": "AU",
+    "country_of_residence": "AU",
     "id_number": "DL99887766",
     "id_type": "drivers_licence",
     "address": "99 Report St, Sydney NSW 2000",
@@ -19,103 +22,110 @@ CUSTOMER_PAYLOAD = {
 }
 
 
-def _get_or_create_customer(client, headers):
-    """Create a customer and return its DB integer id."""
+def _create_customer(client, headers):
     resp = client.post("/api/v1/customers/", json={
         **CUSTOMER_PAYLOAD,
-        "email": f"rpt-{__import__('uuid').uuid4().hex[:6]}@example.com"
+        "email": f"rpt-{uuid.uuid4().hex[:6]}@example.com",
     }, headers=headers)
     assert resp.status_code == 201, f"Customer create failed: {resp.text}"
     return resp.json()["id"]
 
 
-def _report_payload(customer_id: int) -> dict:
-    return {
-        "report_type": "smr",
-        "title": "Test SMR",
-        "summary": "Suspicious transaction pattern detected",
-        "customer_id": customer_id,
-        "total_amount_flagged": 15000.0,
-        "transaction_count": 3,
-    }
+def _create_smr_candidate_case(db, org_id, customer_id, created_by):
+    """Directly create a Case flagged as SMR-considered, ready for SMR generation."""
+    case = Case(
+        case_ref=f"CASE-{uuid.uuid4().hex[:8]}",
+        org_id=org_id,
+        customer_id=customer_id,
+        case_type=CaseType.smr_candidate,
+        severity=CaseSeverity.high,
+        title="Suspicious transaction pattern",
+        is_smr_candidate=True,
+        smr_considered=True,
+        created_by=created_by,
+    )
+    db.add(case)
+    db.commit()
+    db.refresh(case)
+    return case
 
 
-class TestReportCreate:
-    def test_unauthenticated_cannot_create(self, client):
-        resp = client.post("/api/v1/reports/", json={"report_type": "smr", "title": "x", "summary": "x", "customer_id": 1, "total_amount_flagged": 0, "transaction_count": 0})
+def _generate_smr(client, db, headers, mlro_headers, user):
+    cid = _create_customer(client, headers)
+    case = _create_smr_candidate_case(db, user.org_id, cid, user.id)
+    resp = client.post(
+        f"/api/v1/reports/smr/generate-from-case/{case.id}",
+        params={"suspicion_grounds": "Unusual structuring pattern detected"},
+        headers=mlro_headers,
+    )
+    assert resp.status_code == 201, f"SMR generate failed: {resp.text}"
+    return resp.json()["id"]
+
+
+def _same_org_users(db):
+    """Create a compliance user and an MLRO user sharing the same org."""
+    from tests.conftest import _make_user, _auth
+    from app.models.user import UserRole
+
+    compliance = _make_user(db, UserRole.compliance)
+    mlro = _make_user(db, UserRole.mlro, org_id=compliance.org_id)
+    return compliance, _auth(compliance), mlro, _auth(mlro)
+
+
+class TestSMRGenerate:
+    def test_unauthenticated_cannot_generate(self, client):
+        resp = client.post("/api/v1/reports/smr/generate-from-case/case_nonexistent",
+                            params={"suspicion_grounds": "x"})
         assert resp.status_code == 401
 
-    def test_viewer_cannot_create(self, client, viewer_headers, compliance_headers):
-        cid = _get_or_create_customer(client, compliance_headers)
-        resp = client.post("/api/v1/reports/", json=_report_payload(cid), headers=viewer_headers)
+    def test_analyst_cannot_generate(self, client, compliance_headers, analyst_headers):
+        cid = _create_customer(client, compliance_headers)
+        resp = client.post(
+            "/api/v1/reports/smr/generate-from-case/case_nonexistent",
+            params={"suspicion_grounds": "x"},
+            headers=analyst_headers,
+        )
         assert resp.status_code == 403
 
-    def test_compliance_can_create(self, client, compliance_headers):
-        cid = _get_or_create_customer(client, compliance_headers)
-        resp = client.post("/api/v1/reports/", json=_report_payload(cid), headers=compliance_headers)
-        assert resp.status_code == 201
-        data = resp.json()
-        assert "report_id" in data
-        assert data["status"] in ("draft", "pending_review")
-
-    def test_prepared_by_set_from_session(self, client, compliance_user, compliance_headers):
-        cid = _get_or_create_customer(client, compliance_headers)
-        resp = client.post("/api/v1/reports/", json=_report_payload(cid), headers=compliance_headers)
-        assert resp.status_code == 201
-        data = resp.json()
-        assert data.get("prepared_by") == compliance_user.user_id
+    def test_mlro_can_generate(self, client, db):
+        compliance, compliance_headers, mlro, mlro_headers = _same_org_users(db)
+        report_id = _generate_smr(client, db, compliance_headers, mlro_headers, compliance)
+        assert report_id
 
 
 class TestMakerChecker:
-    def _create_report(self, client, headers):
-        cid = _get_or_create_customer(client, headers)
-        resp = client.post("/api/v1/reports/", json=_report_payload(cid), headers=headers)
-        assert resp.status_code == 201
-        return resp.json()["report_id"]
+    def test_reviewer_cannot_sign_off_own_review(self, client, db):
+        compliance, compliance_headers, mlro, mlro_headers = _same_org_users(db)
+        report_id = _generate_smr(client, db, compliance_headers, mlro_headers, compliance)
 
-    def test_author_cannot_approve_own_report(self, client, compliance_user, compliance_headers):
-        report_id = self._create_report(client, compliance_headers)
+        review_resp = client.post(f"/api/v1/reports/smr/{report_id}/review", headers=mlro_headers)
+        assert review_resp.status_code == 200
 
-        # Author tries to approve their own report
-        resp = client.post(
-            f"/api/v1/reports/{report_id}/approve",
-            headers=compliance_headers,
-        )
-        # Maker-checker: author cannot approve (403) or endpoint may not exist (404)
-        assert resp.status_code in (403, 404, 422)
+        # Same person who reviewed cannot sign off (maker-checker)
+        sign_off_resp = client.post(f"/api/v1/reports/smr/{report_id}/mlro-sign-off", headers=mlro_headers)
+        assert sign_off_resp.status_code in (403, 409)
 
-    def test_different_user_can_review(self, client, db, compliance_headers, mlro_headers):
-        report_id = self._create_report(client, compliance_headers)
-
-        resp = client.post(
-            f"/api/v1/reports/{report_id}/review",
-            headers=mlro_headers,
-        )
-        assert resp.status_code in (200, 404)  # 404 if review endpoint path differs
-
-    def test_reviewer_cannot_approve_own_review(self, client, db, compliance_headers, mlro_headers):
-        report_id = self._create_report(client, compliance_headers)
-        # MLRO reviews
-        client.post(f"/api/v1/reports/{report_id}/review", headers=mlro_headers)
-        # MLRO tries to approve their own review
-        resp = client.post(f"/api/v1/reports/{report_id}/approve", headers=mlro_headers)
-        # Should be rejected (maker-checker: same person reviewed and is trying to approve)
-        assert resp.status_code in (403, 400, 404)
-
-
-class TestReportTenantIsolation:
-    def test_cannot_access_other_tenant_report(self, client, db, compliance_headers):
+    def test_different_user_can_sign_off(self, client, db):
         from tests.conftest import _make_user, _auth
         from app.models.user import UserRole
 
-        other_user = _make_user(db, UserRole.compliance, industry_id="IND-RPT-OTHER")
-        other_headers = _auth(other_user)
+        compliance, compliance_headers, mlro, mlro_headers = _same_org_users(db)
+        report_id = _generate_smr(client, db, compliance_headers, mlro_headers, compliance)
 
-        cid = _get_or_create_customer(client, other_headers)
-        resp = client.post("/api/v1/reports/", json=_report_payload(cid), headers=other_headers)
-        assert resp.status_code == 201
-        report_id = resp.json()["report_id"]
+        review_resp = client.post(f"/api/v1/reports/smr/{report_id}/review", headers=compliance_headers)
+        assert review_resp.status_code == 200
 
-        # Original tenant should not be able to access it
-        get_resp = client.get(f"/api/v1/reports/{report_id}", headers=compliance_headers)
+        other_mlro = _make_user(db, UserRole.mlro, org_id=mlro.org_id)
+        other_mlro_headers = _auth(other_mlro)
+        sign_off_resp = client.post(f"/api/v1/reports/smr/{report_id}/mlro-sign-off", headers=other_mlro_headers)
+        assert sign_off_resp.status_code == 200
+
+
+class TestSMRTenantIsolation:
+    def test_cannot_access_other_tenant_report(self, client, db, mlro_headers):
+        other_compliance, other_compliance_headers, other_mlro, other_mlro_headers = _same_org_users(db)
+
+        report_id = _generate_smr(client, db, other_compliance_headers, other_mlro_headers, other_compliance)
+
+        get_resp = client.get(f"/api/v1/reports/smr/{report_id}", headers=mlro_headers)
         assert get_resp.status_code in (403, 404)

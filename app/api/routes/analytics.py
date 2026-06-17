@@ -18,7 +18,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 def _industry(current_user: User, override: Optional[str]) -> Optional[str]:
     if current_user.role == "admin" and override:
         return override
-    return current_user.industry_id
+    return current_user.org_id
 
 
 @router.get("/summary")

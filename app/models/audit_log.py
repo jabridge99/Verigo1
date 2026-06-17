@@ -136,7 +136,7 @@ class AuditLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     # Intentionally NO updated_at — immutable record
 
-    organisation = relationship("Organisation")
+    organisation = relationship("Organisation", back_populates="audit_logs")
 
     __table_args__ = (
         Index("ix_audit_org_event", "org_id", "event_type"),

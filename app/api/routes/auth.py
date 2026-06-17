@@ -105,19 +105,27 @@ def _client_ip(request: Request) -> str:
 def register(payload: UserCreate, request: Request, db: Session = Depends(get_db)):
     if get_user_by_email(db, payload.email):
         raise HTTPException(409, "Email already registered")
+    org_id = payload.org_id
+    if not org_id:
+        # Self-serve signup with no existing org — create one for this user.
+        from app.models.organisation import IndustryType, Organisation
+
+        org = Organisation(name=f"{payload.full_name}'s Organisation", industry_type=IndustryType.other)
+        db.add(org)
+        db.flush()
+        org_id = org.id
     user = create_user(
         db,
         email=payload.email,
         full_name=payload.full_name,
         password=payload.password,
         role=(payload.role.value if payload.role else UserRole.analyst.value),
-        industry_id=payload.industry_id,
-        tenant_id=payload.tenant_id,
+        org_id=org_id,
     )
     record_security_event(
         db,
         "user_registered",
-        user.user_id,
+        user.id,
         ip=_client_ip(request),
         meta={"email": user.email},
     )
@@ -140,7 +148,7 @@ def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
 
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    record_security_event(db, "login_success", user.user_id, ip=ip)
+    record_security_event(db, "login_success", user.id, ip=ip)
 
     if user.mfa_enabled:
         token = build_token_response(user, mfa_pending=True)
@@ -200,7 +208,7 @@ def mfa_verify_enrolment(
         raise HTTPException(400, "Invalid TOTP code")
     current_user.mfa_enabled = True
     db.commit()
-    record_security_event(db, "mfa_enabled", current_user.user_id)
+    record_security_event(db, "mfa_enabled", current_user.id)
     return {"detail": "MFA activated"}
 
 
@@ -217,11 +225,11 @@ def mfa_challenge(
         raise HTTPException(400, "MFA not enabled")
     if not verify_totp(current_user.mfa_secret, code):
         record_security_event(
-            db, "mfa_failed", current_user.user_id, ip=_client_ip(request)
+            db, "mfa_failed", current_user.id, ip=_client_ip(request)
         )
         raise HTTPException(401, "Invalid TOTP code")
     record_security_event(
-        db, "mfa_success", current_user.user_id, ip=_client_ip(request)
+        db, "mfa_success", current_user.id, ip=_client_ip(request)
     )
     return build_token_response(current_user)
 
@@ -237,7 +245,7 @@ def mfa_disable(
     current_user.mfa_enabled = False
     current_user.mfa_secret = None
     db.commit()
-    record_security_event(db, "mfa_disabled", current_user.user_id)
+    record_security_event(db, "mfa_disabled", current_user.id)
     return {"detail": "MFA disabled"}
 
 
@@ -252,7 +260,7 @@ def request_magic_link(
     if user and user.status == UserStatus.active:
         token = create_magic_link(db, payload.email)  # hashed in service layer
         record_security_event(
-            db, "magic_link_requested", user.user_id, ip=_client_ip(request)
+            db, "magic_link_requested", user.id, ip=_client_ip(request)
         )
         from app.config import settings
 
@@ -275,7 +283,7 @@ def verify_magic_link_endpoint(
         raise HTTPException(400, "Account not found or inactive")
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    record_security_event(db, "magic_link_used", user.user_id, ip=_client_ip(request))
+    record_security_event(db, "magic_link_used", user.id, ip=_client_ip(request))
     return build_token_response(user)
 
 
@@ -315,7 +323,7 @@ def change_password(
         raise HTTPException(400, "Password must be at least 12 characters")
     current_user.hashed_password = hash_password(payload.new_password)
     db.commit()
-    record_security_event(db, "password_changed", current_user.user_id)
+    record_security_event(db, "password_changed", current_user.id)
     return {"detail": "Password updated"}
 
 
@@ -324,7 +332,7 @@ def change_password(
 
 @router.post("/verify")
 def verify_token(current_user: User = Depends(_current_user)):
-    return {"valid": True, "user_id": current_user.user_id, "role": current_user.role}
+    return {"valid": True, "user_id": current_user.id, "role": current_user.role}
 
 
 # ── Admin: User management ─────────────────────────────────────────────────────
@@ -337,7 +345,7 @@ def list_users(
 ):
     q = db.query(User)
     if current_user.role != UserRole.admin:
-        q = q.filter(User.industry_id == current_user.industry_id)
+        q = q.filter(User.org_id == current_user.org_id)
     return q.all()
 
 
@@ -356,14 +364,13 @@ def create_user_admin(
         full_name=payload.full_name,
         password=payload.password or secrets.token_urlsafe(16),
         role=(payload.role.value if payload.role else UserRole.analyst.value),
-        industry_id=payload.industry_id or current_user.industry_id,
-        tenant_id=payload.tenant_id,
+        org_id=payload.org_id or current_user.org_id,
     )
     record_security_event(
         db,
         "user_created_by_admin",
-        current_user.user_id,
-        meta={"target": user.user_id, "role": user.role.value},
+        current_user.id,
+        meta={"target": user.id, "role": user.role.value},
         ip=_client_ip(request),
     )
     return user
@@ -389,7 +396,7 @@ def update_user_admin(
         record_security_event(
             db,
             "role_changed",
-            current_user.user_id,
+            current_user.id,
             meta={"target": user_id, "from": old_role.value, "to": target.role.value},
             ip=_client_ip(request),
         )
@@ -406,14 +413,14 @@ def suspend_user(
     target = get_user_by_id(db, user_id)
     if not target:
         raise HTTPException(404, "User not found")
-    if target.user_id == current_user.user_id:
+    if target.id == current_user.id:
         raise HTTPException(400, "Cannot suspend yourself")
     target.status = UserStatus.suspended
     db.commit()
     record_security_event(
         db,
         "user_suspended",
-        current_user.user_id,
+        current_user.id,
         meta={"target": user_id},
         ip=_client_ip(request),
     )
@@ -435,7 +442,7 @@ def activate_user(
     record_security_event(
         db,
         "user_activated",
-        current_user.user_id,
+        current_user.id,
         meta={"target": user_id},
         ip=_client_ip(request),
     )

@@ -19,7 +19,7 @@ from app.models.aml_solution import (
     AMLPolicy, AMLProgram, AMLService, AMLSolution,
     PolicyStatus, ProgramStatus, ServiceStatus, SolutionStatus,
 )
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.user import User
 from app.schemas.aml_solution import (
     AMLProgramApproveRequest, AMLProgramResponse, AMLProgramUpdate,
@@ -88,12 +88,13 @@ def update_program(
         setattr(prog, field, value)
 
     db.add(AuditLog(
+        event_type=AuditEventType.other,
         org_id=org_id_for(current_user),
         actor_id=current_user.id,
         action="aml_program.update",
-        entity_type="AMLProgram",
-        entity_id=prog.id,
-        detail={"fields_updated": list(payload.model_dump(exclude_none=True).keys())},
+        object_type="AMLProgram",
+        object_id=prog.id,
+        new_value={"fields_updated": list(payload.model_dump(exclude_none=True).keys())},
     ))
     db.commit()
     db.refresh(prog)
@@ -114,11 +115,12 @@ def submit_program_for_approval(
 
     prog.status = ProgramStatus.under_review
     db.add(AuditLog(
+        event_type=AuditEventType.other,
         org_id=org_id_for(current_user),
         actor_id=current_user.id,
         action="aml_program.submit_for_approval",
-        entity_type="AMLProgram",
-        entity_id=prog.id,
+        object_type="AMLProgram",
+        object_id=prog.id,
     ))
     db.commit()
     return {"status": prog.status, "message": "Program submitted for approval"}
@@ -144,12 +146,13 @@ def approve_program(
         prog.effective_date = date.today()
 
     db.add(AuditLog(
+        event_type=AuditEventType.other,
         org_id=org_id_for(current_user),
         actor_id=current_user.id,
         action="aml_program.approve",
-        entity_type="AMLProgram",
-        entity_id=prog.id,
-        detail={"comments": payload.comments},
+        object_type="AMLProgram",
+        object_id=prog.id,
+        new_value={"comments": payload.comments},
     ))
     db.commit()
     return {"status": prog.status, "approved_by": current_user.id}

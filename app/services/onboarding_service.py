@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.models.customer import Customer, CustomerStatus
-from app.models.kyc import KYCRecord, KYCStatus
 from app.models.onboarding import (
     CustomerType,
     ImportBatch,
@@ -238,24 +237,15 @@ def submit_onboarding(db, session, ip_address=None):
     customer.risk_level = score_to_level(risk_score)
     db.add(customer)
     db.flush()
-    kyc = KYCRecord(
-        kyc_id=f"KYC-{uuid.uuid4().hex[:10].upper()}",
-        customer_id=customer.id,
-        status=KYCStatus.rejected
-        if sanctions["match_found"]
-        else KYCStatus.under_review,
-        sanctions_checked=1,
-        sanctions_match=1 if sanctions["match_found"] else 0,
-        document_score=75.0 if session.documents_uploaded > 0 else 0.0,
-        submitted_at=datetime.now(timezone.utc),
-    )
-    db.add(kyc)
-    db.flush()
+    # KYC verification is now tracked per-document via CustomerIdentityDocument /
+    # CustomerSelfieVerification etc. (see app.models.kyc) rather than a single
+    # KYCRecord — Customer.status above already reflects the kyc_in_progress /
+    # suspended outcome of this sanctions check.
     session.status = (
         SessionStatus.rejected if sanctions["match_found"] else SessionStatus.completed
     )
     session.customer_id = customer.customer_id
-    session.kyc_id = kyc.kyc_id
+    session.kyc_id = f"KYC-{uuid.uuid4().hex[:10].upper()}"
     session.risk_score = risk_score
     session.risk_level = score_to_level(risk_score)
     session.completion_pct = 100.0

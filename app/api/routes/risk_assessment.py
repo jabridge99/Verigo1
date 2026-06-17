@@ -29,7 +29,7 @@ from app.api.deps import (
     require_analyst_or_above, require_compliance_or_above, require_mlro_or_above,
 )
 from app.db.database import get_db
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.risk_engine import (
     AssessmentStatus, MitigationStatus, RiskAssessmentRun, RiskCategory,
     RiskCategoryType, RiskControl, RiskFactor, RiskFramework,
@@ -333,12 +333,13 @@ def create_assessment(
             ))
 
     db.add(AuditLog(
+        event_type=AuditEventType.risk_score_changed,
         org_id=oid,
         actor_id=current_user.id,
         action="risk.assessment.create",
-        entity_type="RiskAssessmentRun",
-        entity_id=run.id,
-        detail={"title": title, "trigger": trigger},
+        object_type="RiskAssessmentRun",
+        object_id=run.id,
+        new_value={"title": title, "trigger": trigger},
     ))
     db.commit()
     db.refresh(run)
@@ -742,12 +743,13 @@ def submit_assessment(
     run.reviewed_by = current_user.id
 
     db.add(AuditLog(
+        event_type=AuditEventType.risk_score_changed,
         org_id=run.org_id,
         actor_id=current_user.id,
         action="risk.assessment.submit",
-        entity_type="RiskAssessmentRun",
-        entity_id=run_id,
-        detail={
+        object_type="RiskAssessmentRun",
+        object_id=run_id,
+        new_value={
             "overall_residual": run.overall_residual_risk_score,
             "rating": run.overall_residual_rating,
         },
@@ -789,12 +791,13 @@ def approve_assessment(
         run.next_review_date = next_review_date
 
     db.add(AuditLog(
+        event_type=AuditEventType.risk_score_changed,
         org_id=run.org_id,
         actor_id=current_user.id,
         action="risk.assessment.approve",
-        entity_type="RiskAssessmentRun",
-        entity_id=run_id,
-        detail={"approved_by": current_user.id, "disclaimer_acknowledged": True},
+        object_type="RiskAssessmentRun",
+        object_id=run_id,
+        new_value={"approved_by": current_user.id, "disclaimer_acknowledged": True},
     ))
     db.commit()
     return {

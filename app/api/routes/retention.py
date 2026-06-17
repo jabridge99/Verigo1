@@ -89,7 +89,7 @@ def list_retention_policies(
     ),
 ):
     industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+        None if current_user.role == UserRole.admin else current_user.org_id
     )
     return list_policies(db, industry_id)
 
@@ -101,7 +101,7 @@ def set_retention_policy(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+        None if current_user.role == UserRole.admin else current_user.org_id
     )
     try:
         return upsert_policy(
@@ -111,7 +111,7 @@ def set_retention_policy(
             industry_id=industry_id,
             legal_hold=payload.legal_hold,
             notes=payload.notes,
-            created_by=current_user.user_id,
+            created_by=current_user.id,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -126,7 +126,7 @@ def get_retention_policy(
     ),
 ):
     industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+        None if current_user.role == UserRole.admin else current_user.org_id
     )
     return get_policy(db, entity_scope, industry_id)
 
@@ -145,8 +145,8 @@ def create_legal_hold(
         entity_scope=payload.entity_scope,
         entity_id=payload.entity_id,
         reason=payload.reason,
-        held_by=current_user.user_id,
-        industry_id=current_user.industry_id
+        held_by=current_user.id,
+        industry_id=current_user.org_id
         if current_user.role != UserRole.admin
         else None,
     )
@@ -162,8 +162,8 @@ def release_hold(
         return release_legal_hold(
             db,
             hold_id,
-            released_by=current_user.user_id,
-            industry_id=current_user.industry_id
+            released_by=current_user.id,
+            industry_id=current_user.org_id
             if current_user.role != UserRole.admin
             else None,
         )
@@ -182,7 +182,7 @@ def list_legal_holds(
 ):
     q = db.query(LegalHold)
     if current_user.role != UserRole.admin:
-        q = q.filter(LegalHold.industry_id == current_user.industry_id)
+        q = q.filter(LegalHold.industry_id == current_user.org_id)
     if entity_scope:
         q = q.filter(LegalHold.entity_scope == entity_scope)
     if active_only:
@@ -200,7 +200,7 @@ def check_deletion_eligibility(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+        None if current_user.role == UserRole.admin else current_user.org_id
     )
     return is_deletion_eligible(
         db,
@@ -222,6 +222,6 @@ def purge_report(
 ):
     """Dry-run purge report — identifies eligible records without deleting them."""
     industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+        None if current_user.role == UserRole.admin else current_user.org_id
     )
     return generate_purge_report(db, industry_id)

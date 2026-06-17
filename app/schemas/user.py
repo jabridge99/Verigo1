@@ -11,15 +11,13 @@ class UserCreate(BaseModel):
     full_name: str
     password: str
     role: UserRole = UserRole.analyst
-    industry_id: Optional[str] = None
-    tenant_id: Optional[str] = None
+    org_id: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     status: Optional[UserStatus] = None
-    industry_id: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -42,18 +40,17 @@ class TokenResponse(BaseModel):
     email: str
     full_name: str
     role: str
-    industry_id: Optional[str] = None
+    org_id: Optional[str] = None
+    mfa_required: bool = False
 
 
 class UserResponse(BaseModel):
-    id: int
-    user_id: str
+    id: str
     email: str
     full_name: str
     role: UserRole
     status: UserStatus
-    industry_id: Optional[str] = None
-    tenant_id: Optional[str] = None
+    org_id: Optional[str] = None
     mfa_enabled: bool
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

@@ -194,6 +194,7 @@ class Transaction(Base):
 
     # ── Relationships ─────────────────────────────────────────────────────────
     customer        = relationship("Customer", back_populates="transactions")
+    organisation    = relationship("Organisation", back_populates="transactions")
     crypto_detail   = relationship("TransactionCryptoDetail", back_populates="transaction",
                                    uselist=False, cascade="all, delete-orphan")
     alerts          = relationship("TransactionAlert", back_populates="transaction",

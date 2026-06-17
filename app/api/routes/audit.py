@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
-from app.models.audit import AuditLog
+from app.models.audit import LegacyAuditLog as AuditLog
 from app.models.user import User, UserRole
 from app.schemas.audit import AuditLogCreate, AuditLogResponse
 from app.services.audit_service import log_action
@@ -27,7 +27,7 @@ def _scoped_query(db: Session, current_user: User):
     """Return a query scoped to the current user's tenant."""
     q = db.query(AuditLog)
     if current_user.role != UserRole.admin:
-        q = q.filter(AuditLog.industry_id == current_user.industry_id)
+        q = q.filter(AuditLog.industry_id == current_user.org_id)
     return q
 
 
@@ -135,7 +135,7 @@ def get_log(
     # Tenant isolation: non-admin cannot read another tenant's log entry
     if (
         current_user.role != UserRole.admin
-        and entry.industry_id != current_user.industry_id
+        and entry.industry_id != current_user.org_id
     ):
         raise HTTPException(403, "Cross-tenant access denied")
     return entry

@@ -267,7 +267,7 @@ def list_records(
     current_user: User = Depends(_READER),
 ):
     industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+        None if current_user.role == UserRole.admin else current_user.org_id
     )
     return list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
@@ -280,9 +280,9 @@ def create_record(
 ):
     record = IFTIRecord(
         ifti_id=f"IFTI-{uuid.uuid4().hex[:12].upper()}",
-        industry_id=current_user.industry_id,
+        industry_id=current_user.org_id,
         direction=payload.direction,
-        created_by=current_user.user_id,
+        created_by=current_user.id,
     )
     _apply_fields(record, payload)
     db.add(record)
@@ -302,7 +302,7 @@ def get_record(
         raise HTTPException(404, "IFTI record not found")
     if (
         current_user.role != UserRole.admin
-        and r.industry_id != current_user.industry_id
+        and r.industry_id != current_user.org_id
     ):
         raise HTTPException(403, "Access denied")
     return r
@@ -320,7 +320,7 @@ def update_record(
         raise HTTPException(404, "IFTI record not found")
     if (
         current_user.role != UserRole.admin
-        and r.industry_id != current_user.industry_id
+        and r.industry_id != current_user.org_id
     ):
         raise HTTPException(403, "Access denied")
     if r.status == IFTIStatus.submitted:
@@ -373,7 +373,7 @@ def delete_record(
         raise HTTPException(400, "Cannot delete a submitted record")
     if (
         current_user.role != UserRole.admin
-        and r.industry_id != current_user.industry_id
+        and r.industry_id != current_user.org_id
     ):
         raise HTTPException(403, "Access denied")
     db.delete(r)
@@ -397,7 +397,7 @@ def export_excel(
     exactly — open it, verify, then copy-paste rows into AUSTRAC Online and submit.
     """
     industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+        None if current_user.role == UserRole.admin else current_user.org_id
     )
     records = list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
@@ -433,7 +433,7 @@ def export_selected(
     from app.models.ifti import IFTIRecord as IFTIModel
 
     industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+        None if current_user.role == UserRole.admin else current_user.org_id
     )
     q = db.query(IFTIModel).filter(
         IFTIModel.ifti_id.in_(ifti_ids),

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_role
+from app.api.deps import get_current_user, get_db, require_roles
 from app.models.independent_review import (
     ActionStatus, ActionType,
     FindingCategory, FindingRisk, FindingStatus,
@@ -290,7 +290,7 @@ def _action_dict(a: ReviewAction) -> dict:
 def create_review(
     body: ReviewCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     if db.query(IndependentReview).filter_by(
         org_id=current_user.org_id, review_ref=body.review_ref
@@ -377,7 +377,7 @@ def update_review(
     review_id: str,
     body: ReviewUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     review = _get_review(db, current_user.org_id, review_id)
     if review.status == ReviewStatus.archived:
@@ -395,7 +395,7 @@ def transition_review(
     to_status: ReviewStatus,
     notes: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     review = _get_review(db, current_user.org_id, review_id)
     allowed = REVIEW_TRANSITIONS.get(review.status, [])
@@ -423,7 +423,7 @@ def transition_review(
 def board_acknowledge(
     review_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.mlro)),
+    current_user=Depends(require_roles(UserRole.mlro)),
 ):
     review = _get_review(db, current_user.org_id, review_id)
     review.board_acknowledged = True
@@ -441,7 +441,7 @@ def create_finding(
     review_id: str,
     body: FindingCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     review = _get_review(db, current_user.org_id, review_id)
     if review.status == ReviewStatus.archived:
@@ -526,7 +526,7 @@ def update_finding(
     finding_id: str,
     body: FindingUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     review = _get_review(db, current_user.org_id, review_id)
     finding = _get_finding(db, current_user.org_id, finding_id)
@@ -549,7 +549,7 @@ def submit_finding_response(
     finding_id: str,
     management_response: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     finding = _get_finding(db, current_user.org_id, finding_id)
@@ -569,7 +569,7 @@ def start_finding_remediation(
     review_id: str,
     finding_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     finding = _get_finding(db, current_user.org_id, finding_id)
@@ -587,7 +587,7 @@ def close_finding(
     finding_id: str,
     closure_evidence: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     finding = _get_finding(db, current_user.org_id, finding_id)
@@ -609,7 +609,7 @@ def accept_finding_risk(
     finding_id: str,
     rationale: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.mlro)),
+    current_user=Depends(require_roles(UserRole.mlro)),
 ):
     """MLRO formally accepts residual risk rather than remediating the finding."""
     _get_review(db, current_user.org_id, review_id)
@@ -633,7 +633,7 @@ def create_recommendation(
     finding_id: str,
     body: RecommendationCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     finding = _get_finding(db, current_user.org_id, finding_id)
@@ -686,7 +686,7 @@ def update_recommendation(
     rec_id: str,
     body: RecommendationUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     _get_finding(db, current_user.org_id, finding_id)
@@ -706,7 +706,7 @@ def accept_recommendation(
     finding_id: str,
     rec_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     _get_finding(db, current_user.org_id, finding_id)
@@ -728,7 +728,7 @@ def reject_recommendation(
     rec_id: str,
     rejection_reason: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.mlro)),
+    current_user=Depends(require_roles(UserRole.mlro)),
 ):
     """MLRO rejects / disputes a recommendation (entity accepts residual risk)."""
     _get_review(db, current_user.org_id, review_id)
@@ -751,7 +751,7 @@ def complete_recommendation(
     finding_id: str,
     rec_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     _get_finding(db, current_user.org_id, finding_id)
@@ -776,7 +776,7 @@ def create_action(
     rec_id: str,
     body: ActionCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     _get_finding(db, current_user.org_id, finding_id)
@@ -839,7 +839,7 @@ def update_action(
     action_id: str,
     body: ActionUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     action = _get_action(db, current_user.org_id, action_id)
@@ -861,7 +861,7 @@ def start_action(
     rec_id: str,
     action_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     action = _get_action(db, current_user.org_id, action_id)
@@ -883,7 +883,7 @@ def complete_action(
     action_id: str,
     completion_evidence: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     _get_review(db, current_user.org_id, review_id)
     action = _get_action(db, current_user.org_id, action_id)
@@ -911,7 +911,7 @@ def verify_action(
     action_id: str,
     verified_notes: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.compliance)),
+    current_user=Depends(require_roles(UserRole.compliance)),
 ):
     """Compliance officer sign-off that the action is genuinely complete."""
     _get_review(db, current_user.org_id, review_id)
@@ -943,7 +943,7 @@ def cancel_action(
     action_id: str,
     cancellation_reason: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(UserRole.mlro)),
+    current_user=Depends(require_roles(UserRole.mlro)),
 ):
     _get_review(db, current_user.org_id, review_id)
     action = _get_action(db, current_user.org_id, action_id)

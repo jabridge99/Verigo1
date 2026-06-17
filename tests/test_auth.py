@@ -84,7 +84,7 @@ class TestTokenValidation:
     def test_protected_endpoint_valid_token(self, client, analyst_user, analyst_headers):
         resp = client.get("/api/v1/auth/me", headers=analyst_headers)
         assert resp.status_code == 200
-        assert resp.json()["user_id"] == analyst_user.user_id
+        assert resp.json()["id"] == analyst_user.id
 
     def test_logout_blacklists_token(self, client, analyst_headers):
         # Logout should succeed
@@ -98,7 +98,7 @@ class TestTokenValidation:
 class TestRBAC:
     def test_viewer_cannot_promote_user(self, client, viewer_headers, analyst_user):
         resp = client.patch(
-            f"/api/v1/auth/users/{analyst_user.user_id}",
+            f"/api/v1/auth/users/{analyst_user.id}",
             json={"role": "admin"},
             headers=viewer_headers,
         )
@@ -106,7 +106,7 @@ class TestRBAC:
 
     def test_admin_can_update_user(self, client, admin_headers, analyst_user):
         resp = client.patch(
-            f"/api/v1/auth/users/{analyst_user.user_id}",
+            f"/api/v1/auth/users/{analyst_user.id}",
             json={"full_name": "Updated Name"},
             headers=admin_headers,
         )
@@ -114,7 +114,7 @@ class TestRBAC:
 
     def test_user_cannot_self_elevate(self, client, analyst_user, analyst_headers):
         resp = client.patch(
-            f"/api/v1/auth/users/{analyst_user.user_id}",
+            f"/api/v1/auth/users/{analyst_user.id}",
             json={"role": "admin"},
             headers=analyst_headers,
         )
