@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.tenant import IndustryTenant
 from app.schemas.storage import StorageConfigInput
+from app.services.crypto import encrypt_secret
 from app.services.storage.factory import build_provider_from_config, invalidate_tenant_cache
 
 REQUIRED_FIELDS = {
@@ -18,6 +19,9 @@ REQUIRED_FIELDS = {
     "gcs": ["bucket"],
     "local": [],
 }
+
+# Credential fields encrypted at rest before being persisted to storage_config.
+SECRET_FIELDS = {"secret_key", "account_key", "credentials_json"}
 
 
 def _get_tenant(db: Session, industry_id: str) -> Optional[IndustryTenant]:
@@ -44,7 +48,7 @@ async def set_config(db: Session, industry_id: str, data: StorageConfigInput) ->
     cfg = data.model_dump(exclude_none=True)
     cfg["backend"] = backend
 
-    # Best-effort connectivity check — saved either way, but flagged.
+    # Best-effort connectivity check — run before encrypting, saved either way.
     verified = False
     try:
         provider = build_provider_from_config(cfg)
@@ -54,10 +58,14 @@ async def set_config(db: Session, industry_id: str, data: StorageConfigInput) ->
         verified = False
     cfg["verified"] = verified
 
-    tenant.storage_config = cfg
+    encrypted_cfg = {
+        k: (encrypt_secret(v) if k in SECRET_FIELDS and isinstance(v, str) else v)
+        for k, v in cfg.items()
+    }
+    tenant.storage_config = encrypted_cfg
     db.commit()
     invalidate_tenant_cache(industry_id)
-    return cfg
+    return cfg  # return plaintext form for the immediate response (never persisted as-is)
 
 
 def clear_config(db: Session, industry_id: str) -> bool:

@@ -31,6 +31,10 @@ class Settings(BaseSettings):
 
     # ── Document storage ──────────────────────────────────────────────────────
     document_store_path: str = "./uploads"
+    # Encrypts tenant storage_config secret fields at rest. Falls back to a
+    # key derived from secret_key if unset — set this explicitly in production
+    # so rotating the JWT secret doesn't strand stored credentials.
+    storage_encryption_key: str = ""
 
     # ── Email ─────────────────────────────────────────────────────────────────
     smtp_host: str = ""

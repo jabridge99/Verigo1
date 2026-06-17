@@ -77,6 +77,18 @@ def invalidate_tenant_cache(industry_id: str) -> None:
         del _provider_cache[key]
 
 
+_SECRET_FIELDS = {"secret_key", "account_key", "credentials_json"}
+
+
+def _decrypt_secrets(cfg: dict) -> dict:
+    from app.services.crypto import decrypt_secret
+
+    return {
+        k: (decrypt_secret(v) if k in _SECRET_FIELDS and isinstance(v, str) else v)
+        for k, v in cfg.items()
+    }
+
+
 def build_provider_from_config(cfg: dict) -> StorageProvider:
     """Build (uncached) a provider directly from a storage_config dict — used to
     validate a tenant's custom storage settings before persisting them."""
@@ -109,6 +121,7 @@ def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
                         if isinstance(tenant.storage_config, str)
                         else tenant.storage_config
                     )
+                    sc = _decrypt_secrets(sc)
                     backend = sc.get("backend", "local")
                     cache_key = f"{industry_id}:{backend}"
                     if cache_key not in _provider_cache:

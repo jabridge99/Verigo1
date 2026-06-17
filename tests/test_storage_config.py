@@ -108,3 +108,28 @@ def test_non_admin_cannot_use_admin_storage_routes(client, db):
     viewer = _make_user(db, UserRole.viewer, industry_id="IND-STOR-005")
     res = client.get("/api/v1/storage/admin/IND-STOR-005", headers=_auth(viewer))
     assert res.status_code == 403
+
+
+def test_secret_fields_encrypted_at_rest(client, db):
+    _make_tenant(db, "IND-STOR-006")
+    admin = _make_user(db, UserRole.admin, industry_id=None)
+    _set_plan(client, _auth(admin), "IND-STOR-006", "enterprise")
+
+    user = _make_user(db, UserRole.analyst, industry_id="IND-STOR-006")
+    res = client.put(
+        "/api/v1/storage/config",
+        json={"backend": "s3", "bucket": "my-bucket", "access_key": "AK", "secret_key": "SK-PLAINTEXT"},
+        headers=_auth(user),
+    )
+    assert res.status_code == 200, res.text
+
+    db.expire_all()
+    tenant = db.query(IndustryTenant).filter_by(industry_id="IND-STOR-006").first()
+    stored = tenant.storage_config
+    assert stored["secret_key"] != "SK-PLAINTEXT"
+    assert stored["secret_key"].startswith("enc:")
+    assert stored["bucket"] == "my-bucket"  # non-secret stays plaintext
+
+    from app.services.crypto import decrypt_secret
+
+    assert decrypt_secret(stored["secret_key"]) == "SK-PLAINTEXT"
