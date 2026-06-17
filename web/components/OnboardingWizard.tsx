@@ -133,6 +133,11 @@ export default function OnboardingWizard() {
     }, 'Failed to create customer')
   }
 
+  function skipTo(next: Step) {
+    setError('')
+    setStep(next)
+  }
+
   const stepIndex = STEP_ORDER.indexOf(step === 'generating' ? 'risk' : step)
 
   return (
@@ -168,11 +173,12 @@ export default function OnboardingWizard() {
           <h2 className="text-xl font-bold text-slate-900 mb-1">Company details</h2>
           <p className="text-sm text-slate-500 mb-6">Step 2 of 6</p>
           <form onSubmit={handleCompanyDetails} className="space-y-4">
-            <Field label="ABN" value={abn} onChange={setAbn} placeholder="12 345 678 901" required />
-            <Field label="Business address" value={businessAddress} onChange={setBusinessAddress} placeholder="1 Example St, Sydney NSW 2000" required />
-            <Field label="Phone" value={phone} onChange={setPhone} placeholder="+61 2 9000 0000" required />
+            <Field label="ABN" value={abn} onChange={setAbn} placeholder="12 345 678 901" />
+            <Field label="Business address" value={businessAddress} onChange={setBusinessAddress} placeholder="1 Example St, Sydney NSW 2000" />
+            <Field label="Phone" value={phone} onChange={setPhone} placeholder="+61 2 9000 0000" />
             {error && <ErrorBanner message={error} />}
             <NextButton loading={loading} />
+            <SkipButton loading={loading} onClick={() => skipTo('compliance')} />
           </form>
         </>
       )}
@@ -182,10 +188,11 @@ export default function OnboardingWizard() {
           <h2 className="text-xl font-bold text-slate-900 mb-1">Compliance officer</h2>
           <p className="text-sm text-slate-500 mb-6">Step 3 of 6 — who is your AML/CTF Compliance Officer (MLRO)?</p>
           <form onSubmit={handleComplianceOfficer} className="space-y-4">
-            <Field label="Full name" value={officerName} onChange={setOfficerName} placeholder="Jane Smith" required />
-            <Field label="Email" value={officerEmail} onChange={setOfficerEmail} placeholder="jane@company.com.au" type="email" required />
+            <Field label="Full name" value={officerName} onChange={setOfficerName} placeholder="Jane Smith" />
+            <Field label="Email" value={officerEmail} onChange={setOfficerEmail} placeholder="jane@company.com.au" type="email" />
             {error && <ErrorBanner message={error} />}
             <NextButton loading={loading} />
+            <SkipButton loading={loading} onClick={() => skipTo('risk')} />
           </form>
         </>
       )}
@@ -261,6 +268,7 @@ export default function OnboardingWizard() {
             <button type="submit" disabled={loading} className="pub-btn-primary w-full justify-center py-3 disabled:opacity-50">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Onboard Customer <ArrowRight className="w-4 h-4" /></>}
             </button>
+            <SkipButton loading={loading} onClick={() => skipTo('done')} />
           </form>
         </>
       )}
@@ -312,6 +320,15 @@ function NextButton({ loading }: { loading: boolean }) {
   return (
     <button type="submit" disabled={loading} className="pub-btn-primary w-full justify-center py-3 disabled:opacity-50">
       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Continue <ArrowRight className="w-4 h-4" /></>}
+    </button>
+  )
+}
+
+function SkipButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+  return (
+    <button type="button" disabled={loading} onClick={onClick}
+      className="w-full text-center text-sm text-slate-400 hover:text-slate-600 disabled:opacity-50">
+      Skip for now
     </button>
   )
 }
