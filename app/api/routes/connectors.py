@@ -81,12 +81,9 @@ def list_connectors(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = (
-        current_user.industry_id
-        if current_user.role != UserRole.admin
-        else current_user.industry_id
+    return get_credentials(
+        db, current_user.industry_id, provider, current_user.primary_organisation_id
     )
-    return get_credentials(db, industry_id, provider)
 
 
 @router.post("/", response_model=ConnectorResponse, status_code=201)
@@ -104,11 +101,18 @@ def add_connector(
         credentials=payload.credentials,
         label=payload.label,
         created_by=current_user.user_id,
+        organisation_id=current_user.primary_organisation_id,
     )
     if payload.is_default:
         from app.services.connector_service import update_credential as uc
 
-        uc(db, cred.credential_id, current_user.industry_id, is_default=True)
+        uc(
+            db,
+            cred.credential_id,
+            current_user.industry_id,
+            is_default=True,
+            organisation_id=current_user.primary_organisation_id,
+        )
         db.refresh(cred)
     return cred
 
@@ -128,6 +132,7 @@ def update_connector(
             credentials=payload.credentials,
             label=payload.label,
             is_default=payload.is_default,
+            organisation_id=current_user.primary_organisation_id,
         )
     except ValueError as e:
         raise HTTPException(404, str(e))
@@ -139,7 +144,9 @@ def remove_connector(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    delete_credential(db, credential_id, current_user.industry_id)
+    delete_credential(
+        db, credential_id, current_user.industry_id, current_user.primary_organisation_id
+    )
 
 
 @router.post("/{credential_id}/test")
@@ -149,6 +156,11 @@ def test_connector(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     try:
-        return test_credential(db, credential_id, current_user.industry_id)
+        return test_credential(
+            db,
+            credential_id,
+            current_user.industry_id,
+            current_user.primary_organisation_id,
+        )
     except ValueError as e:
         raise HTTPException(404, str(e))

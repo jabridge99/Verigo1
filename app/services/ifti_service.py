@@ -996,11 +996,22 @@ def list_ifti(
     industry_id: Optional[str] = None,
     direction: Optional[str] = None,
     status: Optional[str] = None,
+    organisation_id: Optional[int] = None,
 ) -> list:
+    from sqlalchemy import or_
+
     from app.models.ifti import IFTIRecord
 
     q = db.query(IFTIRecord)
-    if industry_id:
+    if organisation_id:
+        q = q.filter(
+            or_(
+                IFTIRecord.organisation_id == organisation_id,
+                (IFTIRecord.organisation_id.is_(None))
+                & (IFTIRecord.industry_id == industry_id),
+            )
+        )
+    elif industry_id:
         q = q.filter(IFTIRecord.industry_id == industry_id)
     if direction:
         q = q.filter(IFTIRecord.direction == direction)

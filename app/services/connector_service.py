@@ -16,12 +16,25 @@ import logging
 import uuid
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.connector import ConnectorCredential, ConnectorProvider, ConnectorStatus
 
 log = logging.getLogger("tvg.connectors")
+
+
+def _scope(q, industry_id: Optional[str], organisation_id: Optional[int] = None):
+    if organisation_id:
+        return q.filter(
+            or_(
+                ConnectorCredential.organisation_id == organisation_id,
+                (ConnectorCredential.organisation_id.is_(None))
+                & (ConnectorCredential.industry_id == industry_id),
+            )
+        )
+    return q.filter(ConnectorCredential.industry_id == industry_id)
 
 
 # ── Encryption helpers ────────────────────────────────────────────────────────
@@ -60,6 +73,7 @@ def create_credential(
     credentials: dict,
     label: Optional[str] = None,
     created_by: Optional[str] = None,
+    organisation_id: Optional[int] = None,
 ) -> ConnectorCredential:
     # Derive a display hint from the first meaningful key value
     hint = ""
@@ -71,6 +85,7 @@ def create_credential(
     cred = ConnectorCredential(
         credential_id=f"CONN-{uuid.uuid4().hex[:12].upper()}",
         industry_id=industry_id,
+        organisation_id=organisation_id,
         provider=provider,
         label=label or provider.value,
         encrypted_credentials=_encrypt(credentials),
@@ -88,10 +103,9 @@ def get_credentials(
     db: Session,
     industry_id: str,
     provider: Optional[ConnectorProvider] = None,
+    organisation_id: Optional[int] = None,
 ) -> list[ConnectorCredential]:
-    q = db.query(ConnectorCredential).filter(
-        ConnectorCredential.industry_id == industry_id
-    )
+    q = _scope(db.query(ConnectorCredential), industry_id, organisation_id)
     if provider:
         q = q.filter(ConnectorCredential.provider == provider)
     return q.order_by(ConnectorCredential.created_at.desc()).all()
@@ -126,13 +140,11 @@ def update_credential(
     credentials: Optional[dict] = None,
     label: Optional[str] = None,
     is_default: Optional[bool] = None,
+    organisation_id: Optional[int] = None,
 ) -> ConnectorCredential:
     cred = (
-        db.query(ConnectorCredential)
-        .filter(
-            ConnectorCredential.credential_id == credential_id,
-            ConnectorCredential.industry_id == industry_id,
-        )
+        _scope(db.query(ConnectorCredential), industry_id, organisation_id)
+        .filter(ConnectorCredential.credential_id == credential_id)
         .first()
     )
     if not cred:
@@ -148,8 +160,7 @@ def update_credential(
     if is_default is not None:
         if is_default:
             # Unset previous default for same provider
-            db.query(ConnectorCredential).filter(
-                ConnectorCredential.industry_id == industry_id,
+            _scope(db.query(ConnectorCredential), industry_id, organisation_id).filter(
                 ConnectorCredential.provider == cred.provider,
                 ConnectorCredential.credential_id != credential_id,
             ).update({"is_default": False})
@@ -159,13 +170,15 @@ def update_credential(
     return cred
 
 
-def delete_credential(db: Session, credential_id: str, industry_id: str) -> None:
+def delete_credential(
+    db: Session,
+    credential_id: str,
+    industry_id: str,
+    organisation_id: Optional[int] = None,
+) -> None:
     cred = (
-        db.query(ConnectorCredential)
-        .filter(
-            ConnectorCredential.credential_id == credential_id,
-            ConnectorCredential.industry_id == industry_id,
-        )
+        _scope(db.query(ConnectorCredential), industry_id, organisation_id)
+        .filter(ConnectorCredential.credential_id == credential_id)
         .first()
     )
     if cred:
@@ -176,7 +189,12 @@ def delete_credential(db: Session, credential_id: str, industry_id: str) -> None
 # ── Provider connectivity tests ───────────────────────────────────────────────
 
 
-def test_credential(db: Session, credential_id: str, industry_id: str) -> dict:
+def test_credential(
+    db: Session,
+    credential_id: str,
+    industry_id: str,
+    organisation_id: Optional[int] = None,
+) -> dict:
     """
     Test connectivity for a stored credential.
     Returns {"success": bool, "message": str, "provider": str}.
@@ -185,11 +203,8 @@ def test_credential(db: Session, credential_id: str, industry_id: str) -> dict:
     from datetime import datetime, timezone
 
     cred = (
-        db.query(ConnectorCredential)
-        .filter(
-            ConnectorCredential.credential_id == credential_id,
-            ConnectorCredential.industry_id == industry_id,
-        )
+        _scope(db.query(ConnectorCredential), industry_id, organisation_id)
+        .filter(ConnectorCredential.credential_id == credential_id)
         .first()
     )
     if not cred:
