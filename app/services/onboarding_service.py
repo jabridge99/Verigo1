@@ -56,6 +56,7 @@ def create_session(
     db,
     *,
     industry_id,
+    organisation_id=None,
     applicant_name,
     applicant_email,
     applicant_phone=None,
@@ -70,6 +71,7 @@ def create_session(
     session = OnboardingSession(
         session_id=f"OBS-{uuid.uuid4().hex[:10].upper()}",
         industry_id=industry_id,
+        organisation_id=organisation_id,
         customer_type=CustomerType(customer_type),
         applicant_name=applicant_name,
         applicant_email=applicant_email,
@@ -111,7 +113,7 @@ def create_session(
 
 
 def bulk_create_sessions(
-    db, rows, industry_id, source, file_name=None, created_by=None
+    db, rows, industry_id, source, file_name=None, created_by=None, organisation_id=None
 ):
     batch_id = f"BATCH-{uuid.uuid4().hex[:10].upper()}"
     errors = []
@@ -119,6 +121,7 @@ def bulk_create_sessions(
     batch = ImportBatch(
         batch_id=batch_id,
         industry_id=industry_id,
+        organisation_id=organisation_id,
         source=ImportSource(source),
         file_name=file_name,
         total_rows=len(rows),
@@ -135,6 +138,7 @@ def bulk_create_sessions(
             create_session(
                 db,
                 industry_id=industry_id,
+                organisation_id=organisation_id,
                 applicant_name=name.strip(),
                 applicant_email=email.strip().lower(),
                 applicant_phone=row.get("phone") or row.get("mobile"),
