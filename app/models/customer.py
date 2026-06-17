@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, DateTime, Enum, Float, Integer, String, Text
+from sqlalchemy import Column, DateTime, Enum, Float, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -55,6 +55,7 @@ class Customer(Base):
     risk_score = Column(Float, default=0.0)
     is_pep = Column(Integer, default=0)
     industry_id = Column(String(60), index=True)
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

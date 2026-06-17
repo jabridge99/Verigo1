@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -34,6 +34,9 @@ class User(Base):
     industry_id = Column(String(100))  # tenant scope
     tenant_id = Column(String(60))
     is_super_admin = Column(Boolean, default=False)  # global master account, not tenant-scoped
+    # Cached default org for single-org login flows. Source of truth for
+    # membership/role is OrganisationUser (a user may belong to >1 org).
+    primary_organisation_id = Column(Integer, ForeignKey("organisations.id"))
     mfa_enabled = Column(Boolean, default=False)
     mfa_secret = Column(String(200))
     email_verified = Column(Boolean, default=False)

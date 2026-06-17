@@ -17,6 +17,7 @@ import app.models.ifti  # noqa: F401
 import app.models.kyc  # noqa: F401
 import app.models.notification  # noqa: F401
 import app.models.onboarding  # noqa: F401
+import app.models.organisation  # noqa: F401
 import app.models.report  # noqa: F401
 import app.models.retention  # noqa: F401
 import app.models.security_event  # noqa: F401
@@ -37,6 +38,7 @@ from app.api.routes import (
     kyc,
     notifications,
     onboarding,
+    organisations,
     reports,
     retention,
     sanctions,
@@ -85,9 +87,12 @@ async def lifespan(app: FastAPI):
         log.debug("pack_engine not available — skipping pack seeding")
 
     from app.services.auth_service import seed_master_admin
+    from app.services.org_service import seed_permission_catalog_and_roles
 
     db = SessionLocal()
     try:
+        seed_permission_catalog_and_roles(db)
+        log.info("Permission catalog and system roles seeded")
         admin = seed_master_admin(db)
         if admin:
             log.info("Master admin ensured: %s", admin.email)
@@ -175,6 +180,7 @@ app.include_router(connectors.router, prefix="/api/v1")
 app.include_router(retention.router, prefix="/api/v1")
 app.include_router(security_monitor.router, prefix="/api/v1")
 app.include_router(ifti.router, prefix="/api/v1")
+app.include_router(organisations.router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

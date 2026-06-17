@@ -13,6 +13,7 @@ class UserCreate(BaseModel):
     role: UserRole = UserRole.analyst
     industry_id: Optional[str] = None
     tenant_id: Optional[str] = None
+    organisation_name: Optional[str] = None  # if set, creates a new Organisation with this user as owner
 
 
 class UserUpdate(BaseModel):

@@ -1,6 +1,7 @@
 import enum
 
 from sqlalchemy import (
+    ForeignKey,
     JSON,
     Boolean,
     Column,
@@ -123,6 +124,7 @@ class Subscription(Base):
 
     # Tenant link
     industry_id = Column(String(100), index=True, nullable=False)
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
     tenant_id = Column(String(60))
 
     # Plan
@@ -164,6 +166,7 @@ class Invoice(Base):
     invoice_id = Column(String(60), unique=True, index=True, nullable=False)
     subscription_id = Column(String(60), index=True)
     industry_id = Column(String(100), index=True)
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
 
     stripe_invoice_id = Column(String(100))
     amount_aud = Column(Float, nullable=False)

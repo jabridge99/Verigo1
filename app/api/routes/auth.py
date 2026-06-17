@@ -144,6 +144,11 @@ def register(
         ip=_client_ip(request),
         meta={"email": user.email},
     )
+    if payload.organisation_name:
+        from app.services.org_service import create_organisation
+
+        create_organisation(db, payload.organisation_name, user, industry_id=payload.industry_id)
+
     verify_token = create_email_action_token(db, user.email, "verify_email")
     record_security_event(db, "email_verification_requested", user.user_id)
     token = build_token_response(user)
