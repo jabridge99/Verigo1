@@ -98,8 +98,8 @@ const plans = [
     description: 'For reporting groups, financial institutions, and SaaS resellers.',
     highlight: false,
     features: [
-      { label: 'Unlimited customers', included: true },
-      { label: 'All compliance packs', included: true },
+      { label: 'Customizable customer limit', included: true },
+      { label: 'Up to 2 compliance packs', included: true },
       { label: 'KYC, KYB + beneficial ownership', included: true },
       { label: 'AML/CTF Program — tailored to your industry', included: true },
       { label: 'Full IFTI, SMR, TTR suite', included: true },
@@ -121,9 +121,9 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
   {
     group: 'Platform',
     rows: [
-      { feature: 'Customer limit', values: ['10', '50', '200', 'Unlimited'] },
+      { feature: 'Customer limit', values: ['10', '50', '200', 'Customizable'] },
       { feature: 'Users per tenant', values: ['1', '1', '3', '5'] },
-      { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'All packs'] },
+      { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'Up to 2 packs'] },
       { feature: 'AML/CTF Program', tooltip: 'Basic reference template preloaded. Tailoring to your specific business is an additional service.', values: ['Reference only', 'Reference only', 'Reference only', 'Tailored'] },
       { feature: 'Annual review workflow', values: [true, true, true, true] },
     ],
