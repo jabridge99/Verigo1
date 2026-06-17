@@ -1,11 +1,11 @@
 """
-Document storage service — local filesystem with configurable base directory.
-Files are stored under DOCUMENT_STORE_PATH (default: ./uploads).
+Document storage service — delegates byte storage to the per-tenant
+StorageProvider (local/S3/Azure/GCS) resolved via app.services.storage.factory.
+The Document row keeps a logical storage key (`stored_name`); only the
+factory knows which physical backend that key lives in.
 """
 
-import os
 import uuid
-from pathlib import Path
 from typing import List, Optional
 
 from sqlalchemy import desc, or_
@@ -13,9 +13,7 @@ from sqlalchemy.orm import Session, Query
 
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.schemas.document import DocumentUpdate
-
-STORE_PATH = Path(os.getenv("DOCUMENT_STORE_PATH", "./uploads"))
-STORE_PATH.mkdir(parents=True, exist_ok=True)
+from app.services.storage.factory import get_storage_provider
 
 # 50 MB upload limit
 MAX_SIZE = 50 * 1024 * 1024
@@ -39,6 +37,13 @@ def _doc_id() -> str:
     return f"DOC-{uuid.uuid4().hex[:12].upper()}"
 
 
+def _storage_key(industry_id: Optional[str], original_name: str) -> str:
+    ext = original_name.rsplit(".", 1)[-1] if "." in original_name else ""
+    name = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+    prefix = industry_id or "shared"
+    return f"{prefix}/{name}"
+
+
 def _scope(q: Query, industry_id: Optional[str], organisation_id: Optional[int]) -> Query:
     if organisation_id:
         return q.filter(
@@ -52,15 +57,7 @@ def _scope(q: Query, industry_id: Optional[str], organisation_id: Optional[int])
     return q
 
 
-def save_file(content: bytes, original_name: str) -> tuple[str, int]:
-    ext = Path(original_name).suffix.lower()
-    stored = f"{uuid.uuid4().hex}{ext}"
-    dest = STORE_PATH / stored
-    dest.write_bytes(content)
-    return stored, len(content)
-
-
-def create_document(
+async def create_document(
     db: Session,
     filename: str,
     content: bytes,
@@ -73,13 +70,15 @@ def create_document(
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
 ) -> Document:
-    stored_name, size = save_file(content, filename)
+    key = _storage_key(industry_id, filename)
+    provider = get_storage_provider(industry_id)
+    await provider.upload(key, content, content_type=mime_type)
     doc = Document(
         doc_id=_doc_id(),
         filename=filename,
-        stored_name=stored_name,
+        stored_name=key,
         mime_type=mime_type,
-        size_bytes=size,
+        size_bytes=len(content),
         category=category,
         description=description,
         entity_type=entity_type,
@@ -129,8 +128,14 @@ def get_document(db: Session, doc_id: str) -> Optional[Document]:
     )
 
 
-def get_file_path(doc: Document) -> Path:
-    return STORE_PATH / doc.stored_name
+async def download_bytes(doc: Document) -> bytes:
+    provider = get_storage_provider(doc.industry_id)
+    return await provider.download(doc.stored_name)
+
+
+async def get_access_url(doc: Document, expires_in: int = 300) -> str:
+    provider = get_storage_provider(doc.industry_id)
+    return await provider.get_url(doc.stored_name, expires_in=expires_in)
 
 
 def update_document(
@@ -170,7 +175,7 @@ def archive_document(
     return doc
 
 
-def delete_document(
+async def delete_document(
     db: Session, doc_id: str, industry_id: Optional[str], organisation_id: Optional[int] = None
 ) -> bool:
     q = db.query(Document).filter(Document.doc_id == doc_id)
@@ -178,10 +183,9 @@ def delete_document(
     doc = q.first()
     if not doc:
         return False
-    # Soft delete — remove file from disk, mark deleted
-    fp = get_file_path(doc)
-    if fp.exists():
-        fp.unlink(missing_ok=True)
+    # Soft delete — remove the underlying object, mark the row deleted
+    provider = get_storage_provider(doc.industry_id)
+    await provider.delete(doc.stored_name)
     doc.status = DocumentStatus.deleted
     db.commit()
     return True

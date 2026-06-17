@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
@@ -23,6 +23,8 @@ from app.models.user import User, UserRole
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.services import document_service as svc
 from app.services.document_service import ALLOWED_MIME, MAX_SIZE
+from app.services.storage.factory import get_storage_provider
+from app.services.storage.local import LocalStorageProvider
 from app.services.tenant_scope import assert_tenant
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -116,7 +118,7 @@ async def upload_document(
     if not _verify_magic(content, mime):
         raise HTTPException(415, "File content does not match declared content type")
 
-    return svc.create_document(
+    return await svc.create_document(
         db,
         filename=file.filename or "upload",
         content=content,
@@ -175,7 +177,7 @@ def get_document(
 
 
 @router.get("/{doc_id}/download")
-def download_document(
+async def download_document(
     doc_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
@@ -184,18 +186,27 @@ def download_document(
     if not doc:
         raise HTTPException(404, "Document not found")
     _assert_tenant(current_user, doc)
-    path = svc.get_file_path(doc)
-    if not path.exists():
+
+    provider = get_storage_provider(doc.industry_id)
+    if not await provider.exists(doc.stored_name):
         raise HTTPException(404, "File not found on storage")
-    return FileResponse(
-        path=str(path),
-        filename=doc.filename,
-        media_type=doc.mime_type or "application/octet-stream",
-        headers={
-            "Content-Disposition": f'attachment; filename="{doc.filename}"',
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+
+    if isinstance(provider, LocalStorageProvider):
+        # Stream straight from disk — no presigned-URL support for local dev.
+        content = await svc.download_bytes(doc)
+        return StreamingResponse(
+            iter([content]),
+            media_type=doc.mime_type or "application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{doc.filename}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    # Cloud backends: redirect to a short-lived pre-signed URL so the file
+    # streams directly from the object store, not through this API process.
+    url = await svc.get_access_url(doc, expires_in=300)
+    return RedirectResponse(url)
 
 
 @router.patch("/{doc_id}", response_model=DocumentResponse)
@@ -230,10 +241,13 @@ def archive_document(
 
 
 @router.delete("/{doc_id}", status_code=204)
-def delete_document(
+async def delete_document(
     doc_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    if not svc.delete_document(db, doc_id, _industry_scope(current_user), _org_scope(current_user)):
+    deleted = await svc.delete_document(
+        db, doc_id, _industry_scope(current_user), _org_scope(current_user)
+    )
+    if not deleted:
         raise HTTPException(404, "Document not found")
