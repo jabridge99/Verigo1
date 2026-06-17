@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
@@ -120,7 +120,7 @@ async def upload_document(
     # Server-side SHA-256 — never trusted from client
     sha256_hash = hashlib.sha256(content).hexdigest()
 
-    return svc.create_document(
+    return await svc.create_document(
         db,
         filename=file.filename or "upload",
         content=content,
@@ -179,7 +179,7 @@ def get_document(
 
 
 @router.get("/{doc_id}/download")
-def download_document(
+async def download_document(
     doc_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
@@ -188,12 +188,11 @@ def download_document(
     if not doc:
         raise HTTPException(404, "Document not found")
     _assert_tenant(current_user, doc.industry_id)
-    path = svc.get_file_path(doc)
-    if not path.exists():
+    if not await svc.file_exists(doc):
         raise HTTPException(404, "File not found on storage")
-    return FileResponse(
-        path=str(path),
-        filename=doc.filename,
+    content = await svc.get_file_bytes(doc)
+    return Response(
+        content=content,
         media_type=doc.mime_type or "application/octet-stream",
         headers={
             "Content-Disposition": f'attachment; filename="{doc.filename}"',
@@ -230,7 +229,7 @@ def archive_document(
 
 
 @router.delete("/{doc_id}", status_code=204)
-def delete_document(
+async def delete_document(
     doc_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
@@ -240,7 +239,7 @@ def delete_document(
         raise HTTPException(404, "Document not found")
     if doc.legal_hold:
         raise HTTPException(409, "Document is under legal hold and cannot be deleted.")
-    if not svc.delete_document(db, doc_id, _industry_scope(current_user)):
+    if not await svc.delete_document(db, doc_id, _industry_scope(current_user)):
         raise HTTPException(404, "Document not found")
 
 

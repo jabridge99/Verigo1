@@ -74,7 +74,7 @@ async def upload_document(
     if len(content) > max_size_bytes:
         raise HTTPException(413, "File exceeds the 10 MB size limit")
 
-    doc = customer_portal_service.upload_portal_document(
+    doc = await customer_portal_service.upload_portal_document(
         db=db,
         session=session,
         document_category=category,

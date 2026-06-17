@@ -1,11 +1,11 @@
 """
-Document storage service — local filesystem with configurable base directory.
-Files are stored under DOCUMENT_STORE_PATH (default: ./uploads).
+Document storage service — delegates actual file I/O to the pluggable
+StorageProvider (local disk in dev, Supabase/S3/Azure/GCS in production —
+see app.services.storage.factory). Document.stored_name holds the
+storage-backend key, not a filesystem path.
 """
 
-import os
 import uuid
-from pathlib import Path
 from typing import List, Optional
 
 from sqlalchemy import desc
@@ -13,9 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.schemas.document import DocumentUpdate
-
-STORE_PATH = Path(os.getenv("DOCUMENT_STORE_PATH", "./uploads"))
-STORE_PATH.mkdir(parents=True, exist_ok=True)
+from app.services.storage.factory import get_storage_provider
 
 # 50 MB upload limit
 MAX_SIZE = 50 * 1024 * 1024
@@ -39,15 +37,22 @@ def _doc_id() -> str:
     return f"DOC-{uuid.uuid4().hex[:12].upper()}"
 
 
-def save_file(content: bytes, original_name: str) -> tuple[str, int]:
-    ext = Path(original_name).suffix.lower()
-    stored = f"{uuid.uuid4().hex}{ext}"
-    dest = STORE_PATH / stored
-    dest.write_bytes(content)
-    return stored, len(content)
+def _storage_key(industry_id: Optional[str], original_name: str) -> str:
+    from pathlib import PurePosixPath
+
+    ext = PurePosixPath(original_name).suffix.lower()
+    prefix = industry_id or "unscoped"
+    return f"{prefix}/{uuid.uuid4().hex}{ext}"
 
 
-def create_document(
+async def save_file(content: bytes, original_name: str, mime_type: str, industry_id: Optional[str] = None) -> tuple[str, int]:
+    key = _storage_key(industry_id, original_name)
+    provider = get_storage_provider()
+    obj = await provider.upload(key, content, content_type=mime_type)
+    return key, obj.size
+
+
+async def create_document(
     db: Session,
     filename: str,
     content: bytes,
@@ -58,8 +63,10 @@ def create_document(
     description: Optional[str] = None,
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
+    sha256_hash: Optional[str] = None,
+    retention_category: Optional[str] = None,
 ) -> Document:
-    stored_name, size = save_file(content, filename)
+    stored_name, size = await save_file(content, filename, mime_type, industry_id)
     doc = Document(
         doc_id=_doc_id(),
         filename=filename,
@@ -72,6 +79,8 @@ def create_document(
         entity_id=entity_id,
         uploaded_by=uploaded_by,
         industry_id=industry_id,
+        sha256_hash=sha256_hash,
+        retention_category=retention_category,
     )
     db.add(doc)
     db.commit()
@@ -114,8 +123,14 @@ def get_document(db: Session, doc_id: str) -> Optional[Document]:
     )
 
 
-def get_file_path(doc: Document) -> Path:
-    return STORE_PATH / doc.stored_name
+async def get_file_bytes(doc: Document) -> bytes:
+    provider = get_storage_provider()
+    return await provider.download(doc.stored_name)
+
+
+async def file_exists(doc: Document) -> bool:
+    provider = get_storage_provider()
+    return await provider.exists(doc.stored_name)
 
 
 def update_document(
@@ -153,17 +168,19 @@ def archive_document(
     return doc
 
 
-def delete_document(db: Session, doc_id: str, industry_id: Optional[str]) -> bool:
+async def delete_document(db: Session, doc_id: str, industry_id: Optional[str]) -> bool:
     q = db.query(Document).filter(Document.doc_id == doc_id)
     if industry_id:
         q = q.filter(Document.industry_id == industry_id)
     doc = q.first()
     if not doc:
         return False
-    # Soft delete — remove file from disk, mark deleted
-    fp = get_file_path(doc)
-    if fp.exists():
-        fp.unlink(missing_ok=True)
+    # Soft delete — remove object from storage backend, mark deleted
+    provider = get_storage_provider()
+    try:
+        await provider.delete(doc.stored_name)
+    except Exception:
+        pass  # object may already be gone — don't block the soft-delete
     doc.status = DocumentStatus.deleted
     db.commit()
     return True

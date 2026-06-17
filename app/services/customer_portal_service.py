@@ -147,7 +147,7 @@ def get_portal_state(db: Session, session: CustomerPortalSession) -> dict:
     }
 
 
-def upload_portal_document(
+async def upload_portal_document(
     db: Session,
     session: CustomerPortalSession,
     document_category: str,
@@ -157,6 +157,27 @@ def upload_portal_document(
 ) -> CustomerPortalDocument:
     if document_category not in (session.required_documents or []):
         raise HTTPException(422, f"Document category '{document_category}' is not required for this portal session")
+
+    from app.models.document import DocumentCategory
+    from app.services import document_service
+
+    try:
+        doc_category = DocumentCategory(document_category)
+    except ValueError:
+        doc_category = DocumentCategory.other
+
+    stored_doc = await document_service.create_document(
+        db,
+        filename=filename,
+        content=file_content,
+        mime_type=mime_type,
+        uploaded_by=session.customer_id,
+        industry_id=session.org_id,
+        category=doc_category,
+        entity_type="CustomerPortalSession",
+        entity_id=session.id,
+        sha256_hash=hashlib.sha256(file_content).hexdigest(),
+    )
 
     existing = db.query(CustomerPortalDocument).filter_by(
         session_id=session.id, document_category=document_category
@@ -168,6 +189,7 @@ def upload_portal_document(
         existing.status = PortalDocumentStatus.uploaded
         existing.uploaded_at = now
         existing.rejection_reason = None
+        existing.document_id = stored_doc.doc_id
         db.commit()
         db.refresh(existing)
         return existing
@@ -177,6 +199,7 @@ def upload_portal_document(
         customer_id=session.customer_id,
         org_id=session.org_id,
         document_category=document_category,
+        document_id=stored_doc.doc_id,
         status=PortalDocumentStatus.uploaded,
         uploaded_at=now,
     )
