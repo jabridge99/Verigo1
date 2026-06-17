@@ -64,6 +64,12 @@ class Organisation(Base):
     industry_id = Column(String(100), index=True)  # links to an IndustryTenant pack
     risk_profile = Column(Enum(RiskProfile))  # set during self-service sign-up
     status = Column(Enum(OrgStatus), default=OrgStatus.trial)
+    # Phase D — onboarding wizard company/compliance details
+    abn = Column(String(20))
+    business_address = Column(String(300))
+    phone = Column(String(50))
+    compliance_officer_name = Column(String(200))
+    compliance_officer_email = Column(String(200))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

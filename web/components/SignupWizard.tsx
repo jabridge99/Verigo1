@@ -2,25 +2,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { industries } from '@/lib/industries'
-import {
-  registerAccount,
-  confirmEmailVerification,
-  createOrganisation,
-  setOrganisationIndustry,
-  setOrganisationRiskProfile,
-  generateAmlProgram,
-  type AmlProgram,
-} from '@/lib/signup'
+import { ArrowRight, Loader2, AlertCircle } from 'lucide-react'
+import { registerAccount, confirmEmailVerification, createOrganisation } from '@/lib/signup'
 
-type Step = 'account' | 'verify' | 'organisation' | 'industry' | 'risk' | 'generating' | 'done'
-
-const RISK_PROFILES: { id: 'low' | 'standard' | 'high'; label: string; description: string }[] = [
-  { id: 'low', label: 'Low', description: 'Limited exposure, simple products, low-risk customer base.' },
-  { id: 'standard', label: 'Standard', description: 'Typical exposure for your industry.' },
-  { id: 'high', label: 'High', description: 'Complex products, cross-border activity, or higher-risk customers.' },
-]
+type Step = 'account' | 'verify' | 'organisation'
 
 export default function SignupWizard() {
   const router = useRouter()
@@ -33,13 +18,9 @@ export default function SignupWizard() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [companyName, setCompanyName] = useState('')
-  const [industryId, setIndustryId] = useState('')
-  const [riskProfile, setRiskProfile] = useState<'low' | 'standard' | 'high' | ''>('')
 
   const [verifyToken, setVerifyToken] = useState('')
   const [devVerifyToken, setDevVerifyToken] = useState('')
-  const [orgId, setOrgId] = useState('')
-  const [program, setProgram] = useState<AmlProgram | null>(null)
 
   async function handleCreateAccount(e: React.FormEvent) {
     e.preventDefault()
@@ -79,43 +60,9 @@ export default function SignupWizard() {
     setLoading(true)
     try {
       const org = await createOrganisation(companyName)
-      setOrgId(org.org_id)
-      setStep('industry')
+      router.push(`/onboarding-setup?org=${org.org_id}`)
     } catch (err: any) {
       setError(err.message ?? 'Failed to create organisation')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleChooseIndustry(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-    try {
-      await setOrganisationIndustry(orgId, industryId)
-      setStep('risk')
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to save industry')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleChooseRisk(profile: 'low' | 'standard' | 'high') {
-    setError('')
-    setLoading(true)
-    setRiskProfile(profile)
-    try {
-      await setOrganisationRiskProfile(orgId, profile)
-      setStep('generating')
-      const generated = await generateAmlProgram(orgId)
-      setProgram(generated)
-      setStep('done')
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to generate AML program')
-      setStep('risk')
-    } finally {
       setLoading(false)
     }
   }
@@ -123,14 +70,11 @@ export default function SignupWizard() {
   return (
     <div className="pub-card">
       <div className="flex items-center gap-2 mb-6">
-        {(['account', 'verify', 'organisation', 'industry', 'risk', 'done'] as Step[]).map((s, i) => (
+        {(['account', 'verify', 'organisation'] as Step[]).map((s, i) => (
           <div
             key={s}
             className={`h-1.5 flex-1 rounded-full ${
-              step === s || (step === 'generating' && s === 'risk') ||
-              ['account', 'verify', 'organisation', 'industry', 'risk', 'generating', 'done'].indexOf(step) > i
-                ? 'bg-blue-600'
-                : 'bg-slate-200'
+              ['account', 'verify', 'organisation'].indexOf(step) >= i ? 'bg-blue-600' : 'bg-slate-200'
             }`}
           />
         ))}
@@ -212,90 +156,6 @@ export default function SignupWizard() {
         </>
       )}
 
-      {step === 'industry' && (
-        <>
-          <h2 className="text-xl font-bold text-slate-900 mb-6">Choose your industry</h2>
-          <form onSubmit={handleChooseIndustry} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Industry</label>
-              <select required value={industryId} onChange={e => setIndustryId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
-                <option value="">Select your industry</option>
-                {industries.map(i => (
-                  <option key={i.id} value={i.id}>
-                    {i.label}{i.regime === 'expanded' ? ' (Tranche 2 — 2026)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {error && <ErrorBanner message={error} />}
-            <button type="submit" disabled={loading} className="pub-btn-primary w-full justify-center py-3 disabled:opacity-50">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Continue <ArrowRight className="w-4 h-4" /></>}
-            </button>
-          </form>
-        </>
-      )}
-
-      {step === 'risk' && (
-        <>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Choose your risk profile</h2>
-          <p className="text-sm text-slate-500 mb-6">This shapes the review cadence of your AML/CTF program.</p>
-          <div className="space-y-3">
-            {RISK_PROFILES.map(p => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={loading}
-                onClick={() => handleChooseRisk(p.id)}
-                className="w-full text-left rounded-xl border border-slate-200 px-4 py-3 hover:border-blue-500 hover:bg-blue-50/50 transition-colors disabled:opacity-50"
-              >
-                <p className="font-semibold text-slate-900 text-sm">{p.label}</p>
-                <p className="text-slate-500 text-xs mt-0.5">{p.description}</p>
-              </button>
-            ))}
-          </div>
-          {error && <div className="mt-4"><ErrorBanner message={error} /></div>}
-          {loading && (
-            <div className="flex items-center gap-2 mt-4 text-sm text-slate-500">
-              <Loader2 className="w-4 h-4 animate-spin" /> Saving risk profile…
-            </div>
-          )}
-        </>
-      )}
-
-      {step === 'generating' && (
-        <div className="py-12 flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-          <p className="text-slate-600 text-sm">Generating your AML/CTF program…</p>
-        </div>
-      )}
-
-      {step === 'done' && program && (
-        <>
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle2 className="w-6 h-6 text-green-500" />
-            <h2 className="text-xl font-bold text-slate-900">Your AML/CTF program is ready</h2>
-          </div>
-          <p className="text-sm text-slate-500 mb-4">
-            {program.items.length} controls generated for a {program.risk_profile}-risk profile.
-          </p>
-          <ul className="space-y-2 max-h-64 overflow-y-auto mb-6">
-            {program.items.map(item => (
-              <li key={item.title} className="flex items-start gap-2 text-sm text-slate-700">
-                <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                <span>{item.title}</span>
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard')}
-            className="pub-btn-primary w-full justify-center py-3"
-          >
-            Enter Dashboard <ArrowRight className="w-4 h-4" />
-          </button>
-        </>
-      )}
     </div>
   )
 }

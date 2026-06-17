@@ -1,0 +1,326 @@
+'use client'
+import { useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { industries } from '@/lib/industries'
+import {
+  updateOrganisation,
+  generateAmlProgram,
+  createFirstCustomer,
+  type AmlProgram,
+  type FirstCustomerInput,
+} from '@/lib/signup'
+
+type Step = 'industry' | 'company' | 'compliance' | 'risk' | 'generating' | 'program' | 'customer' | 'done'
+
+const STEP_ORDER: Step[] = ['industry', 'company', 'compliance', 'risk', 'program', 'customer', 'done']
+
+const RISK_PROFILES: { id: 'low' | 'standard' | 'high'; label: string; description: string }[] = [
+  { id: 'low', label: 'Low', description: 'Limited exposure, simple products, low-risk customer base.' },
+  { id: 'standard', label: 'Standard', description: 'Typical exposure for your industry.' },
+  { id: 'high', label: 'High', description: 'Complex products, cross-border activity, or higher-risk customers.' },
+]
+
+// Map the marketing-site industry slug to the customer-record IndustryType enum.
+function customerIndustryFor(industryId: string): FirstCustomerInput['industry'] {
+  if (industryId === 'digital-currency-exchange') return 'cryptocurrency'
+  if (industryId === 'real-estate') return 'real_estate'
+  if (['remittance-provider', 'foreign-exchange', 'payment-service-provider'].includes(industryId)) return 'fintech'
+  return 'other'
+}
+
+export default function OnboardingWizard() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const orgId = searchParams.get('org') ?? ''
+
+  const [step, setStep] = useState<Step>('industry')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const [industryId, setIndustryId] = useState('')
+  const [abn, setAbn] = useState('')
+  const [businessAddress, setBusinessAddress] = useState('')
+  const [phone, setPhone] = useState('')
+  const [officerName, setOfficerName] = useState('')
+  const [officerEmail, setOfficerEmail] = useState('')
+  const [program, setProgram] = useState<AmlProgram | null>(null)
+
+  const [customer, setCustomer] = useState({
+    full_name: '',
+    date_of_birth: '',
+    nationality: '',
+    country_of_residence: '',
+    id_number: '',
+    id_type: '',
+    address: '',
+    email: '',
+    phone: '',
+  })
+
+  if (!orgId) {
+    return (
+      <div className="pub-card">
+        <ErrorBanner message="No organisation selected. Please start sign-up again." />
+      </div>
+    )
+  }
+
+  async function withLoading(fn: () => Promise<void>, onError: string) {
+    setError('')
+    setLoading(true)
+    try {
+      await fn()
+    } catch (err: any) {
+      setError(err.message ?? onError)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleChooseIndustry(e: React.FormEvent) {
+    e.preventDefault()
+    withLoading(async () => {
+      await updateOrganisation(orgId, { industry_id: industryId })
+      setStep('company')
+    }, 'Failed to save industry')
+  }
+
+  function handleCompanyDetails(e: React.FormEvent) {
+    e.preventDefault()
+    withLoading(async () => {
+      await updateOrganisation(orgId, { abn, business_address: businessAddress, phone })
+      setStep('compliance')
+    }, 'Failed to save company details')
+  }
+
+  function handleComplianceOfficer(e: React.FormEvent) {
+    e.preventDefault()
+    withLoading(async () => {
+      await updateOrganisation(orgId, {
+        compliance_officer_name: officerName,
+        compliance_officer_email: officerEmail,
+      })
+      setStep('risk')
+    }, 'Failed to save compliance officer')
+  }
+
+  async function handleChooseRisk(profile: 'low' | 'standard' | 'high') {
+    setError('')
+    setLoading(true)
+    try {
+      await updateOrganisation(orgId, { risk_profile: profile })
+      setStep('generating')
+      const generated = await generateAmlProgram(orgId)
+      setProgram(generated)
+      setStep('program')
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to generate AML program')
+      setStep('risk')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleCreateCustomer(e: React.FormEvent) {
+    e.preventDefault()
+    withLoading(async () => {
+      await createFirstCustomer({
+        ...customer,
+        industry: customerIndustryFor(industryId),
+      })
+      setStep('done')
+    }, 'Failed to create customer')
+  }
+
+  const stepIndex = STEP_ORDER.indexOf(step === 'generating' ? 'risk' : step)
+
+  return (
+    <div className="pub-card">
+      <div className="flex items-center gap-2 mb-6">
+        {STEP_ORDER.map((s, i) => (
+          <div key={s} className={`h-1.5 flex-1 rounded-full ${stepIndex >= i ? 'bg-blue-600' : 'bg-slate-200'}`} />
+        ))}
+      </div>
+
+      {step === 'industry' && (
+        <>
+          <h2 className="text-xl font-bold text-slate-900 mb-1">Choose your industry</h2>
+          <p className="text-sm text-slate-500 mb-6">Step 1 of 6</p>
+          <form onSubmit={handleChooseIndustry} className="space-y-4">
+            <select required value={industryId} onChange={e => setIndustryId(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
+              <option value="">Select your industry</option>
+              {industries.map(i => (
+                <option key={i.id} value={i.id}>
+                  {i.label}{i.regime === 'expanded' ? ' (Tranche 2 — 2026)' : ''}
+                </option>
+              ))}
+            </select>
+            {error && <ErrorBanner message={error} />}
+            <NextButton loading={loading} />
+          </form>
+        </>
+      )}
+
+      {step === 'company' && (
+        <>
+          <h2 className="text-xl font-bold text-slate-900 mb-1">Company details</h2>
+          <p className="text-sm text-slate-500 mb-6">Step 2 of 6</p>
+          <form onSubmit={handleCompanyDetails} className="space-y-4">
+            <Field label="ABN" value={abn} onChange={setAbn} placeholder="12 345 678 901" required />
+            <Field label="Business address" value={businessAddress} onChange={setBusinessAddress} placeholder="1 Example St, Sydney NSW 2000" required />
+            <Field label="Phone" value={phone} onChange={setPhone} placeholder="+61 2 9000 0000" required />
+            {error && <ErrorBanner message={error} />}
+            <NextButton loading={loading} />
+          </form>
+        </>
+      )}
+
+      {step === 'compliance' && (
+        <>
+          <h2 className="text-xl font-bold text-slate-900 mb-1">Compliance officer</h2>
+          <p className="text-sm text-slate-500 mb-6">Step 3 of 6 — who is your AML/CTF Compliance Officer (MLRO)?</p>
+          <form onSubmit={handleComplianceOfficer} className="space-y-4">
+            <Field label="Full name" value={officerName} onChange={setOfficerName} placeholder="Jane Smith" required />
+            <Field label="Email" value={officerEmail} onChange={setOfficerEmail} placeholder="jane@company.com.au" type="email" required />
+            {error && <ErrorBanner message={error} />}
+            <NextButton loading={loading} />
+          </form>
+        </>
+      )}
+
+      {step === 'risk' && (
+        <>
+          <h2 className="text-xl font-bold text-slate-900 mb-1">Risk appetite</h2>
+          <p className="text-sm text-slate-500 mb-6">Step 4 of 6 — this shapes the review cadence of your AML/CTF program.</p>
+          <div className="space-y-3">
+            {RISK_PROFILES.map(p => (
+              <button key={p.id} type="button" disabled={loading} onClick={() => handleChooseRisk(p.id)}
+                className="w-full text-left rounded-xl border border-slate-200 px-4 py-3 hover:border-blue-500 hover:bg-blue-50/50 transition-colors disabled:opacity-50">
+                <p className="font-semibold text-slate-900 text-sm">{p.label}</p>
+                <p className="text-slate-500 text-xs mt-0.5">{p.description}</p>
+              </button>
+            ))}
+          </div>
+          {error && <div className="mt-4"><ErrorBanner message={error} /></div>}
+        </>
+      )}
+
+      {step === 'generating' && (
+        <div className="py-12 flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-slate-600 text-sm">Step 5 of 6 — generating your AML/CTF program…</p>
+        </div>
+      )}
+
+      {step === 'program' && program && (
+        <>
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle2 className="w-6 h-6 text-green-500" />
+            <h2 className="text-xl font-bold text-slate-900">Your AML/CTF program is ready</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-4">
+            {program.items.length} controls generated for a {program.risk_profile}-risk profile.
+          </p>
+          <ul className="space-y-2 max-h-56 overflow-y-auto mb-6">
+            {program.items.map(item => (
+              <li key={item.title} className="flex items-start gap-2 text-sm text-slate-700">
+                <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                <span>{item.title}</span>
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={() => setStep('customer')} className="pub-btn-primary w-full justify-center py-3">
+            Continue <ArrowRight className="w-4 h-4" />
+          </button>
+        </>
+      )}
+
+      {step === 'customer' && (
+        <>
+          <h2 className="text-xl font-bold text-slate-900 mb-1">Onboard your first customer</h2>
+          <p className="text-sm text-slate-500 mb-6">Step 6 of 6</p>
+          <form onSubmit={handleCreateCustomer} className="space-y-4">
+            <Field label="Full name" value={customer.full_name} onChange={v => setCustomer({ ...customer, full_name: v })} placeholder="Alex Customer" required />
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Date of birth" value={customer.date_of_birth} onChange={v => setCustomer({ ...customer, date_of_birth: v })} type="date" required />
+              <Field label="Nationality" value={customer.nationality} onChange={v => setCustomer({ ...customer, nationality: v })} placeholder="Australian" required />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Country of residence" value={customer.country_of_residence} onChange={v => setCustomer({ ...customer, country_of_residence: v })} placeholder="Australia" required />
+              <Field label="ID type" value={customer.id_type} onChange={v => setCustomer({ ...customer, id_type: v })} placeholder="Passport" required />
+            </div>
+            <Field label="ID number" value={customer.id_number} onChange={v => setCustomer({ ...customer, id_number: v })} placeholder="PA1234567" required />
+            <Field label="Address" value={customer.address} onChange={v => setCustomer({ ...customer, address: v })} placeholder="2 Customer Rd" required />
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Email" value={customer.email} onChange={v => setCustomer({ ...customer, email: v })} type="email" placeholder="alex@example.com" required />
+              <Field label="Phone" value={customer.phone} onChange={v => setCustomer({ ...customer, phone: v })} placeholder="0400000000" required />
+            </div>
+            {error && <ErrorBanner message={error} />}
+            <button type="submit" disabled={loading} className="pub-btn-primary w-full justify-center py-3 disabled:opacity-50">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Onboard Customer <ArrowRight className="w-4 h-4" /></>}
+            </button>
+          </form>
+        </>
+      )}
+
+      {step === 'done' && (
+        <>
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle2 className="w-6 h-6 text-green-500" />
+            <h2 className="text-xl font-bold text-slate-900">You're all set up</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">
+            Your organisation, AML/CTF program, and first customer are ready to go.
+          </p>
+          <button type="button" onClick={() => router.push('/dashboard')} className="pub-btn-primary w-full justify-center py-3">
+            Enter Dashboard <ArrowRight className="w-4 h-4" />
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  required,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  type?: string
+  required?: boolean
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}</label>
+      <input type={type} required={required} value={value} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+    </div>
+  )
+}
+
+function NextButton({ loading }: { loading: boolean }) {
+  return (
+    <button type="submit" disabled={loading} className="pub-btn-primary w-full justify-center py-3 disabled:opacity-50">
+      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Continue <ArrowRight className="w-4 h-4" /></>}
+    </button>
+  )
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+      <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+      <p className="text-sm text-red-600">{message}</p>
+    </div>
+  )
+}

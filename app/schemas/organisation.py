@@ -16,6 +16,11 @@ class OrganisationUpdate(BaseModel):
     status: Optional[OrgStatus] = None
     industry_id: Optional[str] = None
     risk_profile: Optional[RiskProfile] = None
+    abn: Optional[str] = None
+    business_address: Optional[str] = None
+    phone: Optional[str] = None
+    compliance_officer_name: Optional[str] = None
+    compliance_officer_email: Optional[str] = None
 
 
 class OrganisationResponse(BaseModel):
@@ -27,6 +32,11 @@ class OrganisationResponse(BaseModel):
     risk_profile: Optional[RiskProfile] = None
     status: OrgStatus
     created_at: Optional[datetime] = None
+    abn: Optional[str] = None
+    business_address: Optional[str] = None
+    phone: Optional[str] = None
+    compliance_officer_name: Optional[str] = None
+    compliance_officer_email: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
