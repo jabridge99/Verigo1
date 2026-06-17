@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.sql import func
 
@@ -113,7 +114,110 @@ PLAN_CATALOGUE = {
 }
 
 
+# ── Default feature catalogue (seed data, derived from PLAN_CATALOGUE) ─────────
+# code -> (label, category)
+FEATURE_DEFINITIONS = {
+    "customers_500": ("Up to 500 customers", "limits"),
+    "customers_5000": ("Up to 5,000 customers", "limits"),
+    "customers_unlimited": ("Unlimited customers", "limits"),
+    "aml_monitoring": ("AML transaction monitoring", "core"),
+    "kyc_kyb_onboarding": ("KYC/KYB onboarding", "core"),
+    "austrac_reporting": ("AUSTRAC TTR & IFTI reporting", "core"),
+    "email_notifications": ("Email notifications", "core"),
+    "standard_support": ("Standard support", "support"),
+    "priority_support": ("Priority support", "support"),
+    "advanced_rule_builder": ("Advanced rule builder", "core"),
+    "ecdd_assessments": ("ECDD assessments", "core"),
+    "mlro_case_management": ("MLRO case management", "core"),
+    "webhooks_api": ("Webhooks & API access", "integration"),
+    "document_vault_50gb": ("Document vault (50 GB)", "storage"),
+    "document_vault_500gb": ("Document vault (500 GB)", "storage"),
+    "analytics_dashboard": ("Analytics dashboard", "core"),
+    "white_label_branding": ("White-label branding", "enterprise"),
+    "custom_domain": ("Custom domain", "enterprise"),
+    "multi_tenant_management": ("Multi-tenant management", "enterprise"),
+    "dedicated_mlro_support": ("Dedicated MLRO support", "support"),
+    "sla_99_9": ("SLA 99.9% uptime", "enterprise"),
+    "dedicated_account_manager": ("Dedicated account manager", "support"),
+    "custom_sla": ("Custom SLA", "enterprise"),
+    "onsite_training": ("On-site training", "enterprise"),
+    "regulatory_liaison_support": ("Regulatory liaison support", "support"),
+    "custom_integrations": ("Custom integrations", "integration"),
+}
+
+# Default plan -> set of enabled feature codes, derived from the legacy static lists.
+DEFAULT_PLAN_FEATURES = {
+    BillingPlan.starter: [
+        "customers_500",
+        "aml_monitoring",
+        "kyc_kyb_onboarding",
+        "austrac_reporting",
+        "email_notifications",
+        "standard_support",
+    ],
+    BillingPlan.professional: [
+        "customers_5000",
+        "advanced_rule_builder",
+        "ecdd_assessments",
+        "mlro_case_management",
+        "webhooks_api",
+        "document_vault_50gb",
+        "analytics_dashboard",
+        "priority_support",
+    ],
+    BillingPlan.enterprise: [
+        "customers_unlimited",
+        "white_label_branding",
+        "custom_domain",
+        "multi_tenant_management",
+        "dedicated_mlro_support",
+        "document_vault_500gb",
+        "sla_99_9",
+        "dedicated_account_manager",
+    ],
+    BillingPlan.vvip: [
+        "customers_unlimited",
+        "white_label_branding",
+        "custom_domain",
+        "multi_tenant_management",
+        "dedicated_mlro_support",
+        "document_vault_500gb",
+        "sla_99_9",
+        "dedicated_account_manager",
+        "custom_sla",
+        "onsite_training",
+        "regulatory_liaison_support",
+        "custom_integrations",
+    ],
+}
+
+
 # ── Models ─────────────────────────────────────────────────────────────────────
+
+
+class Feature(Base):
+    __tablename__ = "features"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(60), unique=True, index=True, nullable=False)
+    name = Column(String(200), nullable=False)
+    category = Column(String(60))
+    description = Column(Text)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PlanFeatureToggle(Base):
+    __tablename__ = "plan_feature_toggles"
+    __table_args__ = (UniqueConstraint("plan", "feature_code", name="uq_plan_feature"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan = Column(Enum(BillingPlan), nullable=False, index=True)
+    feature_code = Column(String(60), ForeignKey("features.code"), nullable=False, index=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class Subscription(Base):

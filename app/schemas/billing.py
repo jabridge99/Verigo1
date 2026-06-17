@@ -96,3 +96,14 @@ class PlanInfo(BaseModel):
     annual_discount_pct: float
     features: List[str]
     limits: dict
+
+
+class FeatureToggleRow(BaseModel):
+    code: str
+    name: str
+    category: Optional[str] = None
+    plans: dict  # plan value -> enabled bool
+
+
+class FeatureToggleUpdate(BaseModel):
+    enabled: bool

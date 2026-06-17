@@ -176,6 +176,103 @@ function AdminPricingPanel({ sub, onUpdate }: { sub: Subscription | null; onUpda
   );
 }
 
+// ── Admin feature toggle matrix ─────────────────────────────────────────────────
+
+interface FeatureRow {
+  code: string;
+  name: string;
+  category?: string;
+  plans: Record<string, boolean>;
+}
+
+const TOGGLE_PLANS = ["starter", "professional", "enterprise", "vvip"];
+
+function FeatureToggleMatrix() {
+  const [rows, setRows] = useState<FeatureRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/v1/billing/admin/features`, { credentials: "include" });
+      if (!res.ok) throw new Error();
+      setRows(await res.json());
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = async (code: string, plan: string, enabled: boolean) => {
+    const key = `${plan}:${code}`;
+    setSavingKey(key);
+    setRows(prev => prev.map(r => r.code === code ? { ...r, plans: { ...r.plans, [plan]: enabled } } : r));
+    try {
+      const res = await fetch(`${API}/api/v1/billing/admin/features/${plan}/${code}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      // revert on failure
+      setRows(prev => prev.map(r => r.code === code ? { ...r, plans: { ...r.plans, [plan]: !enabled } } : r));
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  if (loading) return <div className="text-slate-500 text-sm">Loading…</div>;
+  if (!rows.length) return <div className="text-slate-500 text-sm">No features configured yet.</div>;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-white/10 text-left text-slate-400">
+            <th className="py-2 pr-4 font-medium">Feature</th>
+            {TOGGLE_PLANS.map(p => (
+              <th key={p} className="py-2 px-3 font-medium text-center capitalize">{p}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.code} className="border-b border-white/5 last:border-0">
+              <td className="py-2 pr-4 text-slate-300">{r.name}</td>
+              {TOGGLE_PLANS.map(p => {
+                const enabled = !!r.plans[p];
+                const key = `${p}:${r.code}`;
+                return (
+                  <td key={p} className="py-2 px-3 text-center">
+                    <button
+                      onClick={() => toggle(r.code, p, !enabled)}
+                      disabled={savingKey === key}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${
+                        enabled ? "bg-green-600" : "bg-white/10"
+                      }`}
+                      aria-label={`Toggle ${r.name} for ${p}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        enabled ? "translate-x-4" : "translate-x-0.5"
+                      }`} />
+                    </button>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Plan card ──────────────────────────────────────────────────────────────────
 
 const PLAN_ICONS: Record<string, React.ReactNode> = {
@@ -562,6 +659,17 @@ function BillingContent() {
           <div className="space-y-5">
             <AdminPricingPanel sub={sub} onUpdate={load} />
 
+            {/* Feature toggle matrix */}
+            <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+              <h3 className="font-semibold mb-1 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-slate-400" />Plan Feature Toggles
+              </h3>
+              <p className="text-xs text-slate-500 mb-4">
+                Turn features on or off per plan. Changes apply immediately to the public pricing table.
+              </p>
+              <FeatureToggleMatrix />
+            </div>
+
             {/* All subscriptions list */}
             <div className="rounded-xl border border-white/10 bg-white/5 p-5">
               <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -579,6 +687,7 @@ function BillingContent() {
 function AllSubscriptions() {
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -594,6 +703,23 @@ function AllSubscriptions() {
       setSubs([DEMO_SUB]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const act = async (industryId: string, action: "activate" | "terminate") => {
+    setActing(`${industryId}:${action}`);
+    try {
+      const res = await fetch(`${API}/api/v1/billing/admin/${industryId}/${action}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setSubs(prev => prev.map(s => s.industry_id === industryId ? updated : s));
+    } catch {
+      // no-op in demo/mock mode
+    } finally {
+      setActing(null);
     }
   };
 
@@ -614,6 +740,22 @@ function AllSubscriptions() {
           }`}>{s.status}</span>
           {(s.custom_monthly_aud || s.custom_annual_aud) && (
             <span className="text-xs text-amber-400">custom price</span>
+          )}
+          {(s.plan === "enterprise" || s.plan === "vvip") && (
+            <div className="flex gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => act(s.industry_id, "activate")}
+                disabled={acting === `${s.industry_id}:activate` || s.status === "active"}
+                className="px-2.5 py-1 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-400 text-xs font-medium disabled:opacity-40 transition-colors">
+                Activate
+              </button>
+              <button
+                onClick={() => act(s.industry_id, "terminate")}
+                disabled={acting === `${s.industry_id}:terminate` || s.status === "canceled"}
+                className="px-2.5 py-1 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-medium disabled:opacity-40 transition-colors">
+                Terminate
+              </button>
+            </div>
           )}
         </div>
       ))}

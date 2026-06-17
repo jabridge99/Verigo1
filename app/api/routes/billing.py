@@ -10,6 +10,10 @@ POST /billing/subscription/cancel
 GET  /billing/invoices
 PATCH /billing/admin/{industry_id}  — admin: VVIP / price override
 GET  /billing/admin/all         — admin: list all subscriptions
+GET  /billing/admin/features    — admin: plan x feature toggle matrix
+PATCH /billing/admin/features/{plan}/{feature_code} — admin: toggle a feature for a plan
+POST /billing/admin/{industry_id}/activate   — admin: turn a plan on (e.g. Enterprise)
+POST /billing/admin/{industry_id}/terminate  — admin: terminate a plan immediately
 """
 
 from typing import List
@@ -19,11 +23,14 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
+from app.models.billing import BillingPlan
 from app.models.user import User, UserRole
 from app.schemas.billing import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     CustomerPortalResponse,
+    FeatureToggleRow,
+    FeatureToggleUpdate,
     InvoiceResponse,
     SubscriptionAdminUpdate,
     SubscriptionResponse,
@@ -39,9 +46,9 @@ _ADMIN = _require_roles(UserRole.admin)
 
 
 @router.get("/plans")
-def list_plans(discount_pct: float = Query(20.0, ge=0, le=100)):
+def list_plans(discount_pct: float = Query(20.0, ge=0, le=100), db: Session = Depends(get_db)):
     """Public — returns plan catalogue, with annual price recalculated for the given discount."""
-    return svc.catalogue_with_custom(discount_pct=discount_pct)
+    return svc.catalogue_with_custom(db, discount_pct=discount_pct)
 
 
 # ── Authenticated user routes ─────────────────────────────────────────────────
@@ -184,3 +191,58 @@ def admin_create_trial(
     if existing:
         return existing
     return svc.create_trial(db, industry_id, organisation_id=organisation_id)
+
+
+@router.post("/admin/{industry_id}/activate", response_model=SubscriptionResponse)
+def admin_activate_subscription(
+    industry_id: str,
+    organisation_id: int = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    """Manually turn a plan on — primarily for Enterprise/VVIP deals managed
+    outside of Stripe checkout."""
+    sub = svc.activate_subscription(db, industry_id, organisation_id)
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
+    return sub
+
+
+@router.post("/admin/{industry_id}/terminate", response_model=SubscriptionResponse)
+def admin_terminate_subscription(
+    industry_id: str,
+    organisation_id: int = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    """Manually terminate a plan immediately, bypassing cancel-at-period-end."""
+    sub = svc.terminate_subscription(db, industry_id, organisation_id)
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
+    return sub
+
+
+# ── Admin: feature toggle matrix ───────────────────────────────────────────────
+
+
+@router.get("/admin/features", response_model=List[FeatureToggleRow])
+def admin_feature_matrix(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    return svc.feature_matrix(db)
+
+
+@router.patch("/admin/features/{plan}/{feature_code}", response_model=FeatureToggleRow)
+def admin_toggle_feature(
+    plan: BillingPlan,
+    feature_code: str,
+    data: FeatureToggleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    if feature_code not in svc.FEATURE_DEFINITIONS:
+        raise HTTPException(404, "Unknown feature code")
+    svc.set_plan_feature(db, plan, feature_code, data.enabled)
+    rows = svc.feature_matrix(db)
+    return next(r for r in rows if r["code"] == feature_code)

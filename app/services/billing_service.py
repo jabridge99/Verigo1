@@ -24,11 +24,15 @@ from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
 from app.models.billing import (
+    DEFAULT_PLAN_FEATURES,
+    FEATURE_DEFINITIONS,
     PLAN_CATALOGUE,
     BillingInterval,
     BillingPlan,
+    Feature,
     Invoice,
     InvoiceStatus,
+    PlanFeatureToggle,
     Subscription,
     SubscriptionStatus,
 )
@@ -80,6 +84,88 @@ def _inv_id():
     return f"INV-{uuid.uuid4().hex[:12].upper()}"
 
 
+# ── Feature catalogue & per-plan toggles ───────────────────────────────────────
+
+
+def seed_feature_catalog(db: Session) -> None:
+    """Idempotently seed the Feature catalogue and default per-plan toggles."""
+    existing_codes = {f.code for f in db.query(Feature).all()}
+    for code, (name, category) in FEATURE_DEFINITIONS.items():
+        if code not in existing_codes:
+            db.add(Feature(code=code, name=name, category=category))
+    db.commit()
+
+    existing_toggles = {
+        (t.plan, t.feature_code) for t in db.query(PlanFeatureToggle).all()
+    }
+    for plan, codes in DEFAULT_PLAN_FEATURES.items():
+        for code in FEATURE_DEFINITIONS:
+            key = (plan, code)
+            if key in existing_toggles:
+                continue
+            db.add(
+                PlanFeatureToggle(
+                    plan=plan,
+                    feature_code=code,
+                    enabled=code in codes,
+                )
+            )
+    db.commit()
+
+
+def feature_matrix(db: Session) -> List[dict]:
+    """Return the full feature x plan toggle matrix for the admin UI."""
+    seed_feature_catalog(db)
+    toggles = db.query(PlanFeatureToggle).all()
+    by_code: dict = {}
+    for t in toggles:
+        by_code.setdefault(t.feature_code, {})[t.plan.value] = t.enabled
+
+    rows = []
+    for code, (name, category) in FEATURE_DEFINITIONS.items():
+        rows.append(
+            {
+                "code": code,
+                "name": name,
+                "category": category,
+                "plans": by_code.get(code, {}),
+            }
+        )
+    return rows
+
+
+def set_plan_feature(
+    db: Session, plan: BillingPlan, feature_code: str, enabled: bool
+) -> PlanFeatureToggle:
+    seed_feature_catalog(db)
+    toggle = (
+        db.query(PlanFeatureToggle)
+        .filter(
+            PlanFeatureToggle.plan == plan,
+            PlanFeatureToggle.feature_code == feature_code,
+        )
+        .first()
+    )
+    if not toggle:
+        toggle = PlanFeatureToggle(plan=plan, feature_code=feature_code, enabled=enabled)
+        db.add(toggle)
+    else:
+        toggle.enabled = enabled
+    db.commit()
+    db.refresh(toggle)
+    return toggle
+
+
+def enabled_features_for_plan(db: Session, plan: BillingPlan) -> List[str]:
+    seed_feature_catalog(db)
+    toggles = (
+        db.query(PlanFeatureToggle)
+        .filter(PlanFeatureToggle.plan == plan, PlanFeatureToggle.enabled.is_(True))
+        .all()
+    )
+    return [FEATURE_DEFINITIONS[t.feature_code][0] for t in toggles if t.feature_code in FEATURE_DEFINITIONS]
+
+
 # ── Price resolution ───────────────────────────────────────────────────────────
 
 
@@ -101,18 +187,21 @@ def effective_price(sub: Subscription) -> float:
 
 
 def catalogue_with_custom(
-    sub: Optional[Subscription] = None, discount_pct: float = 20.0
+    db: Session,
+    sub: Optional[Subscription] = None,
+    discount_pct: float = 20.0,
 ) -> List[dict]:
     """Return plan catalogue with annual price computed from current discount."""
     plans = []
     for plan_key, info in PLAN_CATALOGUE.items():
+        features = enabled_features_for_plan(db, plan_key) or info["features"]
         entry = {
             "plan": plan_key.value,
             "name": info["name"],
             "monthly_aud": info["monthly_aud"],
             "annual_aud": info["annual_aud"],
             "annual_discount_pct": discount_pct,
-            "features": info["features"],
+            "features": features,
             "limits": info["limits"],
         }
         if info["monthly_aud"] and discount_pct != 20.0:
@@ -188,6 +277,49 @@ def admin_update(
         setattr(sub, field, val)
     # Recompute base_price_aud after any change
     sub.base_price_aud = effective_price(sub)
+    db.commit()
+    db.refresh(sub)
+    return sub
+
+
+def activate_subscription(
+    db: Session,
+    industry_id: str,
+    organisation_id: Optional[int] = None,
+) -> Optional[Subscription]:
+    """Admin-driven, immediate activation — primarily for Enterprise/VVIP deals
+    that are turned on manually rather than through Stripe checkout."""
+    sub = get_subscription(db, industry_id, organisation_id)
+    if not sub:
+        return None
+    sub.status = SubscriptionStatus.active
+    sub.cancel_at_period_end = False
+    sub.canceled_at = None
+    sub.base_price_aud = effective_price(sub)
+    db.commit()
+    db.refresh(sub)
+    return sub
+
+
+def terminate_subscription(
+    db: Session,
+    industry_id: str,
+    organisation_id: Optional[int] = None,
+) -> Optional[Subscription]:
+    """Admin-driven, immediate termination — bypasses Stripe's cancel-at-period-end
+    flow so an Enterprise/VVIP deal can be shut off on the spot."""
+    sub = get_subscription(db, industry_id, organisation_id)
+    if not sub:
+        return None
+    stripe = _stripe()
+    if stripe and sub.stripe_subscription_id:
+        try:
+            stripe.Subscription.cancel(sub.stripe_subscription_id)
+        except Exception as e:
+            print(f"[stripe] terminate error: {e}")
+    sub.status = SubscriptionStatus.canceled
+    sub.cancel_at_period_end = False
+    sub.canceled_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(sub)
     return sub
