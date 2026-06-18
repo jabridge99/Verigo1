@@ -143,10 +143,13 @@ FEATURE_DEFINITIONS = {
     "onsite_training": ("On-site training", "enterprise"),
     "regulatory_liaison_support": ("Regulatory liaison support", "support"),
     "custom_integrations": ("Custom integrations", "integration"),
+    "full_aml_program": ("Full AML/CTF program (all controls)", "core"),
+    "full_risk_assessment": ("Full risk assessment (all factors)", "core"),
 }
 
 # Default plan -> set of enabled feature codes, derived from the legacy static lists.
 DEFAULT_PLAN_FEATURES = {
+    BillingPlan.free_trial: [],
     BillingPlan.starter: [
         "customers_500",
         "aml_monitoring",
@@ -154,6 +157,8 @@ DEFAULT_PLAN_FEATURES = {
         "austrac_reporting",
         "email_notifications",
         "standard_support",
+        "full_aml_program",
+        "full_risk_assessment",
     ],
     BillingPlan.professional: [
         "customers_5000",
@@ -164,6 +169,8 @@ DEFAULT_PLAN_FEATURES = {
         "document_vault_50gb",
         "analytics_dashboard",
         "priority_support",
+        "full_aml_program",
+        "full_risk_assessment",
     ],
     BillingPlan.enterprise: [
         "customers_unlimited",
@@ -174,6 +181,8 @@ DEFAULT_PLAN_FEATURES = {
         "document_vault_500gb",
         "sla_99_9",
         "dedicated_account_manager",
+        "full_aml_program",
+        "full_risk_assessment",
     ],
     BillingPlan.vvip: [
         "customers_unlimited",
@@ -188,6 +197,8 @@ DEFAULT_PLAN_FEATURES = {
         "onsite_training",
         "regulatory_liaison_support",
         "custom_integrations",
+        "full_aml_program",
+        "full_risk_assessment",
     ],
 }
 

@@ -83,3 +83,27 @@ def generate_risk_assessment(db: Session, org: Organisation) -> dict:
 
 def get_risk_assessment(org: Organisation) -> Optional[dict]:
     return org.risk_assessment
+
+
+# ── Trial preview ────────────────────────────────────────────────────────────
+# Same principle as aml_program_service.to_preview_items: free-trial accounts
+# get a genuinely smaller payload, not the full assessment hidden client-side.
+PREVIEW_VISIBLE_COUNT = 2
+
+
+def to_preview_factors(factors: list[dict]) -> list[dict]:
+    visible = factors[:PREVIEW_VISIBLE_COUNT]
+    locked = factors[PREVIEW_VISIBLE_COUNT:]
+
+    out = [{**f, "locked": False} for f in visible]
+    for f in locked:
+        out.append(
+            {
+                "factor": f["factor"],
+                "label": f["label"],
+                "description": "Upgrade to view full risk assessment.",
+                "rating": "locked",
+                "locked": True,
+            }
+        )
+    return out

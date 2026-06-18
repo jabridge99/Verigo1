@@ -19,10 +19,19 @@ def _create_org(client, headers, name="Test Remitco", industry_id=None):
 
 def test_signup_flow_generates_program(client, db):
     seed_permission_catalog_and_roles(db)
+    admin = _make_user(db, UserRole.admin, industry_id=None)
     owner = _make_user(db, UserRole.analyst, industry_id=None)
     headers = _auth(owner)
 
     org = _create_org(client, headers, industry_id="banking-au")
+
+    # Give this org a paid plan so it sees the full (non-preview) program.
+    res = client.patch(
+        f"/api/v1/billing/admin/banking-au?organisation_id={org['id']}",
+        json={"plan": "starter"},
+        headers=_auth(admin),
+    )
+    assert res.status_code == 200, res.text
 
     res = client.patch(
         f"/api/v1/organisations/{org['org_id']}",
@@ -38,6 +47,7 @@ def test_signup_flow_generates_program(client, db):
     assert program["industry_id"] == "banking-au"
     assert program["risk_profile"] == "high"
     assert program["version"] == 1
+    assert program["is_preview"] is False
     titles = {item["title"] for item in program["items"]}
     assert "Enhanced Due Diligence (EDD) for All High-Risk Customers" in titles
     assert "Threshold Transaction Reports (TTR)" in titles

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ArrowRight, Loader2, AlertCircle, CheckCircle2, Lock } from 'lucide-react'
 import { industries } from '@/lib/industries'
 import {
   updateOrganisation,
@@ -296,16 +296,25 @@ export default function OnboardingWizard() {
             <h2 className="text-xl font-bold text-slate-900">Your AML/CTF program is ready</h2>
           </div>
           <p className="text-sm text-slate-500 mb-4">
-            {program.items.length} controls generated for a {program.risk_profile}-risk profile.
+            {program.total_items ?? program.items.length} controls generated for a {program.risk_profile}-risk profile.
           </p>
           <ul className="space-y-2 max-h-56 overflow-y-auto mb-6">
-            {program.items.map(item => (
-              <li key={item.title} className="flex items-start gap-2 text-sm text-slate-700">
-                <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                <span>{item.title}</span>
+            {program.items.map((item, idx) => (
+              <li key={`${item.category}-${idx}`} className={`flex items-start gap-2 text-sm ${item.locked ? 'text-slate-400' : 'text-slate-700'}`}>
+                {item.locked ? (
+                  <Lock className="w-4 h-4 text-slate-300 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                )}
+                <span>{item.locked ? `${item.category} — upgrade to unlock` : item.title}</span>
               </li>
             ))}
           </ul>
+          {program.is_preview && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+              This is a preview. Upgrade your plan to unlock all {program.total_items} controls.
+            </p>
+          )}
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
           <button type="button" onClick={handleGenerateAssessment} className="pub-btn-primary w-full justify-center py-3">
             Continue <ArrowRight className="w-4 h-4" />
@@ -331,12 +340,22 @@ export default function OnboardingWizard() {
           </p>
           <ul className="space-y-3 max-h-56 overflow-y-auto mb-6">
             {assessment.factors.map(f => (
-              <li key={f.factor} className="text-sm">
-                <p className="font-semibold text-slate-900">{f.label} <span className="text-xs font-normal text-slate-400">({f.rating})</span></p>
-                <p className="text-slate-500 text-xs">{f.description}</p>
+              <li key={f.factor} className="text-sm flex items-start gap-2">
+                {f.locked && <Lock className="w-4 h-4 text-slate-300 flex-shrink-0 mt-0.5" />}
+                <div>
+                  <p className={`font-semibold ${f.locked ? 'text-slate-400' : 'text-slate-900'}`}>
+                    {f.label} <span className="text-xs font-normal text-slate-400">({f.rating})</span>
+                  </p>
+                  <p className="text-slate-500 text-xs">{f.description}</p>
+                </div>
               </li>
             ))}
           </ul>
+          {assessment.is_preview && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+              This is a preview. Upgrade your plan to unlock the full risk assessment.
+            </p>
+          )}
           <button type="button" onClick={() => setStep('customer')} className="pub-btn-primary w-full justify-center py-3">
             Continue <ArrowRight className="w-4 h-4" />
           </button>

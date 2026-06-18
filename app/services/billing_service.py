@@ -166,6 +166,23 @@ def enabled_features_for_plan(db: Session, plan: BillingPlan) -> List[str]:
     return [FEATURE_DEFINITIONS[t.feature_code][0] for t in toggles if t.feature_code in FEATURE_DEFINITIONS]
 
 
+def is_feature_enabled(db: Session, plan: BillingPlan, feature_code: str) -> bool:
+    seed_feature_catalog(db)
+    toggle = (
+        db.query(PlanFeatureToggle)
+        .filter(PlanFeatureToggle.plan == plan, PlanFeatureToggle.feature_code == feature_code)
+        .first()
+    )
+    return bool(toggle and toggle.enabled)
+
+
+def current_plan(db: Session, industry_id: str, organisation_id: Optional[int] = None) -> BillingPlan:
+    """Best-effort plan lookup for feature gating. No subscription yet ==
+    treat as free_trial (most restrictive) rather than granting full access."""
+    sub = get_subscription(db, industry_id, organisation_id)
+    return sub.plan if sub else BillingPlan.free_trial
+
+
 # ── Price resolution ───────────────────────────────────────────────────────────
 
 

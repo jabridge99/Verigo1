@@ -27,6 +27,7 @@ export interface AmlProgramItem {
   description?: string
   review_frequency?: string
   is_required: boolean
+  locked?: boolean
 }
 
 export interface AmlProgram {
@@ -36,6 +37,8 @@ export interface AmlProgram {
   status: string
   version: number
   items: AmlProgramItem[]
+  is_preview?: boolean
+  total_items?: number
 }
 
 async function asJson(r: Response) {
@@ -114,6 +117,7 @@ export interface RiskFactor {
   label: string
   description: string
   rating: string
+  locked?: boolean
 }
 
 export interface RiskAssessment {
@@ -121,6 +125,8 @@ export interface RiskAssessment {
   risk_profile: string
   overall_rating: string
   factors: RiskFactor[]
+  is_preview?: boolean
+  total_factors?: number
 }
 
 export async function generateRiskAssessment(orgId: string): Promise<RiskAssessment> {

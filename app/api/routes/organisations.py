@@ -27,7 +27,7 @@ from app.schemas.risk_assessment import (
     AccountabilityAckResponse,
     RiskAssessmentResponse,
 )
-from app.services import aml_program_service, audit_service, risk_assessment_service
+from app.services import aml_program_service, audit_service, billing_service, risk_assessment_service
 from app.services.auth_service import get_user_by_email
 from app.services.org_service import (
     SYSTEM_ROLE_TEMPLATES,
@@ -132,6 +132,18 @@ def update(
 
 def _program_response(db: Session, program) -> AMLProgramResponse:
     items = aml_program_service.get_program_items(db, program)
+    plan = billing_service.current_plan(db, program.industry_id, program.organisation_id)
+    full_enabled = billing_service.is_feature_enabled(db, plan, "full_aml_program")
+    if full_enabled:
+        return AMLProgramResponse(
+            program_id=program.program_id,
+            industry_id=program.industry_id,
+            risk_profile=program.risk_profile,
+            status=program.status,
+            version=program.version,
+            generated_at=program.generated_at,
+            items=items,
+        )
     return AMLProgramResponse(
         program_id=program.program_id,
         industry_id=program.industry_id,
@@ -139,7 +151,9 @@ def _program_response(db: Session, program) -> AMLProgramResponse:
         status=program.status,
         version=program.version,
         generated_at=program.generated_at,
-        items=items,
+        items=aml_program_service.to_preview_items(items),
+        is_preview=True,
+        total_items=len(items),
     )
 
 
@@ -175,6 +189,20 @@ def get_aml_program(
 # ── Risk Assessment (Phase I onboarding) ────────────────────────────────────
 
 
+def _risk_assessment_response(db: Session, org, assessment: dict) -> RiskAssessmentResponse:
+    plan = billing_service.current_plan(db, org.industry_id, org.id)
+    full_enabled = billing_service.is_feature_enabled(db, plan, "full_risk_assessment")
+    if full_enabled:
+        return RiskAssessmentResponse(**assessment, generated_at=org.risk_assessment_generated_at)
+    factors = assessment["factors"]
+    return RiskAssessmentResponse(
+        **{**assessment, "factors": risk_assessment_service.to_preview_factors(factors)},
+        generated_at=org.risk_assessment_generated_at,
+        is_preview=True,
+        total_factors=len(factors),
+    )
+
+
 @router.post("/{org_id}/risk-assessment/generate", response_model=RiskAssessmentResponse, status_code=201)
 def generate_risk_assessment(
     org_id: str,
@@ -187,7 +215,7 @@ def generate_risk_assessment(
         assessment = risk_assessment_service.generate_risk_assessment(db, org)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return RiskAssessmentResponse(**assessment, generated_at=org.risk_assessment_generated_at)
+    return _risk_assessment_response(db, org, assessment)
 
 
 @router.get("/{org_id}/risk-assessment", response_model=RiskAssessmentResponse)
@@ -201,7 +229,7 @@ def get_risk_assessment(
     assessment = risk_assessment_service.get_risk_assessment(org)
     if not assessment:
         raise HTTPException(404, "No risk assessment generated yet")
-    return RiskAssessmentResponse(**assessment, generated_at=org.risk_assessment_generated_at)
+    return _risk_assessment_response(db, org, assessment)
 
 
 @router.post("/{org_id}/aml-accountability/ack", response_model=AccountabilityAckResponse)

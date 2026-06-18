@@ -306,3 +306,44 @@ def get_program_items(db: Session, program: AMLProgram) -> list[AMLProgramItem]:
         .order_by(AMLProgramItem.sort_order)
         .all()
     )
+
+
+# ── Trial preview ────────────────────────────────────────────────────────────
+# Free-trial accounts never receive the full program over the wire — only a
+# shrunken preview is serialised, so there is nothing to recover via dev
+# tools / view-source even if a user inspects the network response.
+PREVIEW_VISIBLE_COUNT = 3
+
+
+def to_preview_items(items: list[AMLProgramItem]) -> list[dict]:
+    """Build a deliberately reduced item list: the first PREVIEW_VISIBLE_COUNT
+    items in full, the remainder collapsed to a locked placeholder that
+    reveals only the category (never the title/description) so the full
+    control set can't be reconstructed from the response."""
+    visible = items[:PREVIEW_VISIBLE_COUNT]
+    locked = items[PREVIEW_VISIBLE_COUNT:]
+
+    out = [
+        {
+            "category": item.category,
+            "title": item.title,
+            "description": item.description,
+            "review_frequency": item.review_frequency,
+            "is_required": item.is_required,
+            "locked": False,
+        }
+        for item in visible
+    ]
+    locked_categories = sorted({item.category for item in locked})
+    for category in locked_categories:
+        out.append(
+            {
+                "category": category,
+                "title": "Upgrade to unlock",
+                "description": None,
+                "review_frequency": None,
+                "is_required": True,
+                "locked": True,
+            }
+        )
+    return out

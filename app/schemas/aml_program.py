@@ -12,6 +12,7 @@ class AMLProgramItemResponse(BaseModel):
     description: Optional[str] = None
     review_frequency: Optional[str] = None
     is_required: bool
+    locked: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -24,5 +25,7 @@ class AMLProgramResponse(BaseModel):
     version: int
     generated_at: Optional[datetime] = None
     items: list[AMLProgramItemResponse]
+    is_preview: bool = False
+    total_items: Optional[int] = None
 
     model_config = {"from_attributes": True}
