@@ -112,6 +112,9 @@ class Settings(BaseSettings):
     cryptoapis_api_key: str = ""
     scorechain_api_key: str = ""
     goplus_api_key: str = ""
+    # Elliptic — enterprise wallet screening, HMAC-signed API (key + secret)
+    elliptic_api_key: str = ""
+    elliptic_api_secret: str = ""
     # OCR / document extraction: stub | textract | google_vision
     ocr_provider: str = "stub"
     # Email: smtp | sendgrid | stub

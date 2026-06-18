@@ -27,7 +27,11 @@ def get_provider() -> CryptoWalletProvider:
         from .goplus import GoPlusProvider
         return GoPlusProvider(api_key=settings.goplus_api_key)
 
-    if provider in ("trm_labs", "elliptic"):
+    if provider == "elliptic":
+        from .elliptic import EllipticProvider
+        return EllipticProvider(api_key=settings.elliptic_api_key, api_secret=settings.elliptic_api_secret)
+
+    if provider == "trm_labs":
         raise NotImplementedError(f"{provider} provider not yet implemented")
 
     raise NotImplementedError("No crypto wallet screening provider configured")

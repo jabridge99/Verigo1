@@ -92,18 +92,19 @@ def test_get_crypto_provider_returns_chainalysis_when_configured(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "provider_name,extra_setting",
+    "provider_name,extra_settings",
     [
         ("ofac_sdn", None),
-        ("crypto_apis", ("cryptoapis_api_key", "test-key")),
-        ("scorechain", ("scorechain_api_key", "test-key")),
+        ("crypto_apis", [("cryptoapis_api_key", "test-key")]),
+        ("scorechain", [("scorechain_api_key", "test-key")]),
         ("goplus", None),
+        ("elliptic", [("elliptic_api_key", "test-key"), ("elliptic_api_secret", "test-secret")]),
     ],
 )
-def test_get_crypto_provider_returns_each_provider(monkeypatch, provider_name, extra_setting):
+def test_get_crypto_provider_returns_each_provider(monkeypatch, provider_name, extra_settings):
     monkeypatch.setattr(config_module.settings, "crypto_provider", provider_name)
-    if extra_setting:
-        monkeypatch.setattr(config_module.settings, extra_setting[0], extra_setting[1])
+    for setting_name, value in extra_settings or []:
+        monkeypatch.setattr(config_module.settings, setting_name, value)
     provider = crypto_factory.get_provider()
     assert provider.name == provider_name
 
@@ -123,6 +124,52 @@ def test_scorechain_provider_requires_api_key():
 def test_goplus_provider_allows_no_api_key():
     from app.integrations.crypto.goplus import GoPlusProvider
     GoPlusProvider("")  # GoPlus has a free unauthenticated quota
+
+
+def test_elliptic_provider_requires_api_key_and_secret():
+    from app.integrations.crypto.elliptic import EllipticProvider
+    with pytest.raises(ProviderUnavailableError):
+        EllipticProvider("", "")
+    with pytest.raises(ProviderUnavailableError):
+        EllipticProvider("key-only", "")
+
+
+@pytest.mark.asyncio
+async def test_elliptic_screen_address_match(monkeypatch):
+    from app.integrations.crypto.elliptic import EllipticProvider
+    provider = EllipticProvider("test-key", "test-secret")
+
+    class _Resp:
+        status_code = 200
+        def json(self):
+            return {"risk_score": 9, "type_category": ["sanctions"]}
+
+    async def _fake_post(self, url, content=None, headers=None):
+        assert headers["x-access-key"] == "test-key"
+        return _Resp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", _fake_post)
+    result = await provider.screen_address("0xSomeAddress", network="ethereum")
+    assert result.is_sanctioned is True
+    assert result.identifications[0].category == "sanctions"
+
+
+@pytest.mark.asyncio
+async def test_elliptic_screen_address_no_match(monkeypatch):
+    from app.integrations.crypto.elliptic import EllipticProvider
+    provider = EllipticProvider("test-key", "test-secret")
+
+    class _Resp:
+        status_code = 200
+        def json(self):
+            return {"risk_score": 1, "type_category": []}
+
+    async def _fake_post(self, url, content=None, headers=None):
+        return _Resp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", _fake_post)
+    result = await provider.screen_address("1CleanAddress", network="bitcoin")
+    assert result.is_sanctioned is False
 
 
 # ── OFACSDNProvider ──────────────────────────────────────────────────────────
