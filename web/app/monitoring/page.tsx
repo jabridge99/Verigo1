@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 interface Alert {
   id: number; alert_id: string; transaction_id: number; customer_id?: number;
   industry_id?: string; alert_type: string; severity: string; status: string;
@@ -88,8 +90,8 @@ export default function MonitoringDashboard() {
   const fetchData = useCallback(async () => {
     try {
       const [aRes, sRes] = await Promise.all([
-        fetch("/api/v1/transactions/alerts/queue?limit=200"),
-        fetch("/api/v1/transactions/alerts/stats"),
+        fetch(`${API}/api/v1/transactions/alerts/queue?limit=200`, { credentials: "include" }),
+        fetch(`${API}/api/v1/transactions/alerts/stats`, { credentials: "include" }),
       ]);
       if (aRes.ok) { const d = await aRes.json(); if (d.length) setAlerts(d); }
       if (sRes.ok) { const d = await sRes.json(); if (d.total_alerts) setStats(d); }
@@ -101,7 +103,7 @@ export default function MonitoringDashboard() {
   const doAction = async (action: "resolve" | "dismiss" | "escalate", alertId: string) => {
     const statusMap: Record<string, string> = { resolve: "resolved", dismiss: "dismissed", escalate: "escalated" };
     try {
-      await fetch(`/api/v1/transactions/alerts/${alertId}/${action}`, { method: "POST" });
+      await fetch(`${API}/api/v1/transactions/alerts/${alertId}/${action}`, { method: "POST", credentials: "include" });
     } catch {}
     setAlerts(prev => prev.map(a =>
       a.alert_id === alertId ? { ...a, status: statusMap[action], is_resolved: action !== "escalate" ? 1 : 0 } : a

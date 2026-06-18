@@ -6,6 +6,7 @@ import BulkUpload from "@/components/Onboarding/BulkUpload";
 import ApplicantTable from "@/components/Onboarding/ApplicantTable";
 import PipelineView from "@/components/Onboarding/PipelineView";
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const INDUSTRY_ID = "digital-currency-exchange";
 
 interface Session {
@@ -53,8 +54,8 @@ export default function OnboardingDashboard() {
     setLoading(true);
     try {
       const [sessRes, statsRes] = await Promise.all([
-        fetch(`/api/v1/onboarding/sessions?industry_id=${INDUSTRY_ID}&limit=200`),
-        fetch(`/api/v1/onboarding/stats?industry_id=${INDUSTRY_ID}`),
+        fetch(`${API}/api/v1/onboarding/sessions?industry_id=${INDUSTRY_ID}&limit=200`, { credentials: "include" }),
+        fetch(`${API}/api/v1/onboarding/stats?industry_id=${INDUSTRY_ID}`, { credentials: "include" }),
       ]);
       if (sessRes.ok) setSessions(await sessRes.json());
       if (statsRes.ok) setStats(await statsRes.json());
@@ -79,7 +80,7 @@ export default function OnboardingDashboard() {
 
   const handleRemind = async (sessionId: string) => {
     try {
-      const res = await fetch(`/api/v1/onboarding/sessions/${sessionId}/remind`, { method: "POST" });
+      const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/remind`, { method: "POST", credentials: "include" });
       if (res.ok) { showToast("success", "Reminder sent"); fetchData(); }
     } catch { showToast("error", "Failed to send reminder"); }
   };
@@ -88,8 +89,9 @@ export default function OnboardingDashboard() {
     e.preventDefault();
     setSubmittingManual(true);
     try {
-      const res = await fetch("/api/v1/onboarding/sessions", {
+      const res = await fetch(`${API}/api/v1/onboarding/sessions`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...manualForm, industry_id: INDUSTRY_ID }),
       });

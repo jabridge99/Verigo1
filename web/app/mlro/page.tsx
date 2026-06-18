@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 interface Case {
   id: number;
   case_id: string;
@@ -76,7 +78,7 @@ export default function MLRODashboard() {
 
   const fetchCases = useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/transactions/cases?limit=100");
+      const res = await fetch(`${API}/api/v1/transactions/cases?limit=100`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setCases(d); }
     } catch {}
   }, []);
@@ -84,7 +86,7 @@ export default function MLRODashboard() {
   useEffect(() => { fetchCases(); }, [fetchCases]);
 
   const updateStatus = async (caseId: string, status: string) => {
-    try { await fetch(`/api/v1/transactions/cases/${caseId}/status?status=${status}`, { method: "PATCH" }); } catch {}
+    try { await fetch(`${API}/api/v1/transactions/cases/${caseId}/status?status=${status}`, { method: "PATCH", credentials: "include" }); } catch {}
     setCases(prev => prev.map(c => c.case_id === caseId ? { ...c, status } : c));
     setSelected(prev => prev?.case_id === caseId ? { ...prev, status } : prev);
     showToast("success", `Case moved to ${status.replace(/_/g, " ")}`);
@@ -514,8 +516,8 @@ function CreateCaseForm({ onCreated }: { onCreated: (c: Case) => void }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch("/api/v1/transactions/cases", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+      const res = await fetch(`${API}/api/v1/transactions/cases`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error();

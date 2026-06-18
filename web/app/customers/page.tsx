@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 interface Customer {
   id: number;
   customer_id: string;
@@ -90,7 +92,7 @@ export default function CustomerRiskDashboard() {
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/v1/customers/?limit=100");
+      const res = await fetch(`${API}/api/v1/customers/?limit=100`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setCustomers(d); }
     } catch {}
     setLoading(false);
