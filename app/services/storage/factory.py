@@ -6,7 +6,7 @@ Resolution order:
 2. Application-wide settings (STORAGE_BACKEND env var)
 3. Default: local filesystem
 
-Supported backends: local, s3, azure, gcs
+Supported backends: local, s3, r2, azure, gcs
 """
 
 from __future__ import annotations
@@ -48,6 +48,21 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
             access_key=cfg["access_key"],
             secret_key=cfg["secret_key"],
             endpoint_url=cfg.get("endpoint_url"),  # Backblaze / MinIO endpoint
+        )
+
+    if backend == "r2":
+        from .s3 import S3StorageProvider
+
+        # Cloudflare R2 is S3-compatible; the only difference is the
+        # account-scoped endpoint and that region is ignored (but required
+        # by boto3's client constructor, hence "auto").
+        return S3StorageProvider(
+            bucket=cfg["bucket"],
+            region="auto",
+            access_key=cfg["access_key"],
+            secret_key=cfg["secret_key"],
+            endpoint_url=cfg.get("endpoint_url")
+            or f"https://{cfg['account_id']}.r2.cloudflarestorage.com",
         )
 
     if backend == "azure":
@@ -149,6 +164,13 @@ def _default_provider() -> StorageProvider:
                 "access_key": getattr(settings, "aws_access_key_id", ""),
                 "secret_key": getattr(settings, "aws_secret_access_key", ""),
                 "endpoint_url": getattr(settings, "s3_endpoint_url", None),
+            }
+        elif backend == "r2":
+            cfg = {
+                "bucket": getattr(settings, "r2_bucket", ""),
+                "account_id": getattr(settings, "r2_account_id", ""),
+                "access_key": getattr(settings, "r2_access_key_id", ""),
+                "secret_key": getattr(settings, "r2_secret_access_key", ""),
             }
         elif backend == "azure":
             cfg = {

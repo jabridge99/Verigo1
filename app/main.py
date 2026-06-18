@@ -156,6 +156,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     logging.getLogger("tvg").error(
         "Unhandled exception: %s\n%s", exc, traceback.format_exc()
     )
+
+    if settings.sentry_dsn:
+        try:
+            import sentry_sdk
+
+            sentry_sdk.capture_exception(exc)
+        except ImportError:
+            pass
+
     return JSONResponse(
         status_code=500,
         content={"detail": "An internal error occurred. Our team has been notified."},

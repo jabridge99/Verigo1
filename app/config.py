@@ -76,13 +76,20 @@ class Settings(BaseSettings):
     stripe_ent_annual_id: str = ""
 
     # ── Storage backend ───────────────────────────────────────────────────────
-    storage_backend: str = "local"  # local | s3 | azure | gcs
+    storage_backend: str = "local"  # local | s3 | r2 | azure | gcs
     # S3 / Backblaze B2 (S3-compatible)
     s3_bucket: str = ""
     s3_region: str = "us-east-1"
     s3_endpoint_url: str = ""  # leave blank for AWS; set for Backblaze/MinIO
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
+    # Cloudflare R2 (S3-compatible — uses the same adapter as S3, with R2's
+    # account-scoped endpoint and free egress). Credentials come from an R2 API
+    # token (Account → R2 → Manage API Tokens), not your Cloudflare login.
+    r2_account_id: str = ""
+    r2_bucket: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
     # Azure Blob
     azure_account_name: str = ""
     azure_account_key: str = ""
@@ -93,6 +100,7 @@ class Settings(BaseSettings):
 
     # ── Sentry (optional) ────────────────────────────────────────────────────
     sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.1
 
     # ── Logging ──────────────────────────────────────────────────────────────
     log_level: str = "INFO"
