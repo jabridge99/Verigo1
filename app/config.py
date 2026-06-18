@@ -92,6 +92,16 @@ class Settings(BaseSettings):
     complyadvantage_api_key: str = ""
     # PEP screening: stub | complyadvantage | worldcheck
     pep_provider: str = "stub"
+    # Identity verification (KYC/KYB): internal | sumsub
+    identity_provider: str = "internal"
+    sumsub_app_token: str = ""
+    sumsub_secret_key: str = ""          # used for both API request signing and webhook verification
+    sumsub_base_url: str = "https://api.sumsub.com"
+    sumsub_level_name: str = "basic-kyc-level"
+    sumsub_kyb_level_name: str = "basic-kyb-level"
+    # Per-check cost we pay the provider, and our markup when billing tenants
+    sumsub_unit_cost_aud: float = 2.50
+    usage_markup_pct: float = 50.0       # tenant is billed unit_cost * (1 + pct/100)
     # OCR / document extraction: stub | textract | google_vision
     ocr_provider: str = "stub"
     # Email: smtp | sendgrid | stub

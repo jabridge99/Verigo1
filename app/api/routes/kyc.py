@@ -5,26 +5,32 @@ filename sanitisation, tenant isolation, MIME validation.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
+from app.config import settings
 from app.db.database import get_db
+from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
+from app.integrations.identity import get_provider
 from app.models.customer import Customer, CustomerStatus
 from app.models.kyc import (
     CustomerIdentityDocument,
     IdentityDocumentType,
+    VerificationProvider,
     VerificationResult,
 )
+from app.models.usage import UsageEventType, UsageRecordStatus
 from app.models.user import User, UserRole
 from app.services.identity_verification import (
     compute_kyc_identity_score,
     verify_document,
 )
 from app.services.sanctions_screening import screen_name
+from app.services.usage_billing_service import find_by_reference, mark_completed, mark_failed, record_usage
 
 router = APIRouter(prefix="/kyc", tags=["KYC"])
 
@@ -194,3 +200,101 @@ def get_kyc_history(
         .filter(CustomerIdentityDocument.customer_id == customer.id)
         .all()
     )
+
+
+# ── Hosted verification (Sumsub) ─────────────────────────────────────────────
+# Set IDENTITY_PROVIDER=sumsub to enable. The customer completes document
+# upload + liveness directly in Sumsub's hosted widget using this token — we
+# never see the raw document images. Results land via the /webhooks/sumsub
+# callback below and are billed as metered usage at that point.
+
+
+@router.post("/{customer_id}/sumsub/token")
+async def create_sumsub_token(
+    customer_id: str,
+    kyb: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    _assert_tenant(current_user, customer.org_id)
+
+    try:
+        provider = get_provider()
+    except (NotImplementedError, ProviderUnavailableError) as exc:
+        raise HTTPException(503, str(exc))
+
+    level_name = settings.sumsub_kyb_level_name if kyb else settings.sumsub_level_name
+    try:
+        token = await provider.generate_access_token(customer.id, level_name)
+    except ProviderUnavailableError as exc:
+        raise HTTPException(503, str(exc))
+    except ProviderRejectedError as exc:
+        raise HTTPException(502, str(exc))
+
+    record_usage(
+        db,
+        org_id=customer.org_id,
+        event_type=UsageEventType.business_verification if kyb else UsageEventType.identity_verification,
+        provider=provider.name,
+        customer_id=customer.id,
+        provider_reference=customer.id,  # joined back to the webhook via externalUserId
+        status=UsageRecordStatus.pending,
+    )
+    return {
+        "token": token.token,
+        "applicant_id": token.applicant_id,
+        "expires_in_seconds": token.expires_in_seconds,
+    }
+
+
+@router.post("/webhooks/sumsub", include_in_schema=False)
+async def sumsub_webhook(request: Request, db: Session = Depends(get_db)):
+    """Unauthenticated — verified by HMAC signature on the raw body instead."""
+    try:
+        provider = get_provider()
+    except (NotImplementedError, ProviderUnavailableError) as exc:
+        raise HTTPException(503, str(exc))
+
+    body = await request.body()
+    signature = request.headers.get("x-payload-digest", "")
+    if not provider.verify_webhook_signature(body, signature):
+        raise HTTPException(401, "Invalid webhook signature")
+
+    payload = await request.json()
+    result = provider.parse_webhook_event(payload)
+
+    usage = find_by_reference(db, provider.name, result.external_user_id or "")
+    if usage and usage.status == UsageRecordStatus.pending:
+        if result.review_result in ("pass", "fail"):
+            mark_completed(db, usage)
+        elif payload.get("type") == "applicantReset":
+            mark_failed(db, usage)
+
+    customer = (
+        db.query(Customer).filter(Customer.id == result.external_user_id).first()
+        if result.external_user_id
+        else None
+    )
+    if customer and result.review_result:
+        doc = CustomerIdentityDocument(
+            customer_id=customer.id,
+            org_id=customer.org_id,
+            document_type=IdentityDocumentType.other,
+            verification_result=(
+                VerificationResult.pass_ if result.review_result == "pass" else VerificationResult.fail
+            ),
+            verification_provider=VerificationProvider.sumsub,
+            provider_reference=result.applicant_id,
+            provider_raw_response=str(result.raw),
+            verified_by="sumsub",
+            verified_at=datetime.now(timezone.utc),
+        )
+        db.add(doc)
+        if result.review_result == "pass" and customer.status == CustomerStatus.pending:
+            customer.status = CustomerStatus.under_review
+        db.commit()
+
+    return {"status": "ok"}

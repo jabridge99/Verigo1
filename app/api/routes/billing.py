@@ -12,6 +12,7 @@ PATCH /billing/admin/{industry_id}  — admin: VVIP / price override
 GET  /billing/admin/all         — admin: list all subscriptions
 """
 
+from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -29,6 +30,7 @@ from app.schemas.billing import (
     SubscriptionResponse,
 )
 from app.services import billing_service as svc
+from app.services import usage_billing_service as usage_billing_svc
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -113,6 +115,18 @@ def list_invoices(
     current_user: User = Depends(_current_user),
 ):
     return svc.list_invoices(db, current_user.org_id or "", limit)
+
+
+@router.get("/usage")
+def usage(
+    period_start: datetime,
+    period_end: datetime,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    """Metered third-party verification usage (e.g. Sumsub checks) and the
+    marked-up amount billed to this org for the given period."""
+    return usage_billing_svc.usage_summary(db, current_user.org_id or "", period_start, period_end)
 
 
 # ── Stripe Webhook (no auth — verified by signature) ──────────────────────────

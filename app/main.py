@@ -28,6 +28,7 @@ import app.models.case  # noqa: F401
 import app.models.user  # noqa: F401
 import app.models.audit_log  # noqa: F401
 import app.models.ifti_receipt  # noqa: F401
+import app.models.usage  # noqa: F401
 import app.models.compliance_calendar  # noqa: F401
 import app.models.regulatory_recommendation  # noqa: F401
 import app.models.risk_matrix  # noqa: F401
