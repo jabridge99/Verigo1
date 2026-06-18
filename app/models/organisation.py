@@ -20,6 +20,7 @@ import enum
 import uuid
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -70,6 +71,12 @@ class Organisation(Base):
     phone = Column(String(50))
     compliance_officer_name = Column(String(200))
     compliance_officer_email = Column(String(200))
+    # Phase I — onboarding risk assessment + AML accountability sign-off
+    risk_assessment = Column(JSON)
+    risk_assessment_generated_at = Column(DateTime(timezone=True))
+    aml_accountability_ack = Column(Boolean, default=False)
+    aml_accountability_ack_at = Column(DateTime(timezone=True))
+    aml_accountability_ack_by = Column(String(200))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

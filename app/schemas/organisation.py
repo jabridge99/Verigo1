@@ -37,6 +37,9 @@ class OrganisationResponse(BaseModel):
     phone: Optional[str] = None
     compliance_officer_name: Optional[str] = None
     compliance_officer_email: Optional[str] = None
+    aml_accountability_ack: Optional[bool] = None
+    aml_accountability_ack_at: Optional[datetime] = None
+    aml_accountability_ack_by: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

@@ -109,6 +109,38 @@ export async function generateAmlProgram(orgId: string): Promise<AmlProgram> {
   return asJson(r)
 }
 
+export interface RiskFactor {
+  factor: string
+  label: string
+  description: string
+  rating: string
+}
+
+export interface RiskAssessment {
+  industry_id: string
+  risk_profile: string
+  overall_rating: string
+  factors: RiskFactor[]
+}
+
+export async function generateRiskAssessment(orgId: string): Promise<RiskAssessment> {
+  const r = await fetch(`${API}/api/v1/organisations/${orgId}/risk-assessment/generate`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  return asJson(r)
+}
+
+export async function acknowledgeAmlAccountability(orgId: string): Promise<void> {
+  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-accountability/ack`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ acknowledged: true }),
+  })
+  await asJson(r)
+}
+
 export interface FirstCustomerInput {
   full_name: string
   date_of_birth: string

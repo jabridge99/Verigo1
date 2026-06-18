@@ -2,6 +2,8 @@
 Phase B — Organisation, membership, and role/permission management API.
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -20,7 +22,12 @@ from app.schemas.organisation import (
     PermissionResponse,
     RoleResponse,
 )
-from app.services import aml_program_service, audit_service
+from app.schemas.risk_assessment import (
+    AccountabilityAckRequest,
+    AccountabilityAckResponse,
+    RiskAssessmentResponse,
+)
+from app.services import aml_program_service, audit_service, risk_assessment_service
 from app.services.auth_service import get_user_by_email
 from app.services.org_service import (
     SYSTEM_ROLE_TEMPLATES,
@@ -163,6 +170,76 @@ def get_aml_program(
     if not program:
         raise HTTPException(404, "No AML program generated yet")
     return _program_response(db, program)
+
+
+# ── Risk Assessment (Phase I onboarding) ────────────────────────────────────
+
+
+@router.post("/{org_id}/risk-assessment/generate", response_model=RiskAssessmentResponse, status_code=201)
+def generate_risk_assessment(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    try:
+        assessment = risk_assessment_service.generate_risk_assessment(db, org)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return RiskAssessmentResponse(**assessment, generated_at=org.risk_assessment_generated_at)
+
+
+@router.get("/{org_id}/risk-assessment", response_model=RiskAssessmentResponse)
+def get_risk_assessment(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    org = _get_org_or_404(db, org_id)
+    _require_member(db, org, current_user)
+    assessment = risk_assessment_service.get_risk_assessment(org)
+    if not assessment:
+        raise HTTPException(404, "No risk assessment generated yet")
+    return RiskAssessmentResponse(**assessment, generated_at=org.risk_assessment_generated_at)
+
+
+@router.post("/{org_id}/aml-accountability/ack", response_model=AccountabilityAckResponse)
+def acknowledge_aml_accountability(
+    org_id: str,
+    payload: AccountabilityAckRequest,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """The industry owner explicitly accepts accountability for the
+    organisation's own AML/CTF program — required to complete onboarding."""
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    if not payload.acknowledged:
+        raise HTTPException(400, "Acknowledgement must be accepted to proceed")
+
+    org.aml_accountability_ack = True
+    org.aml_accountability_ack_at = datetime.now(timezone.utc)
+    org.aml_accountability_ack_by = current_user.email
+    db.commit()
+    db.refresh(org)
+
+    audit_service.log_action(
+        db,
+        action="aml_accountability_acknowledged",
+        entity_type="organisation",
+        entity_id=org.org_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        industry_id=org.industry_id,
+        organisation_id=org.id,
+        after_state={"aml_accountability_ack": True},
+    )
+    return AccountabilityAckResponse(
+        aml_accountability_ack=org.aml_accountability_ack,
+        aml_accountability_ack_at=org.aml_accountability_ack_at,
+        aml_accountability_ack_by=org.aml_accountability_ack_by,
+    )
 
 
 # ── Members ──────────────────────────────────────────────────────────────────
