@@ -16,9 +16,27 @@ from app.db.database import get_db
 from app.models.customer import Customer, CustomerStatus
 from app.models.user import User, UserRole
 from app.schemas.customer import CustomerCreate, CustomerResponse, CustomerUpdate
+from app.services import audit_service
 from app.services.risk_scoring import score_customer, score_to_level
 from app.services.sanctions_screening import screen_name
 from app.services.tenant_scope import assert_tenant, scope_fields, scope_query
+
+_RISK_FIELDS = {"risk_score", "risk_level", "status"}
+
+
+def _log_customer_action(db, current_user, customer, action, before=None, after=None):
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="customer",
+        entity_id=customer.customer_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        industry_id=customer.industry_id,
+        organisation_id=customer.organisation_id,
+        before_state=before,
+        after_state=after,
+    )
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -63,6 +81,13 @@ def onboard_customer(
     db.add(customer)
     db.commit()
     db.refresh(customer)
+    _log_customer_action(
+        db,
+        current_user,
+        customer,
+        "customer_created",
+        after={"status": customer.status, "risk_level": customer.risk_level},
+    )
     return customer
 
 
@@ -117,10 +142,23 @@ def update_customer(
             403, f"Insufficient role to update: {', '.join(attempted_privileged)}"
         )
 
+    risk_fields_changed = set(updates.keys()) & _RISK_FIELDS
+    before = {f: getattr(customer, f) for f in risk_fields_changed} if risk_fields_changed else None
+
     for field, value in updates.items():
         setattr(customer, field, value)
     db.commit()
     db.refresh(customer)
+
+    if risk_fields_changed:
+        _log_customer_action(
+            db,
+            current_user,
+            customer,
+            "risk_matrix_changed",
+            before=before,
+            after={f: getattr(customer, f) for f in risk_fields_changed},
+        )
     return customer
 
 
@@ -138,6 +176,12 @@ def rescore_customer(
         raise HTTPException(404, "Customer not found")
     _assert_tenant(current_user, customer)
 
+    before = {
+        "status": customer.status,
+        "risk_score": customer.risk_score,
+        "risk_level": customer.risk_level,
+    }
+
     sanctions = screen_name(customer.full_name)
     if sanctions["match_found"]:
         customer.status = CustomerStatus.suspended
@@ -149,6 +193,18 @@ def rescore_customer(
         customer.risk_level = score_to_level(risk_score)
     db.commit()
     db.refresh(customer)
+    _log_customer_action(
+        db,
+        current_user,
+        customer,
+        "risk_matrix_changed",
+        before=before,
+        after={
+            "status": customer.status,
+            "risk_score": customer.risk_score,
+            "risk_level": customer.risk_level,
+        },
+    )
     return {
         "customer_id": customer.customer_id,
         "risk_score": customer.risk_score,

@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
+from app.services import audit_service
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
     EmailVerificationConfirm,
@@ -177,6 +178,17 @@ def login(
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
     record_security_event(db, "login_success", user.user_id, ip=ip)
+    audit_service.log_action(
+        db,
+        action="user_logged_in",
+        entity_type="user",
+        entity_id=user.user_id,
+        actor=user.email,
+        actor_role=user.role.value if user.role else None,
+        industry_id=user.industry_id,
+        organisation_id=user.primary_organisation_id,
+        ip_address=ip,
+    )
 
     if user.mfa_enabled:
         token = build_token_response(user, mfa_pending=True)

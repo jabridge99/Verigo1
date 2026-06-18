@@ -20,7 +20,7 @@ from app.schemas.organisation import (
     PermissionResponse,
     RoleResponse,
 )
-from app.services import aml_program_service
+from app.services import aml_program_service, audit_service
 from app.services.auth_service import get_user_by_email
 from app.services.org_service import (
     SYSTEM_ROLE_TEMPLATES,
@@ -98,10 +98,25 @@ def update(
 ):
     org = _get_org_or_404(db, org_id)
     _require_permission(db, org, current_user, "org:manage")
-    for field, val in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    before = {field: getattr(org, field) for field in updates}
+    for field, val in updates.items():
         setattr(org, field, val)
     db.commit()
     db.refresh(org)
+    if updates:
+        audit_service.log_action(
+            db,
+            action="policy_updated",
+            entity_type="organisation",
+            entity_id=org.org_id,
+            actor=current_user.email,
+            actor_role=current_user.role.value if current_user.role else None,
+            industry_id=org.industry_id,
+            organisation_id=org.id,
+            before_state=before,
+            after_state=updates,
+        )
     return org
 
 
