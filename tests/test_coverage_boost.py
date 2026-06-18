@@ -1030,3 +1030,200 @@ def test_compute_risk_matrix_geographic_and_product_extra_branches():
     assert result.geographic_dimension.score > 0
     assert result.transaction_dimension.score > 0
     assert result.product_dimension.score >= 0
+
+
+# ── governance_metrics.py (pure-logic, no DB) ──────────────────────────────────
+
+
+def test_governance_metrics_full_pipeline():
+    from datetime import date, timedelta
+
+    from app.models.governance import PolicyLifecycleStatus
+    from app.models.governance_controls import (
+        ControlEffectiveness,
+        FindingSeverity,
+        RemediationStatus,
+    )
+    from app.models.governance_training import TrainingStatus
+    from app.services.governance_metrics import (
+        build_governance_dashboard,
+        calculate_control_effectiveness,
+        calculate_control_health,
+        calculate_policy_metrics,
+        calculate_training_metrics,
+        control_register_report,
+        governance_summary_report,
+        policy_register_report,
+        rag_status,
+        training_register_report,
+    )
+
+    # rag_status
+    assert rag_status(90, 80, 60) == "green"
+    assert rag_status(70, 80, 60) == "amber"
+    assert rag_status(10, 80, 60) == "red"
+    assert rag_status(5, 10, 20, higher_is_better=False) == "green"
+    assert rag_status(15, 10, 20, higher_is_better=False) == "amber"
+    assert rag_status(30, 10, 20, higher_is_better=False) == "red"
+
+    # control effectiveness
+    res = calculate_control_effectiveness(
+        passed_samples=8,
+        total_samples=10,
+        finding_severities=[FindingSeverity.critical, FindingSeverity.low],
+    )
+    assert res.effectiveness in (
+        ControlEffectiveness.effective,
+        ControlEffectiveness.largely_effective,
+        ControlEffectiveness.partially_effective,
+        ControlEffectiveness.ineffective,
+    )
+    assert res.finding_summary["critical"] == 1
+
+    zero = calculate_control_effectiveness(0, 0, [])
+    assert zero.effectiveness == ControlEffectiveness.not_tested
+
+    today = date.today()
+
+    # training metrics
+    records = []
+    for i, (status, exp_delta) in enumerate(
+        [
+            (TrainingStatus.completed, 10),
+            (TrainingStatus.completed, 100),
+            (TrainingStatus.completed, None),
+            (TrainingStatus.in_progress, None),
+            (TrainingStatus.overdue, None),
+            (TrainingStatus.expired, None),
+            (TrainingStatus.exempt, None),
+        ]
+    ):
+        rec = types.SimpleNamespace(
+            business_unit="Compliance" if i % 2 == 0 else "Sales",
+            status=status,
+            expiry_date=(today + timedelta(days=exp_delta)) if exp_delta is not None else None,
+        )
+        records.append(rec)
+
+    tm = calculate_training_metrics(records, today=today)
+    assert tm.total_assigned == 7
+    assert tm.completed == 3
+    assert tm.by_department  # dict populated
+
+    # policy metrics
+    policies = []
+    for status, overdue in [
+        (PolicyLifecycleStatus.published, True),
+        (PolicyLifecycleStatus.published, False),
+        (PolicyLifecycleStatus.draft, False),
+        (PolicyLifecycleStatus.archived, False),
+    ]:
+        policies.append(
+            types.SimpleNamespace(
+                status=status,
+                review_due_date=(today - timedelta(days=1)) if overdue else (today + timedelta(days=30)),
+            )
+        )
+    pm = calculate_policy_metrics(policies, today=today)
+    assert pm.total == 4
+    assert pm.overdue_review == 1
+
+    # control health
+    controls = []
+    for eff, tested_recent in [
+        (ControlEffectiveness.effective, True),
+        (ControlEffectiveness.ineffective, False),
+        (ControlEffectiveness.not_tested, False),
+    ]:
+        controls.append(
+            types.SimpleNamespace(
+                effectiveness=eff,
+                last_tested_date=today if tested_recent else None,
+            )
+        )
+    remediations = [
+        types.SimpleNamespace(
+            finding_severity=FindingSeverity.critical,
+            status=RemediationStatus.open,
+        ),
+        types.SimpleNamespace(
+            finding_severity=FindingSeverity.low,
+            status=RemediationStatus.overdue,
+        ),
+    ]
+    ch = calculate_control_health(controls, remediations, today=today)
+    assert ch.total_active == 3
+    assert ch.critical_open_remediations == 1
+    assert ch.overdue_remediations == 1
+
+    ch_no_rem = calculate_control_health(controls, [], today=today)
+    assert ch_no_rem.open_remediations == 0
+
+    # dashboard assembly
+    dash = build_governance_dashboard(
+        pm, ch, tm, today=today,
+        policies_due_for_review=2,
+        policies_pending_approval=1,
+        outstanding_attestations=3,
+    )
+    assert dash.overall_rag in ("green", "amber", "red")
+    summary = governance_summary_report(dash)
+    assert summary["overall_health"]["rag"] == dash.overall_rag
+    assert "disclaimer" in summary
+
+    # printable reports
+    p_rows = policy_register_report(
+        [
+            types.SimpleNamespace(
+                policy_number="POL-001",
+                title="AML Policy",
+                policy_type=types.SimpleNamespace(value="aml"),
+                version_major=1,
+                version_minor=0,
+                document_owner="user-1",
+                review_due_date=today,
+                status=PolicyLifecycleStatus.published,
+                effective_date=today,
+            )
+        ]
+    )
+    assert p_rows[0]["policy_number"] == "POL-001"
+
+    c_rows = control_register_report(
+        [
+            types.SimpleNamespace(
+                control_ref="CTRL-001",
+                name="KYC Check",
+                risk_area=types.SimpleNamespace(value="cdd"),
+                control_type=types.SimpleNamespace(value="preventive"),
+                control_owner="user-2",
+                business_unit="Compliance",
+                effectiveness=ControlEffectiveness.effective,
+                last_tested_date=today,
+                next_test_date=today,
+                status=types.SimpleNamespace(value="active"),
+            )
+        ]
+    )
+    assert c_rows[0]["control_ref"] == "CTRL-001"
+
+    t_rows = training_register_report(
+        [
+            types.SimpleNamespace(
+                user_id="user-3",
+                course_id="course-1",
+                course=types.SimpleNamespace(
+                    training_type=types.SimpleNamespace(value="aml_basics")
+                ),
+                assigned_date=today,
+                due_date=today,
+                completion_date=today,
+                expiry_date=today,
+                score=95,
+                passed=True,
+                status=TrainingStatus.completed,
+                certificate_document_id="doc-1",
+            )
+        ]
+    )
+    assert t_rows[0]["user_id"] == "user-3"
