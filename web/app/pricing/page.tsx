@@ -17,7 +17,7 @@ const plans = [
     highlight: false,
     features: [
       { label: 'Full platform access for 7 days', included: true },
-      { label: 'Unlimited customers', included: true },
+      { label: 'Up to 10 customers', included: true },
       { label: '1 industry compliance pack (your sector)', included: true },
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
@@ -40,17 +40,21 @@ const plans = [
     description: 'For small reporting entities building their first AML/CTF programme.',
     highlight: false,
     features: [
-      { label: 'Unlimited customers', included: true },
+      { label: 'Up to 50 customers', included: true },
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
       { label: 'AML/CTF Program — basic reference template', included: true, note: true },
-      { label: 'IFTI IN, OUT & bulk import', included: true },
       { label: 'SMR & TTR reporting', included: true },
       { label: 'Basic transaction monitoring', included: true },
       { label: 'Essential integrations (Email, Cloud Storage)', included: true },
-      { label: 'Sanctions & PEP screening', included: false },
-      { label: 'Adverse media screening', included: false },
+      { label: 'Enhanced due diligence (EDD)', included: true },
+      { label: 'Sanctions screening (OFAC, UN, EU, DFAT, UK HMT)', included: true },
+      { label: 'PEP screening', included: true },
+      { label: 'Adverse media monitoring', included: true },
+      { label: 'IFTI IN & OUT reporting', included: false },
+      { label: 'IFTI bulk import', included: false },
+      { label: 'Report review & MLRO sign-off', included: false },
       { label: 'Case management', included: false },
       { label: 'Workflow automation', included: false },
       { label: 'AML data connectors', included: false },
@@ -67,7 +71,7 @@ const plans = [
     description: 'For growing compliance teams with full AUSTRAC reporting obligations.',
     highlight: true,
     features: [
-      { label: 'Unlimited customers', included: true },
+      { label: 'Up to 200 customers', included: true },
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC + KYB verification', included: true },
       { label: 'AML/CTF Program — basic reference template', included: true, note: true },
@@ -94,8 +98,8 @@ const plans = [
     description: 'For reporting groups, financial institutions, and SaaS resellers.',
     highlight: false,
     features: [
-      { label: 'Unlimited customers', included: true },
-      { label: 'All compliance packs', included: true },
+      { label: 'Customizable customer limit', included: true },
+      { label: 'Up to 2 compliance packs', included: true },
       { label: 'KYC, KYB + beneficial ownership', included: true },
       { label: 'AML/CTF Program — tailored to your industry', included: true },
       { label: 'Full IFTI, SMR, TTR suite', included: true },
@@ -117,8 +121,9 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
   {
     group: 'Platform',
     rows: [
-      { feature: 'Customer limit', values: ['Unlimited', 'Unlimited', 'Unlimited', 'Unlimited'] },
-      { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'All packs'] },
+      { feature: 'Customer limit', values: ['10', '50', '200', 'Customizable'] },
+      { feature: 'Users per tenant', values: ['1', '1', '3', '5'] },
+      { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'Up to 2 packs'] },
       { feature: 'AML/CTF Program', tooltip: 'Basic reference template preloaded. Tailoring to your specific business is an additional service.', values: ['Reference only', 'Reference only', 'Reference only', 'Tailored'] },
       { feature: 'Annual review workflow', values: [true, true, true, true] },
     ],
@@ -129,16 +134,16 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
       { feature: 'KYC — identity verification', values: [true, true, true, true] },
       { feature: 'KYB — business verification', values: [true, true, true, true] },
       { feature: 'Beneficial ownership mapping', values: [true, true, true, true] },
-      { feature: 'Enhanced due diligence (EDD)', values: [true, false, true, true] },
+      { feature: 'Enhanced due diligence (EDD)', values: [true, true, true, true] },
       { feature: 'Ongoing periodic re-verification', values: [true, true, true, true] },
     ],
   },
   {
     group: 'Screening',
     rows: [
-      { feature: 'Sanctions screening (OFAC, UN, EU, DFAT, UK HMT)', values: [true, false, true, true] },
-      { feature: 'PEP screening', values: [true, false, true, true] },
-      { feature: 'Adverse media monitoring', values: [true, false, true, true] },
+      { feature: 'Sanctions screening (OFAC, UN, EU, DFAT, UK HMT)', values: [true, true, true, true] },
+      { feature: 'PEP screening', values: [true, true, true, true] },
+      { feature: 'Adverse media monitoring', values: [true, true, true, true] },
     ],
   },
   {
@@ -152,11 +157,11 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
   {
     group: 'AUSTRAC Reporting',
     rows: [
-      { feature: 'IFTI IN & OUT reporting', values: [true, true, true, true] },
-      { feature: 'IFTI bulk import', values: [true, true, true, true] },
+      { feature: 'IFTI IN & OUT reporting', values: [true, false, true, true] },
+      { feature: 'IFTI bulk import', values: [true, false, true, true] },
       { feature: 'SMR reporting', values: [true, true, true, true] },
       { feature: 'TTR reporting', values: [true, true, true, true] },
-      { feature: 'Report review & MLRO sign-off', values: [true, true, true, true] },
+      { feature: 'Report review & MLRO sign-off', values: [true, false, true, true] },
     ],
   },
   {
@@ -174,6 +179,18 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
     rows: [
       { feature: 'Essential integrations (Email, Cloud Storage)', values: [true, true, true, true] },
       { feature: 'AML data connectors', values: [false, false, true, true] },
+      { feature: 'API access & webhooks', values: [false, false, true, true] },
+      { feature: 'API calls / month', values: ['—', '10,000', '100,000', 'Unlimited'] },
+      { feature: 'Custom domain', values: [false, false, false, true] },
+    ],
+  },
+  {
+    group: 'Compliance Records',
+    rows: [
+      { feature: 'Immutable audit log', values: [true, true, true, true] },
+      { feature: 'Document vault storage', values: ['1 GB', '5 GB', '50 GB', '500 GB'] },
+      { feature: 'AUSTRAC-aligned data retention (7–10 yr)', values: [true, true, true, true] },
+      { feature: 'Legal hold management', values: [false, false, false, true] },
     ],
   },
   {

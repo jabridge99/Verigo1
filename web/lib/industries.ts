@@ -1,8 +1,35 @@
 export type WorkflowStep = { title: string; desc: string }
 export type PricingRec = { plan: string; reason: string }
 
+/** Matches the backend IndustryType enum exactly */
+export type IndustryId =
+  | 'remittance'
+  | 'vasp'
+  | 'bullion_dealers'
+  | 'accountants'
+  | 'conveyancers'
+  | 'legal_professionals'
+  | 'real_estate'
+  | 'precious_metals'
+  | 'pubs_clubs'
+  | 'banking'
+  | 'bookmakers_betting'
+  | 'casinos'
+  | 'financial_services'
+  | 'superannuation'
+  | 'reporting_group'  // structural, not an AUSTRAC industry type
+
+/** Industries that require a custom package — redirect to Contact Us */
+export const CUSTOM_PACKAGE_INDUSTRIES: ReadonlySet<IndustryId> = new Set([
+  'banking',
+  'bookmakers_betting',
+  'casinos',
+  'financial_services',
+  'superannuation',
+])
+
 export type Industry = {
-  id: string
+  id: IndustryId
   slug: string
   label: string
   shortLabel: string
@@ -31,12 +58,12 @@ export type Industry = {
 
 export const industries: Industry[] = [
   // ─────────────────────────────────────────────────────────────────────────
-  // DIGITAL CURRENCY EXCHANGE
+  // VIRTUAL ASSET SERVICE PROVIDERS (AUSTRAC T1)
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'digital-currency-exchange',
-    slug: 'digital-currency-exchange',
-    label: 'Virtual Asset Service Provider (VASP) / DCE',
+    id: 'vasp',
+    slug: 'vasp',
+    label: 'Virtual asset service providers',
     shortLabel: 'VASP / DCE',
     regime: 'current',
     icon: 'Coins',
@@ -108,12 +135,12 @@ export const industries: Industry[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // REMITTANCE PROVIDER
+  // REMITTANCE SERVICE PROVIDERS (AUSTRAC T1)
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'remittance-provider',
-    slug: 'remittance-provider',
-    label: 'Remittance Provider',
+    id: 'remittance',
+    slug: 'remittance',
+    label: 'Remittance service providers',
     shortLabel: 'Remittance',
     regime: 'current',
     icon: 'Globe',
@@ -185,156 +212,79 @@ export const industries: Industry[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FOREIGN EXCHANGE
+  // BULLION DEALERS (AUSTRAC T1)
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'foreign-exchange',
-    slug: 'foreign-exchange',
-    label: 'Foreign Exchange Provider',
-    shortLabel: 'FX',
+    id: 'bullion_dealers',
+    slug: 'bullion-dealers',
+    label: 'Bullion dealers',
+    shortLabel: 'Bullion',
     regime: 'current',
-    icon: 'ArrowLeftRight',
-    description: 'FX businesses exchange currency and must identify customers, monitor transactions and report as required.',
-    overview: "Whether you're running a CBD currency exchange counter or an online FX platform, your obligations under the AML/CTF Act 2006 are significant. Every cash transaction at or above $10,000 triggers a TTR. Every suspicious customer pattern — bulk cash, structuring, PEP customers — needs to be monitored and potentially reported. FX businesses sit at a natural intersection of cash and cross-border flows, making them a persistent focus for AUSTRAC supervision.",
+    icon: 'Gem',
+    description: 'Bullion dealers buying or selling gold, silver, and platinum bullion are reporting entities under the AML/CTF Act 2006.',
+    overview: "Bullion has long been used to convert cash into a portable, high-value store of wealth outside the financial system. As a bullion dealer, you are a reporting entity under the AML/CTF Act 2006 — meaning you must identify your customers, monitor transactions for suspicious patterns, and file reports with AUSTRAC. Cash transactions at or above $10,000 trigger a TTR. Structuring below that threshold — a deliberate pattern to avoid reporting — must also be detected and reported.",
     obligations: [
-      'Register with AUSTRAC as a currency exchange provider',
-      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program based on it',
-      'Conduct KYC on all customers at the point of onboarding',
+      'Register with AUSTRAC as a bullion dealer before providing any designated service',
+      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program',
+      'Conduct KYC on customers making cash transactions at or above $10,000 AUD',
       'Lodge TTR reports within 10 business days of a cash transaction at or above $10,000 AUD',
-      'Lodge IFTI reports where the FX transaction involves an international payment instruction',
       'Lodge SMR reports within 3 business days of forming a suspicion',
+      'Maintain all CDD and transaction records',
     ],
     keyRisks: [
-      'Currency structuring — breaking large exchanges into smaller transactions to stay under TTR thresholds',
-      'Trade-based money laundering through over- or under-invoiced currency conversions',
-      'Bulk cash deposits connected to criminal proceeds requiring conversion',
-      'PEPs and high-risk customers seeking to convert large amounts without scrutiny',
+      'Anonymous cash purchases enabling currency to be converted to portable assets without scrutiny',
+      'Structuring — multiple purchases just below $10,000 to avoid TTR obligations',
+      'Proceeds of crime converted to bullion to facilitate layering outside the financial system',
+      'Customers with no verifiable legitimate source for large cash purchases',
     ],
     risks: [
-      'Currency structuring — breaking large exchanges into smaller transactions to stay under TTR thresholds',
-      'Trade-based money laundering through over- or under-invoicing of currency conversions',
-      'Bulk cash deposits connected to criminal proceeds requiring conversion',
-      'High-risk customers or PEPs seeking to convert large amounts of foreign currency',
+      'Anonymous cash purchases enabling conversion to portable, high-value assets without scrutiny',
+      'Structuring — deliberate pattern of transactions below the $10,000 TTR threshold',
+      'Proceeds of crime converted to bullion as a layering mechanism',
+      'Unverifiable source of funds for large cash bullion purchases',
     ],
     customerRisks: [
-      "Bulk cash depositors — customers who regularly deposit large amounts of physical cash to fund FX conversions are a major ML red flag. The source of cash must be documented and plausible.",
-      "Unusual currency pair requests — customers repeatedly requesting conversions to currencies from high-risk jurisdictions, particularly in cash, warrant enhanced scrutiny.",
-      "PEP customers — politicians, senior public officials, and their families who convert significant funds through your business require enhanced due diligence regardless of apparent legitimacy.",
-      "One-time large conversion customers with no prior relationship — customers who appear once, convert a large amount of cash, and have no verifiable financial history require documented justification.",
+      "Cash buyers near or just below the $10,000 threshold — a customer who regularly buys $9,500 in bullion is displaying classic structuring. The pattern matters, not just the individual transaction.",
+      "First-time buyers making large cash purchases — a customer with no prior relationship arriving with a large amount of cash is a high-risk profile that requires documented source of funds.",
+      "Buyers from high-risk jurisdictions — foreign nationals purchasing significant quantities of bullion, particularly in cash, without an Australian financial footprint require EDD.",
+      "Sellers with unverifiable provenance — customers wanting to sell bullion who cannot document its legitimate origin may be disposing of proceeds of theft or other criminal activity.",
     ],
     cddRequirements: [
-      'Photo identification document verification for all customers',
-      'Address verification for customers transacting above defined thresholds',
-      'Source of funds documentation for large or unusual conversion requests',
-      'Enhanced due diligence for PEPs, high-risk jurisdiction customers, and large-transaction customers',
+      'Identity verification with photo ID for all customers in cash transactions at or above $10,000 AUD',
+      'Source of funds documentation for high-value cash purchases',
+      'PEP and sanctions screening for customers above defined risk thresholds',
+      'Enhanced due diligence for unusual quantities, frequencies, or payment methods',
     ],
     monitoringRequirements: [
-      'Transaction monitoring for structuring patterns below the $10,000 TTR threshold',
-      'Cross-border payment monitoring for transactions with an international element',
-      'Customer-level velocity monitoring for unusual conversion frequency or volume',
+      'Transaction monitoring for structuring — multiple purchases below $10,000 TTR threshold',
+      'Customer-level monitoring for frequency and pattern of bullion purchases and sales',
+      'Cash transaction velocity monitoring for individual and related customers',
     ],
     reportingRequirements: {
-      types: ['TTR', 'IFTI', 'SMR'],
-      details: 'FX providers must lodge TTR reports within 10 business days of a cash transaction at or above $10,000 AUD. IFTI reports are required for international payment instructions above the threshold. SMRs must be lodged within 3 business days.',
+      types: ['TTR', 'SMR'],
+      details: 'Bullion dealers must lodge TTR reports within 10 business days of a cash transaction at or above $10,000 AUD. SMR reports must be lodged within 3 business days of forming a suspicion.',
     },
     howVerigoHelps: [
-      'Automated customer onboarding with KYC and risk scoring tailored to FX transaction thresholds',
-      'Pre-built FX monitoring rules including TTR threshold alerts and structuring detection',
-      'TTR and IFTI report templates pre-populated from transaction records with AUSTRAC validation',
-      'Real-time PEP and sanctions screening at onboarding and for ongoing periodic review',
-      'Full audit trail for every FX transaction, customer decision, and regulatory report',
+      'Customer onboarding and KYC workflows calibrated for bullion transaction thresholds',
+      'TTR report templates pre-populated from transaction records with AUSTRAC validation',
+      'Structuring detection alerts for customers making multiple transactions below TTR thresholds',
+      'PEP and sanctions screening at point-of-sale customer identification',
+      'AML/CTF program template for bullion dealers with transaction risk assessment and training log',
     ],
-    austracRef: 'AML/CTF Act 2006 — Currency Exchange Providers',
-    packName: 'FX Pack',
-    color: 'from-green-500 to-emerald-500',
+    austracRef: 'AML/CTF Act 2006 — Bullion Dealers',
+    packName: 'Bullion Pack',
+    color: 'from-yellow-500 to-amber-400',
     exampleWorkflow: [
-      { title: 'Customer approaches counter', desc: 'Staff identifies the transaction type and amount. KYC triggered for cash transactions above threshold.' },
-      { title: 'Identity collected', desc: 'Customer provides photo ID. Automated KYC check and sanctions screening runs in seconds.' },
-      { title: 'Risk assessed', desc: 'Customer risk score generated. PEP flag or high-risk jurisdiction triggers EDD prompt.' },
-      { title: 'Transaction recorded', desc: 'Amount, currency pair, and customer details captured in Verigo. TTR threshold checked automatically.' },
-      { title: 'TTR auto-generated', desc: '$10,000+ cash transaction? TTR pre-populated and queued for MLRO review.' },
-      { title: 'Submitted on time', desc: 'MLRO approves TTR. Submitted to AUSTRAC within the 10-day deadline. Confirmation stored.' },
+      { title: 'Customer approaches for purchase', desc: 'Sale at or above $10,000 in cash? KYC triggered at point of sale. Digital ID check sent to customer.' },
+      { title: 'Identity verified', desc: 'Photo ID captured and verified. Sanctions screening runs automatically.' },
+      { title: 'Source of funds documented', desc: 'Customer provides documentation of where the cash originated. Stored securely.' },
+      { title: 'TTR generated', desc: 'Cash transaction at or above $10,000? TTR auto-populated from transaction data and queued for review.' },
+      { title: 'Structuring check', desc: "Customer's transaction history reviewed. Pattern of purchases just below $10,000? Alert raised for MLRO." },
+      { title: 'TTR submitted or SMR filed', desc: 'TTR submitted to AUSTRAC within 10 days. Suspicious pattern? SMR prepared and filed within 3 days.' },
     ],
     pricingRec: {
       plan: 'Essential',
-      reason: 'Most FX operators need solid KYC, TTR generation, and basic monitoring. The Essential plan covers your core obligations. Upgrade to Professional if you handle high transaction volumes or international payment instructions requiring IFTI reporting.',
-    },
-  },
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // PAYMENT SERVICE PROVIDER
-  // ─────────────────────────────────────────────────────────────────────────
-  {
-    id: 'payment-service-provider',
-    slug: 'payment-service-provider',
-    label: 'Payment Service Provider',
-    shortLabel: 'PSP',
-    regime: 'current',
-    icon: 'CreditCard',
-    description: 'PSPs facilitate payment flows and are reporting entities under the AML/CTF Act with broad monitoring obligations.',
-    overview: "You process payments between merchants and their customers — which means you sit in the middle of transactions you didn't initiate and can't always control. That creates a unique compliance challenge. AUSTRAC expects you to verify the merchants you onboard, monitor for suspicious payment patterns across your entire network, and file reports when something doesn't look right. Volume is not an excuse — 100% of transactions need to be covered.",
-    obligations: [
-      'Register with AUSTRAC and maintain a full AML/CTF program',
-      'Conduct KYB due diligence on merchants at onboarding and on an ongoing basis',
-      'Perform KYC on end-users engaging in reportable transactions',
-      'Lodge SMR reports for suspicious transactions or merchant behaviour within 3 business days',
-      'Lodge IFTI reports for international transfer instructions above the threshold',
-      'Maintain sanctions screening across all merchants and high-value users',
-    ],
-    keyRisks: [
-      'Merchant fraud — use of the PSP to process transactions linked to criminal activity',
-      'Card-not-present abuse for online transactions enabling identity fraud',
-      'Velocity pattern abuse — rapid small transactions designed to avoid detection',
-      'Cross-border payment risk where merchant counterparties are in high-risk jurisdictions',
-    ],
-    risks: [
-      'Merchant fraud — use of the PSP to process transactions linked to criminal activity',
-      'Card-not-present abuse for online transactions enabling identity fraud',
-      'Velocity pattern abuse — rapid small transactions designed to avoid detection',
-      'Cross-border payment risk where merchant counterparties are in high-risk jurisdictions',
-    ],
-    customerRisks: [
-      "High-refund merchants — merchants with abnormally high refund rates may be processing fraudulent transactions and reversing them to avoid detection. A major risk pattern in PSP environments.",
-      "New merchants with immediate high volumes — a merchant who generates unusual transaction volume in the first week of onboarding without any prior history warrants immediate enhanced monitoring.",
-      "Merchants in high-risk categories — gambling, adult content, nutraceuticals, and digital goods are historically over-represented in PSP fraud and laundering cases.",
-      "Cross-border merchants — merchants who receive funds locally but settle to offshore accounts, especially in high-risk jurisdictions, carry elevated ML exposure.",
-    ],
-    cddRequirements: [
-      'Business verification (KYB) for all merchants including beneficial ownership identification',
-      'Individual KYC for merchants who are sole traders or principals of small businesses',
-      'PEP and sanctions screening at merchant onboarding and ongoing periodic review',
-      'Enhanced due diligence for high-risk merchant categories or abnormal transaction volumes',
-    ],
-    monitoringRequirements: [
-      'Transaction-level monitoring for velocity patterns, unusual amounts, and high-risk merchant activity',
-      'Merchant-level monitoring for changes in transaction profile indicating potential misuse',
-      'IFTI monitoring for cross-border payment instructions above the reporting threshold',
-    ],
-    reportingRequirements: {
-      types: ['SMR', 'IFTI', 'TTR'],
-      details: 'PSPs must lodge SMRs within 3 business days of forming a suspicion about a transaction or customer. IFTI reports are required for international transfer instructions above the threshold. TTRs apply to cash transactions at or above $10,000 AUD.',
-    },
-    howVerigoHelps: [
-      'KYB workflows for merchant onboarding — business verification and beneficial ownership mapped automatically',
-      'Automated PEP and sanctions screening for merchants at onboarding and on periodic renewal',
-      'Pre-built PSP transaction monitoring rules including velocity, cross-border, and refund pattern detection',
-      'Case management linking transaction alerts to investigation and SMR preparation',
-      'Full audit trail for every merchant decision, transaction alert, and AUSTRAC submission',
-    ],
-    austracRef: 'AML/CTF Act 2006 — Payment Providers',
-    packName: 'PSP Pack',
-    color: 'from-purple-500 to-violet-500',
-    exampleWorkflow: [
-      { title: 'Merchant applies', desc: 'Merchant submits application. KYB triggered — ABN verified, directors identified, UBOs mapped.' },
-      { title: 'Beneficial owners verified', desc: 'All directors and 25%+ shareholders put through KYC. Sanctions and PEP screening runs.' },
-      { title: 'Merchant risk rated', desc: 'Risk score assigned based on business type, jurisdiction, and ownership structure. High-risk routed to EDD.' },
-      { title: 'Platform access granted', desc: 'Merchant onboarded. Transaction monitoring rules activated for their account from day one.' },
-      { title: 'Anomaly detected', desc: 'Velocity pattern alert raised. Case created automatically and assigned to compliance analyst.' },
-      { title: 'Case resolved', desc: 'Analyst investigates, documents findings. SMR filed if suspicious. Case closed with full audit trail.' },
-    ],
-    pricingRec: {
-      plan: 'Enterprise',
-      reason: "PSPs operate at scale across large merchant networks, often requiring multi-entity oversight, custom API integrations, AML data connectors (Chainalysis, Greeid), and dedicated compliance support. Enterprise is the right fit.",
+      reason: 'Bullion dealers primarily need TTR generation, KYC at point of sale, and structuring detection. The Essential plan covers these core obligations.',
     },
   },
 
@@ -342,9 +292,9 @@ export const industries: Industry[] = [
   // REAL ESTATE
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'real-estate',
+    id: 'real_estate',
     slug: 'real-estate',
-    label: 'Real Estate Professional',
+    label: 'Real estate agents',
     shortLabel: 'Real Estate',
     regime: 'expanded',
     icon: 'Home',
@@ -420,9 +370,9 @@ export const industries: Industry[] = [
   // CONVEYANCER
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'conveyancer',
-    slug: 'conveyancer',
-    label: 'Conveyancer',
+    id: 'conveyancers',
+    slug: 'conveyancers',
+    label: 'Conveyancers',
     shortLabel: 'Conveyancer',
     regime: 'expanded',
     icon: 'FileCheck',
@@ -497,9 +447,9 @@ export const industries: Industry[] = [
   // LAW FIRM
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'law-firm',
-    slug: 'law-firm',
-    label: 'Law Firm',
+    id: 'legal_professionals',
+    slug: 'legal-professionals',
+    label: 'Legal professionals',
     shortLabel: 'Legal',
     regime: 'expanded',
     icon: 'Scale',
@@ -574,9 +524,9 @@ export const industries: Industry[] = [
   // ACCOUNTING FIRM
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'accounting-firm',
-    slug: 'accounting-firm',
-    label: 'Accounting Firm',
+    id: 'accountants',
+    slug: 'accountants',
+    label: 'Accountants',
     shortLabel: 'Accounting',
     regime: 'expanded',
     icon: 'Calculator',
@@ -651,9 +601,9 @@ export const industries: Industry[] = [
   // PRECIOUS METALS
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'precious-metals',
+    id: 'precious_metals',
     slug: 'precious-metals',
-    label: 'Precious Metal Dealer',
+    label: 'Dealers in precious metals and related products',
     shortLabel: 'Precious Metals',
     regime: 'expanded',
     icon: 'Gem',
@@ -728,7 +678,7 @@ export const industries: Industry[] = [
   // REPORTING GROUP
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'reporting-group',
+    id: 'reporting_group',
     slug: 'reporting-group',
     label: 'Reporting Group',
     shortLabel: 'Reporting Group',
@@ -802,82 +752,81 @@ export const industries: Industry[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // MORTGAGE BROKER
+  // PUBS, CLUBS AND HOTELS (AUSTRAC T2)
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'mortgage-broker',
-    slug: 'mortgage-broker',
-    label: 'Mortgage Broker',
-    shortLabel: 'Mortgage',
-    regime: 'current',
-    icon: 'Landmark',
-    description: 'Mortgage brokers who arrange or provide credit facilities are reporting entities under the AML/CTF Act 2006 with obligations to verify borrowers and report suspicious activity.',
-    overview: "You sit between the borrower and the lender — and that makes you a gatekeeper for one of the largest financial transactions most Australians ever make. Mortgage brokers who provide or arrange credit are reporting entities under the AML/CTF Act 2006. Your obligation is to know who you're dealing with, verify where the funds are coming from, and report anything that doesn't add up. Property transactions are one of the most common vehicles for money laundering in Australia — AUSTRAC's data confirms it.",
+    id: 'pubs_clubs',
+    slug: 'pubs-clubs',
+    label: 'Pubs, clubs and hotels',
+    shortLabel: 'Pubs & Clubs',
+    regime: 'expanded',
+    icon: 'Building2',
+    description: 'Hotels, pubs, and licensed clubs that provide certain gambling or payment services become reporting entities under Tranche 2 reforms effective 1 July 2026.',
+    overview: "From 1 July 2026, licensed venues that provide gambling facilities or stored-value payment services are reporting entities under Australian AML law. If your venue has gaming machines, a TAB, keno, or accepts stored-value cards for significant transactions, you are required to enrol with AUSTRAC, implement an AML/CTF program, conduct customer due diligence, and report suspicious activity. Cash-intensive venues have long been targeted for placement-stage money laundering — the reform directly addresses that gap.",
     obligations: [
-      'Enrol with AUSTRAC as a provider of designated credit services',
-      'Conduct an ML/TF Risk Assessment and implement a unified AML/CTF program based on it',
-      'Conduct CDD on all borrowers before providing credit services',
-      'Verify the source of the borrower\'s deposit and other funds being applied to the transaction',
-      'Identify and verify any guarantors or third parties contributing funds',
+      'Enrol with AUSTRAC before 1 July 2026 if providing designated gambling or payment services',
+      'Conduct an ML/TF Risk Assessment and implement a written AML/CTF program',
+      'Conduct CDD on customers engaging in transactions above prescribed thresholds',
       'Lodge SMR reports within 3 business days of forming a suspicion',
+      'Lodge TTR reports within 10 business days of a cash transaction at or above $10,000 AUD',
       'Maintain all CDD and transaction records for a minimum of 7 years',
     ],
     keyRisks: [
-      'Borrowers using property finance to integrate criminal proceeds into the legitimate economy',
-      'Third-party gifted deposits with no verifiable legitimate source',
-      'Income inflation or falsified employment documents used to secure larger loans',
-      'PEPs and their associates using property purchases to move significant funds',
+      'Placement of criminal cash proceeds through gaming machine play to receive clean tickets or cheques',
+      'Smurfing — multiple people using cash at gaming machines on behalf of a single beneficial owner',
+      'Third-party involvement where customers use gaming facilities on behalf of absent criminal principals',
+      'High-volume cash transactions at the bar or gaming area with no customer identification',
     ],
     risks: [
-      'Borrowers using property finance to integrate criminal proceeds into the legitimate economy',
-      'Third-party gifted deposits with no verifiable legitimate source',
-      'Income inflation or falsified employment documents used to secure larger loans',
-      'PEPs and their associates purchasing property through mortgage arrangements',
+      'Placement of cash proceeds through gaming machine play to receive a clean cheque payout',
+      'Smurfing — multiple individuals using gaming facilities on behalf of a single beneficial controller',
+      'Anonymous high-value cash transactions at the venue with no customer identification',
+      'Stored-value card misuse for layering criminal funds through legitimate venue spending',
+    ],
+    customerRisks: [
+      "Regular large-cash gaming machine players — customers who consistently load high amounts of cash into gaming machines, particularly if they collect winnings by cheque, are exhibiting classic placement behaviour.",
+      "Customers using third-party funds for gaming — someone who accepts cash from another person before using gaming facilities is almost certainly a smurfing participant and should trigger immediate investigation.",
+      "High-frequency cash transactions just below reporting thresholds — a customer who consistently transacts just under $10,000 at your venue is likely structuring to avoid TTR obligations.",
+      "Customers with no apparent legitimate income for the volume of gambling — a customer whose declared or apparent income is inconsistent with their gambling expenditure requires a source of funds inquiry.",
     ],
     cddRequirements: [
-      'Full identity verification of all borrowers with government-issued photo ID',
-      'Source of funds verification for the deposit and any other funds being applied to the purchase',
-      'Third-party fund contributor identification and verification where gifted or contributed funds are involved',
-      'PEP and sanctions screening of all borrowers, guarantors, and material third parties at application',
+      'Identity verification for customers engaging in gaming or payment transactions above prescribed thresholds',
+      'Source of funds inquiry for high-value or unusual gaming activity',
+      'PEP and sanctions screening for customers identified through the CDD process',
+      'Enhanced due diligence for customers exhibiting structuring or third-party fund patterns',
     ],
     monitoringRequirements: [
-      'Ongoing monitoring of borrower application patterns for inconsistencies between stated income and deposit source',
-      'Periodic review of borrower risk ratings where material changes in circumstances are identified',
-      'Post-settlement review for indicators that emerge after loan approval that may require SMR filing',
+      'Transaction monitoring for structuring — repeated cash gaming transactions just below $10,000',
+      'Customer-level gaming pattern monitoring to detect unusual expenditure relative to customer profile',
+      'Third-party fund detection — monitoring for customers receiving cash from others before gaming',
     ],
     reportingRequirements: {
-      types: ['SMR'],
-      details: 'Mortgage brokers must lodge SMR reports within 3 business days of forming a suspicion about a borrower, application, or transaction. You must not disclose to the borrower that an SMR has been filed.',
+      types: ['TTR', 'SMR'],
+      details: 'Licensed venues must lodge TTR reports within 10 business days of a cash transaction at or above $10,000 AUD. SMR reports must be lodged within 3 business days of forming a suspicion about a customer or transaction.',
     },
     howVerigoHelps: [
-      'Guided borrower CDD workflow — identity verification and document collection completed digitally before application progresses',
-      'Source of funds verification module with document upload, review, and documented approval workflow',
-      'PEP and sanctions screening of all borrowers, guarantors, and third-party fund contributors at application',
-      'Third-party fund contributor identification and KYC workflow triggered automatically when gift or contribution is declared',
-      'SMR case management and preparation tools for MLRO review and AUSTRAC lodgement',
+      'Customer identification and KYC workflows calibrated for gaming and venue transaction thresholds',
+      'TTR report templates pre-populated from transaction data with AUSTRAC validation',
+      'Structuring detection and gaming pattern alerts for high-risk customer activity',
+      'SMR case management for MLRO review and AUSTRAC lodgement',
+      'AML/CTF program template for licensed venues with staff training tracking and risk assessment',
     ],
-    austracRef: 'AML/CTF Act 2006 — Providers of Designated Credit Services',
-    packName: 'Mortgage Broker Pack',
-    color: 'from-sky-500 to-blue-600',
-    customerRisks: [
-      "Borrowers with large unexplained cash deposits — a deposit that significantly exceeds what the borrower's declared income could plausibly support is a major red flag. Source of funds must be documented and verified before you proceed.",
-      "Third-party gifted funds — when the deposit or top-up funds come from a third party not on the application, that person must be identified and the source of their contribution documented. Undisclosed third-party contributors are a classic ML structuring method.",
-      "Borrowers from high-risk jurisdictions with offshore income — borrowers whose funds originate from countries with weak AML regimes, or whose offshore income is difficult to verify, carry elevated risk and require enhanced scrutiny.",
-      "PEP borrowers — politicians, senior government officials, and their family members seeking mortgage finance require enhanced due diligence regardless of apparent legitimacy.",
-    ],
+    austracRef: 'AML/CTF Amendment Act 2024 — Tranche 2 Reform',
+    packName: 'Pubs & Clubs Pack',
+    color: 'from-orange-500 to-red-500',
     exampleWorkflow: [
-      { title: 'Borrower submits application', desc: 'Application received. CDD workflow triggered immediately — digital ID check sent to borrower.' },
-      { title: 'Identity verified', desc: 'Borrower completes KYC from their phone. Document and biometric check runs automatically.' },
-      { title: 'Source of funds requested', desc: 'Borrower provides bank statements and documentation confirming the origin of the deposit and any other funds.' },
-      { title: 'Third-party contributors identified', desc: 'Gifted or contributed funds declared? Contributor identified, verified, and source of their funds documented.' },
-      { title: 'PEP and sanctions screening', desc: 'All borrowers, guarantors, and material third parties screened. PEP flag triggers EDD before application advances.' },
-      { title: 'Loan proceeds or SMR filed', desc: 'Clean application proceeds to lender. Red flags? MLRO reviews and prepares SMR if required. Records retained for 7 years.' },
+      { title: 'Customer presents at gaming area', desc: 'Cash load at or above threshold? CDD triggered. Digital ID check sent or processed on-site.' },
+      { title: 'Identity verified', desc: 'Photo ID captured. Sanctions and PEP screening runs automatically.' },
+      { title: 'Gaming pattern recorded', desc: "Transaction added to customer's monitoring profile. Amount, frequency, and payout method tracked." },
+      { title: 'Structuring check', desc: "Customer's prior transactions reviewed. Multiple loads near $10,000? Alert raised for venue MLRO." },
+      { title: 'TTR generated if applicable', desc: 'Cash transaction at or above $10,000? TTR auto-populated and queued for review.' },
+      { title: 'TTR submitted or SMR filed', desc: 'TTR submitted within 10 days. Suspicious pattern identified? SMR prepared and filed within 3 days.' },
     ],
     pricingRec: {
-      plan: 'Professional',
-      reason: 'Mortgage brokers need full KYC, source of funds workflows, third-party contributor management, PEP screening, and MLRO case management for SMR preparation. Professional covers all of this with advanced monitoring and case management built in.',
+      plan: 'Essential',
+      reason: 'Most licensed venues need threshold-triggered KYC, TTR generation, and SMR capability. The Essential plan covers all core Tranche 2 obligations for pubs, clubs, and hotels.',
     },
   },
 ]
 
-export const getIndustry = (id: string) => industries.find(i => i.id === id)
+export const getIndustry = (slug: string) => industries.find(i => i.slug === slug)

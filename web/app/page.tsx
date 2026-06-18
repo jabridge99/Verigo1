@@ -227,25 +227,23 @@ function AMLReformTimeline() {
 // ─────────────────────────────────────────────────────────────────────────────
 function WhoWeHelp() {
   const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-    'digital-currency-exchange': Coins,
-    'remittance-provider': Globe,
-    'foreign-exchange': ArrowLeftRight,
-    'payment-service-provider': CreditCard,
-    'real-estate': Home,
-    'conveyancer': FileCheck,
-    'law-firm': Scale,
-    'accounting-firm': Calculator,
-    'precious-metals': Gem,
-    'reporting-group': Network,
-    'mortgage-broker': Landmark,
+    'vasp': Coins,
+    'remittance': Globe,
+    'bullion_dealers': Gem,
+    'real_estate': Home,
+    'conveyancers': FileCheck,
+    'legal_professionals': Scale,
+    'accountants': Calculator,
+    'precious_metals': Gem,
+    'pubs_clubs': Building2,
+    'reporting_group': Network,
   }
 
   const allIndustries = industries.filter(i =>
     [
-      'digital-currency-exchange', 'remittance-provider', 'foreign-exchange',
-      'law-firm', 'accounting-firm', 'conveyancer', 'real-estate',
-      'precious-metals', 'reporting-group', 'payment-service-provider',
-      'mortgage-broker',
+      'vasp', 'remittance', 'bullion_dealers',
+      'real_estate', 'conveyancers', 'legal_professionals', 'accountants',
+      'precious_metals', 'pubs_clubs', 'reporting_group',
     ].includes(i.id)
   )
 
@@ -266,7 +264,7 @@ function WhoWeHelp() {
           {allIndustries.map(ind => (
             <Link
               key={ind.id}
-              href={`/solutions/${ind.id}`}
+              href={`/solutions/${ind.slug}`}
               className="pub-card-hover group flex flex-col gap-4"
             >
               <div className={`w-12 h-12 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}>

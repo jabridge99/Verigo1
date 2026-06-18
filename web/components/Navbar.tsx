@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark, BookOpen, HelpCircle } from 'lucide-react'
-import { getStoredUser, clearUser } from '@/lib/auth'
+import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark, BookOpen, HelpCircle, Building2 } from 'lucide-react'
+import { getStoredUser, getToken, clearUser } from '@/lib/auth'
 import { useRouter, usePathname } from 'next/navigation'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -14,21 +14,20 @@ const solutionItems = [
   { label: 'Transaction Monitoring', href: '/solutions/transaction-monitoring', desc: 'Automated AML transaction surveillance' },
   { label: 'Case Management', href: '/solutions/case-management', desc: 'Alert-to-case investigation workflows' },
   { label: 'Regulatory Reporting', href: '/solutions/regulatory-reporting', desc: 'AUSTRAC-ready report generation' },
-  { label: 'Reporting Groups', href: '/solutions/reporting-groups', desc: 'Multi-entity group compliance' },
+  { label: 'Reporting Groups', href: '/solutions/reporting-group', desc: 'Multi-entity group compliance' },
   { label: 'Workflow Automation', href: '/solutions/workflow-automation', desc: 'No-code compliance automation' },
 ]
 
 const industryItems = [
-  { label: 'VASPs / Digital Currency Exchanges (DCEs)', href: '/solutions/digital-currency-exchange', icon: Coins },
-  { label: 'Remittance Providers', href: '/solutions/remittance-provider', icon: Globe },
-  { label: 'Foreign Exchange', href: '/solutions/foreign-exchange', icon: ArrowLeftRight },
-  { label: 'Payment Service Providers', href: '/solutions/payment-service-provider', icon: CreditCard },
-  { label: 'Mortgage Brokers', href: '/solutions/mortgage-broker', icon: Landmark },
-  { label: 'Real Estate Professionals', href: '/solutions/real-estate', icon: Home },
-  { label: 'Conveyancers', href: '/solutions/conveyancer', icon: FileCheck },
-  { label: 'Law Firms', href: '/solutions/law-firm', icon: Scale },
-  { label: 'Accounting Firms', href: '/solutions/accounting-firm', icon: Calculator },
-  { label: 'Precious Metal Dealers', href: '/solutions/precious-metals', icon: Gem },
+  { label: 'VASPs / Digital Currency Exchanges', href: '/solutions/vasp', icon: Coins },
+  { label: 'Remittance Service Providers', href: '/solutions/remittance', icon: Globe },
+  { label: 'Bullion Dealers', href: '/solutions/bullion-dealers', icon: Gem },
+  { label: 'Real Estate Agents', href: '/solutions/real-estate', icon: Home },
+  { label: 'Conveyancers', href: '/solutions/conveyancers', icon: FileCheck },
+  { label: 'Legal Professionals', href: '/solutions/legal-professionals', icon: Scale },
+  { label: 'Accountants', href: '/solutions/accountants', icon: Calculator },
+  { label: 'Precious Metals Dealers', href: '/solutions/precious-metals', icon: Gem },
+  { label: 'Pubs, Clubs & Hotels', href: '/solutions/pubs-clubs', icon: Building2 },
 ]
 
 export default function Navbar() {
@@ -68,8 +67,9 @@ export default function Navbar() {
     if (!user) return
     const load = async () => {
       try {
+        const token = getToken()
         const res = await fetch(`${API}/api/v1/notifications/summary`, {
-          credentials: "include",
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (res.ok) {
           const data = await res.json()

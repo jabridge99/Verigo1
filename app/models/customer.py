@@ -8,12 +8,34 @@ from app.db.database import Base
 
 
 class IndustryType(str, enum.Enum):
-    banking = "banking"
-    fintech = "fintech"
-    insurance = "insurance"
+    # Tranche 1 — self-serve
+    remittance = "remittance"
+    vasp = "vasp"
+    bullion_dealers = "bullion_dealers"
+    # Tranche 2 — self-serve
+    accountants = "accountants"
+    conveyancers = "conveyancers"
+    legal_professionals = "legal_professionals"
     real_estate = "real_estate"
-    cryptocurrency = "cryptocurrency"
+    precious_metals = "precious_metals"
+    pubs_clubs = "pubs_clubs"
+    # Tranche 1 — custom package only
+    banking = "banking"
+    bookmakers_betting = "bookmakers_betting"
+    casinos = "casinos"
+    financial_services = "financial_services"
+    superannuation = "superannuation"
+    # Structural (not a standalone industry type)
     other = "other"
+
+
+CUSTOM_PACKAGE_INDUSTRIES: frozenset = frozenset({
+    IndustryType.banking,
+    IndustryType.bookmakers_betting,
+    IndustryType.casinos,
+    IndustryType.financial_services,
+    IndustryType.superannuation,
+})
 
 
 class CustomerStatus(str, enum.Enum):

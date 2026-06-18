@@ -5,6 +5,15 @@ const nextConfig = {
   reactStrictMode: true,
   // 'standalone' is for Docker only — Vercel builds natively without it
   ...(process.env.DOCKER_BUILD === '1' && { output: 'standalone' }),
+  async redirects() {
+    return [
+      {
+        source: '/solutions/payment-service-provider',
+        destination: '/solutions/remittance',
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {
