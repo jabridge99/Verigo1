@@ -28,6 +28,7 @@ import time
 import httpx
 
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
+
 from .base import CryptoWalletProvider, WalletIdentification, WalletScreeningResult
 
 log = logging.getLogger("verigo.integrations.crypto.elliptic")

@@ -32,7 +32,6 @@ from app.api.deps import (
     org_id_for,
     require_analyst_or_above,
     require_compliance_or_above,
-    require_mlro_or_above,
 )
 from app.config import settings
 from app.db.database import get_db
