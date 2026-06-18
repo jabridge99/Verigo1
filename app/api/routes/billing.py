@@ -20,8 +20,10 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user
 from app.db.database import get_db
+from app.models.billing import AddonKey
 from app.models.user import User
 from app.schemas.billing import (
+    AddonResponse,
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     CustomerPortalResponse,
@@ -115,6 +117,47 @@ def list_invoices(
     current_user: User = Depends(_current_user),
 ):
     return svc.list_invoices(db, current_user.org_id or "", limit)
+
+
+@router.get("/addons")
+def list_addon_catalogue():
+    """Public — Enterprise add-on catalogue. Add-ons unlock providers that are
+    partially built or sales-gated (e.g. Elliptic/TRM Labs crypto screening)."""
+    return svc.addon_catalogue()
+
+
+@router.get("/addons/mine", response_model=List[AddonResponse])
+def my_addons(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.get_org_addons(db, current_user.org_id or "")
+
+
+@router.post("/addons/{addon_key}/purchase", response_model=AddonResponse)
+def purchase_addon(
+    addon_key: AddonKey,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    if not current_user.org_id:
+        raise HTTPException(400, "User has no org_id")
+    try:
+        return svc.purchase_addon(db, current_user.org_id, addon_key)
+    except ValueError as e:
+        raise HTTPException(402, str(e))
+
+
+@router.post("/addons/{addon_key}/cancel", response_model=AddonResponse)
+def cancel_addon(
+    addon_key: AddonKey,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    addon = svc.cancel_addon(db, current_user.org_id or "", addon_key)
+    if not addon:
+        raise HTTPException(404, "Add-on not found")
+    return addon
 
 
 @router.get("/usage")

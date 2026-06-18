@@ -306,3 +306,66 @@ def test_crypto_wallet_route_requires_compliance_role(client, analyst_headers, a
         headers=analyst_headers,
     )
     assert resp.status_code == 403
+
+
+# ── Enterprise add-on gating (Elliptic / TRM Labs) ────────────────────────────
+
+def test_crypto_wallet_route_requires_enterprise_addon_for_elliptic(
+    client, compliance_headers, compliance_user, db, monkeypatch
+):
+    monkeypatch.setattr(config_module.settings, "crypto_provider", "elliptic")
+    monkeypatch.setattr(config_module.settings, "elliptic_api_key", "test-key")
+    monkeypatch.setattr(config_module.settings, "elliptic_api_secret", "test-secret")
+    customer = _make_customer(db, compliance_user.org_id)
+    resp = client.post(
+        "/api/v1/screening/crypto-wallet",
+        json={
+            "customer_id": customer.id,
+            "wallet_address": "0xSomeAddress",
+            "network": "ethereum",
+        },
+        headers=compliance_headers,
+    )
+    assert resp.status_code == 402
+    assert resp.json()["detail"]["error"] == "enterprise_addon_required"
+
+
+def test_crypto_wallet_route_uses_elliptic_once_addon_purchased(
+    client, compliance_headers, compliance_user, db, monkeypatch
+):
+    from app.models.billing import AddonKey, BillingPlan
+    from app.services import billing_service as billing_svc
+
+    monkeypatch.setattr(config_module.settings, "crypto_provider", "elliptic")
+    customer = _make_customer(db, compliance_user.org_id)
+
+    sub = billing_svc.create_trial(db, compliance_user.org_id)
+    sub.plan = BillingPlan.enterprise
+    db.commit()
+    billing_svc.purchase_addon(db, compliance_user.org_id, AddonKey.enterprise_crypto_screening)
+
+    class _FakeResult:
+        is_sanctioned = True
+        identifications = []
+        raw = {}
+
+    class _FakeProvider:
+        name = "elliptic"
+
+        async def screen_address(self, address, network=None):
+            return _FakeResult()
+
+    monkeypatch.setattr(
+        "app.api.routes.screening.get_crypto_provider", lambda: _FakeProvider()
+    )
+    resp = client.post(
+        "/api/v1/screening/crypto-wallet",
+        json={
+            "customer_id": customer.id,
+            "wallet_address": "0xSomeAddress",
+            "network": "ethereum",
+        },
+        headers=compliance_headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["risk_score"] == 100.0

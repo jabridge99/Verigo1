@@ -34,6 +34,7 @@ from app.api.deps import (
     require_compliance_or_above,
     require_mlro_or_above,
 )
+from app.config import settings
 from app.db.database import get_db
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
 from app.integrations.crypto import get_provider as get_crypto_provider
@@ -55,6 +56,7 @@ from app.models.screening import (
     WalletRiskCategory,
 )
 from app.models.user import User
+from app.services import billing_service as billing_svc
 
 router = APIRouter(prefix="/screening", tags=["Screening Hub"])
 
@@ -689,6 +691,22 @@ async def screen_crypto_wallet(
     """
     org_id = org_id_for(current_user)
     _resolve_customer(payload.customer_id, org_id, db)
+
+    configured_provider = getattr(settings, "crypto_provider", "internal")
+    addon_key = billing_svc.addon_for_provider(configured_provider)
+    if addon_key and not billing_svc.has_addon(db, org_id, addon_key):
+        raise HTTPException(
+            402,
+            {
+                "error": "enterprise_addon_required",
+                "message": (
+                    f"'{configured_provider}' wallet screening requires the "
+                    f"{billing_svc.ADDON_CATALOGUE[addon_key]['name']} add-on."
+                ),
+                "addon_key": addon_key.value,
+                "purchase_url": "/api/v1/billing/addons/{}/purchase".format(addon_key.value),
+            },
+        )
 
     try:
         provider = get_crypto_provider()

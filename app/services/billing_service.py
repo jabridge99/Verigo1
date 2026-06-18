@@ -24,12 +24,16 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models.billing import (
+    ADDON_CATALOGUE,
     PLAN_CATALOGUE,
+    AddonKey,
+    AddonStatus,
     BillingInterval,
     BillingPlan,
     Invoice,
     InvoiceStatus,
     Subscription,
+    SubscriptionAddon,
     SubscriptionStatus,
 )
 from app.schemas.billing import CheckoutSessionRequest, SubscriptionAdminUpdate
@@ -78,6 +82,10 @@ def _sub_id():
 
 def _inv_id():
     return f"INV-{uuid.uuid4().hex[:12].upper()}"
+
+
+def _addon_id():
+    return f"ADDON-{uuid.uuid4().hex[:12].upper()}"
 
 
 # ── Price resolution ───────────────────────────────────────────────────────────
@@ -425,3 +433,96 @@ def list_invoices(db: Session, industry_id: str, limit: int = 20) -> List[Invoic
         .limit(limit)
         .all()
     )
+
+
+# ── Enterprise add-ons ───────────────────────────────────────────────────────
+# In-app purchase that unlocks providers which are partially built (unverified
+# response schema) or sales-gated (no self-serve API access) — e.g. Elliptic
+# and TRM Labs crypto wallet screening. Sold separately from the base plan.
+
+
+def addon_catalogue() -> List[dict]:
+    return [
+        {
+            "addon_key": key.value,
+            "name": info["name"],
+            "monthly_aud": info["monthly_aud"],
+            "description": info["description"],
+            "unlocks_providers": info["unlocks_providers"],
+            "requires_plan": [p.value for p in info["requires_plan"]],
+        }
+        for key, info in ADDON_CATALOGUE.items()
+    ]
+
+
+def get_org_addons(db: Session, org_id: str) -> List[SubscriptionAddon]:
+    return (
+        db.query(SubscriptionAddon)
+        .filter(SubscriptionAddon.org_id == org_id)
+        .order_by(desc(SubscriptionAddon.created_at))
+        .all()
+    )
+
+
+def has_addon(db: Session, org_id: str, addon_key: AddonKey) -> bool:
+    return (
+        db.query(SubscriptionAddon)
+        .filter(
+            SubscriptionAddon.org_id == org_id,
+            SubscriptionAddon.addon_key == addon_key,
+            SubscriptionAddon.status == AddonStatus.active,
+        )
+        .first()
+        is not None
+    )
+
+
+def addon_for_provider(provider_name: str) -> Optional[AddonKey]:
+    """Return the add-on key that gates `provider_name`, or None if it's
+    included in the base plan (e.g. the free-tier crypto providers)."""
+    for key, info in ADDON_CATALOGUE.items():
+        if provider_name in info["unlocks_providers"]:
+            return key
+    return None
+
+
+def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> SubscriptionAddon:
+    info = ADDON_CATALOGUE.get(addon_key)
+    if not info:
+        raise ValueError(f"Unknown add-on: {addon_key}")
+
+    sub = get_subscription(db, org_id)
+    if not sub or sub.plan not in info["requires_plan"]:
+        required = " or ".join(p.value for p in info["requires_plan"])
+        raise ValueError(f"{info['name']} requires an active {required} plan")
+
+    existing = (
+        db.query(SubscriptionAddon)
+        .filter(SubscriptionAddon.org_id == org_id, SubscriptionAddon.addon_key == addon_key)
+        .first()
+    )
+    addon = existing or SubscriptionAddon(
+        addon_id=_addon_id(), org_id=org_id, addon_key=addon_key
+    )
+    addon.status = AddonStatus.active
+    addon.price_aud = info["monthly_aud"]
+    addon.canceled_at = None
+    db.add(addon)
+    db.commit()
+    db.refresh(addon)
+    return addon
+
+
+def cancel_addon(db: Session, org_id: str, addon_key: AddonKey) -> Optional[SubscriptionAddon]:
+    addon = (
+        db.query(SubscriptionAddon)
+        .filter(SubscriptionAddon.org_id == org_id, SubscriptionAddon.addon_key == addon_key)
+        .first()
+    )
+    if not addon:
+        return None
+    addon.status = AddonStatus.canceled
+    addon.canceled_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(addon)
+    return addon
