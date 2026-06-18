@@ -24,6 +24,9 @@ from app.models.user import User, UserRole
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.services import document_service as svc
 from app.services.document_service import ALLOWED_MIME, MAX_SIZE
+from app.services.storage.factory import get_storage_provider
+from app.services.storage.local import LocalStorageProvider
+from app.services.tenant_scope import assert_tenant
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -86,6 +89,14 @@ def _industry_scope(current_user: User) -> Optional[str]:
     return None if current_user.role == UserRole.admin else current_user.org_id
 
 
+def _org_scope(current_user: User) -> Optional[str]:
+    return (
+        None
+        if current_user.role == UserRole.admin
+        else current_user.primary_organisation_id
+    )
+
+
 @router.post("", response_model=DocumentResponse, status_code=201)
 async def upload_document(
     file: UploadFile = File(...),
@@ -128,7 +139,8 @@ async def upload_document(
         content=content,
         mime_type=mime,
         uploaded_by=current_user.id,
-        industry_id=current_user.org_id,
+        industry_id=_industry_scope(current_user),
+        organisation_id=_org_scope(current_user),
         category=category,
         description=description,
         entity_type=entity_type,
@@ -151,6 +163,7 @@ def list_documents(
     return svc.list_documents(
         db,
         industry_id=_industry_scope(current_user),
+        organisation_id=_org_scope(current_user),
         category=category,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -164,7 +177,9 @@ def document_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.document_stats(db, _industry_scope(current_user))
+    return svc.document_stats(
+        db, _industry_scope(current_user), _org_scope(current_user)
+    )
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)
@@ -176,7 +191,7 @@ def get_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    _assert_tenant(current_user, doc.industry_id)
+    _assert_tenant(current_user, doc)
     return doc
 
 
@@ -210,7 +225,9 @@ def update_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    doc = svc.update_document(db, doc_id, data, _industry_scope(current_user))
+    doc = svc.update_document(
+        db, doc_id, data, _industry_scope(current_user), _org_scope(current_user)
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc
@@ -224,7 +241,9 @@ def archive_document(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    doc = svc.archive_document(db, doc_id, _industry_scope(current_user))
+    doc = svc.archive_document(
+        db, doc_id, _industry_scope(current_user), _org_scope(current_user)
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc

@@ -105,7 +105,7 @@ def test_score_customer_and_levels():
     high_risk_customer = types.SimpleNamespace(
         country_of_residence="AF",
         nationality="KP",
-        industry=types.SimpleNamespace(value="cryptocurrency"),
+        industry=types.SimpleNamespace(value="vasp"),
         is_pep=True,
         source_of_funds=None,
     )
@@ -424,13 +424,13 @@ def test_effective_price_branches(db):
     assert svc.effective_price(sub) > 0
 
 
-def test_catalogue_with_custom_default_and_discount():
+def test_catalogue_with_custom_default_and_discount(db):
     from app.services import billing_service as svc
 
-    default_catalogue = svc.catalogue_with_custom()
+    default_catalogue = svc.catalogue_with_custom(db)
     assert len(default_catalogue) > 0
 
-    discounted = svc.catalogue_with_custom(discount_pct=50.0)
+    discounted = svc.catalogue_with_custom(db, discount_pct=50.0)
     assert any(p["annual_discount_pct"] == 50.0 for p in discounted)
 
 

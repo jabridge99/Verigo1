@@ -13,12 +13,21 @@ class BrandingConfig(BaseModel):
     primary_color: Optional[str] = None  # Hex colour e.g. #2563eb
     accent_color: Optional[str] = None  # Secondary accent
     bg_color: Optional[str] = None  # App background override
+    surface_color: Optional[str] = None  # Cards / panels background
+    text_color: Optional[str] = None  # Primary body text
     custom_domain: Optional[str] = None  # e.g. compliance.acmecorp.com
     support_email: Optional[str] = None
     footer_text: Optional[str] = None  # Replaces default footer tagline
     hide_verigo_badge: bool = False  # Remove "Powered by Verigo"
 
-    @field_validator("primary_color", "accent_color", "bg_color", mode="before")
+    @field_validator(
+        "primary_color",
+        "accent_color",
+        "bg_color",
+        "surface_color",
+        "text_color",
+        mode="before",
+    )
     @classmethod
     def must_be_hex(cls, v):
         if v and not re.match(r"^#[0-9a-fA-F]{3,8}$", v):

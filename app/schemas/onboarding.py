@@ -7,13 +7,11 @@ from app.models.onboarding import CustomerType
 
 
 class SessionCreate(BaseModel):
-    industry_id: str
     applicant_name: str
     applicant_email: EmailStr
     applicant_phone: Optional[str] = None
     applicant_company: Optional[str] = None
     customer_type: CustomerType = CustomerType.individual
-    created_by: Optional[str] = None
 
 
 class SessionSummary(BaseModel):

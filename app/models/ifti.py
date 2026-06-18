@@ -21,7 +21,7 @@ Party terminology (IFTI-DRA):
 
 import enum
 
-from sqlalchemy import Column, Date, DateTime, Float, Integer, String
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.sql import func
 
@@ -45,6 +45,7 @@ class IFTIRecord(Base):
     id = Column(Integer, primary_key=True, index=True)
     ifti_id = Column(String(60), unique=True, index=True, nullable=False)
     industry_id = Column(String(60), index=True)
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
     direction = Column(SAEnum(IFTIDirection), nullable=False, index=True)
     status = Column(SAEnum(IFTIStatus), default=IFTIStatus.draft)
 

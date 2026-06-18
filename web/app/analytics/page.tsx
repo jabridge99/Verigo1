@@ -5,7 +5,7 @@ import {
   BarChart2, TrendingUp, Users, FileText, AlertTriangle,
   Shield, CheckCircle, Clock, Activity,
 } from "lucide-react";
-import { getStoredUser, getToken } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -152,16 +152,16 @@ export default function AnalyticsPage() {
 
   useEffect(() => { if (!user) { router.push("/login"); return; } load(); }, [range]);
 
-  const auth = () => ({ Authorization: `Bearer ${getToken()}` });
+  
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [sr, tr, or_, rr] = await Promise.all([
-        fetch(`${API}/api/v1/analytics/summary`, { headers: auth() }),
-        fetch(`${API}/api/v1/analytics/transactions/volume-trend?days=${range}`, { headers: auth() }),
-        fetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=${range}`, { headers: auth() }),
-        fetch(`${API}/api/v1/analytics/reports/submission-trend?days=${Math.max(range, 90)}`, { headers: auth() }),
+        fetch(`${API}/api/v1/analytics/summary`, { credentials: "include" }),
+        fetch(`${API}/api/v1/analytics/transactions/volume-trend?days=${range}`, { credentials: "include" }),
+        fetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=${range}`, { credentials: "include" }),
+        fetch(`${API}/api/v1/analytics/reports/submission-trend?days=${Math.max(range, 90)}`, { credentials: "include" }),
       ]);
       if (!sr.ok) throw new Error("api");
       setSummary(await sr.json());

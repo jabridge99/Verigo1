@@ -68,7 +68,7 @@ def _same_org_users(db):
     from app.models.user import UserRole
 
     compliance = _make_user(db, UserRole.compliance)
-    mlro = _make_user(db, UserRole.mlro, org_id=compliance.org_id)
+    mlro = _make_user(db, UserRole.mlro, industry_id=compliance.org_id)
     return compliance, _auth(compliance), mlro, _auth(mlro)
 
 
@@ -115,7 +115,7 @@ class TestMakerChecker:
         review_resp = client.post(f"/api/v1/reports/smr/{report_id}/review", headers=compliance_headers)
         assert review_resp.status_code == 200
 
-        other_mlro = _make_user(db, UserRole.mlro, org_id=mlro.org_id)
+        other_mlro = _make_user(db, UserRole.mlro, industry_id=mlro.org_id)
         other_mlro_headers = _auth(other_mlro)
         sign_off_resp = client.post(f"/api/v1/reports/smr/{report_id}/mlro-sign-off", headers=other_mlro_headers)
         assert sign_off_resp.status_code == 200

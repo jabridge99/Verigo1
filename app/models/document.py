@@ -93,6 +93,7 @@ class Document(Base):
     # ── Ownership ──────────────────────────────────────────────────────────────
     uploaded_by = Column(String(60), nullable=False)  # user_id
     industry_id = Column(String(100))
+    organisation_id = Column(String, ForeignKey("organisations.id"), index=True)
 
     status = Column(Enum(DocumentStatus), default=DocumentStatus.active)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

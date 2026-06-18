@@ -14,17 +14,16 @@ export const metadata = {
 }
 
 const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'digital-currency-exchange': Coins,
-  'remittance-provider': Globe,
-  'foreign-exchange': ArrowLeftRight,
-  'payment-service-provider': CreditCard,
-  'real-estate': Home,
-  'conveyancer': FileCheck,
-  'law-firm': Scale,
-  'accounting-firm': Calculator,
-  'precious-metals': Gem,
-  'reporting-group': Network,
-  'mortgage-broker': Landmark,
+  'vasp': Coins,
+  'remittance': Globe,
+  'bullion_dealers': Gem,
+  'real_estate': Home,
+  'conveyancers': FileCheck,
+  'legal_professionals': Scale,
+  'accountants': Calculator,
+  'precious_metals': Gem,
+  'pubs_clubs': Building2,
+  'reporting_group': Network,
 }
 
 const otherSectors: { icon: React.ComponentType<{ className?: string }>; label: string }[] = [
@@ -77,7 +76,7 @@ export default function IndustriesPage() {
             {current.map(ind => {
               const Icon = industryIconMap[ind.id] ?? Shield
               return (
-                <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
+                <Link key={ind.id} href={`/solutions/${ind.slug}`} className="pub-card-hover group flex flex-col">
                   <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}>
                     <Icon className="w-7 h-7 text-white" />
                   </div>
@@ -115,7 +114,7 @@ export default function IndustriesPage() {
             {expanded.map(ind => {
               const Icon = industryIconMap[ind.id] ?? Shield
               return (
-                <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
+                <Link key={ind.id} href={`/solutions/${ind.slug}`} className="pub-card-hover group flex flex-col">
                   <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}>
                     <Icon className="w-7 h-7 text-white" />
                   </div>

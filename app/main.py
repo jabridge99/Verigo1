@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+import app.models.aml_program  # noqa: F401
 import app.models.aml_solution  # noqa: F401
 import app.models.api_key  # noqa: F401
 import app.models.audit  # noqa: F401
@@ -36,6 +37,7 @@ import app.models.kyc  # noqa: F401
 import app.models.monitoring  # noqa: F401
 import app.models.notification  # noqa: F401
 import app.models.onboarding  # noqa: F401
+import app.models.organisation  # noqa: F401
 import app.models.professional_assessment  # noqa: F401
 import app.models.regulatory_recommendation  # noqa: F401
 import app.models.report  # noqa: F401
@@ -66,12 +68,15 @@ from app.api.routes import (
     kyc,
     notifications,
     onboarding,
+    organisations,
     reports,
     retention,
     sanctions,
     security_monitor,
+    storage,
     tenants,
     transactions,
+    verify,
 )
 from app.api.routes.alerts import router as alerts_router
 from app.api.routes.aml_program import router as aml_program_router
@@ -157,6 +162,19 @@ async def lifespan(app: FastAPI):
     except ImportError:
         log.debug("pack_engine not available — skipping pack seeding")
 
+    from app.services.auth_service import seed_master_admin
+    from app.services.org_service import seed_permission_catalog_and_roles
+
+    db = SessionLocal()
+    try:
+        seed_permission_catalog_and_roles(db)
+        log.info("Permission catalog and system roles seeded")
+        admin = seed_master_admin(db)
+        if admin:
+            log.info("Master admin ensured: %s", admin.email)
+    finally:
+        db.close()
+
     start_scheduler()
     log.info("Background scheduler started")
 
@@ -216,6 +234,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     logging.getLogger("tvg").error(
         "Unhandled exception: %s\n%s", exc, traceback.format_exc()
     )
+
+    if settings.sentry_dsn:
+        try:
+            import sentry_sdk
+
+            sentry_sdk.capture_exception(exc)
+        except ImportError:
+            pass
+
     return JSONResponse(
         status_code=500,
         content={"detail": "An internal error occurred. Our team has been notified."},
@@ -273,6 +300,9 @@ app.include_router(customer_portal_public_router, prefix="/api/v1")
 app.include_router(training_triggers_router, prefix="/api/v1")
 app.include_router(examination_packs_router, prefix="/api/v1")
 app.include_router(benchmark_router, prefix="/api/v1")
+app.include_router(verify.router, prefix="/api/v1")
+app.include_router(storage.router, prefix="/api/v1")
+app.include_router(organisations.router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

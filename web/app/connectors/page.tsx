@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""; }
 
 async function apiFetch(path: string, opts?: RequestInit) {
   const res = await fetch(`${API}${path}`, {
     ...opts,
-    headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...(opts?.headers || {}) },
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...(opts?.headers || {}) },
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.json();

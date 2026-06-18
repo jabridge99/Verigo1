@@ -26,6 +26,7 @@ from app.db.database import get_db
 from app.models.ifti import IFTIDirection, IFTIRecord, IFTIStatus
 from app.models.user import User, UserRole
 from app.services.ifti_service import generate_ifti_excel, get_ifti, list_ifti
+from app.services.tenant_scope import assert_tenant, scope_fields
 
 router = APIRouter(prefix="/ifti", tags=["IFTI Reports"])
 
@@ -417,14 +418,26 @@ def export_selected(
     current_user: User = Depends(_WRITER),
 ):
     """Export a specific selection of IFTI records to Excel."""
+    from sqlalchemy import or_
+
     from app.models.ifti import IFTIRecord as IFTIModel
 
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    scoped = scope_fields(current_user)
+    industry_id = scoped.get("industry_id")
+    organisation_id = scoped.get("organisation_id")
     q = db.query(IFTIModel).filter(
         IFTIModel.ifti_id.in_(ifti_ids),
         IFTIModel.direction == direction,
     )
-    if industry_id:
+    if organisation_id:
+        q = q.filter(
+            or_(
+                IFTIModel.organisation_id == organisation_id,
+                (IFTIModel.organisation_id.is_(None))
+                & (IFTIModel.industry_id == industry_id),
+            )
+        )
+    elif industry_id:
         q = q.filter(IFTIModel.industry_id == industry_id)
     records = q.all()
 

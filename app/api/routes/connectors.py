@@ -86,7 +86,6 @@ def list_connectors(
         if current_user.role != UserRole.admin
         else current_user.org_id
     )
-    return get_credentials(db, industry_id, provider)
 
 
 @router.post("/", response_model=ConnectorResponse, status_code=201)
@@ -128,6 +127,7 @@ def update_connector(
             credentials=payload.credentials,
             label=payload.label,
             is_default=payload.is_default,
+            organisation_id=current_user.primary_organisation_id,
         )
     except ValueError as e:
         raise HTTPException(404, str(e))

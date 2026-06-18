@@ -5,6 +5,14 @@ Uses an in-memory SQLite database — no external dependencies required.
 Each test gets a fresh, isolated database via transaction rollback.
 """
 
+import os
+
+# Must be set before app.main is imported — the in-process rate limiter is
+# registered as middleware at import time and its token buckets are shared
+# across the whole pytest session (single app instance), so a full test run
+# can otherwise trip it well before any individual test misbehaves.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -92,16 +100,17 @@ def _make_org(db) -> Organisation:
     return org
 
 
-def _make_user(db, role: UserRole, org_id: str = None) -> User:
-    if org_id is None:
-        org_id = _make_org(db).id
+def _make_user(db, role: UserRole, industry_id: str = None) -> User:
+    if industry_id is None:
+        industry_id = _make_org(db).id
     user = User(
         email=f"{role.value}-{uuid.uuid4().hex[:6]}@test.com",
         full_name=f"Test {role.value.title()}",
         hashed_password=hash_password("TestPassword123!"),
         role=role,
         status=UserStatus.active,
-        org_id=org_id,
+        org_id=industry_id,
+        industry_id=industry_id,
     )
     db.add(user)
     db.commit()

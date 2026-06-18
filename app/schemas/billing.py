@@ -121,3 +121,14 @@ class AddonResponse(BaseModel):
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class FeatureToggleRow(BaseModel):
+    code: str
+    name: str
+    category: Optional[str] = None
+    plans: dict  # plan value -> enabled bool
+
+
+class FeatureToggleUpdate(BaseModel):
+    enabled: bool

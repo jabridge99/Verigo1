@@ -21,6 +21,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.retention import EntityScope, LegalHold, RetentionPolicy
@@ -44,14 +45,27 @@ def get_policy(
     db: Session,
     entity_scope: EntityScope,
     industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ) -> RetentionPolicy:
-    """Return the most-specific policy: tenant > global > AUSTRAC default (synthetic)."""
+    """Return the most-specific policy: org > tenant > global > AUSTRAC default (synthetic)."""
+    if organisation_id:
+        p = (
+            db.query(RetentionPolicy)
+            .filter(
+                RetentionPolicy.entity_scope == entity_scope,
+                RetentionPolicy.organisation_id == organisation_id,
+            )
+            .first()
+        )
+        if p:
+            return p
     if industry_id:
         p = (
             db.query(RetentionPolicy)
             .filter(
                 RetentionPolicy.entity_scope == entity_scope,
                 RetentionPolicy.industry_id == industry_id,
+                RetentionPolicy.organisation_id.is_(None),
             )
             .first()
         )
@@ -62,7 +76,8 @@ def get_policy(
         db.query(RetentionPolicy)
         .filter(
             RetentionPolicy.entity_scope == entity_scope,
-            RetentionPolicy.industry_id is None,
+            RetentionPolicy.industry_id.is_(None),
+            RetentionPolicy.organisation_id.is_(None),
         )
         .first()
     )
@@ -83,6 +98,7 @@ def upsert_policy(
     entity_scope: EntityScope,
     retention_years: int,
     industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
     legal_hold: bool = False,
     notes: Optional[str] = None,
     created_by: Optional[str] = None,
@@ -95,6 +111,7 @@ def upsert_policy(
         .filter(
             RetentionPolicy.entity_scope == entity_scope,
             RetentionPolicy.industry_id == industry_id,
+            RetentionPolicy.organisation_id == organisation_id,
         )
         .first()
     )
@@ -108,6 +125,7 @@ def upsert_policy(
         p = RetentionPolicy(
             policy_id=f"RET-{uuid.uuid4().hex[:10].upper()}",
             industry_id=industry_id,
+            organisation_id=organisation_id,
             entity_scope=entity_scope,
             retention_years=retention_years,
             legal_hold=legal_hold,
@@ -121,12 +139,26 @@ def upsert_policy(
 
 
 def list_policies(
-    db: Session, industry_id: Optional[str] = None
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ) -> list[RetentionPolicy]:
-    q = db.query(RetentionPolicy).filter(
-        (RetentionPolicy.industry_id == industry_id)
-        | (RetentionPolicy.industry_id is None)
-    )
+    if organisation_id:
+        q = db.query(RetentionPolicy).filter(
+            or_(
+                RetentionPolicy.organisation_id == organisation_id,
+                (RetentionPolicy.organisation_id.is_(None))
+                & (RetentionPolicy.industry_id == industry_id),
+                RetentionPolicy.industry_id.is_(None),
+            )
+        )
+    else:
+        q = db.query(RetentionPolicy).filter(
+            or_(
+                RetentionPolicy.industry_id == industry_id,
+                RetentionPolicy.industry_id.is_(None),
+            )
+        )
     return q.order_by(RetentionPolicy.entity_scope).all()
 
 
@@ -140,10 +172,12 @@ def place_legal_hold(
     reason: str,
     held_by: str,
     industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ) -> LegalHold:
     hold = LegalHold(
         hold_id=f"HOLD-{uuid.uuid4().hex[:10].upper()}",
         industry_id=industry_id,
+        organisation_id=organisation_id,
         entity_scope=entity_scope,
         entity_id=entity_id,
         reason=reason,
@@ -168,11 +202,15 @@ def release_legal_hold(
     hold_id: str,
     released_by: str,
     industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ) -> LegalHold:
     hold = db.query(LegalHold).filter(LegalHold.hold_id == hold_id).first()
     if not hold:
         raise ValueError("Legal hold not found")
-    if industry_id and hold.industry_id != industry_id:
+    if organisation_id and hold.organisation_id is not None:
+        if hold.organisation_id != organisation_id:
+            raise PermissionError("Cross-tenant hold access denied")
+    elif industry_id and hold.industry_id != industry_id:
         raise PermissionError("Cross-tenant hold access denied")
     hold.active = False
     hold.released_at = datetime.now(timezone.utc)
@@ -204,6 +242,7 @@ def is_deletion_eligible(
     entity_id: str,
     created_at: datetime,
     industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
     pep_or_high_risk: bool = False,
 ) -> dict:
     """
@@ -223,7 +262,7 @@ def is_deletion_eligible(
             "eligible_after": None,
         }
 
-    policy = get_policy(db, entity_scope, industry_id)
+    policy = get_policy(db, entity_scope, industry_id, organisation_id)
     years = policy.retention_years
 
     # ECDD/PEP uplift: 10 years minimum
@@ -255,7 +294,11 @@ def is_deletion_eligible(
 # ── Scheduled purge report (dry-run only — no auto-delete) ───────────────────
 
 
-def generate_purge_report(db: Session, industry_id: Optional[str] = None) -> dict:
+def generate_purge_report(
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
+) -> dict:
     """
     Identify records past their retention window.
     Returns a summary for compliance review — does NOT delete anything.
@@ -271,14 +314,22 @@ def generate_purge_report(db: Session, industry_id: Optional[str] = None) -> dic
     }
 
     def _cutoff(scope: EntityScope, pep: bool = False) -> datetime:
-        p = get_policy(db, scope, industry_id)
+        p = get_policy(db, scope, industry_id, organisation_id)
         years = max(p.retention_years, 10 if pep else 0)
         return now - timedelta(days=years * 365)
 
     # Customers
     cutoff = _cutoff(EntityScope.customer)
     q = db.query(Customer).filter(Customer.created_at < cutoff)
-    if industry_id:
+    if organisation_id:
+        q = q.filter(
+            or_(
+                Customer.organisation_id == organisation_id,
+                (Customer.organisation_id.is_(None))
+                & (Customer.industry_id == industry_id),
+            )
+        )
+    elif industry_id:
         q = q.filter(Customer.industry_id == industry_id)
     for c in q.all():
         if not has_active_hold(db, EntityScope.customer, c.customer_id):

@@ -19,6 +19,7 @@ from app.models.audit import LegacyAuditLog as AuditLog
 from app.models.user import User, UserRole
 from app.schemas.audit import AuditLogCreate, AuditLogResponse
 from app.services.audit_service import log_action
+from app.services.tenant_scope import assert_tenant, scope_query
 
 router = APIRouter(prefix="/audit", tags=["Audit Trail"])
 
@@ -27,7 +28,7 @@ def _scoped_query(db: Session, current_user: User):
     """Return a query scoped to the current user's tenant."""
     q = db.query(AuditLog)
     if current_user.role != UserRole.admin:
-        q = q.filter(AuditLog.industry_id == current_user.org_id)
+        q = q.filter(AuditLog.organisation_id == current_user.org_id)
     return q
 
 

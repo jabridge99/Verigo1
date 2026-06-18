@@ -8,7 +8,7 @@ import {
   Shield, Activity, FolderOpen, BarChart2, Settings, X,
   CreditCard, Webhook, Building2, ClipboardList, LogOut,
 } from "lucide-react";
-import { getStoredUser, getToken, clearUser } from "@/lib/auth";
+import { getStoredUser, clearUser } from "@/lib/auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -51,7 +51,7 @@ export default function MobileNav() {
     const load = async () => {
       try {
         const res = await fetch(`${API}/api/v1/notifications/summary`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
+          credentials: "include",
         });
         if (res.ok) setUnread((await res.json()).unread_count ?? 0);
       } catch { /* ignore */ }

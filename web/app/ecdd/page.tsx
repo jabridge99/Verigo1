@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 interface ECDDRecord {
   id: number;
   ecdd_id: string;
@@ -61,7 +63,7 @@ export default function ECDDDashboard() {
 
   const fetchRecords = useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/reports/ecdd/");
+      const res = await fetch(`${API}/api/v1/reports/ecdd/`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setRecords(d); }
     } catch {}
   }, []);
@@ -69,7 +71,7 @@ export default function ECDDDashboard() {
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
   const completeECDD = async (ecddId: string) => {
-    try { await fetch(`/api/v1/reports/ecdd/${ecddId}/complete`, { method: "PATCH" }); } catch {}
+    try { await fetch(`${API}/api/v1/reports/ecdd/${ecddId}/complete`, { method: "PATCH", credentials: "include" }); } catch {}
     setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? { ...r, status: "completed" } : r));
     setSelected(prev => prev?.ecdd_id === ecddId ? { ...prev, status: "completed" } : prev);
     showToast("success", "ECDD marked as completed");
@@ -390,8 +392,8 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch("/api/v1/reports/ecdd/", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+      const res = await fetch(`${API}/api/v1/reports/ecdd/`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error(await res.text());

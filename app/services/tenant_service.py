@@ -2,11 +2,21 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.models.organisation import CUSTOM_PACKAGE_INDUSTRIES
 from app.models.tenant import IndustryTenant
 from app.schemas.tenant import TenantCreate, TenantUpdate
 
 
+class CustomPackageRequiredError(Exception):
+    """Raised when a self-serve tenant signup targets a custom-package-only industry."""
+
+
 def create_tenant(db: Session, payload: TenantCreate) -> IndustryTenant:
+    if payload.industry_id in {i.value for i in CUSTOM_PACKAGE_INDUSTRIES}:
+        raise CustomPackageRequiredError(
+            f"Industry '{payload.industry_id}' requires a custom package — "
+            "self-serve signup is not available for this sector"
+        )
     tenant = IndustryTenant(
         tenant_id=f"TENANT-{uuid.uuid4().hex[:10].upper()}", **payload.model_dump()
     )

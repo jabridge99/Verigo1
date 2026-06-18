@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Users, Plus, Search, Shield, CheckCircle, XCircle, Clock, AlertTriangle, X, Save } from 'lucide-react'
 import clsx from 'clsx'
-import { getStoredUser, getToken } from '@/lib/auth'
+import { getStoredUser } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -65,8 +65,7 @@ export default function UsersPage() {
       return
     }
     setCurrentUser(stored)
-    const token = getToken()
-    fetch(`${API}/api/v1/auth/users`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API}/api/v1/auth/users`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(d => d && setUsers(d))
       .catch(() => {})
@@ -80,12 +79,11 @@ export default function UsersPage() {
 
   async function toggleStatus(u: AppUser) {
     const action = u.status === 'active' ? 'suspend' : 'activate'
-    const token = getToken()
     try {
       if (action === 'suspend') {
-        await fetch(`${API}/api/v1/auth/users/${u.user_id}/suspend`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+        await fetch(`${API}/api/v1/auth/users/${u.user_id}/suspend`, { method: 'POST', credentials: 'include' })
       } else {
-        await fetch(`${API}/api/v1/auth/users/${u.user_id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status: 'active' }) })
+        await fetch(`${API}/api/v1/auth/users/${u.user_id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) })
       }
     } catch {}
     const newStatus = action === 'suspend' ? 'suspended' : 'active'
@@ -95,11 +93,11 @@ export default function UsersPage() {
 
   async function createUser() {
     setSaving(true)
-    const token = getToken()
     try {
       const r = await fetch(`${API}/api/v1/auth/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newForm),
       })
       if (r.ok) {

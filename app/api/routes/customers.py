@@ -100,6 +100,7 @@ from app.schemas.customer import (
     WalletScreeningCreate,
     WalletScreeningResponse,
 )
+from app.services import audit_service
 
 log = logging.getLogger("verigo.api.customers")
 router = APIRouter(prefix="/customers", tags=["Customers"])
@@ -1180,6 +1181,7 @@ def rescore_customer(
 ):
     """Re-run risk scoring. Risk fields are set by engine only."""
     customer = _get_customer(customer_id, org_id_for(current_user), db)
+    before = {"risk_score": customer.risk_score, "risk_level": customer.risk_level}
 
     # Basic built-in scoring logic (replace with full engine call when ready)
     score = 0.0
@@ -1213,6 +1215,20 @@ def rescore_customer(
 
     _record_risk_history(
         customer, "manual_rescore", current_user.id, db, scoring_factors=factors
+    )
+    audit_service.log_action(
+        db,
+        action="risk_matrix_changed",
+        entity_type="customer",
+        entity_id=customer.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=customer.org_id,
+        before_state={
+            "risk_score": before["risk_score"],
+            "risk_level": before["risk_level"].value if before["risk_level"] else None,
+        },
+        after_state={"risk_score": score, "risk_level": level.value},
     )
     db.commit()
 

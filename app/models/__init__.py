@@ -231,8 +231,15 @@ from app.models.monitoring import (
 from app.models.organisation import (
     CUSTOM_PACKAGE_INDUSTRIES,
     IndustryType,
+    MembershipStatus,
     Organisation,
     OrganisationStatus,
+    OrganisationUser,
+    Permission,
+    RiskProfile,
+    Role,
+    new_role_id,
+    role_permissions,
 )
 from app.models.professional_assessment import (
     AssessmentRiskRating,
@@ -661,4 +668,12 @@ __all__ = [
     "RecommendationStatus",
     "ActionType",
     "ActionStatus",
+    # RBAC / Organisation membership
+    "MembershipStatus",
+    "OrganisationUser",
+    "Permission",
+    "RiskProfile",
+    "Role",
+    "new_role_id",
+    "role_permissions",
 ]

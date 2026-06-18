@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.tenant import TenantCreate, TenantResponse, TenantSummary, TenantUpdate
 from app.services.tenant_service import (
+    CustomPackageRequiredError,
     activate_tenant,
     create_tenant,
     get_tenant,
@@ -26,7 +27,10 @@ def create(payload: TenantCreate, db: Session = Depends(get_db)):
         raise HTTPException(
             409, f"Tenant for industry '{payload.industry_id}' already exists"
         )
-    return create_tenant(db, payload)
+    try:
+        return create_tenant(db, payload)
+    except CustomPackageRequiredError as exc:
+        raise HTTPException(422, str(exc))
 
 
 @router.get("/", response_model=list[TenantSummary])

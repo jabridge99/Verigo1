@@ -18,25 +18,35 @@ import secrets
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db.database import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
+    EmailVerificationConfirm,
+    EmailVerificationRequest,
     MagicLinkRequest,
     MagicLinkVerify,
     PasswordChange,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     TokenResponse,
     UserCreate,
     UserLogin,
     UserResponse,
     UserUpdate,
 )
+from app.services import audit_service
 from app.services.auth_service import (
     TOKEN_BLACKLIST,
     authenticate_user,
     build_token_response,
+    clear_session_cookie,
+    consume_email_action_token,
+    create_email_action_token,
     create_magic_link,
     create_user,
     decode_token,
@@ -44,8 +54,15 @@ from app.services.auth_service import (
     get_user_by_id,
     hash_password,
     record_security_event,
+    set_session_cookie,
     verify_magic_link,
     verify_password,
+)
+from app.services.oauth_service import (
+    build_authorize_url,
+    exchange_code_for_profile,
+    get_provider,
+    new_state,
 )
 
 log = logging.getLogger("tvg.auth")
@@ -56,12 +73,17 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 def _current_user(
+    request: Request,
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ) -> User:
-    if not authorization or not authorization.startswith("Bearer "):
+    raw: Optional[str] = None
+    if authorization and authorization.startswith("Bearer "):
+        raw = authorization.removeprefix("Bearer ").strip()
+    elif settings.session_cookie_name in request.cookies:
+        raw = request.cookies[settings.session_cookie_name]
+    if not raw:
         raise HTTPException(401, "Not authenticated")
-    raw = authorization.removeprefix("Bearer ").strip()
 
     # Check revocation blacklist
     jti_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
@@ -102,7 +124,12 @@ def _client_ip(request: Request) -> str:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-def register(payload: UserCreate, request: Request, db: Session = Depends(get_db)):
+def register(
+    payload: UserCreate,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     if get_user_by_email(db, payload.email):
         raise HTTPException(409, "Email already registered")
     org_id = payload.org_id
@@ -131,14 +158,32 @@ def register(payload: UserCreate, request: Request, db: Session = Depends(get_db
         ip=_client_ip(request),
         meta={"email": user.email},
     )
-    return build_token_response(user)
+    if payload.organisation_name:
+        from app.services.org_service import create_organisation
+
+        create_organisation(
+            db, payload.organisation_name, user, industry_id=payload.industry_id
+        )
+
+    verify_token = create_email_action_token(db, user.email, "verify_email")
+    record_security_event(db, "email_verification_requested", user.id)
+    token = build_token_response(user)
+    set_session_cookie(response, token["access_token"])
+    if not settings.is_production:
+        token["dev_verify_email_token"] = verify_token
+    return token
 
 
 # ── Login ──────────────────────────────────────────────────────────────────────
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
+def login(
+    payload: UserLogin,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     ip = _client_ip(request)
     user = authenticate_user(db, payload.email, payload.password)
     if not user:
@@ -151,12 +196,26 @@ def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
     record_security_event(db, "login_success", user.id, ip=ip)
+    audit_service.log_action(
+        db,
+        action="user_logged_in",
+        entity_type="user",
+        entity_id=user.id,
+        actor=user.email,
+        actor_role=user.role.value if user.role else None,
+        industry_id=user.industry_id,
+        organisation_id=user.primary_organisation_id,
+        ip_address=ip,
+    )
 
     if user.mfa_enabled:
         token = build_token_response(user, mfa_pending=True)
+        set_session_cookie(response, token["access_token"])
         return {**token, "mfa_required": True}
 
-    return build_token_response(user)
+    token = build_token_response(user)
+    set_session_cookie(response, token["access_token"])
+    return token
 
 
 # ── Logout ────────────────────────────────────────────────────────────────────
@@ -164,10 +223,13 @@ def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 def logout(
+    response: Response,
+    request: Request,
     authorization: Optional[str] = Header(None),
     current_user: User = Depends(_current_user),
 ):
-    if authorization:
+    raw = None
+    if authorization and authorization.startswith("Bearer "):
         raw = authorization.removeprefix("Bearer ").strip()
         from app.services.auth_service import ACCESS_TOKEN_EXPIRY_MINUTES
 
@@ -218,6 +280,7 @@ def mfa_verify_enrolment(
 def mfa_challenge(
     code: str,
     request: Request,
+    response: Response,
     current_user: User = Depends(_current_user),
     db: Session = Depends(get_db),
 ):
@@ -270,7 +333,10 @@ def request_magic_link(
 
 @router.post("/magic-link/verify", response_model=TokenResponse)
 def verify_magic_link_endpoint(
-    payload: MagicLinkVerify, request: Request, db: Session = Depends(get_db)
+    payload: MagicLinkVerify,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
 ):
     email = verify_magic_link(db, payload.token)
     if not email:
@@ -283,6 +349,88 @@ def verify_magic_link_endpoint(
     db.commit()
     record_security_event(db, "magic_link_used", user.id, ip=_client_ip(request))
     return build_token_response(user)
+
+
+# ── Email verification ──────────────────────────────────────────────────────
+
+
+@router.post("/email/verify/request")
+def request_email_verification(
+    payload: EmailVerificationRequest, request: Request, db: Session = Depends(get_db)
+):
+    user = get_user_by_email(db, payload.email)
+    if user and not user.email_verified:
+        token = create_email_action_token(db, user.email, "verify_email")
+        record_security_event(
+            db, "email_verification_requested", user.id, ip=_client_ip(request)
+        )
+        from app.services.email_service import send_email_verification
+
+        send_email_verification(user.email, user.full_name, token)
+        if not settings.is_production:
+            return {"detail": "Verification email sent", "dev_token": token}
+    # Always same response — prevents user enumeration
+    return {
+        "detail": "If that email exists and is unverified, a verification link has been sent"
+    }
+
+
+@router.post("/email/verify/confirm")
+def confirm_email_verification(
+    payload: EmailVerificationConfirm, request: Request, db: Session = Depends(get_db)
+):
+    email = consume_email_action_token(db, payload.token, "verify_email")
+    if not email:
+        raise HTTPException(400, "Invalid or expired verification link")
+    user = get_user_by_email(db, email)
+    if not user:
+        raise HTTPException(400, "Account not found")
+    user.email_verified = True
+    db.commit()
+    record_security_event(db, "email_verified", user.id, ip=_client_ip(request))
+    return {"detail": "Email verified"}
+
+
+# ── Password reset ───────────────────────────────────────────────────────────
+
+
+@router.post("/password-reset/request")
+def request_password_reset(
+    payload: PasswordResetRequest, request: Request, db: Session = Depends(get_db)
+):
+    user = get_user_by_email(db, payload.email)
+    if user and user.status == UserStatus.active and user.hashed_password:
+        token = create_email_action_token(db, user.email, "password_reset")
+        record_security_event(
+            db, "password_reset_requested", user.id, ip=_client_ip(request)
+        )
+        from app.services.email_service import send_password_reset
+
+        send_password_reset(user.email, user.full_name, token)
+        if not settings.is_production:
+            return {"detail": "Password reset email sent", "dev_token": token}
+    # Always same response — prevents user enumeration
+    return {"detail": "If that email exists, a password reset link has been sent"}
+
+
+@router.post("/password-reset/confirm")
+def confirm_password_reset(
+    payload: PasswordResetConfirm, request: Request, db: Session = Depends(get_db)
+):
+    if len(payload.new_password) < 12:
+        raise HTTPException(400, "Password must be at least 12 characters")
+    email = consume_email_action_token(db, payload.token, "password_reset")
+    if not email:
+        raise HTTPException(400, "Invalid or expired reset link")
+    user = get_user_by_email(db, email)
+    if not user:
+        raise HTTPException(400, "Account not found")
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    record_security_event(
+        db, "password_reset_completed", user.id, ip=_client_ip(request)
+    )
+    return {"detail": "Password updated"}
 
 
 # ── Me ────────────────────────────────────────────────────────────────────────

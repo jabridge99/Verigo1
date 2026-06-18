@@ -23,6 +23,7 @@ from app.services.retention_service import (
     release_legal_hold,
     upsert_policy,
 )
+from app.services.tenant_scope import scope_fields, scope_query
 
 router = APIRouter(prefix="/retention", tags=["Data Retention"])
 
@@ -98,13 +99,14 @@ def set_retention_policy(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    scoped = scope_fields(current_user)
     try:
         return upsert_policy(
             db,
             entity_scope=payload.entity_scope,
             retention_years=payload.retention_years,
-            industry_id=industry_id,
+            industry_id=scoped.get("industry_id"),
+            organisation_id=scoped.get("organisation_id"),
             legal_hold=payload.legal_hold,
             notes=payload.notes,
             created_by=current_user.id,
@@ -134,6 +136,7 @@ def create_legal_hold(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
+    scoped = scope_fields(current_user)
     return place_legal_hold(
         db,
         entity_scope=payload.entity_scope,
@@ -152,6 +155,7 @@ def release_hold(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
+    scoped = scope_fields(current_user)
     try:
         return release_legal_hold(
             db,
@@ -193,13 +197,14 @@ def check_deletion_eligibility(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    scoped = scope_fields(current_user)
     return is_deletion_eligible(
         db,
         entity_scope=payload.entity_scope,
         entity_id=payload.entity_id,
         created_at=payload.created_at,
-        industry_id=industry_id,
+        industry_id=scoped.get("industry_id"),
+        organisation_id=scoped.get("organisation_id"),
         pep_or_high_risk=payload.pep_or_high_risk,
     )
 

@@ -4,6 +4,8 @@ import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import MobileNav from '@/components/MobileNav'
 import PWAProvider from '@/components/PWAProvider'
+import AnalyticsProvider from '@/components/AnalyticsProvider'
+import CookieNotice from '@/components/CookieNotice'
 
 export const metadata: Metadata = {
   title: 'Verigo | Australian AML/CTF Compliance Platform',
@@ -44,6 +46,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Footer />
         <MobileNav />
         <PWAProvider />
+        <AnalyticsProvider />
+        <CookieNotice />
       </body>
     </html>
   )

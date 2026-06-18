@@ -1,6 +1,16 @@
 import enum
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -40,6 +50,7 @@ class APIKey(Base):
     key_prefix = Column(String(12), nullable=False)  # tvg_live_XXXX
     user_id = Column(String(60), nullable=False)
     industry_id = Column(String(100))
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
     status = Column(Enum(APIKeyStatus), default=APIKeyStatus.active)
     scopes = Column(JSON, default=list)  # ["customers:read", ...]
     last_used_at = Column(DateTime(timezone=True))
@@ -59,6 +70,7 @@ class WebhookEndpoint(Base):
     events = Column(JSON, default=list)  # list of WebhookEvent values
     user_id = Column(String(60), nullable=False)
     industry_id = Column(String(100))
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
     status = Column(Enum(WebhookStatus), default=WebhookStatus.active)
     failure_count = Column(Integer, default=0)
     last_fired_at = Column(DateTime(timezone=True))

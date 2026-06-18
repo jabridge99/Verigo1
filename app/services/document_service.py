@@ -1,15 +1,15 @@
 """
-Document storage service — delegates actual file I/O to the pluggable
-StorageProvider (local disk in dev, Supabase/S3/Azure/GCS in production —
-see app.services.storage.factory). Document.stored_name holds the
-storage-backend key, not a filesystem path.
+Document storage service — delegates byte storage to the per-tenant
+StorageProvider (local/Supabase/S3/Azure/GCS) resolved via
+app.services.storage.factory. The Document row keeps a logical storage key
+(`stored_name`); only the factory knows which physical backend that key lives in.
 """
 
 import uuid
 from typing import List, Optional
 
-from sqlalchemy import desc
-from sqlalchemy.orm import Session
+from sqlalchemy import desc, or_
+from sqlalchemy.orm import Query, Session
 
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.schemas.document import DocumentUpdate
@@ -38,23 +38,26 @@ def _doc_id() -> str:
 
 
 def _storage_key(industry_id: Optional[str], original_name: str) -> str:
-    from pathlib import PurePosixPath
+    ext = original_name.rsplit(".", 1)[-1] if "." in original_name else ""
+    name = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+    prefix = industry_id or "shared"
+    return f"{prefix}/{name}"
 
-    ext = PurePosixPath(original_name).suffix.lower()
-    prefix = industry_id or "unscoped"
-    return f"{prefix}/{uuid.uuid4().hex}{ext}"
 
-
-async def save_file(
-    content: bytes,
-    original_name: str,
-    mime_type: str,
-    industry_id: Optional[str] = None,
-) -> tuple[str, int]:
-    key = _storage_key(industry_id, original_name)
-    provider = get_storage_provider()
-    obj = await provider.upload(key, content, content_type=mime_type)
-    return key, obj.size
+def _scope(
+    q: Query, industry_id: Optional[str], organisation_id: Optional[str]
+) -> Query:
+    if organisation_id:
+        return q.filter(
+            or_(
+                Document.organisation_id == organisation_id,
+                (Document.organisation_id.is_(None))
+                & (Document.industry_id == industry_id),
+            )
+        )
+    if industry_id:
+        return q.filter(Document.industry_id == industry_id)
+    return q
 
 
 async def create_document(
@@ -64,6 +67,7 @@ async def create_document(
     mime_type: str,
     uploaded_by: str,
     industry_id: Optional[str],
+    organisation_id: Optional[str] = None,
     category: DocumentCategory = DocumentCategory.other,
     description: Optional[str] = None,
     entity_type: Optional[str] = None,
@@ -71,19 +75,22 @@ async def create_document(
     sha256_hash: Optional[str] = None,
     retention_category: Optional[str] = None,
 ) -> Document:
-    stored_name, size = await save_file(content, filename, mime_type, industry_id)
+    key = _storage_key(industry_id, filename)
+    provider = get_storage_provider(industry_id)
+    await provider.upload(key, content, content_type=mime_type)
     doc = Document(
         doc_id=_doc_id(),
         filename=filename,
-        stored_name=stored_name,
+        stored_name=key,
         mime_type=mime_type,
-        size_bytes=size,
+        size_bytes=len(content),
         category=category,
         description=description,
         entity_type=entity_type,
         entity_id=entity_id,
         uploaded_by=uploaded_by,
         industry_id=industry_id,
+        organisation_id=organisation_id,
         sha256_hash=sha256_hash,
         retention_category=retention_category,
     )
@@ -96,6 +103,7 @@ async def create_document(
 def list_documents(
     db: Session,
     industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
     category: Optional[DocumentCategory] = None,
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
@@ -104,8 +112,7 @@ def list_documents(
     offset: int = 0,
 ) -> List[Document]:
     q = db.query(Document).filter(Document.status == DocumentStatus.active)
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     if category:
         q = q.filter(Document.category == category)
     if entity_type:
@@ -128,24 +135,36 @@ def get_document(db: Session, doc_id: str) -> Optional[Document]:
     )
 
 
-async def get_file_bytes(doc: Document) -> bytes:
-    provider = get_storage_provider()
+async def download_bytes(doc: Document) -> bytes:
+    provider = get_storage_provider(doc.industry_id)
     return await provider.download(doc.stored_name)
 
 
+async def get_access_url(doc: Document, expires_in: int = 300) -> str:
+    provider = get_storage_provider(doc.industry_id)
+    return await provider.get_url(doc.stored_name, expires_in=expires_in)
+
+
+async def get_file_bytes(doc: Document) -> bytes:
+    return await download_bytes(doc)
+
+
 async def file_exists(doc: Document) -> bool:
-    provider = get_storage_provider()
+    provider = get_storage_provider(doc.industry_id)
     return await provider.exists(doc.stored_name)
 
 
 def update_document(
-    db: Session, doc_id: str, data: DocumentUpdate, industry_id: Optional[str]
+    db: Session,
+    doc_id: str,
+    data: DocumentUpdate,
+    industry_id: Optional[str],
+    organisation_id: Optional[str] = None,
 ) -> Optional[Document]:
     q = db.query(Document).filter(
         Document.doc_id == doc_id, Document.status == DocumentStatus.active
     )
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     doc = q.first()
     if not doc:
         return None
@@ -157,13 +176,15 @@ def update_document(
 
 
 def archive_document(
-    db: Session, doc_id: str, industry_id: Optional[str]
+    db: Session,
+    doc_id: str,
+    industry_id: Optional[str],
+    organisation_id: Optional[str] = None,
 ) -> Optional[Document]:
     q = db.query(Document).filter(
         Document.doc_id == doc_id, Document.status == DocumentStatus.active
     )
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     doc = q.first()
     if not doc:
         return None
@@ -173,15 +194,19 @@ def archive_document(
     return doc
 
 
-async def delete_document(db: Session, doc_id: str, industry_id: Optional[str]) -> bool:
+async def delete_document(
+    db: Session,
+    doc_id: str,
+    industry_id: Optional[str],
+    organisation_id: Optional[str] = None,
+) -> bool:
     q = db.query(Document).filter(Document.doc_id == doc_id)
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     doc = q.first()
     if not doc:
         return False
     # Soft delete — remove object from storage backend, mark deleted
-    provider = get_storage_provider()
+    provider = get_storage_provider(doc.industry_id)
     try:
         await provider.delete(doc.stored_name)
     except Exception:
@@ -191,10 +216,13 @@ async def delete_document(db: Session, doc_id: str, industry_id: Optional[str]) 
     return True
 
 
-def document_stats(db: Session, industry_id: Optional[str] = None) -> dict:
+def document_stats(
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
+) -> dict:
     q = db.query(Document).filter(Document.status == DocumentStatus.active)
-    if industry_id:
-        q = q.filter(Document.industry_id == industry_id)
+    q = _scope(q, industry_id, organisation_id)
     total = q.count()
     total_bytes = sum(d.size_bytes or 0 for d in q.all())
     by_category: dict = {}

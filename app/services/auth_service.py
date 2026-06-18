@@ -22,7 +22,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import MagicLinkToken, User, UserStatus
+from app.models.user import EmailActionToken, MagicLinkToken, User, UserStatus
 from app.services.token_blacklist import (
     TOKEN_BLACKLIST,  # noqa: F401 — re-exported for callers
 )
@@ -97,6 +97,43 @@ def create_user(
     return user
 
 
+def seed_master_admin(db: Session) -> Optional[User]:
+    """
+    Idempotently ensure a global super-admin account exists, from
+    settings.master_admin_email / master_admin_password. No-op if either
+    is unset, or if a user with that email already exists (in which case
+    it's promoted to super-admin if it isn't already, but its password is
+    left untouched).
+    """
+    email = settings.master_admin_email.strip().lower()
+    if not email or not settings.master_admin_password:
+        return None
+
+    user = get_user_by_email(db, email)
+    if user:
+        if not user.is_super_admin or user.role != "admin":
+            user.is_super_admin = True
+            user.role = "admin"
+            db.commit()
+            db.refresh(user)
+        return user
+
+    user = User(
+        user_id=f"USR-{uuid.uuid4().hex[:10].upper()}",
+        email=email,
+        full_name="Master Admin",
+        hashed_password=hash_password(settings.master_admin_password),
+        role="admin",
+        status=UserStatus.active,
+        email_verified=True,
+        is_super_admin=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email.lower().strip()).first()
 
@@ -137,6 +174,7 @@ def build_token_response(user: User, mfa_pending: bool = False) -> dict:
         "role": user.role.value if hasattr(user.role, "value") else user.role,
         "org_id": user.org_id,
         "mfa_required": mfa_pending,
+        "is_super_admin": bool(user.is_super_admin),
     }
 
 
@@ -181,6 +219,75 @@ def verify_magic_link(db: Session, plain_token: str) -> Optional[str]:
     ml.used = True
     db.commit()
     return ml.email
+
+
+# ── Email verification & password reset (hashed, single-use tokens) ──────────
+
+EMAIL_ACTION_EXPIRY_MINUTES = {"verify_email": 60 * 24, "password_reset": 30}
+
+
+def _hash_action_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_email_action_token(db: Session, email: str, purpose: str) -> str:
+    plain = secrets.token_urlsafe(32)
+    hashed = _hash_action_token(plain)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=EMAIL_ACTION_EXPIRY_MINUTES[purpose]
+    )
+    db.query(EmailActionToken).filter(
+        EmailActionToken.email == email.lower(),
+        EmailActionToken.purpose == purpose,
+        EmailActionToken.used.is_(False),
+    ).update({"used": True})
+    rec = EmailActionToken(
+        token=hashed, email=email.lower(), purpose=purpose, expires_at=expires_at
+    )
+    db.add(rec)
+    db.commit()
+    return plain
+
+
+def consume_email_action_token(
+    db: Session, plain_token: str, purpose: str
+) -> Optional[str]:
+    hashed = _hash_action_token(plain_token)
+    rec = (
+        db.query(EmailActionToken)
+        .filter(
+            EmailActionToken.token == hashed,
+            EmailActionToken.purpose == purpose,
+            EmailActionToken.used.is_(False),
+        )
+        .first()
+    )
+    if not rec:
+        return None
+    if rec.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        return None
+    rec.used = True
+    db.commit()
+    return rec.email
+
+
+# ── Session cookie helpers ───────────────────────────────────────────────────
+
+
+def set_session_cookie(response, token: str) -> None:
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=token,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+        path="/",
+    )
+
+
+def clear_session_cookie(response) -> None:
+    response.delete_cookie(key=settings.session_cookie_name, path="/")
 
 
 # ── Security event logging ────────────────────────────────────────────────────
