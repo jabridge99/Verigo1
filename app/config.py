@@ -31,8 +31,15 @@ class Settings(BaseSettings):
 
     # ── Document storage ──────────────────────────────────────────────────────
     document_store_path: str = "./uploads"
+    # Encrypts tenant storage_config secret fields at rest. Falls back to a
+    # key derived from secret_key if unset — set this explicitly in production
+    # so rotating the JWT secret doesn't strand stored credentials.
+    storage_encryption_key: str = ""
 
     # ── Email ─────────────────────────────────────────────────────────────────
+    # console (dev logging) | smtp | resend
+    email_backend: str = "console"
+    resend_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
@@ -43,6 +50,20 @@ class Settings(BaseSettings):
     # ── App URLs ──────────────────────────────────────────────────────────────
     app_url: str = "http://localhost:3000"
     api_url: str = "http://localhost:8000"
+
+    # ── OAuth (social login) ─────────────────────────────────────────────────
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_tenant: str = "common"  # or your Azure AD tenant id
+
+    # ── Session cookie ───────────────────────────────────────────────────────
+    session_cookie_name: str = "tvg_session"
+
+    # ── Master admin (seeded on startup if set, idempotent) ────────────────────
+    master_admin_email: str = ""
+    master_admin_password: str = ""
 
     # ── Stripe ────────────────────────────────────────────────────────────────
     stripe_secret_key: str = ""
@@ -55,13 +76,20 @@ class Settings(BaseSettings):
     stripe_ent_annual_id: str = ""
 
     # ── Storage backend ───────────────────────────────────────────────────────
-    storage_backend: str = "local"  # local | s3 | azure | gcs
+    storage_backend: str = "local"  # local | s3 | r2 | azure | gcs
     # S3 / Backblaze B2 (S3-compatible)
     s3_bucket: str = ""
     s3_region: str = "us-east-1"
     s3_endpoint_url: str = ""  # leave blank for AWS; set for Backblaze/MinIO
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
+    # Cloudflare R2 (S3-compatible — uses the same adapter as S3, with R2's
+    # account-scoped endpoint and free egress). Credentials come from an R2 API
+    # token (Account → R2 → Manage API Tokens), not your Cloudflare login.
+    r2_account_id: str = ""
+    r2_bucket: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
     # Azure Blob
     azure_account_name: str = ""
     azure_account_key: str = ""
@@ -72,6 +100,7 @@ class Settings(BaseSettings):
 
     # ── Sentry (optional) ────────────────────────────────────────────────────
     sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.1
 
     # ── Logging ──────────────────────────────────────────────────────────────
     log_level: str = "INFO"

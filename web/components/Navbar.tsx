@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark, BookOpen, HelpCircle, Building2 } from 'lucide-react'
-import { getStoredUser, getToken, clearUser } from '@/lib/auth'
+import { getStoredUser, clearUser } from '@/lib/auth'
 import { useRouter, usePathname } from 'next/navigation'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -67,9 +67,8 @@ export default function Navbar() {
     if (!user) return
     const load = async () => {
       try {
-        const token = getToken()
         const res = await fetch(`${API}/api/v1/notifications/summary`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         })
         if (res.ok) {
           const data = await res.json()

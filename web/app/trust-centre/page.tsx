@@ -43,9 +43,11 @@ Audit logs cannot be modified or deleted by any user, including administrators. 
     icon: Database,
     title: 'Australian Data Residency',
     color: 'bg-emerald-50 text-emerald-600',
-    body: `All VeriGo customer and compliance data is hosted in AWS data centres located in Sydney, Australia. No customer data is replicated, transferred, or processed outside of Australia. This commitment is contractually guaranteed in VeriGo's terms of service.
+    body: `All VeriGo customer and compliance data — customer records, KYC documents, transactions, AML programs, audit logs — is hosted in AWS data centres located in Sydney, Australia. No customer or compliance data is replicated, transferred, or processed outside of Australia. This commitment is contractually guaranteed in VeriGo's terms of service.
 
-Australian data residency ensures compliance with the Australian Privacy Act 1988, the Privacy (Australian Government Agencies - Governance) APP Code, and the requirements of the AML/CTF Act for record retention on Australian soil.`,
+Australian data residency ensures compliance with the Australian Privacy Act 1988, the Privacy (Australian Government Agencies - Governance) APP Code, and the requirements of the AML/CTF Act for record retention on Australian soil.
+
+Separately, anonymised, cookieless marketing-site analytics (page views, performance metrics — never AML/customer data) are processed by Vercel's global edge network as part of hosting our public website. See our Privacy Policy for the full list of sub-processors.`,
   },
   {
     icon: Shield,
@@ -195,7 +197,7 @@ export default function TrustCentrePage() {
               and your rights regarding your data. We update it when our practices change — not just when required by law.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="#" className="pub-btn-secondary">Read our Privacy Policy</Link>
+              <Link href="/privacy" className="pub-btn-secondary">Read our Privacy Policy</Link>
               <Link href="/contact" className="pub-btn-primary">
                 Questions? Contact our team <ArrowRight className="w-4 h-4" />
               </Link>

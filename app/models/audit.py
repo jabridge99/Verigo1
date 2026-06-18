@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, ForeignKey
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -15,6 +15,7 @@ class AuditLog(Base):
     actor = Column(String(200))
     actor_role = Column(String(50))
     industry_id = Column(String(100))
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
     before_state = Column(JSON)
     after_state = Column(JSON)
     notes = Column(Text)

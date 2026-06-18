@@ -13,6 +13,7 @@ Returns a list of alerts to be persisted.
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.customer import Customer
@@ -81,7 +82,7 @@ def _build_context(txn: Transaction, customer: Customer) -> dict:
     }
 
 
-def run_monitoring(db, txn, customer, industry_id=None):
+def run_monitoring(db, txn, customer, industry_id=None, organisation_id=None):
     alerts = []
     amount_aud = txn.amount_aud or txn.amount
 
@@ -93,6 +94,7 @@ def run_monitoring(db, txn, customer, industry_id=None):
                 transaction_id=txn.id,
                 customer_id=customer.id,
                 industry_id=industry_id,
+                organisation_id=organisation_id,
                 alert_type=AlertType.large_transaction,
                 severity=AlertSeverity.high,
                 description=f"Transaction AUD ${amount_aud:,.2f} meets or exceeds the CTR threshold of ${CTR_THRESHOLD:,}. AUSTRAC reporting may be required.",
@@ -112,6 +114,7 @@ def run_monitoring(db, txn, customer, industry_id=None):
                 transaction_id=txn.id,
                 customer_id=customer.id,
                 industry_id=industry_id,
+                organisation_id=organisation_id,
                 alert_type=AlertType.structuring,
                 severity=AlertSeverity.high,
                 description=f"{len(below_threshold)} transactions totalling AUD ${total:,.2f} detected near the CTR threshold within 24 hours — possible structuring.",
@@ -134,6 +137,7 @@ def run_monitoring(db, txn, customer, industry_id=None):
                 transaction_id=txn.id,
                 customer_id=customer.id,
                 industry_id=industry_id,
+                organisation_id=organisation_id,
                 alert_type=AlertType.cross_border,
                 severity=sev,
                 description=f"International funds transfer instruction (IFTI) detected to/from {txn.counterparty_country or 'unknown country'}. AUSTRAC IFTI report may be required.",
@@ -149,6 +153,7 @@ def run_monitoring(db, txn, customer, industry_id=None):
                 transaction_id=txn.id,
                 customer_id=customer.id,
                 industry_id=industry_id,
+                organisation_id=organisation_id,
                 alert_type=AlertType.high_risk_country,
                 severity=AlertSeverity.high,
                 description=f"Counterparty country {cc} is on FATF/AUSTRAC high-risk jurisdiction list.",
@@ -163,6 +168,7 @@ def run_monitoring(db, txn, customer, industry_id=None):
                 transaction_id=txn.id,
                 customer_id=customer.id,
                 industry_id=industry_id,
+                organisation_id=organisation_id,
                 alert_type=AlertType.pep_transaction,
                 severity=AlertSeverity.high,
                 description=f"Transaction of AUD ${amount_aud:,.2f} by a Politically Exposed Person (PEP). Enhanced due diligence required.",
@@ -182,6 +188,7 @@ def run_monitoring(db, txn, customer, industry_id=None):
                     transaction_id=txn.id,
                     customer_id=customer.id,
                     industry_id=industry_id,
+                organisation_id=organisation_id,
                     alert_type=AlertType.velocity_breach,
                     severity=AlertSeverity.medium,
                     description=f"Velocity breach ({window_label}): {count} transactions totalling AUD ${total:,.2f} exceed thresholds ({count_thresh} txns / ${amount_thresh:,}).",
@@ -199,6 +206,7 @@ def run_monitoring(db, txn, customer, industry_id=None):
                     transaction_id=txn.id,
                     customer_id=customer.id,
                     industry_id=industry_id,
+                organisation_id=organisation_id,
                     alert_type=AlertType.sanctions_match,
                     severity=AlertSeverity.critical,
                     description=f"Counterparty '{txn.counterparty_name}' matched on sanctions watchlist.",
@@ -219,6 +227,7 @@ def run_monitoring(db, txn, customer, industry_id=None):
                         transaction_id=txn.id,
                         customer_id=customer.id,
                         industry_id=industry_id,
+                organisation_id=organisation_id,
                         alert_type=AlertType.rule_triggered,
                         severity=AlertSeverity(rule_result.get("severity", "medium")),
                         description=f"Custom rule triggered: '{rule_result['rule_name']}'. Action: {rule_result.get('action', 'flag')}.",
@@ -232,9 +241,23 @@ def run_monitoring(db, txn, customer, industry_id=None):
     return alerts
 
 
+def _scope(q, model, industry_id=None, organisation_id=None):
+    if organisation_id:
+        return q.filter(
+            or_(
+                model.organisation_id == organisation_id,
+                (model.organisation_id.is_(None)) & (model.industry_id == industry_id),
+            )
+        )
+    if industry_id:
+        return q.filter(model.industry_id == industry_id)
+    return q
+
+
 def get_alert_queue(
     db,
     industry_id=None,
+    organisation_id=None,
     severity=None,
     status=None,
     alert_type=None,
@@ -243,8 +266,7 @@ def get_alert_queue(
     limit=100,
 ):
     q = db.query(TransactionAlert)
-    if industry_id:
-        q = q.filter_by(industry_id=industry_id)
+    q = _scope(q, TransactionAlert, industry_id, organisation_id)
     if severity:
         q = q.filter(TransactionAlert.severity == severity)
     if status:
@@ -258,10 +280,9 @@ def get_alert_queue(
     )
 
 
-def monitoring_stats(db, industry_id=None):
+def monitoring_stats(db, industry_id=None, organisation_id=None):
     q = db.query(TransactionAlert)
-    if industry_id:
-        q = q.filter_by(industry_id=industry_id)
+    q = _scope(q, TransactionAlert, industry_id, organisation_id)
     alerts = q.all()
     by_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     by_type: dict = {}
@@ -279,8 +300,7 @@ def monitoring_stats(db, industry_id=None):
         if st not in ("dismissed", "resolved", "reported"):
             open_count += 1
     txn_q = db.query(Transaction)
-    if industry_id:
-        txn_q = txn_q.filter_by(industry_id=industry_id)
+    txn_q = _scope(txn_q, Transaction, industry_id, organisation_id)
     total_txns = txn_q.count()
     flagged_txns = txn_q.filter(Transaction.is_suspicious == 1).count()
     return {

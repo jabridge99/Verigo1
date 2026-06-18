@@ -3,13 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""; }
 
 async function apiFetch(path: string, opts?: RequestInit) {
   const res = await fetch(`${API}${path}`, {
     ...opts,
+    credentials: "include",
     headers: {
-      Authorization: `Bearer ${getToken()}`,
       "Content-Type": "application/json",
       ...(opts?.headers || {}),
     },
@@ -454,7 +453,8 @@ export default function IFTIPage() {
 
       const res = await fetch(url, {
         method,
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body,
       });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);

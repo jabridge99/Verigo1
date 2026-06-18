@@ -26,6 +26,7 @@ from app.db.database import get_db
 from app.models.ifti import IFTIDirection, IFTIRecord, IFTIStatus
 from app.models.user import User, UserRole
 from app.services.ifti_service import generate_ifti_excel, get_ifti, list_ifti
+from app.services.tenant_scope import assert_tenant, scope_fields
 
 router = APIRouter(prefix="/ifti", tags=["IFTI Reports"])
 
@@ -249,10 +250,14 @@ def list_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+    scoped = scope_fields(current_user)
+    return list_ifti(
+        db,
+        industry_id=scoped.get("industry_id"),
+        direction=direction,
+        status=status,
+        organisation_id=scoped.get("organisation_id"),
     )
-    return list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
 
 @router.post("/", response_model=IFTIResponse, status_code=201)
@@ -264,6 +269,7 @@ def create_record(
     record = IFTIRecord(
         ifti_id=f"IFTI-{uuid.uuid4().hex[:12].upper()}",
         industry_id=current_user.industry_id,
+        organisation_id=current_user.primary_organisation_id,
         direction=payload.direction,
         created_by=current_user.user_id,
     )
@@ -283,11 +289,7 @@ def get_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if (
-        current_user.role != UserRole.admin
-        and r.industry_id != current_user.industry_id
-    ):
-        raise HTTPException(403, "Access denied")
+    assert_tenant(current_user, r.organisation_id, r.industry_id)
     return r
 
 
@@ -301,11 +303,7 @@ def update_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if (
-        current_user.role != UserRole.admin
-        and r.industry_id != current_user.industry_id
-    ):
-        raise HTTPException(403, "Access denied")
+    assert_tenant(current_user, r.organisation_id, r.industry_id)
     if r.status == IFTIStatus.submitted:
         raise HTTPException(400, "Cannot edit a submitted IFTI record")
     _apply_fields(r, payload)
@@ -354,11 +352,7 @@ def delete_record(
         raise HTTPException(404, "IFTI record not found")
     if r.status == IFTIStatus.submitted:
         raise HTTPException(400, "Cannot delete a submitted record")
-    if (
-        current_user.role != UserRole.admin
-        and r.industry_id != current_user.industry_id
-    ):
-        raise HTTPException(403, "Access denied")
+    assert_tenant(current_user, r.organisation_id, r.industry_id)
     db.delete(r)
     db.commit()
 
@@ -379,10 +373,14 @@ def export_excel(
     The downloaded file matches the official AUSTRAC IFTI-DRA IN / OUT template
     exactly — open it, verify, then copy-paste rows into AUSTRAC Online and submit.
     """
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+    scoped = scope_fields(current_user)
+    records = list_ifti(
+        db,
+        industry_id=scoped.get("industry_id"),
+        direction=direction,
+        status=status,
+        organisation_id=scoped.get("organisation_id"),
     )
-    records = list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
     if not records:
         raise HTTPException(
@@ -415,14 +413,24 @@ def export_selected(
     """Export a specific selection of IFTI records to Excel."""
     from app.models.ifti import IFTIRecord as IFTIModel
 
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
-    )
+    from sqlalchemy import or_
+
+    scoped = scope_fields(current_user)
+    industry_id = scoped.get("industry_id")
+    organisation_id = scoped.get("organisation_id")
     q = db.query(IFTIModel).filter(
         IFTIModel.ifti_id.in_(ifti_ids),
         IFTIModel.direction == direction,
     )
-    if industry_id:
+    if organisation_id:
+        q = q.filter(
+            or_(
+                IFTIModel.organisation_id == organisation_id,
+                (IFTIModel.organisation_id.is_(None))
+                & (IFTIModel.industry_id == industry_id),
+            )
+        )
+    elif industry_id:
         q = q.filter(IFTIModel.industry_id == industry_id)
     records = q.all()
 

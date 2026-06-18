@@ -37,6 +37,7 @@ from app.services.reporting_service import (
     reporting_summary,
 )
 from app.services.risk_scoring import score_to_level
+from app.services.tenant_scope import assert_tenant, scope_fields, scope_query
 
 router = APIRouter(prefix="/reports", tags=["Compliance Reports"])
 
@@ -55,18 +56,12 @@ _REVIEW = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
 _APPROVE = _require_roles(UserRole.admin, UserRole.mlro)
 
 
-def _assert_tenant(current_user: User, report_industry_id: Optional[str]):
-    if current_user.role == UserRole.admin:
-        return
-    if report_industry_id and report_industry_id != current_user.industry_id:
-        raise HTTPException(403, "Cross-tenant access denied")
+def _assert_tenant(current_user: User, record) -> None:
+    assert_tenant(current_user, record.organisation_id, record.industry_id)
 
 
 def _scoped(db: Session, current_user: User):
-    q = db.query(ComplianceReport)
-    if current_user.role != UserRole.admin:
-        q = q.filter(ComplianceReport.industry_id == current_user.industry_id)
-    return q
+    return scope_query(db.query(ComplianceReport), ComplianceReport, current_user)
 
 
 # ─── Reports CRUD ─────────────────────────────────────────────────────────────
@@ -81,7 +76,7 @@ def create_report(
     customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
 
     from app.services.reporting_service import (
         _days_remaining,
@@ -93,12 +88,12 @@ def create_report(
     rtype = payload.report_type.value
     due = _due_date(rtype)
     data = payload.model_dump()
-    # Enforce tenant scoping from session — ignore any industry_id in payload
-    data["industry_id"] = (
-        current_user.industry_id
-        if current_user.role != UserRole.admin
-        else data.get("industry_id")
-    )
+    # Enforce tenant scoping from session — ignore any industry_id/organisation_id in payload
+    data.pop("organisation_id", None)
+    scoped = scope_fields(current_user)
+    if scoped:
+        data["industry_id"] = scoped["industry_id"]
+        data["organisation_id"] = scoped["organisation_id"]
     data["prepared_by"] = current_user.user_id
 
     report = ComplianceReport(
@@ -367,7 +362,7 @@ def create_ecdd(
     customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
 
     # ECDD requires approved KYC — enforce business rule
     from app.models.kyc import KYCRecord, KYCStatus
@@ -434,5 +429,5 @@ def get_ecdd_records(
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
     return db.query(ECDDRecord).filter_by(customer_id=customer.id).all()

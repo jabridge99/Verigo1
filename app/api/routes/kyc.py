@@ -21,6 +21,7 @@ from app.services.identity_verification import (
     verify_document,
 )
 from app.services.sanctions_screening import screen_name
+from app.services.tenant_scope import assert_tenant
 
 router = APIRouter(prefix="/kyc", tags=["KYC"])
 
@@ -28,11 +29,8 @@ ALLOWED_DOC_MIME = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
 MAX_DOC_SIZE = 10 * 1024 * 1024
 
 
-def _assert_tenant(current_user: User, record_industry_id):
-    if current_user.role == UserRole.admin:
-        return
-    if record_industry_id and record_industry_id != current_user.industry_id:
-        raise HTTPException(403, "Cross-tenant access denied")
+def _assert_tenant(current_user: User, customer: Customer):
+    assert_tenant(current_user, customer.organisation_id, customer.industry_id)
 
 
 @router.post("/{customer_id}/initiate")
@@ -44,7 +42,7 @@ def initiate_kyc(
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
     existing = (
         db.query(KYCRecord)
         .filter(
@@ -94,7 +92,8 @@ async def upload_document(
         raise HTTPException(400, "Invalid filename")
 
     customer = db.query(Customer).filter(Customer.id == kyc.customer_id).first()
-    _assert_tenant(current_user, customer.industry_id if customer else None)
+    if customer:
+        _assert_tenant(current_user, customer)
 
     doc = KYCDocument(
         kyc_record_id=kyc.id,
@@ -136,7 +135,8 @@ def review_kyc(
     if not kyc:
         raise HTTPException(404, "KYC record not found")
     customer = db.query(Customer).filter(Customer.id == kyc.customer_id).first()
-    _assert_tenant(current_user, customer.industry_id if customer else None)
+    if customer:
+        _assert_tenant(current_user, customer)
 
     documents = db.query(KYCDocument).filter(KYCDocument.kyc_record_id == kyc.id).all()
     sanctions = screen_name(customer.full_name)
@@ -181,5 +181,5 @@ def get_kyc_history(
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
     return db.query(KYCRecord).filter(KYCRecord.customer_id == customer.id).all()

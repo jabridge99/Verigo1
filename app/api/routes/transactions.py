@@ -41,6 +41,7 @@ from app.services.monitoring_engine import (
     run_monitoring,
 )
 from app.services.risk_scoring import score_transaction
+from app.services.tenant_scope import assert_tenant, scope_fields, scope_query
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -58,25 +59,16 @@ _RESOLVE = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
 _DISMISS = _require_roles(UserRole.admin, UserRole.mlro)
 
 
-def _assert_tenant(current_user: User, resource_industry_id: Optional[str]):
-    if current_user.role == UserRole.admin:
-        return
-    if resource_industry_id and resource_industry_id != current_user.industry_id:
-        raise HTTPException(403, "Cross-tenant access denied")
+def _assert_tenant(current_user: User, record) -> None:
+    assert_tenant(current_user, record.organisation_id, record.industry_id)
 
 
 def _scoped_txn(db: Session, current_user: User):
-    q = db.query(Transaction)
-    if current_user.role != UserRole.admin:
-        q = q.filter(Transaction.industry_id == current_user.industry_id)
-    return q
+    return scope_query(db.query(Transaction), Transaction, current_user)
 
 
 def _scoped_alert(db: Session, current_user: User):
-    q = db.query(TransactionAlert)
-    if current_user.role != UserRole.admin:
-        q = q.filter(TransactionAlert.industry_id == current_user.industry_id)
-    return q
+    return scope_query(db.query(TransactionAlert), TransactionAlert, current_user)
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────
@@ -91,15 +83,15 @@ def create_transaction(
     customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
 
     data = payload.model_dump()
     data["transaction_id"] = f"TXN-{uuid.uuid4().hex[:12].upper()}"
-    data["industry_id"] = (
-        current_user.industry_id
-        if current_user.role != UserRole.admin
-        else data.get("industry_id")
-    )
+    data.pop("organisation_id", None)
+    scoped = scope_fields(current_user)
+    if scoped:
+        data["industry_id"] = scoped["industry_id"]
+        data["organisation_id"] = scoped["organisation_id"]
     if data.get("amount_aud") is None:
         data["amount_aud"] = data["amount"]
 
@@ -125,7 +117,13 @@ def create_transaction(
     if txn.is_suspicious:
         txn.status = TransactionStatus.flagged
 
-    alerts = run_monitoring(db, txn, customer, industry_id=data.get("industry_id"))
+    alerts = run_monitoring(
+        db,
+        txn,
+        customer,
+        industry_id=data.get("industry_id"),
+        organisation_id=data.get("organisation_id"),
+    )
     for alert in alerts:
         db.add(alert)
     if alerts:
@@ -210,12 +208,11 @@ def alert_queue(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
-    )
+    scoped = scope_fields(current_user)
     return get_alert_queue(
         db,
-        industry_id=industry_id,
+        industry_id=scoped.get("industry_id"),
+        organisation_id=scoped.get("organisation_id"),
         severity=severity,
         status=status,
         alert_type=alert_type,
@@ -230,10 +227,12 @@ def alert_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.industry_id
+    scoped = scope_fields(current_user)
+    return monitoring_stats(
+        db,
+        industry_id=scoped.get("industry_id"),
+        organisation_id=scoped.get("organisation_id"),
     )
-    return monitoring_stats(db, industry_id=industry_id)
 
 
 @router.get("/alerts", response_model=list[AlertResponse])
@@ -412,14 +411,14 @@ def create_case(
     customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer.industry_id)
+    _assert_tenant(current_user, customer)
 
     data = payload.model_dump()
-    data["industry_id"] = (
-        current_user.industry_id
-        if current_user.role != UserRole.admin
-        else data.get("industry_id")
-    )
+    data.pop("organisation_id", None)
+    scoped = scope_fields(current_user)
+    if scoped:
+        data["industry_id"] = scoped["industry_id"]
+        data["organisation_id"] = scoped["organisation_id"]
     data["assigned_to"] = current_user.user_id  # from session
 
     case = MonitoringCase(case_id=f"CASE-{uuid.uuid4().hex[:10].upper()}", **data)
@@ -437,9 +436,7 @@ def list_cases(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    q = db.query(MonitoringCase)
-    if current_user.role != UserRole.admin:
-        q = q.filter(MonitoringCase.industry_id == current_user.industry_id)
+    q = scope_query(db.query(MonitoringCase), MonitoringCase, current_user)
     if status:
         q = q.filter(MonitoringCase.status == status)
     return q.order_by(MonitoringCase.created_at.desc()).offset(skip).limit(limit).all()
@@ -452,9 +449,7 @@ def update_case_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(_RESOLVE),
 ):
-    q = db.query(MonitoringCase)
-    if current_user.role != UserRole.admin:
-        q = q.filter(MonitoringCase.industry_id == current_user.industry_id)
+    q = scope_query(db.query(MonitoringCase), MonitoringCase, current_user)
     case = q.filter(MonitoringCase.case_id == case_id).first()
     if not case:
         raise HTTPException(404, "Case not found")

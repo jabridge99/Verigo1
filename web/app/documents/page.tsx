@@ -6,7 +6,7 @@ import {
   File, Image, Search, Filter, AlertTriangle, CheckCircle,
   HardDrive, X, Plus,
 } from "lucide-react";
-import { getStoredUser, getToken } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -95,14 +95,14 @@ export default function DocumentsPage() {
 
   useEffect(() => { if (!user) { router.push("/login"); return; } load(); }, []);
 
-  const auth = () => ({ Authorization: `Bearer ${getToken()}` });
+  
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [dr, sr] = await Promise.all([
-        fetch(`${API}/api/v1/documents?limit=200`, { headers: auth() }),
-        fetch(`${API}/api/v1/documents/stats`, { headers: auth() }),
+        fetch(`${API}/api/v1/documents?limit=200`, { credentials: "include" }),
+        fetch(`${API}/api/v1/documents/stats`, { credentials: "include" }),
       ]);
       if (!dr.ok) throw new Error("api");
       setDocs(await dr.json());
@@ -128,7 +128,7 @@ export default function DocumentsPage() {
       if (uploadEntityId) fd.append("entity_id", uploadEntityId);
 
       const res = await fetch(`${API}/api/v1/documents`, {
-        method: "POST", headers: auth(), body: fd,
+        method: "POST", credentials: "include", body: fd,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -163,7 +163,7 @@ export default function DocumentsPage() {
 
   const handleDownload = async (doc: Doc) => {
     try {
-      const res = await fetch(`${API}/api/v1/documents/${doc.doc_id}/download`, { headers: auth() });
+      const res = await fetch(`${API}/api/v1/documents/${doc.doc_id}/download`, { credentials: "include" });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -178,7 +178,7 @@ export default function DocumentsPage() {
   const handleArchive = async (doc_id: string) => {
     setDocs(prev => prev.map(d => d.doc_id === doc_id ? { ...d, status: "archived" } : d));
     try {
-      await fetch(`${API}/api/v1/documents/${doc_id}/archive`, { method: "POST", headers: auth() });
+      await fetch(`${API}/api/v1/documents/${doc_id}/archive`, { method: "POST", credentials: "include" });
     } catch {}
   };
 
@@ -186,7 +186,7 @@ export default function DocumentsPage() {
     if (!confirm("Permanently delete this document?")) return;
     setDocs(prev => prev.filter(d => d.doc_id !== doc_id));
     try {
-      await fetch(`${API}/api/v1/documents/${doc_id}`, { method: "DELETE", headers: auth() });
+      await fetch(`${API}/api/v1/documents/${doc_id}`, { method: "DELETE", credentials: "include" });
     } catch {}
   };
 

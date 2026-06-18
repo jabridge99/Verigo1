@@ -26,6 +26,8 @@ import app.models.security_event  # noqa
 import app.models.connector       # noqa
 import app.models.retention       # noqa
 import app.models.ifti            # noqa
+import app.models.organisation    # noqa
+import app.models.aml_program     # noqa
 
 config = context.config
 if config.config_file_name is not None:

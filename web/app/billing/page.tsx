@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import {
   CreditCard, Check, Star, Zap, Shield, Crown,
   ChevronDown, ChevronUp, ExternalLink, AlertTriangle,
-  Calendar, Receipt, Settings, ArrowRight, Sparkles,
+  Calendar, Receipt, Settings, ArrowRight, Sparkles, Database, Lock,
 } from "lucide-react";
-import { getStoredUser, getToken } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -74,6 +74,242 @@ const DEMO_INVOICES: Invoice[] = [
   { invoice_id: "INV-002", amount_aud: 6975.00, tax_aud: 697.50, total_aud: 7672.50, status: "paid", period_start: new Date(Date.now() - 86400000 * 730).toISOString(), period_end: new Date(Date.now() - 86400000 * 365).toISOString(), paid_at: new Date(Date.now() - 86400000 * 729).toISOString(), created_at: new Date(Date.now() - 86400000 * 730).toISOString() },
 ];
 
+// ── Storage config ───────────────────────────────────────────────────────────
+
+interface StorageConfig {
+  backend: string;
+  bucket?: string;
+  region?: string;
+  access_key?: string;
+  endpoint_url?: string;
+  account_name?: string;
+  container?: string;
+  configured: boolean;
+  verified?: boolean | null;
+}
+
+const BACKEND_FIELDS: Record<string, { key: string; label: string; secret?: boolean }[]> = {
+  s3: [
+    { key: "bucket", label: "Bucket" },
+    { key: "region", label: "Region" },
+    { key: "access_key", label: "Access key" },
+    { key: "secret_key", label: "Secret key", secret: true },
+    { key: "endpoint_url", label: "Endpoint URL (optional — Backblaze/MinIO)" },
+  ],
+  azure: [
+    { key: "account_name", label: "Account name" },
+    { key: "account_key", label: "Account key", secret: true },
+    { key: "container", label: "Container" },
+  ],
+  gcs: [
+    { key: "bucket", label: "Bucket" },
+    { key: "credentials_json", label: "Service account JSON (path or contents)", secret: true },
+  ],
+};
+
+function StorageConfigForm({
+  values, onChange,
+}: { values: Record<string, string>; onChange: (k: string, v: string) => void }) {
+  const backend = values.backend || "s3";
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">Backend</label>
+        <select value={backend} onChange={e => onChange("backend", e.target.value)}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:border-blue-500">
+          {["s3", "azure", "gcs"].map(b => (
+            <option key={b} value={b} className="bg-slate-900">{b.toUpperCase()}</option>
+          ))}
+        </select>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {(BACKEND_FIELDS[backend] || []).map(f => (
+          <div key={f.key}>
+            <label className="text-xs text-slate-400 mb-1 block">{f.label}</label>
+            <input
+              type={f.secret ? "password" : "text"}
+              value={values[f.key] ?? ""}
+              onChange={e => onChange(f.key, e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MyStoragePanel({ plan }: { plan?: string }) {
+  const entitled = plan === "enterprise" || plan === "vvip";
+  const [config, setConfig] = useState<StorageConfig | null>(null);
+  const [form, setForm] = useState<Record<string, string>>({ backend: "s3" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => { if (entitled) load(); }, [entitled]);
+
+  const load = async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/storage/config`, { credentials: "include" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setConfig(data);
+      if (data.configured) setForm({ backend: data.backend, ...data });
+    } catch {}
+  };
+
+  const save = async () => {
+    setSaving(true); setMsg("");
+    try {
+      const res = await fetch(`${API}/api/v1/storage/config`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Save failed");
+      setConfig(data);
+      setMsg(data.verified ? "Connected and verified." : "Saved — connection could not be verified, check credentials.");
+    } catch (e: any) { setMsg(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const disconnect = async () => {
+    await fetch(`${API}/api/v1/storage/config`, { method: "DELETE", credentials: "include" });
+    setConfig({ backend: "local", configured: false });
+    setForm({ backend: "s3" });
+    setMsg("Reverted to the platform default storage.");
+  };
+
+  if (!entitled) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/5 p-5 flex items-start gap-3">
+        <Lock className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
+        <div>
+          <h3 className="font-semibold mb-1">Bring your own storage</h3>
+          <p className="text-sm text-slate-400">
+            Connect your own S3, Azure Blob, or GCS bucket so documents never leave infrastructure you control.
+            Available on the <span className="text-amber-400">Enterprise</span> and <span className="text-rose-400">VVIP</span> plans.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Database className="w-5 h-5 text-blue-400" />
+          <h3 className="font-semibold">Your Storage</h3>
+        </div>
+        {config?.configured && (
+          <span className={`text-xs px-2 py-0.5 rounded-full ${config.verified ? "bg-green-500/20 text-green-400" : "bg-amber-500/20 text-amber-400"}`}>
+            {config.verified ? "Connected" : "Unverified"}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">
+        {config?.configured
+          ? `Documents are stored in your own ${config.backend.toUpperCase()} bucket.`
+          : "Documents currently use the platform default storage."}
+      </p>
+      <StorageConfigForm values={form} onChange={(k, v) => setForm(prev => ({ ...prev, [k]: v }))} />
+      <div className="flex items-center gap-3">
+        <button onClick={save} disabled={saving}
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-sm font-medium transition-colors">
+          {saving ? "Saving…" : "Connect Storage"}
+        </button>
+        {config?.configured && (
+          <button onClick={disconnect}
+            className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-colors">
+            Disconnect
+          </button>
+        )}
+        {msg && <span className="text-sm text-slate-400">{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
+function AdminStoragePanel() {
+  const [industryId, setIndustryId] = useState("");
+  const [form, setForm] = useState<Record<string, string>>({ backend: "s3" });
+  const [current, setCurrent] = useState<StorageConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const lookup = async () => {
+    if (!industryId) return;
+    setMsg("");
+    try {
+      const res = await fetch(`${API}/api/v1/storage/admin/${industryId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Tenant not found or lookup failed");
+      const data = await res.json();
+      setCurrent(data);
+      setForm({ backend: data.backend, ...data });
+    } catch (e: any) { setMsg(e.message); setCurrent(null); }
+  };
+
+  const save = async () => {
+    setSaving(true); setMsg("");
+    try {
+      const res = await fetch(`${API}/api/v1/storage/admin/${industryId}`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Save failed");
+      setCurrent(data);
+      setMsg(data.verified ? "Connected and verified." : "Saved — connection could not be verified.");
+    } catch (e: any) { setMsg(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const clear = async () => {
+    if (!industryId) return;
+    await fetch(`${API}/api/v1/storage/admin/${industryId}`, { method: "DELETE", credentials: "include" });
+    setCurrent({ backend: "local", configured: false });
+    setMsg("Reverted to the platform default storage.");
+  };
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Database className="w-5 h-5 text-blue-400" />
+        <h3 className="font-semibold">Assign Storage per Tenant</h3>
+      </div>
+      <div className="flex gap-2">
+        <input value={industryId} onChange={e => setIndustryId(e.target.value)}
+          placeholder="industry_id (e.g. dce-001)"
+          className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:border-blue-500" />
+        <button onClick={lookup}
+          className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-colors">
+          Load
+        </button>
+      </div>
+      {current && (
+        <p className="text-xs text-slate-500">
+          {current.configured ? `Currently on ${current.backend.toUpperCase()}` : "Currently on the platform default (local)"}
+        </p>
+      )}
+      <StorageConfigForm values={form} onChange={(k, v) => setForm(prev => ({ ...prev, [k]: v }))} />
+      <div className="flex items-center gap-3">
+        <button onClick={save} disabled={saving || !industryId}
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-sm font-medium transition-colors">
+          {saving ? "Saving…" : "Assign Storage"}
+        </button>
+        <button onClick={clear} disabled={!industryId}
+          className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm disabled:opacity-40 transition-colors">
+          Revert to Default
+        </button>
+        {msg && <span className="text-sm text-slate-400">{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
 // ── Admin VVIP panel ──────────────────────────────────────────────────────────
 
 function AdminPricingPanel({ sub, onUpdate }: { sub: Subscription | null; onUpdate: () => void }) {
@@ -97,7 +333,8 @@ function AdminPricingPanel({ sub, onUpdate }: { sub: Subscription | null; onUpda
       if (discountPct)   body.annual_discount_pct = parseFloat(discountPct);
       const res = await fetch(`${API}/api/v1/billing/admin/${industryId}`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json()).detail ?? "Save failed");
@@ -175,6 +412,103 @@ function AdminPricingPanel({ sub, onUpdate }: { sub: Subscription | null; onUpda
   );
 }
 
+// ── Admin feature toggle matrix ─────────────────────────────────────────────────
+
+interface FeatureRow {
+  code: string;
+  name: string;
+  category?: string;
+  plans: Record<string, boolean>;
+}
+
+const TOGGLE_PLANS = ["starter", "professional", "enterprise", "vvip"];
+
+function FeatureToggleMatrix() {
+  const [rows, setRows] = useState<FeatureRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/v1/billing/admin/features`, { credentials: "include" });
+      if (!res.ok) throw new Error();
+      setRows(await res.json());
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = async (code: string, plan: string, enabled: boolean) => {
+    const key = `${plan}:${code}`;
+    setSavingKey(key);
+    setRows(prev => prev.map(r => r.code === code ? { ...r, plans: { ...r.plans, [plan]: enabled } } : r));
+    try {
+      const res = await fetch(`${API}/api/v1/billing/admin/features/${plan}/${code}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      // revert on failure
+      setRows(prev => prev.map(r => r.code === code ? { ...r, plans: { ...r.plans, [plan]: !enabled } } : r));
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  if (loading) return <div className="text-slate-500 text-sm">Loading…</div>;
+  if (!rows.length) return <div className="text-slate-500 text-sm">No features configured yet.</div>;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-white/10 text-left text-slate-400">
+            <th className="py-2 pr-4 font-medium">Feature</th>
+            {TOGGLE_PLANS.map(p => (
+              <th key={p} className="py-2 px-3 font-medium text-center capitalize">{p}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.code} className="border-b border-white/5 last:border-0">
+              <td className="py-2 pr-4 text-slate-300">{r.name}</td>
+              {TOGGLE_PLANS.map(p => {
+                const enabled = !!r.plans[p];
+                const key = `${p}:${r.code}`;
+                return (
+                  <td key={p} className="py-2 px-3 text-center">
+                    <button
+                      onClick={() => toggle(r.code, p, !enabled)}
+                      disabled={savingKey === key}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${
+                        enabled ? "bg-green-600" : "bg-white/10"
+                      }`}
+                      aria-label={`Toggle ${r.name} for ${p}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        enabled ? "translate-x-4" : "translate-x-0.5"
+                      }`} />
+                    </button>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Plan card ──────────────────────────────────────────────────────────────────
 
 const PLAN_ICONS: Record<string, React.ReactNode> = {
@@ -217,7 +551,7 @@ function BillingContent() {
   const [loading, setLoading] = useState(true);
   const [demo, setDemo] = useState(false);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
-  const [tab, setTab] = useState<"plans" | "invoices" | "admin">("plans");
+  const [tab, setTab] = useState<"plans" | "invoices" | "storage" | "admin">("plans");
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const user = typeof window !== "undefined" ? getStoredUser() : null;
@@ -232,15 +566,15 @@ function BillingContent() {
     load();
   }, [interval]);
 
-  const auth = () => ({ Authorization: `Bearer ${getToken()}` });
+  
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [pr, sr, ir] = await Promise.all([
         fetch(`${API}/api/v1/billing/plans?discount_pct=${interval === "annual" ? 20 : 0}`),
-        fetch(`${API}/api/v1/billing/subscription`, { headers: auth() }),
-        fetch(`${API}/api/v1/billing/invoices`, { headers: auth() }),
+        fetch(`${API}/api/v1/billing/subscription`, { credentials: "include" }),
+        fetch(`${API}/api/v1/billing/invoices`, { credentials: "include" }),
       ]);
       if (!pr.ok || !sr.ok) throw new Error("api");
       setPlans(await pr.json());
@@ -262,7 +596,8 @@ function BillingContent() {
     try {
       const res = await fetch(`${API}/api/v1/billing/checkout`, {
         method: "POST",
-        headers: { ...auth(), "Content-Type": "application/json" },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plan: planKey,
           interval,
@@ -283,7 +618,7 @@ function BillingContent() {
 
   const openPortal = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/billing/portal?return_url=${encodeURIComponent(APP_URL + "/billing")}`, { headers: auth() });
+      const res = await fetch(`${API}/api/v1/billing/portal?return_url=${encodeURIComponent(APP_URL + "/billing")}`, { credentials: "include" });
       if (!res.ok) throw new Error();
       const { portal_url } = await res.json();
       window.location.href = portal_url;
@@ -294,7 +629,7 @@ function BillingContent() {
 
   const cancelSub = async () => {
     try {
-      await fetch(`${API}/api/v1/billing/subscription/cancel?at_period_end=true`, { method: "POST", headers: auth() });
+      await fetch(`${API}/api/v1/billing/subscription/cancel?at_period_end=true`, { method: "POST", credentials: "include" });
       setSub(prev => prev ? { ...prev, cancel_at_period_end: true } : prev);
     } catch {
       setSub(prev => prev ? { ...prev, cancel_at_period_end: true } : prev);
@@ -394,6 +729,7 @@ function BillingContent() {
           {([
             ["plans", "Plans", CreditCard],
             ["invoices", "Invoices", Receipt],
+            ["storage", "Storage", Database],
             ...(isAdmin ? [["admin", "Admin Override", Crown]] : []),
           ] as [string, string, React.ElementType][]).map(([id, label, Icon]) => (
             <button key={id} onClick={() => setTab(id as any)}
@@ -555,10 +891,31 @@ function BillingContent() {
           </div>
         )}
 
+        {/* ── Storage tab ───────────────────────────────────────────────── */}
+        {tab === "storage" && (
+          <div className="space-y-5">
+            <MyStoragePanel plan={sub?.plan} />
+          </div>
+        )}
+
         {/* ── Admin tab ─────────────────────────────────────────────────── */}
         {tab === "admin" && isAdmin && (
           <div className="space-y-5">
             <AdminPricingPanel sub={sub} onUpdate={load} />
+
+            {/* Per-tenant storage assignment */}
+            <AdminStoragePanel />
+
+            {/* Feature toggle matrix */}
+            <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+              <h3 className="font-semibold mb-1 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-slate-400" />Plan Feature Toggles
+              </h3>
+              <p className="text-xs text-slate-500 mb-4">
+                Turn features on or off per plan. Changes apply immediately to the public pricing table.
+              </p>
+              <FeatureToggleMatrix />
+            </div>
 
             {/* All subscriptions list */}
             <div className="rounded-xl border border-white/10 bg-white/5 p-5">
@@ -577,6 +934,7 @@ function BillingContent() {
 function AllSubscriptions() {
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -584,7 +942,7 @@ function AllSubscriptions() {
     setLoading(true);
     try {
       const res = await fetch(`${API}/api/v1/billing/admin/all`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        credentials: "include",
       });
       if (!res.ok) throw new Error();
       setSubs(await res.json());
@@ -592,6 +950,23 @@ function AllSubscriptions() {
       setSubs([DEMO_SUB]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const act = async (industryId: string, action: "activate" | "terminate") => {
+    setActing(`${industryId}:${action}`);
+    try {
+      const res = await fetch(`${API}/api/v1/billing/admin/${industryId}/${action}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setSubs(prev => prev.map(s => s.industry_id === industryId ? updated : s));
+    } catch {
+      // no-op in demo/mock mode
+    } finally {
+      setActing(null);
     }
   };
 
@@ -612,6 +987,22 @@ function AllSubscriptions() {
           }`}>{s.status}</span>
           {(s.custom_monthly_aud || s.custom_annual_aud) && (
             <span className="text-xs text-amber-400">custom price</span>
+          )}
+          {(s.plan === "enterprise" || s.plan === "vvip") && (
+            <div className="flex gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => act(s.industry_id, "activate")}
+                disabled={acting === `${s.industry_id}:activate` || s.status === "active"}
+                className="px-2.5 py-1 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-400 text-xs font-medium disabled:opacity-40 transition-colors">
+                Activate
+              </button>
+              <button
+                onClick={() => act(s.industry_id, "terminate")}
+                disabled={acting === `${s.industry_id}:terminate` || s.status === "canceled"}
+                className="px-2.5 py-1 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-medium disabled:opacity-40 transition-colors">
+                Terminate
+              </button>
+            </div>
           )}
         </div>
       ))}

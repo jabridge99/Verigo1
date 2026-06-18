@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 interface Report {
   id: number;
   report_id: string;
@@ -123,8 +125,8 @@ export default function ReportingDashboard() {
   const fetchData = useCallback(async () => {
     try {
       const [rRes, sRes] = await Promise.all([
-        fetch("/api/v1/reports/?limit=100"),
-        fetch("/api/v1/reports/summary"),
+        fetch(`${API}/api/v1/reports/?limit=100`, { credentials: "include" }),
+        fetch(`${API}/api/v1/reports/summary`, { credentials: "include" }),
       ]);
       if (rRes.ok) { const d = await rRes.json(); if (d.length) setReports(d); }
       if (sRes.ok) { const d = await sRes.json(); if (d.total) setSummary(d); }
@@ -135,16 +137,16 @@ export default function ReportingDashboard() {
 
   const advanceStatus = async (reportId: string, action: "review" | "approve" | "submit" | "acknowledge") => {
     const endpoints: Record<string, string> = {
-      review: `/api/v1/reports/${reportId}/review?reviewer=compliance%40firm.com.au`,
-      approve: `/api/v1/reports/${reportId}/approve?approved_by=mlro%40firm.com.au`,
-      submit: `/api/v1/reports/${reportId}/submit`,
-      acknowledge: `/api/v1/reports/${reportId}/acknowledge`,
+      review: `${API}/api/v1/reports/${reportId}/review?reviewer=compliance%40firm.com.au`,
+      approve: `${API}/api/v1/reports/${reportId}/approve?approved_by=mlro%40firm.com.au`,
+      submit: `${API}/api/v1/reports/${reportId}/submit`,
+      acknowledge: `${API}/api/v1/reports/${reportId}/acknowledge`,
     };
     const statusMap: Record<string, string> = { review: "under_review", approve: "approved", submit: "submitted", acknowledge: "acknowledged" };
     try {
       const opts: RequestInit = action === "submit"
-        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ submitted_to: "AUSTRAC", approved_by: "mlro@firm.com.au" }) }
-        : { method: "POST" };
+        ? { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ submitted_to: "AUSTRAC", approved_by: "mlro@firm.com.au" }) }
+        : { method: "POST", credentials: "include" };
       await fetch(endpoints[action], opts);
     } catch {}
     setReports(prev => prev.map(r => r.report_id === reportId ? { ...r, status: statusMap[action] } : r));
@@ -153,7 +155,7 @@ export default function ReportingDashboard() {
   };
 
   const autoGenerate = async () => {
-    try { await fetch("/api/v1/reports/auto-generate/bulk", { method: "POST" }); } catch {}
+    try { await fetch(`${API}/api/v1/reports/auto-generate/bulk`, { method: "POST", credentials: "include" }); } catch {}
     showToast("success", "Auto-generation triggered — check reports list");
     fetchData();
   };
@@ -453,7 +455,8 @@ function CreateReportForm({ onCreated }: { onCreated: (r: Report) => void }) {
     e.preventDefault();
     setSubmitting(true); setError(null);
     try {
-      const res = await fetch("/api/v1/reports/", {
+      const res = await fetch(`${API}/api/v1/reports/`, {
+        credentials: "include",
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });

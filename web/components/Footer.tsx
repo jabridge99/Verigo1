@@ -83,11 +83,15 @@ export default function Footer() {
 
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-slate-500 text-sm">
-            © {new Date().getFullYear()} Verigo. All rights reserved.
+            © {new Date().getFullYear()} PSP Education Pty Ltd (ABN 21 628 429 925), trading as Verigo. All rights reserved.
           </p>
           <div className="flex gap-6">
-            {['Privacy Policy', 'Terms of Service', 'Security'].map(l => (
-              <Link key={l} href="#" className="text-slate-500 hover:text-slate-400 text-sm transition-colors">{l}</Link>
+            {[
+              { label: 'Privacy Policy', href: '/privacy' },
+              { label: 'Terms of Service', href: '#' },
+              { label: 'Security', href: '/trust-centre' },
+            ].map(l => (
+              <Link key={l.label} href={l.href} className="text-slate-500 hover:text-slate-400 text-sm transition-colors">{l.label}</Link>
             ))}
           </div>
         </div>

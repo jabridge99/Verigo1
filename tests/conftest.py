@@ -5,6 +5,14 @@ Uses an in-memory SQLite database — no external dependencies required.
 Each test gets a fresh, isolated database via transaction rollback.
 """
 
+import os
+
+# Must be set before app.main is imported — the in-process rate limiter is
+# registered as middleware at import time and its token buckets are shared
+# across the whole pytest session (single app instance), so a full test run
+# can otherwise trip it well before any individual test misbehaves.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

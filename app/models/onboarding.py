@@ -51,6 +51,7 @@ class OnboardingSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String(50), unique=True, nullable=False, index=True)
     industry_id = Column(String(100), nullable=False)
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
     customer_type = Column(Enum(CustomerType), default=CustomerType.individual)
 
     applicant_name = Column(String(300), nullable=False)
@@ -115,6 +116,7 @@ class ImportBatch(Base):
     id = Column(Integer, primary_key=True, index=True)
     batch_id = Column(String(50), unique=True, nullable=False, index=True)
     industry_id = Column(String(100), nullable=False)
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
     source = Column(Enum(ImportSource), nullable=False)
     file_name = Column(String(500))
     total_rows = Column(Integer, default=0)

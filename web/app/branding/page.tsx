@@ -5,17 +5,17 @@ import {
   Palette, Save, RotateCcw, Eye, Shield, CheckCircle,
   AlertTriangle, Globe, Mail, Type, Image,
 } from "lucide-react";
-import { getStoredUser, getToken } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { fetchBranding, saveBranding, resetBranding, applyBrandingToDOM, DEFAULT_BRANDING, BrandingConfig } from "@/lib/branding";
 import { useRouter } from "next/navigation";
 
 const PRESET_PALETTES = [
-  { name: "Verigo", primary: "#2563eb", accent: "#f59e0b", bg: "#060d1a" },
-  { name: "Midnight Green",  primary: "#059669", accent: "#34d399", bg: "#022c22" },
-  { name: "Royal Purple",    primary: "#7c3aed", accent: "#a78bfa", bg: "#0d0414" },
-  { name: "Crimson",         primary: "#dc2626", accent: "#fbbf24", bg: "#0c0303" },
-  { name: "Ocean",           primary: "#0284c7", accent: "#38bdf8", bg: "#020b14" },
-  { name: "Slate Pro",       primary: "#475569", accent: "#94a3b8", bg: "#0a0d12" },
+  { name: "Verigo",          primary: "#2563eb", accent: "#f59e0b", bg: "#060d1a", surface: "#0d1526", text: "#f1f5f9" },
+  { name: "Midnight Green",  primary: "#059669", accent: "#34d399", bg: "#022c22", surface: "#064e3b", text: "#ecfdf5" },
+  { name: "Royal Purple",    primary: "#7c3aed", accent: "#a78bfa", bg: "#0d0414", surface: "#1e0533", text: "#f5f3ff" },
+  { name: "Crimson",         primary: "#dc2626", accent: "#fbbf24", bg: "#0c0303", surface: "#2d0a0a", text: "#fef2f2" },
+  { name: "Ocean",           primary: "#0284c7", accent: "#38bdf8", bg: "#020b14", surface: "#082035", text: "#f0f9ff" },
+  { name: "Slate Pro",       primary: "#475569", accent: "#94a3b8", bg: "#0a0d12", surface: "#1e293b", text: "#f8fafc" },
 ];
 
 function ColorSwatch({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
@@ -74,7 +74,7 @@ export default function BrandingPage() {
     setSaving(true);
     setError("");
     try {
-      const updated = await saveBranding(getToken()!, config);
+      const updated = await saveBranding(config);
       setConfig(updated);
       applyBrandingToDOM(updated);
       setSaved(true);
@@ -89,7 +89,7 @@ export default function BrandingPage() {
   const handleReset = async () => {
     if (!confirm("Reset all branding to Verigo defaults?")) return;
     try {
-      await resetBranding(getToken()!);
+      await resetBranding();
       setConfig(DEFAULT_BRANDING);
       applyBrandingToDOM(DEFAULT_BRANDING);
     } catch {
@@ -98,7 +98,7 @@ export default function BrandingPage() {
   };
 
   const applyPreset = (p: typeof PRESET_PALETTES[0]) => {
-    setConfig(prev => ({ ...prev, primary_color: p.primary, accent_color: p.accent, bg_color: p.bg }));
+    setConfig(prev => ({ ...prev, primary_color: p.primary, accent_color: p.accent, bg_color: p.bg, surface_color: p.surface, text_color: p.text }));
     setSaved(false);
   };
 
@@ -163,9 +163,9 @@ export default function BrandingPage() {
                   <Shield className="w-5 h-5 text-white" />
                 </div>
               )}
-              <span className="font-bold text-lg text-white">{config.company_name || "Your Company"}</span>
+              <span className="font-bold text-lg" style={{ color: config.text_color || "#f1f5f9" }}>{config.company_name || "Your Company"}</span>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap mb-3">
               <span className="px-3 py-1.5 rounded-lg text-sm font-medium text-white" style={{ background: config.primary_color }}>
                 Primary Button
               </span>
@@ -173,10 +173,14 @@ export default function BrandingPage() {
                 Accent Button
               </span>
             </div>
+            <div className="rounded-lg p-3" style={{ background: config.surface_color || "#0d1526" }}>
+              <p className="text-xs font-medium mb-1" style={{ color: config.text_color || "#f1f5f9" }}>Surface / Card</p>
+              <p className="text-xs opacity-60" style={{ color: config.text_color || "#f1f5f9" }}>This is how cards and panels will look.</p>
+            </div>
             {!config.hide_verigo_badge && (
               <p className="text-xs mt-3" style={{ color: config.primary_color }}>Powered by Verigo</p>
             )}
-            <p className="text-xs text-slate-500 mt-1">{config.footer_text}</p>
+            <p className="text-xs mt-1 opacity-50" style={{ color: config.text_color || "#f1f5f9" }}>{config.footer_text}</p>
           </div>
         )}
 
@@ -252,7 +256,7 @@ export default function BrandingPage() {
                     className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs transition-colors"
                   >
                     <span className="flex gap-0.5">
-                      {[p.primary, p.accent, p.bg].map((c, i) => (
+                      {[p.primary, p.accent, p.bg, p.surface, p.text].map((c, i) => (
                         <span key={i} className="w-3 h-3 rounded-full border border-white/20" style={{ background: c }} />
                       ))}
                     </span>
@@ -265,7 +269,9 @@ export default function BrandingPage() {
             <div className="space-y-3">
               <ColorSwatch label="Primary colour" value={config.primary_color || ""} onChange={v => set("primary_color", v)} />
               <ColorSwatch label="Accent colour"  value={config.accent_color || ""}  onChange={v => set("accent_color", v)} />
-              <ColorSwatch label="Background"      value={config.bg_color || ""}      onChange={v => set("bg_color", v)} />
+              <ColorSwatch label="Background"     value={config.bg_color || ""}      onChange={v => set("bg_color", v)} />
+              <ColorSwatch label="Surface colour" value={config.surface_color || ""} onChange={v => set("surface_color", v)} />
+              <ColorSwatch label="Text colour"    value={config.text_color || ""}    onChange={v => set("text_color", v)} />
             </div>
           </section>
 

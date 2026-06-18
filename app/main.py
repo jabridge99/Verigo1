@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+import app.models.aml_program  # noqa: F401
 import app.models.api_key  # noqa: F401
 import app.models.audit  # noqa: F401
 import app.models.billing  # noqa: F401
@@ -17,6 +18,7 @@ import app.models.ifti  # noqa: F401
 import app.models.kyc  # noqa: F401
 import app.models.notification  # noqa: F401
 import app.models.onboarding  # noqa: F401
+import app.models.organisation  # noqa: F401
 import app.models.report  # noqa: F401
 import app.models.retention  # noqa: F401
 import app.models.security_event  # noqa: F401
@@ -37,12 +39,15 @@ from app.api.routes import (
     kyc,
     notifications,
     onboarding,
+    organisations,
     reports,
     retention,
     sanctions,
     security_monitor,
+    storage,
     tenants,
     transactions,
+    verify,
 )
 from app.config import settings
 from app.db.database import Base, SessionLocal, engine
@@ -83,6 +88,19 @@ async def lifespan(app: FastAPI):
             db.close()
     except ImportError:
         log.debug("pack_engine not available — skipping pack seeding")
+
+    from app.services.auth_service import seed_master_admin
+    from app.services.org_service import seed_permission_catalog_and_roles
+
+    db = SessionLocal()
+    try:
+        seed_permission_catalog_and_roles(db)
+        log.info("Permission catalog and system roles seeded")
+        admin = seed_master_admin(db)
+        if admin:
+            log.info("Master admin ensured: %s", admin.email)
+    finally:
+        db.close()
 
     yield
     log.info("Shutdown complete")
@@ -138,6 +156,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     logging.getLogger("tvg").error(
         "Unhandled exception: %s\n%s", exc, traceback.format_exc()
     )
+
+    if settings.sentry_dsn:
+        try:
+            import sentry_sdk
+
+            sentry_sdk.capture_exception(exc)
+        except ImportError:
+            pass
+
     return JSONResponse(
         status_code=500,
         content={"detail": "An internal error occurred. Our team has been notified."},
@@ -165,6 +192,9 @@ app.include_router(connectors.router, prefix="/api/v1")
 app.include_router(retention.router, prefix="/api/v1")
 app.include_router(security_monitor.router, prefix="/api/v1")
 app.include_router(ifti.router, prefix="/api/v1")
+app.include_router(organisations.router, prefix="/api/v1")
+app.include_router(verify.router, prefix="/api/v1")
+app.include_router(storage.router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

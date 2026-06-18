@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
@@ -23,6 +23,9 @@ from app.models.user import User, UserRole
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.services import document_service as svc
 from app.services.document_service import ALLOWED_MIME, MAX_SIZE
+from app.services.storage.factory import get_storage_provider
+from app.services.storage.local import LocalStorageProvider
+from app.services.tenant_scope import assert_tenant
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -72,17 +75,17 @@ def _verify_magic(content: bytes, declared_mime: str) -> bool:
     return False
 
 
-def _assert_tenant(current_user: User, doc_industry_id: Optional[str]):
-    """Explicit check — admin sees all, non-admin must match their industry_id."""
-    if current_user.role == UserRole.admin:
-        return  # admin has cross-tenant read access by design
-    if doc_industry_id and doc_industry_id != current_user.industry_id:
-        raise HTTPException(403, "Cross-tenant document access denied")
+def _assert_tenant(current_user: User, doc) -> None:
+    assert_tenant(current_user, doc.organisation_id, doc.industry_id)
 
 
 def _industry_scope(current_user: User) -> Optional[str]:
     """Return the industry_id to filter on, or None for admin (no filter)."""
     return None if current_user.role == UserRole.admin else current_user.industry_id
+
+
+def _org_scope(current_user: User) -> Optional[int]:
+    return None if current_user.role == UserRole.admin else current_user.primary_organisation_id
 
 
 @router.post("", response_model=DocumentResponse, status_code=201)
@@ -115,13 +118,14 @@ async def upload_document(
     if not _verify_magic(content, mime):
         raise HTTPException(415, "File content does not match declared content type")
 
-    return svc.create_document(
+    return await svc.create_document(
         db,
         filename=file.filename or "upload",
         content=content,
         mime_type=mime,
         uploaded_by=current_user.user_id,
         industry_id=current_user.industry_id,
+        organisation_id=current_user.primary_organisation_id,
         category=category,
         description=description,
         entity_type=entity_type,
@@ -142,6 +146,7 @@ def list_documents(
     return svc.list_documents(
         db,
         industry_id=_industry_scope(current_user),
+        organisation_id=_org_scope(current_user),
         category=category,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -155,7 +160,7 @@ def document_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.document_stats(db, _industry_scope(current_user))
+    return svc.document_stats(db, _industry_scope(current_user), _org_scope(current_user))
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)
@@ -167,12 +172,12 @@ def get_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    _assert_tenant(current_user, doc.industry_id)
+    _assert_tenant(current_user, doc)
     return doc
 
 
 @router.get("/{doc_id}/download")
-def download_document(
+async def download_document(
     doc_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
@@ -180,19 +185,28 @@ def download_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    _assert_tenant(current_user, doc.industry_id)
-    path = svc.get_file_path(doc)
-    if not path.exists():
+    _assert_tenant(current_user, doc)
+
+    provider = get_storage_provider(doc.industry_id)
+    if not await provider.exists(doc.stored_name):
         raise HTTPException(404, "File not found on storage")
-    return FileResponse(
-        path=str(path),
-        filename=doc.filename,
-        media_type=doc.mime_type or "application/octet-stream",
-        headers={
-            "Content-Disposition": f'attachment; filename="{doc.filename}"',
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+
+    if isinstance(provider, LocalStorageProvider):
+        # Stream straight from disk — no presigned-URL support for local dev.
+        content = await svc.download_bytes(doc)
+        return StreamingResponse(
+            iter([content]),
+            media_type=doc.mime_type or "application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{doc.filename}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    # Cloud backends: redirect to a short-lived pre-signed URL so the file
+    # streams directly from the object store, not through this API process.
+    url = await svc.get_access_url(doc, expires_in=300)
+    return RedirectResponse(url)
 
 
 @router.patch("/{doc_id}", response_model=DocumentResponse)
@@ -202,7 +216,9 @@ def update_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    doc = svc.update_document(db, doc_id, data, _industry_scope(current_user))
+    doc = svc.update_document(
+        db, doc_id, data, _industry_scope(current_user), _org_scope(current_user)
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc
@@ -216,17 +232,22 @@ def archive_document(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    doc = svc.archive_document(db, doc_id, _industry_scope(current_user))
+    doc = svc.archive_document(
+        db, doc_id, _industry_scope(current_user), _org_scope(current_user)
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc
 
 
 @router.delete("/{doc_id}", status_code=204)
-def delete_document(
+async def delete_document(
     doc_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    if not svc.delete_document(db, doc_id, _industry_scope(current_user)):
+    deleted = await svc.delete_document(
+        db, doc_id, _industry_scope(current_user), _org_scope(current_user)
+    )
+    if not deleted:
         raise HTTPException(404, "Document not found")

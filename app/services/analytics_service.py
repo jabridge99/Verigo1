@@ -5,7 +5,7 @@ Analytics service — aggregates compliance metrics for the reporting dashboard.
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
@@ -24,13 +24,26 @@ def _days_ago(n: int):
     return _now() - timedelta(days=n)
 
 
+def _scope(q, model, industry_id: Optional[str], organisation_id: Optional[int]):
+    if organisation_id:
+        return q.filter(
+            or_(
+                model.organisation_id == organisation_id,
+                (model.organisation_id.is_(None)) & (model.industry_id == industry_id),
+            )
+        )
+    if industry_id:
+        return q.filter(model.industry_id == industry_id)
+    return q
+
+
 # ── Customer Analytics ─────────────────────────────────────────────────────────
 
 
-def customer_risk_breakdown(db: Session, industry_id: Optional[str] = None):
-    q = db.query(Customer)
-    if industry_id:
-        q = q.filter(Customer.industry_id == industry_id)
+def customer_risk_breakdown(
+    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+):
+    q = _scope(db.query(Customer), Customer, industry_id, organisation_id)
     total = q.count()
     breakdown = {}
     for level in RiskLevel:
@@ -39,15 +52,17 @@ def customer_risk_breakdown(db: Session, industry_id: Optional[str] = None):
 
 
 def customer_onboarding_trend(
-    db: Session, days: int = 30, industry_id: Optional[str] = None
+    db: Session,
+    days: int = 30,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[int] = None,
 ):
     since = _days_ago(days)
     q = db.query(
         func.date(Customer.created_at).label("day"),
         func.count().label("count"),
     ).filter(Customer.created_at >= since)
-    if industry_id:
-        q = q.filter(Customer.industry_id == industry_id)
+    q = _scope(q, Customer, industry_id, organisation_id)
     rows = q.group_by(func.date(Customer.created_at)).order_by("day").all()
     return [{"date": str(r.day), "count": r.count} for r in rows]
 
@@ -56,7 +71,10 @@ def customer_onboarding_trend(
 
 
 def transaction_volume_trend(
-    db: Session, days: int = 30, industry_id: Optional[str] = None
+    db: Session,
+    days: int = 30,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[int] = None,
 ):
     since = _days_ago(days)
     q = db.query(
@@ -64,18 +82,17 @@ def transaction_volume_trend(
         func.count().label("count"),
         func.coalesce(func.sum(Transaction.amount), 0).label("volume"),
     ).filter(Transaction.created_at >= since)
-    if industry_id:
-        q = q.filter(Transaction.industry_id == industry_id)
+    q = _scope(q, Transaction, industry_id, organisation_id)
     rows = q.group_by(func.date(Transaction.created_at)).order_by("day").all()
     return [
         {"date": str(r.day), "count": r.count, "volume": float(r.volume)} for r in rows
     ]
 
 
-def flagged_transaction_stats(db: Session, industry_id: Optional[str] = None):
-    q = db.query(Transaction)
-    if industry_id:
-        q = q.filter(Transaction.industry_id == industry_id)
+def flagged_transaction_stats(
+    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+):
+    q = _scope(db.query(Transaction), Transaction, industry_id, organisation_id)
     total = q.count()
     suspicious = q.filter(Transaction.is_suspicious == 1).count()
     return {
@@ -88,10 +105,13 @@ def flagged_transaction_stats(db: Session, industry_id: Optional[str] = None):
 # ── KYC Analytics ─────────────────────────────────────────────────────────────
 
 
-def kyc_status_breakdown(db: Session, industry_id: Optional[str] = None):
+def kyc_status_breakdown(
+    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+):
     q = db.query(KYCRecord)
-    if industry_id:
-        q = q.filter(KYCRecord.industry_id == industry_id)
+    if industry_id or organisation_id:
+        q = q.join(Customer, KYCRecord.customer_id == Customer.id)
+        q = _scope(q, Customer, industry_id, organisation_id)
     breakdown = {}
     for status in KYCStatus:
         breakdown[status.value] = q.filter(KYCRecord.status == status).count()
@@ -101,10 +121,10 @@ def kyc_status_breakdown(db: Session, industry_id: Optional[str] = None):
 # ── Reporting Analytics ────────────────────────────────────────────────────────
 
 
-def report_stats(db: Session, industry_id: Optional[str] = None):
-    q = db.query(Report)
-    if industry_id:
-        q = q.filter(Report.industry_id == industry_id)
+def report_stats(
+    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+):
+    q = _scope(db.query(Report), Report, industry_id, organisation_id)
     total = q.count()
     by_status = {}
     for s in ReportStatus:
@@ -116,15 +136,17 @@ def report_stats(db: Session, industry_id: Optional[str] = None):
 
 
 def report_submission_trend(
-    db: Session, days: int = 90, industry_id: Optional[str] = None
+    db: Session,
+    days: int = 90,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[int] = None,
 ):
     since = _days_ago(days)
     q = db.query(
         func.date(Report.created_at).label("day"),
         func.count().label("count"),
     ).filter(Report.created_at >= since)
-    if industry_id:
-        q = q.filter(Report.industry_id == industry_id)
+    q = _scope(q, Report, industry_id, organisation_id)
     rows = q.group_by(func.date(Report.created_at)).order_by("day").all()
     return [{"date": str(r.day), "count": r.count} for r in rows]
 
@@ -133,15 +155,17 @@ def report_submission_trend(
 
 
 def audit_activity_trend(
-    db: Session, days: int = 30, industry_id: Optional[str] = None
+    db: Session,
+    days: int = 30,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[int] = None,
 ):
     since = _days_ago(days)
     q = db.query(
         func.date(AuditLog.created_at).label("day"),
         func.count().label("count"),
     ).filter(AuditLog.created_at >= since)
-    if industry_id:
-        q = q.filter(AuditLog.industry_id == industry_id)
+    q = _scope(q, AuditLog, industry_id, organisation_id)
     rows = q.group_by(func.date(AuditLog.created_at)).order_by("day").all()
     return [{"date": str(r.day), "count": r.count} for r in rows]
 
@@ -149,11 +173,13 @@ def audit_activity_trend(
 # ── Composite Dashboard Summary ────────────────────────────────────────────────
 
 
-def dashboard_summary(db: Session, industry_id: Optional[str] = None):
-    customers = customer_risk_breakdown(db, industry_id)
-    txn = flagged_transaction_stats(db, industry_id)
-    kyc = kyc_status_breakdown(db, industry_id)
-    rpt = report_stats(db, industry_id)
+def dashboard_summary(
+    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+):
+    customers = customer_risk_breakdown(db, industry_id, organisation_id)
+    txn = flagged_transaction_stats(db, industry_id, organisation_id)
+    kyc = kyc_status_breakdown(db, industry_id, organisation_id)
+    rpt = report_stats(db, industry_id, organisation_id)
 
     pending_kyc = kyc["by_status"].get("pending_review", 0)
     overdue_reports = rpt["by_status"].get("draft", 0)

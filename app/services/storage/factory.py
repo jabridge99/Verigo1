@@ -6,7 +6,7 @@ Resolution order:
 2. Application-wide settings (STORAGE_BACKEND env var)
 3. Default: local filesystem
 
-Supported backends: local, s3, azure, gcs
+Supported backends: local, s3, r2, azure, gcs
 """
 
 from __future__ import annotations
@@ -50,6 +50,21 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
             endpoint_url=cfg.get("endpoint_url"),  # Backblaze / MinIO endpoint
         )
 
+    if backend == "r2":
+        from .s3 import S3StorageProvider
+
+        # Cloudflare R2 is S3-compatible; the only difference is the
+        # account-scoped endpoint and that region is ignored (but required
+        # by boto3's client constructor, hence "auto").
+        return S3StorageProvider(
+            bucket=cfg["bucket"],
+            region="auto",
+            access_key=cfg["access_key"],
+            secret_key=cfg["secret_key"],
+            endpoint_url=cfg.get("endpoint_url")
+            or f"https://{cfg['account_id']}.r2.cloudflarestorage.com",
+        )
+
     if backend == "azure":
         from .azure_blob import AzureBlobStorageProvider
 
@@ -68,6 +83,32 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
         )
 
     raise ValueError(f"Unknown storage backend: {backend}")
+
+
+def invalidate_tenant_cache(industry_id: str) -> None:
+    """Drop any cached provider for this tenant — call after storage_config changes
+    so credential rotations / backend switches take effect immediately."""
+    for key in [k for k in _provider_cache if k.startswith(f"{industry_id}:")]:
+        del _provider_cache[key]
+
+
+_SECRET_FIELDS = {"secret_key", "account_key", "credentials_json"}
+
+
+def _decrypt_secrets(cfg: dict) -> dict:
+    from app.services.crypto import decrypt_secret
+
+    return {
+        k: (decrypt_secret(v) if k in _SECRET_FIELDS and isinstance(v, str) else v)
+        for k, v in cfg.items()
+    }
+
+
+def build_provider_from_config(cfg: dict) -> StorageProvider:
+    """Build (uncached) a provider directly from a storage_config dict — used to
+    validate a tenant's custom storage settings before persisting them."""
+    backend = cfg.get("backend", "local")
+    return _build_provider(backend, cfg)
 
 
 def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
@@ -95,6 +136,7 @@ def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
                         if isinstance(tenant.storage_config, str)
                         else tenant.storage_config
                     )
+                    sc = _decrypt_secrets(sc)
                     backend = sc.get("backend", "local")
                     cache_key = f"{industry_id}:{backend}"
                     if cache_key not in _provider_cache:
@@ -108,6 +150,10 @@ def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
             )
 
     # Application-wide default
+    return _default_provider()
+
+
+def _default_provider() -> StorageProvider:
     backend = getattr(settings, "storage_backend", "local")
     if backend not in _provider_cache:
         cfg: dict = {}
@@ -118,6 +164,13 @@ def get_storage_provider(industry_id: Optional[str] = None) -> StorageProvider:
                 "access_key": getattr(settings, "aws_access_key_id", ""),
                 "secret_key": getattr(settings, "aws_secret_access_key", ""),
                 "endpoint_url": getattr(settings, "s3_endpoint_url", None),
+            }
+        elif backend == "r2":
+            cfg = {
+                "bucket": getattr(settings, "r2_bucket", ""),
+                "account_id": getattr(settings, "r2_account_id", ""),
+                "access_key": getattr(settings, "r2_access_key_id", ""),
+                "secret_key": getattr(settings, "r2_secret_access_key", ""),
             }
         elif backend == "azure":
             cfg = {

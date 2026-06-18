@@ -4,6 +4,8 @@ import { useState } from "react";
 import { CheckCircle, Upload, ChevronRight, ChevronLeft, Shield, AlertCircle } from "lucide-react";
 import clsx from "clsx";
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 interface Step { step: number; name: string; description: string; }
 interface PortalData {
   session_id: string; applicant_name: string; applicant_email: string;
@@ -24,13 +26,13 @@ export default function CustomerPortal({ token, data }: { token: string; data: P
   const handleNext = async () => {
     setSubmitting(true); setError(null);
     try {
-      const res = await fetch(`/api/v1/onboarding/portal/${token}/step`, {
+      const res = await fetch(`${API}/api/v1/onboarding/portal/${token}/step`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ step: currentStep, data: formData }),
       });
       if (!res.ok) throw new Error(await res.text());
       if (isLastStep) {
-        const sub = await fetch(`/api/v1/onboarding/portal/${token}/submit`, { method: "POST" });
+        const sub = await fetch(`${API}/api/v1/onboarding/portal/${token}/submit`, { method: "POST" });
         setCompletionResult(await sub.json());
         setCompleted(true);
       } else {

@@ -21,5 +21,8 @@ class IndustryTenant(Base):
     status = Column(String(30), default="active")
     settings = Column(JSON, default=dict)
     branding = Column(JSON, default=dict)
+    # Per-tenant storage override — {"backend": "s3"|"azure"|"gcs"|"local", ...creds}.
+    # Empty/None means the tenant uses the platform-wide default backend.
+    storage_config = Column(JSON, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

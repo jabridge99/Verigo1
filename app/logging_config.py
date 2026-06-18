@@ -63,7 +63,8 @@ def setup_logging() -> None:
                 environment=settings.environment,
                 release=f"tvg@{settings.version}",
                 integrations=[FastApiIntegration(), SqlalchemyIntegration()],
-                traces_sample_rate=0.1,
+                traces_sample_rate=settings.sentry_traces_sample_rate,
+                send_default_pii=False,
             )
             logging.getLogger("tvg").info("Sentry initialised")
         except ImportError:
