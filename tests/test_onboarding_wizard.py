@@ -85,7 +85,7 @@ def test_full_onboarding_wizard_flow_through_first_customer(client, db):
             "address": "3 Customer Rd",
             "email": "first.customer@example.com",
             "phone": "0411111111",
-            "industry": "cryptocurrency",
+            "industry": "vasp",
         },
         headers=headers,
     )
