@@ -11,6 +11,22 @@ def get_provider() -> CryptoWalletProvider:
         from .chainalysis import ChainalysisProvider
         return ChainalysisProvider(api_key=settings.chainalysis_api_key)
 
+    if provider == "ofac_sdn":
+        from .ofac_sdn import OFACSDNProvider
+        return OFACSDNProvider()
+
+    if provider == "crypto_apis":
+        from .crypto_apis import CryptoAPIsProvider
+        return CryptoAPIsProvider(api_key=settings.cryptoapis_api_key)
+
+    if provider == "scorechain":
+        from .scorechain import ScorechainProvider
+        return ScorechainProvider(api_key=settings.scorechain_api_key)
+
+    if provider == "goplus":
+        from .goplus import GoPlusProvider
+        return GoPlusProvider(api_key=settings.goplus_api_key)
+
     if provider in ("trm_labs", "elliptic"):
         raise NotImplementedError(f"{provider} provider not yet implemented")
 

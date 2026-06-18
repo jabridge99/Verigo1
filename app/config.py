@@ -102,10 +102,16 @@ class Settings(BaseSettings):
     # Per-check cost we pay the provider, and our markup when billing tenants
     sumsub_unit_cost_aud: float = 2.50
     usage_markup_pct: float = 50.0       # tenant is billed unit_cost * (1 + pct/100)
-    # Crypto wallet screening: internal | chainalysis | trm_labs | elliptic
-    # chainalysis = free sanctions-only oracle (no per-check cost — not billed as usage)
+    # Crypto wallet screening: internal | chainalysis | ofac_sdn | crypto_apis |
+    # scorechain | goplus | trm_labs | elliptic
+    # chainalysis/ofac_sdn/scorechain/goplus = free or free-tier sanctions-only
+    # checks (no per-check cost — not billed as usage). crypto_apis is real
+    # pay-as-you-go (fits the usage-billing pattern, no enterprise minimum).
     crypto_provider: str = "internal"
     chainalysis_api_key: str = ""
+    cryptoapis_api_key: str = ""
+    scorechain_api_key: str = ""
+    goplus_api_key: str = ""
     # OCR / document extraction: stub | textract | google_vision
     ocr_provider: str = "stub"
     # Email: smtp | sendgrid | stub

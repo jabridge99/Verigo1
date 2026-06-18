@@ -17,6 +17,11 @@ class WalletIdentification:
 
 @dataclass
 class WalletScreeningResult:
+    # True if the address was flagged by the provider at all — for
+    # sanctions-only providers (Chainalysis, OFAC SDN) this means a literal
+    # sanctions-list match; for aggregator providers (GoPlus, Scorechain,
+    # Crypto APIs) it means *any* risk flag fired (sanctions, mixer, darknet,
+    # scam, etc) — see `identifications` for the specific category breakdown.
     is_sanctioned: bool
     identifications: list[WalletIdentification] = field(default_factory=list)
     provider: str = ""

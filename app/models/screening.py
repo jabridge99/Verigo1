@@ -195,6 +195,10 @@ class WalletRiskCategory(str, enum.Enum):
 class CryptoProvider(str, enum.Enum):
     internal    = "internal"
     chainalysis = "chainalysis"
+    ofac_sdn    = "ofac_sdn"
+    crypto_apis = "crypto_apis"
+    scorechain  = "scorechain"
+    goplus      = "goplus"
     trm_labs    = "trm_labs"
     elliptic    = "elliptic"
     other       = "other"

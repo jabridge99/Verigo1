@@ -91,6 +91,98 @@ def test_get_crypto_provider_returns_chainalysis_when_configured(monkeypatch):
     assert isinstance(provider, ChainalysisProvider)
 
 
+@pytest.mark.parametrize(
+    "provider_name,extra_setting",
+    [
+        ("ofac_sdn", None),
+        ("crypto_apis", ("cryptoapis_api_key", "test-key")),
+        ("scorechain", ("scorechain_api_key", "test-key")),
+        ("goplus", None),
+    ],
+)
+def test_get_crypto_provider_returns_each_provider(monkeypatch, provider_name, extra_setting):
+    monkeypatch.setattr(config_module.settings, "crypto_provider", provider_name)
+    if extra_setting:
+        monkeypatch.setattr(config_module.settings, extra_setting[0], extra_setting[1])
+    provider = crypto_factory.get_provider()
+    assert provider.name == provider_name
+
+
+def test_crypto_apis_provider_requires_api_key():
+    from app.integrations.crypto.crypto_apis import CryptoAPIsProvider
+    with pytest.raises(ProviderUnavailableError):
+        CryptoAPIsProvider("")
+
+
+def test_scorechain_provider_requires_api_key():
+    from app.integrations.crypto.scorechain import ScorechainProvider
+    with pytest.raises(ProviderUnavailableError):
+        ScorechainProvider("")
+
+
+def test_goplus_provider_allows_no_api_key():
+    from app.integrations.crypto.goplus import GoPlusProvider
+    GoPlusProvider("")  # GoPlus has a free unauthenticated quota
+
+
+# ── OFACSDNProvider ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_ofac_sdn_unsupported_network_returns_clear():
+    from app.integrations.crypto.ofac_sdn import OFACSDNProvider
+    provider = OFACSDNProvider()
+    result = await provider.screen_address("some-address", network="other")
+    assert result.is_sanctioned is False
+
+
+@pytest.mark.asyncio
+async def test_ofac_sdn_matches_cached_address(monkeypatch):
+    from app.integrations.crypto.ofac_sdn import OFACSDNProvider
+    provider = OFACSDNProvider()
+
+    class _Resp:
+        status_code = 200
+        text = "1BadAddress\n2AnotherAddress\n"
+        def raise_for_status(self):
+            pass
+
+    async def _fake_get(self, url):
+        assert "sanctioned_addresses_XBT.txt" in url
+        return _Resp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+    result = await provider.screen_address("1BadAddress", network="bitcoin")
+    assert result.is_sanctioned is True
+    assert result.identifications[0].name == "OFAC SDN"
+
+    # second call should hit the in-memory cache, not refetch
+    async def _fail_get(self, url):
+        raise AssertionError("should not refetch within TTL")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fail_get)
+    result2 = await provider.screen_address("2AnotherAddress", network="bitcoin")
+    assert result2.is_sanctioned is True
+
+
+@pytest.mark.asyncio
+async def test_ofac_sdn_no_match(monkeypatch):
+    from app.integrations.crypto.ofac_sdn import OFACSDNProvider
+    provider = OFACSDNProvider()
+
+    class _Resp:
+        status_code = 200
+        text = "1BadAddress\n"
+        def raise_for_status(self):
+            pass
+
+    async def _fake_get(self, url):
+        return _Resp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+    result = await provider.screen_address("1CleanAddress", network="bitcoin")
+    assert result.is_sanctioned is False
+
+
 # ── /screening/crypto-wallet route ──────────────────────────────────────────
 
 def test_crypto_wallet_route_falls_back_to_simulation_when_unconfigured(
