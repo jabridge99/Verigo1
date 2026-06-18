@@ -3,12 +3,20 @@ Phase C — auto-generate an AML/CTF program for a newly onboarded
 organisation, from its chosen industry and risk profile.
 """
 
+import hashlib
+import json
 import uuid
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.aml_program import AMLProgram, AMLProgramItem, AMLProgramStatus
+from app.models.aml_program import (
+    AMLProgram,
+    AMLProgramItem,
+    AMLProgramStatus,
+    AMLProgramVersion,
+    new_qr_token,
+)
 from app.models.organisation import Organisation, RiskProfile
 
 # Baseline control set every organisation needs, regardless of industry.
@@ -248,10 +256,36 @@ def build_program_items(industry_id: str, risk_profile: RiskProfile) -> list[dic
     ]
 
 
+def _content_hash(items: list[dict]) -> str:
+    canonical = json.dumps(items, sort_keys=True, default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _snapshot_version(db: Session, program: AMLProgram, items: list[dict]) -> AMLProgramVersion:
+    """Record an immutable snapshot of this version's item set — Verigo's
+    permanent record-keeping copy, independent of what the customer can see
+    or whether they later cancel."""
+    snapshot = AMLProgramVersion(
+        program_id=program.id,
+        organisation_id=program.organisation_id,
+        version=program.version,
+        industry_id=program.industry_id,
+        risk_profile=program.risk_profile,
+        items_snapshot=items,
+        item_count=len(items),
+        content_hash=_content_hash(items),
+        qr_token=new_qr_token(),
+    )
+    db.add(snapshot)
+    return snapshot
+
+
 def generate_program(db: Session, org: Organisation) -> AMLProgram:
     """Generate (or regenerate) an organisation's AML/CTF program from its
     chosen industry_id and risk_profile. Idempotent — re-running replaces
-    the item set and bumps the version."""
+    the item set and bumps the version. Locked generation: there is no path
+    to regenerate an earlier version, only forward — each new version is
+    permanently snapshotted before the live item set is replaced."""
     if not org.industry_id:
         raise ValueError("Organisation has no industry selected")
     if not org.risk_profile:
@@ -278,7 +312,11 @@ def generate_program(db: Session, org: Organisation) -> AMLProgram:
         db.add(program)
     db.flush()
 
-    for i, item in enumerate(build_program_items(org.industry_id, org.risk_profile)):
+    built_items = [
+        {**item, "is_required": item.get("is_required", True)}
+        for item in build_program_items(org.industry_id, org.risk_profile)
+    ]
+    for i, item in enumerate(built_items):
         db.add(
             AMLProgramItem(
                 program_id=program.id,
@@ -290,6 +328,7 @@ def generate_program(db: Session, org: Organisation) -> AMLProgram:
                 sort_order=i,
             )
         )
+    _snapshot_version(db, program, built_items)
     db.commit()
     db.refresh(program)
     return program
@@ -306,6 +345,56 @@ def get_program_items(db: Session, program: AMLProgram) -> list[AMLProgramItem]:
         .order_by(AMLProgramItem.sort_order)
         .all()
     )
+
+
+# ── Retention — version history ─────────────────────────────────────────────
+
+
+def list_versions(db: Session, program: AMLProgram) -> list[AMLProgramVersion]:
+    return (
+        db.query(AMLProgramVersion)
+        .filter(AMLProgramVersion.program_id == program.id)
+        .order_by(AMLProgramVersion.version.desc())
+        .all()
+    )
+
+
+def get_version(db: Session, program: AMLProgram, version: int) -> Optional[AMLProgramVersion]:
+    return (
+        db.query(AMLProgramVersion)
+        .filter(AMLProgramVersion.program_id == program.id, AMLProgramVersion.version == version)
+        .first()
+    )
+
+
+def get_version_by_qr_token(db: Session, qr_token: str) -> Optional[AMLProgramVersion]:
+    return db.query(AMLProgramVersion).filter(AMLProgramVersion.qr_token == qr_token).first()
+
+
+# ── "Rev up" — program health score / improvement suggestions ──────────────
+
+
+def compute_health(db: Session, program: AMLProgram) -> dict:
+    """Compare the org's current live item set against what the template
+    would generate today for its industry/risk profile. Surfaces controls
+    the template has gained since the program was last generated, so we can
+    nudge the customer to regenerate rather than let the program go stale."""
+    current_titles = {item.title for item in get_program_items(db, program)}
+    template_items = build_program_items(program.industry_id, RiskProfile(program.risk_profile))
+    template_titles = {item["title"] for item in template_items}
+
+    missing = [item for item in template_items if item["title"] not in current_titles]
+    matched = len(template_titles & current_titles)
+    score = round(100 * matched / len(template_titles)) if template_titles else 100
+
+    return {
+        "score": score,
+        "up_to_date": not missing,
+        "suggestions": [
+            {"category": item["category"], "title": item["title"], "description": item.get("description")}
+            for item in missing
+        ],
+    }
 
 
 # ── Trial preview ────────────────────────────────────────────────────────────

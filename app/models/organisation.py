@@ -77,6 +77,12 @@ class Organisation(Base):
     aml_accountability_ack = Column(Boolean, default=False)
     aml_accountability_ack_at = Column(DateTime(timezone=True))
     aml_accountability_ack_by = Column(String(200))
+    # Retention / IP terms-of-use acceptance — tied to the same onboarding
+    # checkbox as the accountability acknowledgement (see Phase I).
+    retention_terms_accepted = Column(Boolean, default=False)
+    retention_terms_accepted_at = Column(DateTime(timezone=True))
+    retention_terms_accepted_by = Column(String(200))
+    retention_terms_version = Column(String(20))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

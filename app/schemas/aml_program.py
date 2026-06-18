@@ -29,3 +29,48 @@ class AMLProgramResponse(BaseModel):
     total_items: Optional[int] = None
 
     model_config = {"from_attributes": True}
+
+
+class AMLProgramVersionResponse(BaseModel):
+    version: int
+    generated_at: Optional[datetime] = None
+    item_count: int
+    content_hash: str
+    qr_token: str
+    is_current: bool
+    locked: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class AMLProgramVersionListResponse(BaseModel):
+    versions: list[AMLProgramVersionResponse]
+    full_history_available: bool
+
+
+class AMLProgramVersionDetailResponse(BaseModel):
+    version: int
+    generated_at: Optional[datetime] = None
+    item_count: int
+    content_hash: str
+    qr_token: str
+    items: list[AMLProgramItemResponse]
+
+
+class ExportRequest(BaseModel):
+    reason: str
+
+
+class VerificationResponse(BaseModel):
+    program_id: Optional[str] = None
+    version: int
+    generated_at: Optional[datetime] = None
+    content_hash: str
+    item_count: int
+    is_current: bool
+
+
+class ProgramHealthResponse(BaseModel):
+    score: int
+    up_to_date: bool
+    suggestions: list[dict]

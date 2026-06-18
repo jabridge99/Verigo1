@@ -24,9 +24,16 @@ class RiskAssessmentResponse(BaseModel):
 
 class AccountabilityAckRequest(BaseModel):
     acknowledged: bool
+    # Single onboarding checkbox covers both accountability and the
+    # retention/IP terms of use — both default to the same value as
+    # `acknowledged` unless explicitly overridden.
+    retention_terms_accepted: Optional[bool] = None
 
 
 class AccountabilityAckResponse(BaseModel):
     aml_accountability_ack: bool
     aml_accountability_ack_at: Optional[datetime] = None
     aml_accountability_ack_by: Optional[str] = None
+    retention_terms_accepted: bool = False
+    retention_terms_accepted_at: Optional[datetime] = None
+    retention_terms_version: Optional[str] = None

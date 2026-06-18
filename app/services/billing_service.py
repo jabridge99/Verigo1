@@ -183,6 +183,22 @@ def current_plan(db: Session, industry_id: str, organisation_id: Optional[int] =
     return sub.plan if sub else BillingPlan.free_trial
 
 
+_INACTIVE_STATUSES = {
+    SubscriptionStatus.canceled,
+    SubscriptionStatus.unpaid,
+    SubscriptionStatus.paused,
+    SubscriptionStatus.incomplete,
+}
+
+
+def is_active_subscriber(db: Session, industry_id: str, organisation_id: Optional[int] = None) -> bool:
+    """Whether the org currently has a live (non-canceled) subscription.
+    Used to gate retention features like full version history — once a
+    subscription lapses, access narrows to the latest version only."""
+    sub = get_subscription(db, industry_id, organisation_id)
+    return bool(sub and sub.status not in _INACTIVE_STATUSES)
+
+
 # ── Price resolution ───────────────────────────────────────────────────────────
 
 

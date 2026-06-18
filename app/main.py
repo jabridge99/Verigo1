@@ -47,6 +47,7 @@ from app.api.routes import (
     storage,
     tenants,
     transactions,
+    verify,
 )
 from app.config import settings
 from app.db.database import Base, SessionLocal, engine
@@ -183,6 +184,7 @@ app.include_router(retention.router, prefix="/api/v1")
 app.include_router(security_monitor.router, prefix="/api/v1")
 app.include_router(ifti.router, prefix="/api/v1")
 app.include_router(organisations.router, prefix="/api/v1")
+app.include_router(verify.router, prefix="/api/v1")
 app.include_router(storage.router, prefix="/api/v1")
 
 

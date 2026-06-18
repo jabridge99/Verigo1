@@ -11,7 +11,14 @@ from app.api.routes.auth import _current_user
 from app.db.database import get_db
 from app.models.organisation import MembershipStatus, Organisation, OrganisationUser, Permission, Role
 from app.models.user import User
-from app.schemas.aml_program import AMLProgramResponse
+from app.schemas.aml_program import (
+    AMLProgramResponse,
+    AMLProgramVersionDetailResponse,
+    AMLProgramVersionListResponse,
+    AMLProgramVersionResponse,
+    ExportRequest,
+    ProgramHealthResponse,
+)
 from app.schemas.organisation import (
     MemberAdd,
     MemberResponse,
@@ -27,7 +34,13 @@ from app.schemas.risk_assessment import (
     AccountabilityAckResponse,
     RiskAssessmentResponse,
 )
-from app.services import aml_program_service, audit_service, billing_service, risk_assessment_service
+from app.services import (
+    aml_program_service,
+    audit_service,
+    billing_service,
+    program_retention_service,
+    risk_assessment_service,
+)
 from app.services.auth_service import get_user_by_email
 from app.services.org_service import (
     SYSTEM_ROLE_TEMPLATES,
@@ -186,6 +199,139 @@ def get_aml_program(
     return _program_response(db, program)
 
 
+# ── Retention — version history, export, verification, health ──────────────
+
+
+@router.get("/{org_id}/aml-program/versions", response_model=AMLProgramVersionListResponse)
+def list_aml_program_versions(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """Full version history for active subscribers; lapsed/canceled
+    organisations see only the latest version's metadata."""
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    program = aml_program_service.get_program(db, org)
+    if not program:
+        raise HTTPException(404, "No AML program generated yet")
+
+    versions = aml_program_service.list_versions(db, program)
+    full_history = billing_service.is_active_subscriber(db, org.industry_id, org.id)
+    if not full_history:
+        versions = program_retention_service.latest_only(versions)
+
+    return AMLProgramVersionListResponse(
+        versions=[
+            AMLProgramVersionResponse(
+                version=v.version,
+                generated_at=v.generated_at,
+                item_count=v.item_count,
+                content_hash=v.content_hash,
+                qr_token=v.qr_token,
+                is_current=(v.version == program.version),
+            )
+            for v in versions
+        ],
+        full_history_available=full_history,
+    )
+
+
+@router.get("/{org_id}/aml-program/versions/{version}", response_model=AMLProgramVersionDetailResponse)
+def get_aml_program_version(
+    org_id: str,
+    version: int,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve a specific version's full content. For active subscribers
+    this is unrestricted; for lapsed organisations, retrieving anything
+    other than the latest version goes through the throttled retention
+    process (8-hour cooldown, capped at 3 lifetime retrievals)."""
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    program = aml_program_service.get_program(db, org)
+    if not program:
+        raise HTTPException(404, "No AML program generated yet")
+
+    full_history = billing_service.is_active_subscriber(db, org.industry_id, org.id)
+    if full_history or version == program.version:
+        snapshot = aml_program_service.get_version(db, program, version)
+        if not snapshot:
+            raise HTTPException(404, "Version not found")
+    else:
+        try:
+            snapshot = program_retention_service.request_old_version(
+                db, org, program, version, current_user.email
+            )
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        except PermissionError as e:
+            raise HTTPException(429, str(e))
+
+    return AMLProgramVersionDetailResponse(
+        version=snapshot.version,
+        generated_at=snapshot.generated_at,
+        item_count=snapshot.item_count,
+        content_hash=snapshot.content_hash,
+        qr_token=snapshot.qr_token,
+        items=snapshot.items_snapshot,
+    )
+
+
+@router.post("/{org_id}/aml-program/export")
+def export_aml_program(
+    org_id: str,
+    payload: ExportRequest,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export the current AML program. Every export is logged with the
+    requester's stated reason — if a customer can't produce this trail on
+    request, that's itself a compliance gap they have to explain."""
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    if not payload.reason or not payload.reason.strip():
+        raise HTTPException(400, "An export reason is required")
+
+    program = aml_program_service.get_program(db, org)
+    if not program:
+        raise HTTPException(404, "No AML program generated yet")
+
+    response = _program_response(db, program)
+
+    audit_service.log_action(
+        db,
+        action="aml_program_exported",
+        entity_type="aml_program",
+        entity_id=program.program_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        industry_id=org.industry_id,
+        organisation_id=org.id,
+        notes=payload.reason,
+        after_state={"version": program.version, "is_preview": response.is_preview},
+    )
+    return response
+
+
+@router.get("/{org_id}/aml-program/health", response_model=ProgramHealthResponse)
+def get_aml_program_health(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """'Rev up' nudge — compares the live program against what the current
+    template would generate, surfacing improvements available since the
+    program was last regenerated."""
+    org = _get_org_or_404(db, org_id)
+    _require_member(db, org, current_user)
+    program = aml_program_service.get_program(db, org)
+    if not program:
+        raise HTTPException(404, "No AML program generated yet")
+    return ProgramHealthResponse(**aml_program_service.compute_health(db, program))
+
+
 # ── Risk Assessment (Phase I onboarding) ────────────────────────────────────
 
 
@@ -232,6 +378,9 @@ def get_risk_assessment(
     return _risk_assessment_response(db, org, assessment)
 
 
+RETENTION_TERMS_VERSION = "2026-06-18"
+
+
 @router.post("/{org_id}/aml-accountability/ack", response_model=AccountabilityAckResponse)
 def acknowledge_aml_accountability(
     org_id: str,
@@ -240,15 +389,29 @@ def acknowledge_aml_accountability(
     db: Session = Depends(get_db),
 ):
     """The industry owner explicitly accepts accountability for the
-    organisation's own AML/CTF program — required to complete onboarding."""
+    organisation's own AML/CTF program, and the retention/IP terms of use
+    (Verigo owns the template engine and retains a permanent copy for
+    record-keeping; the org gets a revocable license to its generated
+    instance) — a single checkbox covers both, required to complete
+    onboarding."""
     org = _get_org_or_404(db, org_id)
     _require_permission(db, org, current_user, "org:manage")
     if not payload.acknowledged:
         raise HTTPException(400, "Acknowledgement must be accepted to proceed")
 
+    retention_accepted = (
+        payload.retention_terms_accepted
+        if payload.retention_terms_accepted is not None
+        else payload.acknowledged
+    )
+
     org.aml_accountability_ack = True
     org.aml_accountability_ack_at = datetime.now(timezone.utc)
     org.aml_accountability_ack_by = current_user.email
+    org.retention_terms_accepted = retention_accepted
+    org.retention_terms_accepted_at = datetime.now(timezone.utc) if retention_accepted else None
+    org.retention_terms_accepted_by = current_user.email if retention_accepted else None
+    org.retention_terms_version = RETENTION_TERMS_VERSION if retention_accepted else None
     db.commit()
     db.refresh(org)
 
@@ -261,12 +424,19 @@ def acknowledge_aml_accountability(
         actor_role=current_user.role.value if current_user.role else None,
         industry_id=org.industry_id,
         organisation_id=org.id,
-        after_state={"aml_accountability_ack": True},
+        after_state={
+            "aml_accountability_ack": True,
+            "retention_terms_accepted": retention_accepted,
+            "retention_terms_version": org.retention_terms_version,
+        },
     )
     return AccountabilityAckResponse(
         aml_accountability_ack=org.aml_accountability_ack,
         aml_accountability_ack_at=org.aml_accountability_ack_at,
         aml_accountability_ack_by=org.aml_accountability_ack_by,
+        retention_terms_accepted=org.retention_terms_accepted,
+        retention_terms_accepted_at=org.retention_terms_accepted_at,
+        retention_terms_version=org.retention_terms_version,
     )
 
 

@@ -206,6 +206,20 @@ The periodic KYC review for <strong style="color:#fff;">{customer_name}</strong>
     return _send(to, f"Review due: {customer_name} — Verigo", html)
 
 
+def send_admin_retention_alert(
+    to: str, org_name: str, org_id: str, version: int, requested_by: str
+) -> bool:
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+<div style="background:#f59e0b22;border:1px solid #f59e0b55;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+  <span style="color:#f59e0b;font-weight:700;font-size:13px;">RETENTION FOLLOW-UP</span>
+</div>
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Lapsed customer requested an older AML program version</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;"><strong style="color:#fff;">{requested_by}</strong> at <strong style="color:#fff;">{org_name}</strong> ({org_id}) requested archived version <strong style="color:#fff;">v{version}</strong> after their subscription lapsed.</p>
+<p style="color:#94a3b8;font-size:14px;">This usually means they still need their compliance records but haven't resubscribed — a good time for a win-back call.</p>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(to, f"Retention follow-up: {org_name} requested an old AML program version", html)
+
+
 def send_smr_review_notice(
     to: str, full_name: str, smr_id: str, customer_name: str, days_remaining: int
 ) -> bool:
