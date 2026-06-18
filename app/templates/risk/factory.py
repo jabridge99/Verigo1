@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import importlib
 import logging
-from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -60,7 +59,8 @@ GOVERNANCE_DISCLAIMER = (
 
 
 def _load_library(industry: str) -> RiskLibrary:
-    module_name = INDUSTRY_MODULE_MAP.get(str(industry), "other")
+    key = industry.value if hasattr(industry, "value") else str(industry)
+    module_name = INDUSTRY_MODULE_MAP.get(key, "other")
     mod = importlib.import_module(f"app.templates.risk.industries.{module_name}")
     return mod.get_library()
 
@@ -88,7 +88,7 @@ def seed_risk_framework(
         org_id=org.id,
         solution_id=solution_id,
         name=f"ML/TF Risk Assessment Framework — {org.name}",
-        industry=str(org.industry_type),
+        industry=org.industry_type.value if hasattr(org.industry_type, "value") else str(org.industry_type),
         category_weights=library.category_weights,
         governance_disclaimer=GOVERNANCE_DISCLAIMER,
         created_by=created_by,

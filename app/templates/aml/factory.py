@@ -101,7 +101,7 @@ def seed_aml_solution(
     solution = AMLSolution(
         org_id=org.id,
         status=SolutionStatus.active,
-        template_industry=str(org.industry_type),
+        template_industry=org.industry_type.value if hasattr(org.industry_type, "value") else str(org.industry_type),
         activated_at=_now(),
         created_by=created_by,
     )
