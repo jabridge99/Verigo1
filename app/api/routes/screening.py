@@ -35,6 +35,8 @@ from app.api.deps import (
     require_mlro_or_above,
 )
 from app.db.database import get_db
+from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
+from app.integrations.crypto import get_provider as get_crypto_provider
 from app.models.customer import Customer
 from app.models.screening import (
     AdverseMediaCategory,
@@ -669,16 +671,18 @@ def batch_screen(
 # ── Crypto Wallet Screening ───────────────────────────────────────────────────
 
 @router.post("/crypto-wallet", status_code=201)
-def screen_crypto_wallet(
+async def screen_crypto_wallet(
     payload: WalletScreeningRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
     """
-    Screen a crypto wallet address for risk indicators.
+    Screen a crypto wallet address for sanctions/risk exposure.
 
-    In production, routes to Chainalysis / TRM Labs / Elliptic via Integration Hub.
-    Currently runs in simulation mode — results are placeholders.
+    Routes to the configured CRYPTO_PROVIDER (currently: Chainalysis's free
+    sanctions-only oracle — direct OFAC/UN/EU/UK address matches, no
+    cluster-level risk scoring or exposure percentages). Falls back to
+    simulation mode if no provider is configured.
 
     DISCLAIMER: Wallet risk scores are data inputs only.
     The platform does not make compliance determinations about crypto transactions.
@@ -686,26 +690,64 @@ def screen_crypto_wallet(
     org_id = org_id_for(current_user)
     _resolve_customer(payload.customer_id, org_id, db)
 
-    screening = CryptoWalletScreening(
-        id=f"cws_{uuid4().hex[:12]}",
-        org_id=org_id,
-        customer_id=payload.customer_id,
-        wallet_address=payload.wallet_address,
-        network=payload.network,
-        wallet_label=payload.wallet_label,
-        provider=payload.provider,
-        provider_reference=f"SIM-{uuid4().hex[:8].upper()}",
-        risk_score=None,
-        risk_category=WalletRiskCategory.clear,
-        risk_details={"note": "Simulation only — wire to provider via Integration Hub."},
-        sanctioned_exposure_pct=0.0,
-        darknet_exposure_pct=0.0,
-        mixer_exposure_pct=0.0,
-        high_risk_exchange_pct=0.0,
-        scam_exposure_pct=0.0,
-        status=ScreeningStatus.clear,
-        triggered_by=current_user.id,
-    )
+    try:
+        provider = get_crypto_provider()
+    except (NotImplementedError, ProviderUnavailableError):
+        provider = None
+
+    if provider is not None:
+        try:
+            result = await provider.screen_address(payload.wallet_address, payload.network.value)
+        except ProviderRejectedError as exc:
+            raise HTTPException(502, str(exc))
+        risk_category = WalletRiskCategory.sanctioned if result.is_sanctioned else WalletRiskCategory.clear
+        screening = CryptoWalletScreening(
+            id=f"cws_{uuid4().hex[:12]}",
+            org_id=org_id,
+            customer_id=payload.customer_id,
+            wallet_address=payload.wallet_address,
+            network=payload.network,
+            wallet_label=payload.wallet_label,
+            provider=CryptoProvider(provider.name),
+            provider_reference=f"{provider.name.upper()}-{uuid4().hex[:8]}",
+            risk_score=100.0 if result.is_sanctioned else 0.0,
+            risk_category=risk_category,
+            risk_details={
+                "identifications": [
+                    {"category": i.category, "name": i.name, "description": i.description, "url": i.url}
+                    for i in result.identifications
+                ]
+            },
+            sanctioned_exposure_pct=100.0 if result.is_sanctioned else 0.0,
+            darknet_exposure_pct=0.0,
+            mixer_exposure_pct=0.0,
+            high_risk_exchange_pct=0.0,
+            scam_exposure_pct=0.0,
+            provider_raw_response=str(result.raw),
+            status=ScreeningStatus.potential_match if result.is_sanctioned else ScreeningStatus.clear,
+            triggered_by=current_user.id,
+        )
+    else:
+        screening = CryptoWalletScreening(
+            id=f"cws_{uuid4().hex[:12]}",
+            org_id=org_id,
+            customer_id=payload.customer_id,
+            wallet_address=payload.wallet_address,
+            network=payload.network,
+            wallet_label=payload.wallet_label,
+            provider=payload.provider,
+            provider_reference=f"SIM-{uuid4().hex[:8].upper()}",
+            risk_score=None,
+            risk_category=WalletRiskCategory.clear,
+            risk_details={"note": "Simulation only — no CRYPTO_PROVIDER configured."},
+            sanctioned_exposure_pct=0.0,
+            darknet_exposure_pct=0.0,
+            mixer_exposure_pct=0.0,
+            high_risk_exchange_pct=0.0,
+            scam_exposure_pct=0.0,
+            status=ScreeningStatus.clear,
+            triggered_by=current_user.id,
+        )
     db.add(screening)
     db.commit()
     db.refresh(screening)
