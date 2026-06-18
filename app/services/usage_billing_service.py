@@ -5,6 +5,7 @@ Every billable provider call (e.g. a Sumsub KYC check) gets a UsageRecord
 with the cost we pay the vendor and the marked-up amount we bill the tenant.
 Records are aggregated into Invoice line items by `bill_org_usage`.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -63,10 +64,15 @@ def mark_failed(db: Session, record: UsageRecord) -> UsageRecord:
     return record
 
 
-def find_by_reference(db: Session, provider: str, provider_reference: str) -> UsageRecord | None:
+def find_by_reference(
+    db: Session, provider: str, provider_reference: str
+) -> UsageRecord | None:
     return (
         db.query(UsageRecord)
-        .filter(UsageRecord.provider == provider, UsageRecord.provider_reference == provider_reference)
+        .filter(
+            UsageRecord.provider == provider,
+            UsageRecord.provider_reference == provider_reference,
+        )
         .order_by(UsageRecord.created_at.desc())
         .first()
     )
@@ -85,7 +91,9 @@ def list_unbilled(db: Session, org_id: str) -> list[UsageRecord]:
     )
 
 
-def usage_summary(db: Session, org_id: str, period_start: datetime, period_end: datetime) -> dict:
+def usage_summary(
+    db: Session, org_id: str, period_start: datetime, period_end: datetime
+) -> dict:
     records = (
         db.query(UsageRecord)
         .filter(

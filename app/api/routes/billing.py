@@ -169,7 +169,9 @@ def usage(
 ):
     """Metered third-party verification usage (e.g. Sumsub checks) and the
     marked-up amount billed to this org for the given period."""
-    return usage_billing_svc.usage_summary(db, current_user.org_id or "", period_start, period_end)
+    return usage_billing_svc.usage_summary(
+        db, current_user.org_id or "", period_start, period_end
+    )
 
 
 # ── Stripe Webhook (no auth — verified by signature) ──────────────────────────

@@ -3,14 +3,13 @@ Twilio SMS provider.
 Requires: pip install twilio
 Set SMS_PROVIDER=twilio, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER in env.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 
-from app.config import settings
-from app.integrations.base import ProviderRejectedError
-from .base import SMSProvider, SMSMessage
+from .base import SMSMessage, SMSProvider
 
 log = logging.getLogger("verigo.integrations.sms.twilio")
 
@@ -25,6 +24,7 @@ class TwilioSMSProvider(SMSProvider):
     def _get_client(self):
         if self._client is None:
             from twilio.rest import Client
+
             self._client = Client(self.account_sid, self.auth_token)
         return self._client
 

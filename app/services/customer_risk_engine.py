@@ -12,55 +12,124 @@ Weighted combination → overall score → decision gateway (CDD or EDD).
 
 All country lists are illustrative starting points. Replace with live FATF/DFAT feeds.
 """
+
 from dataclasses import dataclass, field
 from typing import Optional
 
 from app.models.customer import CDDLevel, Customer, RiskLevel
 from app.models.customer_workflow import EDDTrigger
 
-
 # ── Country Risk Lists (seed data — override with live feeds) ─────────────────
 
 FATF_BLACKLIST = frozenset({"KP", "IR", "MM"})
 
-FATF_GREYLIST = frozenset({
-    "AL", "BB", "BF", "CM", "CD", "HT", "JM", "JO", "ML", "MZ",
-    "NG", "PH", "SN", "SY", "TZ", "TN", "TR", "UG", "VU", "YE",
-    "ZW", "VE", "PA",
-})
+FATF_GREYLIST = frozenset(
+    {
+        "AL",
+        "BB",
+        "BF",
+        "CM",
+        "CD",
+        "HT",
+        "JM",
+        "JO",
+        "ML",
+        "MZ",
+        "NG",
+        "PH",
+        "SN",
+        "SY",
+        "TZ",
+        "TN",
+        "TR",
+        "UG",
+        "VU",
+        "YE",
+        "ZW",
+        "VE",
+        "PA",
+    }
+)
 
-SANCTIONS_COUNTRIES = frozenset({
-    "IR", "KP", "RU", "BY", "SY", "CU", "SD", "LY", "SO",
-})
+SANCTIONS_COUNTRIES = frozenset(
+    {
+        "IR",
+        "KP",
+        "RU",
+        "BY",
+        "SY",
+        "CU",
+        "SD",
+        "LY",
+        "SO",
+    }
+)
 
-HIGH_RISK_COUNTRIES = frozenset({
-    "AF", "PK", "MM", "BI", "CF", "TD", "CO", "GN", "GW", "HT",
-    "IQ", "LB", "LY", "ML", "MZ", "NG", "SS", "SD", "SO", "SY",
-    "UA", "VE", "YE", "ZW",
-})
+HIGH_RISK_COUNTRIES = frozenset(
+    {
+        "AF",
+        "PK",
+        "MM",
+        "BI",
+        "CF",
+        "TD",
+        "CO",
+        "GN",
+        "GW",
+        "HT",
+        "IQ",
+        "LB",
+        "LY",
+        "ML",
+        "MZ",
+        "NG",
+        "SS",
+        "SD",
+        "SO",
+        "SY",
+        "UA",
+        "VE",
+        "YE",
+        "ZW",
+    }
+)
 
 # Occupations considered inherently higher risk for AML/CTF
-HIGH_RISK_OCCUPATIONS = frozenset({
-    "politician", "government_official", "law_enforcement", "military",
-    "judge", "prosecutor", "diplomat", "central_banker",
-    "casino_employee", "money_changer", "pawnbroker",
-    "jeweller", "precious_metals_dealer", "real_estate_agent",
-    "accountant", "lawyer", "notary",
-})
+HIGH_RISK_OCCUPATIONS = frozenset(
+    {
+        "politician",
+        "government_official",
+        "law_enforcement",
+        "military",
+        "judge",
+        "prosecutor",
+        "diplomat",
+        "central_banker",
+        "casino_employee",
+        "money_changer",
+        "pawnbroker",
+        "jeweller",
+        "precious_metals_dealer",
+        "real_estate_agent",
+        "accountant",
+        "lawyer",
+        "notary",
+    }
+)
 
 # Default weights — can be overridden per org via GovernanceCustomScoring
 DEFAULT_WEIGHTS = {
-    "customer":     0.30,
-    "product":      0.25,
-    "geographic":   0.20,
-    "channel":      0.15,
-    "transaction":  0.10,
+    "customer": 0.30,
+    "product": 0.25,
+    "geographic": 0.20,
+    "channel": 0.15,
+    "transaction": 0.10,
 }
 
 RISK_THRESHOLDS = {
-    "low":      33.0,
-    "medium":   66.0,
-    "high":     85.0,
+    "low": 33.0,
+    "medium": 66.0,
+    "high": 85.0,
     # > high → critical
 }
 
@@ -81,7 +150,7 @@ class RiskAssessmentResult:
     transaction_risk: RiskDimensionResult
     overall_score: float
     overall_level: str
-    gateway_decision: str           # "cdd" | "edd"
+    gateway_decision: str  # "cdd" | "edd"
     edd_triggers: list[str]
     weights: dict[str, float]
 
@@ -92,7 +161,10 @@ def _clamp(v: float) -> float:
 
 # ── Dimension 1: Customer Risk ────────────────────────────────────────────────
 
-def score_customer_risk(customer: Customer, is_pep: bool, pep_type: Optional[str]) -> RiskDimensionResult:
+
+def score_customer_risk(
+    customer: Customer, is_pep: bool, pep_type: Optional[str]
+) -> RiskDimensionResult:
     score = 0.0
     factors: dict[str, float] = {}
     flags: dict[str, bool] = {}
@@ -134,6 +206,7 @@ def score_customer_risk(customer: Customer, is_pep: bool, pep_type: Optional[str
 
 # ── Dimension 2: Product Risk ─────────────────────────────────────────────────
 
+
 def score_product_risk(
     involves_remittance: bool = False,
     involves_fx: bool = False,
@@ -173,6 +246,7 @@ def score_product_risk(
 
 # ── Dimension 3: Geographic Risk ──────────────────────────────────────────────
 
+
 def score_geographic_risk(countries: list[str]) -> RiskDimensionResult:
     score = 0.0
     factors: dict[str, float] = {}
@@ -207,6 +281,7 @@ def score_geographic_risk(countries: list[str]) -> RiskDimensionResult:
 
 
 # ── Dimension 4: Channel Risk ─────────────────────────────────────────────────
+
 
 def score_channel_risk(
     channel: str,
@@ -245,6 +320,7 @@ def score_channel_risk(
 
 
 # ── Dimension 5: Transaction Risk ─────────────────────────────────────────────
+
 
 def score_transaction_risk(
     expected_monthly_volume_aud: Optional[float] = None,
@@ -294,6 +370,7 @@ def score_transaction_risk(
 
 # ── Decision Gateway ───────────────────────────────────────────────────────────
 
+
 def _determine_gateway(
     overall_score: float,
     customer_r: RiskDimensionResult,
@@ -337,6 +414,7 @@ def _level(score: float) -> str:
 
 # ── Main Entry Point ───────────────────────────────────────────────────────────
 
+
 def assess_customer_risk(
     customer: Customer,
     is_pep: bool = False,
@@ -366,27 +444,44 @@ def assess_customer_risk(
     w = weights or DEFAULT_WEIGHTS
 
     c_result = score_customer_risk(customer, is_pep, pep_type)
-    p_result = score_product_risk(involves_remittance, involves_fx, involves_crypto,
-                                   involves_cash, involves_trust, involves_bearer)
+    p_result = score_product_risk(
+        involves_remittance,
+        involves_fx,
+        involves_crypto,
+        involves_cash,
+        involves_trust,
+        involves_bearer,
+    )
 
-    all_countries = list(set(filter(None, [
-        customer.nationality, customer.dual_nationality,
-        customer.country_of_birth, customer.country_of_residence,
-        *(countries or []),
-    ])))
+    all_countries = list(
+        set(
+            filter(
+                None,
+                [
+                    customer.nationality,
+                    customer.dual_nationality,
+                    customer.country_of_birth,
+                    customer.country_of_residence,
+                    *(countries or []),
+                ],
+            )
+        )
+    )
     g_result = score_geographic_risk(all_countries)
     ch_result = score_channel_risk(channel, is_introduced, is_third_party_reliance)
     t_result = score_transaction_risk(
-        expected_monthly_volume_aud, expected_max_transaction_aud,
-        expected_frequency, crosses_border,
+        expected_monthly_volume_aud,
+        expected_max_transaction_aud,
+        expected_frequency,
+        crosses_border,
     )
 
     overall = (
-        c_result.score  * w["customer"]     +
-        p_result.score  * w["product"]      +
-        g_result.score  * w["geographic"]   +
-        ch_result.score * w["channel"]      +
-        t_result.score  * w["transaction"]
+        c_result.score * w["customer"]
+        + p_result.score * w["product"]
+        + g_result.score * w["geographic"]
+        + ch_result.score * w["channel"]
+        + t_result.score * w["transaction"]
     )
     overall = _clamp(overall)
 

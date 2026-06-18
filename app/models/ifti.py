@@ -77,8 +77,8 @@ class IFTIRecord(Base):
     oc_email = Column(String(200))
     oc_occupation = Column(String(200))
     oc_abn = Column(String(50))
-    oc_acn = Column(String(9))    # Australian Company Number (9 digits)
-    oc_arbn = Column(String(9))   # Australian Registered Body Number (9 digits)
+    oc_acn = Column(String(9))  # Australian Company Number (9 digits)
+    oc_arbn = Column(String(9))  # Australian Registered Body Number (9 digits)
     oc_customer_number = Column(String(100))
     oc_account_number = Column(String(100))
     oc_business_structure = Column(String(100))
@@ -116,8 +116,8 @@ class IFTIRecord(Base):
     bc_arbn = Column(String(9))
     bc_business_structure = Column(String(100))
     bc_account_number = Column(String(100))
-    bc_institution_name = Column(String(200))   # InstitutionWithAccount.name (MANDATORY)
-    bc_institution_city = Column(String(100))   # InstitutionWithAccount.city (MANDATORY)
+    bc_institution_name = Column(String(200))  # InstitutionWithAccount.name (MANDATORY)
+    bc_institution_city = Column(String(100))  # InstitutionWithAccount.city (MANDATORY)
     bc_institution_country = Column(String(100))  # InstitutionWithAccount.country
 
     # ── Person/org accepting transfer instruction from ordering customer ───────
@@ -144,8 +144,8 @@ class IFTIRecord(Base):
     accept_abn = Column(String(50))  # IFTI-IN only
     accept_acn = Column(String(9))
     # orderingInstn.foreignBased — MANDATORY per IFTI-DRA-1-2 schema (YesNo)
-    accept_foreign_based = Column(String(3), default="No")   # Yes | No
-    is_accepting_money = Column(String(5), default="Yes")    # Yes/No
+    accept_foreign_based = Column(String(3), default="No")  # Yes | No
+    is_accepting_money = Column(String(5), default="Yes")  # Yes/No
     is_sending_instruction = Column(String(5), default="Yes")  # Yes/No
 
     # ── Person/org accepting money (if different) — both ─────────────────────
@@ -210,7 +210,7 @@ class IFTIRecord(Base):
 
     # initiatingInstn (0..1) — optional intermediate institution between
     # orderingInstn and sendingInstn. Maps to XML <initiatingInstn> element.
-    init_instn_same_as_ordering = Column(String(3))   # Yes | No
+    init_instn_same_as_ordering = Column(String(3))  # Yes | No
     init_instn_full_name = Column(String(200))
     init_instn_address = Column(String(300))
     init_instn_city = Column(String(100))

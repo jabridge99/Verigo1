@@ -12,10 +12,11 @@ Roles:
 DISCLAIMER: Alerts are indicators for human review. No alert constitutes a
 determination of suspicious activity or a requirement to lodge an SMR.
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -54,10 +55,14 @@ DISCLAIMER = (
 
 
 def _get_alert_or_404(alert_id: str, org_id: str, db: Session) -> TransactionAlert:
-    alert = db.query(TransactionAlert).filter(
-        TransactionAlert.id == alert_id,
-        TransactionAlert.org_id == org_id,
-    ).first()
+    alert = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.id == alert_id,
+            TransactionAlert.org_id == org_id,
+        )
+        .first()
+    )
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found.")
     return alert
@@ -106,9 +111,12 @@ def alert_dashboard(
 
     total = q.count()
     open_alerts = q.filter(
-        TransactionAlert.status.notin_([
-            AlertStatus.dismissed, AlertStatus.resolved,
-        ])
+        TransactionAlert.status.notin_(
+            [
+                AlertStatus.dismissed,
+                AlertStatus.resolved,
+            ]
+        )
     ).count()
     smr_candidates = q.filter(TransactionAlert.is_smr_candidate == True).count()
 
@@ -297,7 +305,8 @@ def record_result(
         AlertResult.customer_restricted,
     }
     if payload.result in _definitive and alert.status not in (
-        AlertStatus.dismissed, AlertStatus.resolved
+        AlertStatus.dismissed,
+        AlertStatus.resolved,
     ):
         alert.status = AlertStatus.resolved
         alert.resolved_by = current_user.id
@@ -327,7 +336,8 @@ def create_case_from_alert(
     """
     from datetime import datetime, timezone
     from uuid import uuid4
-    from app.models.case import CaseStatus, CaseType, CaseSeverity
+
+    from app.models.case import CaseSeverity, CaseType
 
     org_id = org_id_for(current_user)
     alert = _get_alert_or_404(alert_id, org_id, db)
@@ -345,10 +355,13 @@ def create_case_from_alert(
         case_ref=case_ref,
         org_id=org_id,
         customer_id=alert.customer_id,
-        case_type=CaseType.smr_candidate if alert.is_smr_candidate else CaseType.internal_investigation,
+        case_type=CaseType.smr_candidate
+        if alert.is_smr_candidate
+        else CaseType.internal_investigation,
         severity=case_severity,
         title=title or f"Investigation — {alert.title}",
-        description=description or (
+        description=description
+        or (
             f"Case opened from alert {alert.alert_ref}. "
             f"Alert category: {alert.category.value}. "
             f"Alert score: {alert.alert_score:.1f}/100."
@@ -394,6 +407,7 @@ def get_alert_recommendations(
 ):
     """Regulatory recommendations linked to this alert."""
     from app.models.regulatory_recommendation import RegulatoryRecommendation
+
     org_id = org_id_for(current_user)
     _get_alert_or_404(alert_id, org_id, db)
 

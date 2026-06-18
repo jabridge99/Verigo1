@@ -45,7 +45,12 @@ def _storage_key(industry_id: Optional[str], original_name: str) -> str:
     return f"{prefix}/{uuid.uuid4().hex}{ext}"
 
 
-async def save_file(content: bytes, original_name: str, mime_type: str, industry_id: Optional[str] = None) -> tuple[str, int]:
+async def save_file(
+    content: bytes,
+    original_name: str,
+    mime_type: str,
+    industry_id: Optional[str] = None,
+) -> tuple[str, int]:
     key = _storage_key(industry_id, original_name)
     provider = get_storage_provider()
     obj = await provider.upload(key, content, content_type=mime_type)

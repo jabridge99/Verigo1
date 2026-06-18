@@ -10,6 +10,7 @@ returns whether an address has been directly identified on a sanctions list
 exposure percentages, or transaction-graph analysis; that requires a paid
 provider (TRM Labs / Elliptic).
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,6 +18,7 @@ import logging
 import httpx
 
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
+
 from .base import CryptoWalletProvider, WalletIdentification, WalletScreeningResult
 
 log = logging.getLogger("verigo.integrations.crypto.chainalysis")
@@ -29,20 +31,28 @@ class ChainalysisProvider(CryptoWalletProvider):
 
     def __init__(self, api_key: str):
         if not api_key:
-            raise ProviderUnavailableError("chainalysis", "CHAINALYSIS_API_KEY not configured")
+            raise ProviderUnavailableError(
+                "chainalysis", "CHAINALYSIS_API_KEY not configured"
+            )
         self.api_key = api_key
 
-    async def screen_address(self, address: str, network: str | None = None) -> WalletScreeningResult:
+    async def screen_address(
+        self, address: str, network: str | None = None
+    ) -> WalletScreeningResult:
         async with httpx.AsyncClient(timeout=15, base_url=BASE_URL) as client:
             resp = await client.get(
                 f"/address/{address}",
                 headers={"Token": self.api_key},
             )
         if resp.status_code >= 400:
-            raise ProviderRejectedError("chainalysis", f"{resp.status_code}: {resp.text}", raw=resp.text)
+            raise ProviderRejectedError(
+                "chainalysis", f"{resp.status_code}: {resp.text}", raw=resp.text
+            )
 
         data = resp.json()
-        raw_identifications = data if isinstance(data, list) else data.get("identifications", [])
+        raw_identifications = (
+            data if isinstance(data, list) else data.get("identifications", [])
+        )
         identifications = [
             WalletIdentification(
                 category=item.get("category", "sanctions"),

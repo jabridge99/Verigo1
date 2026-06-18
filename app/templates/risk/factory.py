@@ -9,6 +9,7 @@ Usage:
 
     seed_risk_framework(db=db, org=organisation, solution_id=solution.id, created_by=user.id)
 """
+
 from __future__ import annotations
 
 import importlib
@@ -18,7 +19,10 @@ from sqlalchemy.orm import Session
 
 from app.models.organisation import Organisation
 from app.models.risk_engine import (
-    RiskFramework, RiskCategory, RiskFactor, RiskLibraryFactor,
+    RiskCategory,
+    RiskFactor,
+    RiskFramework,
+    RiskLibraryFactor,
 )
 from app.templates.risk.base import RiskLibrary
 
@@ -26,26 +30,23 @@ log = logging.getLogger("verigo.templates.risk")
 
 INDUSTRY_MODULE_MAP = {
     # ── Tranche 1 ─────────────────────────────────────────────────────────────
-    "remittance":            "remittance",
-    "vasp":                  "vasp",
-    "bullion_dealers":       "other",
-
+    "remittance": "remittance",
+    "vasp": "vasp",
+    "bullion_dealers": "other",
     # ── Tranche 2 ─────────────────────────────────────────────────────────────
-    "accountants":           "accounting",
-    "conveyancers":          "real_estate",
-    "legal_professionals":   "legal",
-    "real_estate":           "real_estate",
-    "precious_metals":       "other",
-    "pubs_clubs":            "other",
-
+    "accountants": "accounting",
+    "conveyancers": "real_estate",
+    "legal_professionals": "legal",
+    "real_estate": "real_estate",
+    "precious_metals": "other",
+    "pubs_clubs": "other",
     # ── Custom-package industries (not primary target) ─────────────────────────
-    "banking":               "banking",
-    "bookmakers_betting":    "other",
-    "casinos":               "other",
-    "financial_services":    "fintech",
-    "superannuation":        "other",
-
-    "other":                 "other",
+    "banking": "banking",
+    "bookmakers_betting": "other",
+    "casinos": "other",
+    "financial_services": "fintech",
+    "superannuation": "other",
+    "other": "other",
 }
 
 GOVERNANCE_DISCLAIMER = (
@@ -80,7 +81,8 @@ def seed_risk_framework(
 
     log.info(
         "Seeding RiskFramework for org=%s industry=%s",
-        org.id, org.industry_type,
+        org.id,
+        org.industry_type,
     )
 
     # ── 1. RiskFramework ─────────────────────────────────────────────────────
@@ -88,7 +90,9 @@ def seed_risk_framework(
         org_id=org.id,
         solution_id=solution_id,
         name=f"ML/TF Risk Assessment Framework — {org.name}",
-        industry=org.industry_type.value if hasattr(org.industry_type, "value") else str(org.industry_type),
+        industry=org.industry_type.value
+        if hasattr(org.industry_type, "value")
+        else str(org.industry_type),
         category_weights=library.category_weights,
         governance_disclaimer=GOVERNANCE_DISCLAIMER,
         created_by=created_by,
@@ -99,13 +103,13 @@ def seed_risk_framework(
     # ── 2. RiskCategories ────────────────────────────────────────────────────
     category_map: dict[str, RiskCategory] = {}
     category_labels = {
-        "customer":    "Customer Risk",
-        "product":     "Product & Service Risk",
-        "service":     "Service Delivery Risk",
-        "geographic":  "Geographic Risk",
-        "channel":     "Channel Risk",
+        "customer": "Customer Risk",
+        "product": "Product & Service Risk",
+        "service": "Service Delivery Risk",
+        "geographic": "Geographic Risk",
+        "channel": "Channel Risk",
         "transaction": "Transaction Risk",
-        "regulatory":  "Regulatory & Compliance Risk",
+        "regulatory": "Regulatory & Compliance Risk",
     }
     for cat_type, weight in library.category_weights.items():
         cat = RiskCategory(
@@ -123,47 +127,54 @@ def seed_risk_framework(
 
     # ── 3. RiskLibraryFactor seeds (idempotent) ───────────────────────────────
     existing_refs = {
-        r[0] for r in db.query(RiskLibraryFactor.factor_ref).filter(
-            RiskLibraryFactor.industry == library.industry
-        ).all()
+        r[0]
+        for r in db.query(RiskLibraryFactor.factor_ref)
+        .filter(RiskLibraryFactor.industry == library.industry)
+        .all()
     }
 
     for lf in library.factors:
         if lf.ref not in existing_refs:
-            db.add(RiskLibraryFactor(
-                industry=library.industry,
-                category_type=lf.category_type,
-                factor_ref=lf.ref,
-                factor_name=lf.name,
-                description=lf.description,
-                suggested_likelihood=lf.suggested_likelihood,
-                suggested_consequence=lf.suggested_consequence,
-                rationale=lf.rationale,
-                mitigation_examples=lf.mitigation_examples,
-            ))
+            db.add(
+                RiskLibraryFactor(
+                    industry=library.industry,
+                    category_type=lf.category_type,
+                    factor_ref=lf.ref,
+                    factor_name=lf.name,
+                    description=lf.description,
+                    suggested_likelihood=lf.suggested_likelihood,
+                    suggested_consequence=lf.suggested_consequence,
+                    rationale=lf.rationale,
+                    mitigation_examples=lf.mitigation_examples,
+                )
+            )
 
     # ── 4. RiskFactors (org-specific, editable copies) ───────────────────────
     for lf in library.factors:
         cat = category_map.get(lf.category_type)
         if not cat:
             continue
-        db.add(RiskFactor(
-            category_id=cat.id,
-            org_id=org.id,
-            factor_ref=lf.ref,
-            name=lf.name,
-            description=lf.description,
-            suggested_likelihood=lf.suggested_likelihood,
-            suggested_consequence=lf.suggested_consequence,
-            rationale=lf.rationale,
-            mitigation_examples=lf.mitigation_examples,
-            is_active=True,
-            created_by=created_by,
-        ))
+        db.add(
+            RiskFactor(
+                category_id=cat.id,
+                org_id=org.id,
+                factor_ref=lf.ref,
+                name=lf.name,
+                description=lf.description,
+                suggested_likelihood=lf.suggested_likelihood,
+                suggested_consequence=lf.suggested_consequence,
+                rationale=lf.rationale,
+                mitigation_examples=lf.mitigation_examples,
+                is_active=True,
+                created_by=created_by,
+            )
+        )
 
     log.info(
         "RiskFramework seeded: framework_id=%s categories=%d factors=%d",
-        framework.id, len(category_map), len(library.factors),
+        framework.id,
+        len(category_map),
+        len(library.factors),
     )
 
     return framework

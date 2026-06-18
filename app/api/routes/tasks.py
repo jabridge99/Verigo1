@@ -12,6 +12,7 @@ Role permissions:
   compliance+ : create, update, assign, complete, send-rfi, rfi-received
   mlro+       : cancel
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -35,6 +36,7 @@ router = APIRouter(prefix="/tasks", tags=["Tasks & RFI Workflow"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _next_task_ref(db: Session, org_id: str) -> str:
     count = db.query(Task).filter(Task.org_id == org_id).count()
     return f"TASK-{count + 1:04d}"
@@ -47,8 +49,15 @@ def _get_task_or_404(task_id: str, org_id: str, db: Session) -> Task:
     return t
 
 
-def _log_event(db: Session, task: Task, event_type: str, actor_id: str,
-               from_status: str = None, to_status: str = None, note: str = None) -> None:
+def _log_event(
+    db: Session,
+    task: Task,
+    event_type: str,
+    actor_id: str,
+    from_status: str = None,
+    to_status: str = None,
+    note: str = None,
+) -> None:
     ev = TaskEvent(
         task_id=task.id,
         org_id=task.org_id,
@@ -96,6 +105,7 @@ def _task_dict(t: Task) -> dict:
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+
 class TaskCreate(BaseModel):
     task_type: TaskType
     title: str
@@ -104,7 +114,7 @@ class TaskCreate(BaseModel):
     case_id: Optional[str] = None
     customer_id: Optional[str] = None
     assigned_to: Optional[str] = None
-    due_date: Optional[str] = None       # YYYY-MM-DD
+    due_date: Optional[str] = None  # YYYY-MM-DD
     rfi_channel: Optional[str] = None
     related_document_ids: Optional[list] = None
 
@@ -131,11 +141,12 @@ class CancelPayload(BaseModel):
 
 
 class RFIPayload(BaseModel):
-    channel: Optional[str] = "email"   # email | portal | mail | in_person
+    channel: Optional[str] = "email"  # email | portal | mail | in_person
     note: Optional[str] = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("", status_code=201)
 def create_task(
@@ -149,6 +160,7 @@ def create_task(
     due = None
     if payload.due_date:
         from datetime import date
+
         due = date.fromisoformat(payload.due_date)
 
     t = Task(
@@ -172,11 +184,15 @@ def create_task(
 
     db.add(t)
     db.flush()
-    _log_event(db, t, "created", current_user.id,
-               to_status=TaskStatus.open.value)
+    _log_event(db, t, "created", current_user.id, to_status=TaskStatus.open.value)
     if payload.assigned_to:
-        _log_event(db, t, "assigned", current_user.id,
-                   note=f"Assigned to {payload.assigned_to}")
+        _log_event(
+            db,
+            t,
+            "assigned",
+            current_user.id,
+            note=f"Assigned to {payload.assigned_to}",
+        )
     db.commit()
     db.refresh(t)
     return _task_dict(t)
@@ -252,6 +268,7 @@ def update_task(
     data = payload.model_dump(exclude_none=True)
     if "due_date" in data:
         from datetime import date
+
         data["due_date"] = date.fromisoformat(data["due_date"])
     for k, v in data.items():
         setattr(t, k, v)
@@ -278,8 +295,13 @@ def assign_task(
     if t.status == TaskStatus.open:
         t.status = TaskStatus.in_progress
 
-    _log_event(db, t, "assigned", current_user.id,
-               note=f"Reassigned from {prev} to {payload.assign_to}")
+    _log_event(
+        db,
+        t,
+        "assigned",
+        current_user.id,
+        note=f"Reassigned from {prev} to {payload.assign_to}",
+    )
     db.commit()
     return {"task_id": task_id, "assigned_to": t.assigned_to, "status": t.status.value}
 
@@ -303,11 +325,21 @@ def complete_task(
     t.completed_at = datetime.now(timezone.utc)
     t.completion_notes = payload.notes
 
-    _log_event(db, t, "completed", current_user.id,
-               from_status=prev, to_status=TaskStatus.completed.value,
-               note=payload.notes)
+    _log_event(
+        db,
+        t,
+        "completed",
+        current_user.id,
+        from_status=prev,
+        to_status=TaskStatus.completed.value,
+        note=payload.notes,
+    )
     db.commit()
-    return {"task_id": task_id, "status": t.status.value, "completed_at": t.completed_at}
+    return {
+        "task_id": task_id,
+        "status": t.status.value,
+        "completed_at": t.completed_at,
+    }
 
 
 @router.post("/{task_id}/cancel")
@@ -327,9 +359,15 @@ def cancel_task(
     t.cancelled_at = datetime.now(timezone.utc)
     t.cancellation_reason = payload.reason
 
-    _log_event(db, t, "cancelled", current_user.id,
-               from_status=prev, to_status=TaskStatus.cancelled.value,
-               note=payload.reason)
+    _log_event(
+        db,
+        t,
+        "cancelled",
+        current_user.id,
+        from_status=prev,
+        to_status=TaskStatus.cancelled.value,
+        note=payload.reason,
+    )
     db.commit()
     return {"task_id": task_id, "status": t.status.value}
 
@@ -351,9 +389,15 @@ def send_rfi(
     t.rfi_sent_at = datetime.now(timezone.utc)
     t.rfi_channel = payload.channel or t.rfi_channel
 
-    _log_event(db, t, "rfi_sent", current_user.id,
-               from_status=prev, to_status=TaskStatus.waiting_response.value,
-               note=payload.note or f"RFI sent via {t.rfi_channel}")
+    _log_event(
+        db,
+        t,
+        "rfi_sent",
+        current_user.id,
+        from_status=prev,
+        to_status=TaskStatus.waiting_response.value,
+        note=payload.note or f"RFI sent via {t.rfi_channel}",
+    )
     db.commit()
     return {
         "task_id": task_id,
@@ -378,10 +422,15 @@ def rfi_received(
     t.status = TaskStatus.in_progress
     t.rfi_response_received_at = datetime.now(timezone.utc)
 
-    _log_event(db, t, "rfi_received", current_user.id,
-               from_status=TaskStatus.waiting_response.value,
-               to_status=TaskStatus.in_progress.value,
-               note=note or "RFI response received")
+    _log_event(
+        db,
+        t,
+        "rfi_received",
+        current_user.id,
+        from_status=TaskStatus.waiting_response.value,
+        to_status=TaskStatus.in_progress.value,
+        note=note or "RFI response received",
+    )
     db.commit()
     return {
         "task_id": task_id,

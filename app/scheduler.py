@@ -8,8 +8,8 @@ Jobs:
 
 Scheduler is started in the FastAPI lifespan and shut down cleanly on exit.
 """
+
 import logging
-from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -40,8 +40,8 @@ def _job_deadline_check():
 def _job_capture_snapshots():
     try:
         from app.db.database import SessionLocal
-        from app.services import benchmark_service as svc
         from app.models.benchmark import SnapshotPeriod
+        from app.services import benchmark_service as svc
 
         db = SessionLocal()
         try:

@@ -9,6 +9,7 @@ The `lists` branch is regenerated nightly (0 UTC) by GitHub Actions, so we
 fetch the relevant per-asset text file and cache it in-memory with a TTL —
 no API key, no rate limit, fully self-hosted exact-match lookup.
 """
+
 from __future__ import annotations
 
 import logging
@@ -61,24 +62,32 @@ class OFACSDNProvider(CryptoWalletProvider):
             addresses: set[str] = set()
         else:
             resp.raise_for_status()
-            addresses = {line.strip() for line in resp.text.splitlines() if line.strip()}
+            addresses = {
+                line.strip() for line in resp.text.splitlines() if line.strip()
+            }
 
         self._cache[ticker] = (time.monotonic(), addresses)
         return addresses
 
-    async def screen_address(self, address: str, network: str | None = None) -> WalletScreeningResult:
+    async def screen_address(
+        self, address: str, network: str | None = None
+    ) -> WalletScreeningResult:
         ticker = NETWORK_TO_TICKER.get(network or "")
         if not ticker:
-            return WalletScreeningResult(is_sanctioned=False, identifications=[], provider=self.name, raw=None)
+            return WalletScreeningResult(
+                is_sanctioned=False, identifications=[], provider=self.name, raw=None
+            )
 
         addresses = await self._addresses_for_ticker(ticker)
         is_match = address in addresses
         identifications = (
-            [WalletIdentification(
-                category="sanctions",
-                name="OFAC SDN",
-                description=f"Address found in OFAC SDN sanctioned {ticker} address list",
-            )]
+            [
+                WalletIdentification(
+                    category="sanctions",
+                    name="OFAC SDN",
+                    description=f"Address found in OFAC SDN sanctioned {ticker} address list",
+                )
+            ]
             if is_match
             else []
         )

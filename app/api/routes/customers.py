@@ -14,6 +14,7 @@ AUSTRAC requirements:
   - EDD approval gate (senior_managing_official sign-off)
   - Ongoing monitoring: next_review_date enforced by review records
 """
+
 import logging
 from datetime import date, datetime, timezone
 from typing import List, Optional
@@ -22,45 +23,82 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    Pagination, get_current_user, org_id_for,
-    require_analyst_or_above, require_compliance_or_above, require_mlro_or_above,
+    Pagination,
+    get_current_user,
+    org_id_for,
+    require_analyst_or_above,
+    require_compliance_or_above,
 )
 from app.db.database import get_db
 from app.models.audit_log import AuditEventType, AuditLog
 from app.models.customer import (
-    BeneficialOwner, CDDLevel, CorporateDocument,
-    Customer, CustomerNote, CustomerOnboardingChecklist,
-    CustomerPreviousName, CustomerReview, CustomerRiskScoreHistory,
-    CustomerStatus, BusinessDetail, RiskLevel,
+    BeneficialOwner,
+    BusinessDetail,
+    CDDLevel,
+    CorporateDocument,
+    Customer,
+    CustomerNote,
+    CustomerOnboardingChecklist,
+    CustomerPreviousName,
+    CustomerReview,
+    CustomerRiskScoreHistory,
+    CustomerStatus,
+    RiskLevel,
 )
 from app.models.kyc import (
-    CustomerAddressVerification, CustomerEmailVerification,
-    CustomerIdentityDocument, CustomerPhoneVerification,
-    CustomerSelfieVerification, VerificationResult,
+    CustomerAddressVerification,
+    CustomerEmailVerification,
+    CustomerIdentityDocument,
+    CustomerPhoneVerification,
+    CustomerSelfieVerification,
+    VerificationResult,
 )
 from app.models.screening import (
-    AdverseMediaResult, CryptoWalletScreening,
-    ScreeningAlert, ScreeningRecord, ScreeningStatus, ScreeningType,
+    CryptoWalletScreening,
+    ScreeningAlert,
+    ScreeningRecord,
+    ScreeningStatus,
+    ScreeningType,
 )
 from app.models.user import User
 from app.schemas.customer import (
-    AddressVerificationCreate, AddressVerificationResponse,
-    AlertResponse, AlertUpdateRequest,
-    BeneficialOwnerCreate, BeneficialOwnerResponse, BeneficialOwnerUpdate,
-    BusinessDetailCreate, BusinessDetailResponse,
-    CorporateDocumentCreate, CorporateDocumentResponse,
-    CustomerCreate, CustomerNoteCreate, CustomerNoteResponse,
-    CustomerResponse, CustomerReviewCreate, CustomerReviewResponse,
-    CustomerStatusUpdate, CustomerUpdate,
-    EmailVerificationCreate, EmailVerificationResponse,
-    IdentityDocumentCreate, IdentityDocumentResponse, IdentityDocumentVerifyUpdate,
+    AddressVerificationCreate,
+    AddressVerificationResponse,
+    AlertResponse,
+    AlertUpdateRequest,
+    BeneficialOwnerCreate,
+    BeneficialOwnerResponse,
+    BeneficialOwnerUpdate,
+    BusinessDetailCreate,
+    BusinessDetailResponse,
+    CorporateDocumentCreate,
+    CorporateDocumentResponse,
+    CustomerCreate,
+    CustomerNoteCreate,
+    CustomerNoteResponse,
+    CustomerResponse,
+    CustomerReviewCreate,
+    CustomerReviewResponse,
+    CustomerStatusUpdate,
+    CustomerUpdate,
+    EmailVerificationCreate,
+    EmailVerificationResponse,
+    IdentityDocumentCreate,
+    IdentityDocumentResponse,
+    IdentityDocumentVerifyUpdate,
     OnboardingChecklistResponse,
-    PhoneVerificationCreate, PhoneVerificationResponse,
-    PreviousNameCreate, PreviousNameResponse,
+    PhoneVerificationCreate,
+    PhoneVerificationResponse,
+    PreviousNameCreate,
+    PreviousNameResponse,
     RiskScoreHistoryResponse,
-    ScreeningRecordResponse, ScreeningTriggerRequest, ScreeningReviewUpdate,
-    SelfieVerificationCreate, SelfieVerificationResponse,
-    WalletScreeningCreate, WalletScreeningResponse,
+    ScreeningRecordResponse,
+    ScreeningReviewUpdate,
+    ScreeningTriggerRequest,
+    SelfieVerificationCreate,
+    SelfieVerificationResponse,
+    WalletScreeningCreate,
+    WalletScreeningResponse,
 )
 
 log = logging.getLogger("verigo.api.customers")
@@ -71,16 +109,28 @@ DISCLAIMER = (
     "remain the responsibility of the reporting entity."
 )
 
-_PRIVILEGED_FIELDS = {"status", "risk_score", "risk_level", "cdd_level", "is_pep", "pep_type"}
+_PRIVILEGED_FIELDS = {
+    "status",
+    "risk_score",
+    "risk_level",
+    "cdd_level",
+    "is_pep",
+    "pep_type",
+}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _get_customer(customer_id: str, org_id: str, db: Session) -> Customer:
-    c = db.query(Customer).filter(
-        Customer.id == customer_id,
-        Customer.org_id == org_id,
-    ).first()
+    c = (
+        db.query(Customer)
+        .filter(
+            Customer.id == customer_id,
+            Customer.org_id == org_id,
+        )
+        .first()
+    )
     if not c:
         raise HTTPException(404, "Customer not found")
     return c
@@ -101,18 +151,29 @@ def _create_checklist(customer: Customer, db: Session) -> CustomerOnboardingChec
     return chk
 
 
-def _update_checklist_flag(customer: Customer, flag: str, value: bool, db: Session) -> None:
-    chk = db.query(CustomerOnboardingChecklist).filter(
-        CustomerOnboardingChecklist.customer_id == customer.id
-    ).first()
+def _update_checklist_flag(
+    customer: Customer, flag: str, value: bool, db: Session
+) -> None:
+    chk = (
+        db.query(CustomerOnboardingChecklist)
+        .filter(CustomerOnboardingChecklist.customer_id == customer.id)
+        .first()
+    )
     if chk:
         setattr(chk, flag, value)
         _check_checklist_complete(chk, customer, db)
 
 
-def _check_checklist_complete(chk: CustomerOnboardingChecklist, customer: Customer, db: Session) -> None:
+def _check_checklist_complete(
+    chk: CustomerOnboardingChecklist, customer: Customer, db: Session
+) -> None:
     required = ["identity_document_verified", "pep_screened", "sanctions_screened"]
-    if customer.customer_type.value in ("company", "trust", "partnership", "association"):
+    if customer.customer_type.value in (
+        "company",
+        "trust",
+        "partnership",
+        "association",
+    ):
         required += ["ubo_identified", "ubo_screened"]
     is_complete = all(getattr(chk, f) for f in required)
     if is_complete and not chk.is_complete:
@@ -128,20 +189,23 @@ def _record_risk_history(
     notes: Optional[str] = None,
     scoring_factors: Optional[dict] = None,
 ) -> None:
-    db.add(CustomerRiskScoreHistory(
-        customer_id=customer.id,
-        org_id=customer.org_id,
-        risk_score=customer.risk_score,
-        risk_level=customer.risk_level,
-        cdd_level=customer.cdd_level,
-        scoring_factors=scoring_factors,
-        trigger=trigger,
-        triggered_by=actor_id,
-        notes=notes,
-    ))
+    db.add(
+        CustomerRiskScoreHistory(
+            customer_id=customer.id,
+            org_id=customer.org_id,
+            risk_score=customer.risk_score,
+            risk_level=customer.risk_level,
+            cdd_level=customer.cdd_level,
+            scoring_factors=scoring_factors,
+            trigger=trigger,
+            triggered_by=actor_id,
+            notes=notes,
+        )
+    )
 
 
 # ── Customer CRUD ─────────────────────────────────────────────────────────────
+
 
 @router.post("", response_model=CustomerResponse, status_code=201)
 def create_customer(
@@ -198,15 +262,20 @@ def create_customer(
     _create_checklist(customer, db)
     _record_risk_history(customer, "onboarding", current_user.id, db)
 
-    db.add(AuditLog(
-        org_id=oid,
-        actor_id=current_user.id,
-        event_type=AuditEventType.customer_created,
-        action="customer.create",
-        object_type="Customer",
-        object_id=customer.id,
-        new_value={"customer_ref": customer.customer_ref, "type": payload.customer_type.value},
-    ))
+    db.add(
+        AuditLog(
+            org_id=oid,
+            actor_id=current_user.id,
+            event_type=AuditEventType.customer_created,
+            action="customer.create",
+            object_type="Customer",
+            object_id=customer.id,
+            new_value={
+                "customer_ref": customer.customer_ref,
+                "type": payload.customer_type.value,
+            },
+        )
+    )
     db.commit()
     db.refresh(customer)
     log.info("Customer created: %s org=%s", customer.customer_ref, oid)
@@ -239,8 +308,12 @@ def list_customers(
         q = q.filter(Customer.is_pep == is_pep)
     if due_for_review:
         from datetime import timedelta
+
         cutoff = date.today() + timedelta(days=30)
-        q = q.filter(Customer.next_review_date <= cutoff, Customer.status == CustomerStatus.active)
+        q = q.filter(
+            Customer.next_review_date <= cutoff,
+            Customer.status == CustomerStatus.active,
+        )
     return pagination.apply(q.order_by(Customer.created_at.desc())).all()
 
 
@@ -268,15 +341,17 @@ def update_customer(
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(customer, field, value)
 
-    db.add(AuditLog(
-        org_id=customer.org_id,
-        actor_id=current_user.id,
-        event_type=AuditEventType.customer_updated,
-        action="customer.update",
-        object_type="Customer",
-        object_id=customer.id,
-        new_value={"fields": list(payload.model_dump(exclude_none=True).keys())},
-    ))
+    db.add(
+        AuditLog(
+            org_id=customer.org_id,
+            actor_id=current_user.id,
+            event_type=AuditEventType.customer_updated,
+            action="customer.update",
+            object_type="Customer",
+            object_id=customer.id,
+            new_value={"fields": list(payload.model_dump(exclude_none=True).keys())},
+        )
+    )
     db.commit()
     db.refresh(customer)
     return customer
@@ -293,36 +368,51 @@ def update_customer_status(
 
     # Enforce screening gate before activating
     if payload.status == CustomerStatus.active:
-        chk = db.query(CustomerOnboardingChecklist).filter(
-            CustomerOnboardingChecklist.customer_id == customer_id
-        ).first()
-        if chk and not (chk.pep_screened and chk.sanctions_screened and chk.identity_document_verified):
+        chk = (
+            db.query(CustomerOnboardingChecklist)
+            .filter(CustomerOnboardingChecklist.customer_id == customer_id)
+            .first()
+        )
+        if chk and not (
+            chk.pep_screened
+            and chk.sanctions_screened
+            and chk.identity_document_verified
+        ):
             raise HTTPException(
                 422,
-                "Cannot activate: PEP screening, sanctions screening, and identity verification must be complete"
+                "Cannot activate: PEP screening, sanctions screening, and identity verification must be complete",
             )
 
     # EDD gate: enhanced CDD requires senior approval
-    if customer.cdd_level == CDDLevel.enhanced and payload.status == CustomerStatus.active:
-        chk = db.query(CustomerOnboardingChecklist).filter(
-            CustomerOnboardingChecklist.customer_id == customer_id
-        ).first()
+    if (
+        customer.cdd_level == CDDLevel.enhanced
+        and payload.status == CustomerStatus.active
+    ):
+        chk = (
+            db.query(CustomerOnboardingChecklist)
+            .filter(CustomerOnboardingChecklist.customer_id == customer_id)
+            .first()
+        )
         if chk and not chk.edd_senior_approval_obtained:
-            raise HTTPException(422, "EDD customers require senior approval before activation")
+            raise HTTPException(
+                422, "EDD customers require senior approval before activation"
+            )
 
     old_status = customer.status
     customer.status = payload.status
 
-    db.add(AuditLog(
-        org_id=customer.org_id,
-        actor_id=current_user.id,
-        event_type=AuditEventType.customer_status_changed,
-        action="customer.status_change",
-        object_type="Customer",
-        object_id=customer.id,
-        old_value={"status": old_status.value},
-        new_value={"status": payload.status.value, "reason": payload.reason},
-    ))
+    db.add(
+        AuditLog(
+            org_id=customer.org_id,
+            actor_id=current_user.id,
+            event_type=AuditEventType.customer_status_changed,
+            action="customer.status_change",
+            object_type="Customer",
+            object_id=customer.id,
+            old_value={"status": old_status.value},
+            new_value={"status": payload.status.value, "reason": payload.reason},
+        )
+    )
     db.commit()
     db.refresh(customer)
     return customer
@@ -330,7 +420,12 @@ def update_customer_status(
 
 # ── Previous Names ─────────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/previous-names", response_model=PreviousNameResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/previous-names",
+    response_model=PreviousNameResponse,
+    status_code=201,
+)
 def add_previous_name(
     customer_id: str,
     payload: PreviousNameCreate,
@@ -361,14 +456,22 @@ def list_previous_names(
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(CustomerPreviousName).filter(
-        CustomerPreviousName.customer_id == customer_id
-    ).order_by(CustomerPreviousName.created_at.desc()).all()
+    return (
+        db.query(CustomerPreviousName)
+        .filter(CustomerPreviousName.customer_id == customer_id)
+        .order_by(CustomerPreviousName.created_at.desc())
+        .all()
+    )
 
 
 # ── Business Detail (KYB) ──────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/business-detail", response_model=BusinessDetailResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/business-detail",
+    response_model=BusinessDetailResponse,
+    status_code=201,
+)
 def create_business_detail(
     customer_id: str,
     payload: BusinessDetailCreate,
@@ -406,7 +509,12 @@ def get_business_detail(
 
 # ── Beneficial Owners ──────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/beneficial-owners", response_model=BeneficialOwnerResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/beneficial-owners",
+    response_model=BeneficialOwnerResponse,
+    status_code=201,
+)
 def add_beneficial_owner(
     customer_id: str,
     payload: BeneficialOwnerCreate,
@@ -427,19 +535,26 @@ def add_beneficial_owner(
     return ubo
 
 
-@router.get("/{customer_id}/beneficial-owners", response_model=List[BeneficialOwnerResponse])
+@router.get(
+    "/{customer_id}/beneficial-owners", response_model=List[BeneficialOwnerResponse]
+)
 def list_beneficial_owners(
     customer_id: str,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(BeneficialOwner).filter(
-        BeneficialOwner.customer_id == customer_id
-    ).order_by(BeneficialOwner.created_at).all()
+    return (
+        db.query(BeneficialOwner)
+        .filter(BeneficialOwner.customer_id == customer_id)
+        .order_by(BeneficialOwner.created_at)
+        .all()
+    )
 
 
-@router.patch("/{customer_id}/beneficial-owners/{ubo_id}", response_model=BeneficialOwnerResponse)
+@router.patch(
+    "/{customer_id}/beneficial-owners/{ubo_id}", response_model=BeneficialOwnerResponse
+)
 def update_beneficial_owner(
     customer_id: str,
     ubo_id: str,
@@ -448,9 +563,13 @@ def update_beneficial_owner(
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    ubo = db.query(BeneficialOwner).filter(
-        BeneficialOwner.id == ubo_id, BeneficialOwner.customer_id == customer_id
-    ).first()
+    ubo = (
+        db.query(BeneficialOwner)
+        .filter(
+            BeneficialOwner.id == ubo_id, BeneficialOwner.customer_id == customer_id
+        )
+        .first()
+    )
     if not ubo:
         raise HTTPException(404, "Beneficial owner not found")
     for field, value in payload.model_dump(exclude_none=True).items():
@@ -467,7 +586,12 @@ def update_beneficial_owner(
 
 # ── Corporate Documents ────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/corporate-documents", response_model=CorporateDocumentResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/corporate-documents",
+    response_model=CorporateDocumentResponse,
+    status_code=201,
+)
 def add_corporate_document(
     customer_id: str,
     payload: CorporateDocumentCreate,
@@ -487,21 +611,31 @@ def add_corporate_document(
     return doc
 
 
-@router.get("/{customer_id}/corporate-documents", response_model=List[CorporateDocumentResponse])
+@router.get(
+    "/{customer_id}/corporate-documents", response_model=List[CorporateDocumentResponse]
+)
 def list_corporate_documents(
     customer_id: str,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(CorporateDocument).filter(
-        CorporateDocument.customer_id == customer_id
-    ).order_by(CorporateDocument.created_at.desc()).all()
+    return (
+        db.query(CorporateDocument)
+        .filter(CorporateDocument.customer_id == customer_id)
+        .order_by(CorporateDocument.created_at.desc())
+        .all()
+    )
 
 
 # ── Identity Documents ─────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/identity-documents", response_model=IdentityDocumentResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/identity-documents",
+    response_model=IdentityDocumentResponse,
+    status_code=201,
+)
 def add_identity_document(
     customer_id: str,
     payload: IdentityDocumentCreate,
@@ -521,7 +655,10 @@ def add_identity_document(
     return doc
 
 
-@router.patch("/{customer_id}/identity-documents/{doc_id}/verify", response_model=IdentityDocumentResponse)
+@router.patch(
+    "/{customer_id}/identity-documents/{doc_id}/verify",
+    response_model=IdentityDocumentResponse,
+)
 def verify_identity_document(
     customer_id: str,
     doc_id: str,
@@ -530,10 +667,14 @@ def verify_identity_document(
     db: Session = Depends(get_db),
 ):
     customer = _get_customer(customer_id, org_id_for(current_user), db)
-    doc = db.query(CustomerIdentityDocument).filter(
-        CustomerIdentityDocument.id == doc_id,
-        CustomerIdentityDocument.customer_id == customer_id,
-    ).first()
+    doc = (
+        db.query(CustomerIdentityDocument)
+        .filter(
+            CustomerIdentityDocument.id == doc_id,
+            CustomerIdentityDocument.customer_id == customer_id,
+        )
+        .first()
+    )
     if not doc:
         raise HTTPException(404, "Identity document not found")
 
@@ -550,21 +691,31 @@ def verify_identity_document(
     return doc
 
 
-@router.get("/{customer_id}/identity-documents", response_model=List[IdentityDocumentResponse])
+@router.get(
+    "/{customer_id}/identity-documents", response_model=List[IdentityDocumentResponse]
+)
 def list_identity_documents(
     customer_id: str,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(CustomerIdentityDocument).filter(
-        CustomerIdentityDocument.customer_id == customer_id
-    ).order_by(CustomerIdentityDocument.created_at.desc()).all()
+    return (
+        db.query(CustomerIdentityDocument)
+        .filter(CustomerIdentityDocument.customer_id == customer_id)
+        .order_by(CustomerIdentityDocument.created_at.desc())
+        .all()
+    )
 
 
 # ── Selfie Verification ────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/selfie-verification", response_model=SelfieVerificationResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/selfie-verification",
+    response_model=SelfieVerificationResponse,
+    status_code=201,
+)
 def add_selfie_verification(
     customer_id: str,
     payload: SelfieVerificationCreate,
@@ -572,10 +723,14 @@ def add_selfie_verification(
     db: Session = Depends(get_db),
 ):
     customer = _get_customer(customer_id, org_id_for(current_user), db)
-    overall = VerificationResult.pass_ if (
-        payload.liveness_result == VerificationResult.pass_ and
-        payload.face_match_result == VerificationResult.pass_
-    ) else VerificationResult.refer
+    overall = (
+        VerificationResult.pass_
+        if (
+            payload.liveness_result == VerificationResult.pass_
+            and payload.face_match_result == VerificationResult.pass_
+        )
+        else VerificationResult.refer
+    )
 
     rec = CustomerSelfieVerification(
         customer_id=customer.id,
@@ -592,21 +747,32 @@ def add_selfie_verification(
     return rec
 
 
-@router.get("/{customer_id}/selfie-verifications", response_model=List[SelfieVerificationResponse])
+@router.get(
+    "/{customer_id}/selfie-verifications",
+    response_model=List[SelfieVerificationResponse],
+)
 def list_selfie_verifications(
     customer_id: str,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(CustomerSelfieVerification).filter(
-        CustomerSelfieVerification.customer_id == customer_id
-    ).order_by(CustomerSelfieVerification.created_at.desc()).all()
+    return (
+        db.query(CustomerSelfieVerification)
+        .filter(CustomerSelfieVerification.customer_id == customer_id)
+        .order_by(CustomerSelfieVerification.created_at.desc())
+        .all()
+    )
 
 
 # ── Address Verification ───────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/address-verification", response_model=AddressVerificationResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/address-verification",
+    response_model=AddressVerificationResponse,
+    status_code=201,
+)
 def add_address_verification(
     customer_id: str,
     payload: AddressVerificationCreate,
@@ -628,7 +794,12 @@ def add_address_verification(
 
 # ── Phone Verification ─────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/phone-verification", response_model=PhoneVerificationResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/phone-verification",
+    response_model=PhoneVerificationResponse,
+    status_code=201,
+)
 def create_phone_verification(
     customer_id: str,
     payload: PhoneVerificationCreate,
@@ -649,7 +820,10 @@ def create_phone_verification(
     return rec
 
 
-@router.post("/{customer_id}/phone-verification/{verification_id}/confirm", response_model=PhoneVerificationResponse)
+@router.post(
+    "/{customer_id}/phone-verification/{verification_id}/confirm",
+    response_model=PhoneVerificationResponse,
+)
 def confirm_phone_otp(
     customer_id: str,
     verification_id: str,
@@ -658,10 +832,14 @@ def confirm_phone_otp(
 ):
     """Mark OTP as verified (OTP logic handled by frontend/SMS provider)."""
     customer = _get_customer(customer_id, org_id_for(current_user), db)
-    rec = db.query(CustomerPhoneVerification).filter(
-        CustomerPhoneVerification.id == verification_id,
-        CustomerPhoneVerification.customer_id == customer_id,
-    ).first()
+    rec = (
+        db.query(CustomerPhoneVerification)
+        .filter(
+            CustomerPhoneVerification.id == verification_id,
+            CustomerPhoneVerification.customer_id == customer_id,
+        )
+        .first()
+    )
     if not rec:
         raise HTTPException(404, "Phone verification record not found")
     rec.otp_verified = True
@@ -676,7 +854,12 @@ def confirm_phone_otp(
 
 # ── Email Verification ─────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/email-verification", response_model=EmailVerificationResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/email-verification",
+    response_model=EmailVerificationResponse,
+    status_code=201,
+)
 def create_email_verification(
     customer_id: str,
     payload: EmailVerificationCreate,
@@ -685,6 +868,7 @@ def create_email_verification(
 ):
     customer = _get_customer(customer_id, org_id_for(current_user), db)
     from app.models.kyc import CustomerEmailVerification as EV
+
     rec = EV(
         customer_id=customer.id,
         org_id=customer.org_id,
@@ -699,7 +883,10 @@ def create_email_verification(
     return rec
 
 
-@router.post("/{customer_id}/email-verification/{verification_id}/confirm", response_model=EmailVerificationResponse)
+@router.post(
+    "/{customer_id}/email-verification/{verification_id}/confirm",
+    response_model=EmailVerificationResponse,
+)
 def confirm_email_token(
     customer_id: str,
     verification_id: str,
@@ -707,10 +894,14 @@ def confirm_email_token(
     db: Session = Depends(get_db),
 ):
     customer = _get_customer(customer_id, org_id_for(current_user), db)
-    rec = db.query(CustomerEmailVerification).filter(
-        CustomerEmailVerification.id == verification_id,
-        CustomerEmailVerification.customer_id == customer_id,
-    ).first()
+    rec = (
+        db.query(CustomerEmailVerification)
+        .filter(
+            CustomerEmailVerification.id == verification_id,
+            CustomerEmailVerification.customer_id == customer_id,
+        )
+        .first()
+    )
     if not rec:
         raise HTTPException(404, "Email verification record not found")
     rec.token_verified = True
@@ -725,7 +916,12 @@ def confirm_email_token(
 
 # ── Screening ──────────────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/screen", response_model=List[ScreeningRecordResponse], status_code=201)
+
+@router.post(
+    "/{customer_id}/screen",
+    response_model=List[ScreeningRecordResponse],
+    status_code=201,
+)
 def trigger_screening(
     customer_id: str,
     payload: ScreeningTriggerRequest,
@@ -771,15 +967,20 @@ def trigger_screening(
         if flag:
             _update_checklist_flag(customer, flag, True, db)
 
-    db.add(AuditLog(
-        org_id=customer.org_id,
-        actor_id=current_user.id,
-        event_type=AuditEventType.screening_completed,
-        action="customer.screening.triggered",
-        object_type="Customer",
-        object_id=customer.id,
-        new_value={"types": [t.value for t in payload.screening_types], "provider": payload.provider.value},
-    ))
+    db.add(
+        AuditLog(
+            org_id=customer.org_id,
+            actor_id=current_user.id,
+            event_type=AuditEventType.screening_completed,
+            action="customer.screening.triggered",
+            object_type="Customer",
+            object_id=customer.id,
+            new_value={
+                "types": [t.value for t in payload.screening_types],
+                "provider": payload.provider.value,
+            },
+        )
+    )
     db.commit()
     for r in results:
         db.refresh(r)
@@ -800,7 +1001,10 @@ def list_screening_records(
     return q.order_by(ScreeningRecord.screened_at.desc()).all()
 
 
-@router.patch("/{customer_id}/screening/{record_id}/review", response_model=ScreeningRecordResponse)
+@router.patch(
+    "/{customer_id}/screening/{record_id}/review",
+    response_model=ScreeningRecordResponse,
+)
 def review_screening_result(
     customer_id: str,
     record_id: str,
@@ -809,10 +1013,14 @@ def review_screening_result(
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    rec = db.query(ScreeningRecord).filter(
-        ScreeningRecord.id == record_id,
-        ScreeningRecord.customer_id == customer_id,
-    ).first()
+    rec = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.id == record_id,
+            ScreeningRecord.customer_id == customer_id,
+        )
+        .first()
+    )
     if not rec:
         raise HTTPException(404, "Screening record not found")
     rec.status = payload.status
@@ -827,7 +1035,12 @@ def review_screening_result(
 
 # ── Crypto Wallet Screening ────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/wallet-screening", response_model=WalletScreeningResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/wallet-screening",
+    response_model=WalletScreeningResponse,
+    status_code=201,
+)
 def screen_crypto_wallet(
     customer_id: str,
     payload: WalletScreeningCreate,
@@ -851,19 +1064,25 @@ def screen_crypto_wallet(
     return rec
 
 
-@router.get("/{customer_id}/wallet-screenings", response_model=List[WalletScreeningResponse])
+@router.get(
+    "/{customer_id}/wallet-screenings", response_model=List[WalletScreeningResponse]
+)
 def list_wallet_screenings(
     customer_id: str,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(CryptoWalletScreening).filter(
-        CryptoWalletScreening.customer_id == customer_id
-    ).order_by(CryptoWalletScreening.screened_at.desc()).all()
+    return (
+        db.query(CryptoWalletScreening)
+        .filter(CryptoWalletScreening.customer_id == customer_id)
+        .order_by(CryptoWalletScreening.screened_at.desc())
+        .all()
+    )
 
 
 # ── Screening Alerts ───────────────────────────────────────────────────────────
+
 
 @router.get("/{customer_id}/alerts", response_model=List[AlertResponse])
 def list_customer_alerts(
@@ -872,9 +1091,12 @@ def list_customer_alerts(
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(ScreeningAlert).filter(
-        ScreeningAlert.customer_id == customer_id
-    ).order_by(ScreeningAlert.created_at.desc()).all()
+    return (
+        db.query(ScreeningAlert)
+        .filter(ScreeningAlert.customer_id == customer_id)
+        .order_by(ScreeningAlert.created_at.desc())
+        .all()
+    )
 
 
 @router.patch("/{customer_id}/alerts/{alert_id}", response_model=AlertResponse)
@@ -886,10 +1108,14 @@ def resolve_alert(
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    alert = db.query(ScreeningAlert).filter(
-        ScreeningAlert.id == alert_id,
-        ScreeningAlert.customer_id == customer_id,
-    ).first()
+    alert = (
+        db.query(ScreeningAlert)
+        .filter(
+            ScreeningAlert.id == alert_id,
+            ScreeningAlert.customer_id == customer_id,
+        )
+        .first()
+    )
     if not alert:
         raise HTTPException(404, "Alert not found")
     alert.status = payload.status
@@ -906,16 +1132,21 @@ def resolve_alert(
 
 # ── Onboarding Checklist ───────────────────────────────────────────────────────
 
-@router.get("/{customer_id}/onboarding-checklist", response_model=OnboardingChecklistResponse)
+
+@router.get(
+    "/{customer_id}/onboarding-checklist", response_model=OnboardingChecklistResponse
+)
 def get_onboarding_checklist(
     customer_id: str,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    chk = db.query(CustomerOnboardingChecklist).filter(
-        CustomerOnboardingChecklist.customer_id == customer_id
-    ).first()
+    chk = (
+        db.query(CustomerOnboardingChecklist)
+        .filter(CustomerOnboardingChecklist.customer_id == customer_id)
+        .first()
+    )
     if not chk:
         raise HTTPException(404, "Onboarding checklist not found")
     return chk
@@ -923,16 +1154,22 @@ def get_onboarding_checklist(
 
 # ── Risk Score History ─────────────────────────────────────────────────────────
 
-@router.get("/{customer_id}/risk-history", response_model=List[RiskScoreHistoryResponse])
+
+@router.get(
+    "/{customer_id}/risk-history", response_model=List[RiskScoreHistoryResponse]
+)
 def get_risk_score_history(
     customer_id: str,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(CustomerRiskScoreHistory).filter(
-        CustomerRiskScoreHistory.customer_id == customer_id
-    ).order_by(CustomerRiskScoreHistory.scored_at.desc()).all()
+    return (
+        db.query(CustomerRiskScoreHistory)
+        .filter(CustomerRiskScoreHistory.customer_id == customer_id)
+        .order_by(CustomerRiskScoreHistory.scored_at.desc())
+        .all()
+    )
 
 
 @router.post("/{customer_id}/rescore")
@@ -974,7 +1211,9 @@ def rescore_customer(
     customer.risk_score = score
     customer.risk_level = level
 
-    _record_risk_history(customer, "manual_rescore", current_user.id, db, scoring_factors=factors)
+    _record_risk_history(
+        customer, "manual_rescore", current_user.id, db, scoring_factors=factors
+    )
     db.commit()
 
     return {"customer_id": customer_id, "risk_score": score, "risk_level": level.value}
@@ -982,7 +1221,10 @@ def rescore_customer(
 
 # ── Periodic Reviews ───────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/reviews", response_model=CustomerReviewResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/reviews", response_model=CustomerReviewResponse, status_code=201
+)
 def create_review(
     customer_id: str,
     payload: CustomerReviewCreate,
@@ -1007,7 +1249,10 @@ def create_review(
         customer.risk_score = payload.risk_score_after
     if payload.risk_score_after is not None or payload.cdd_level_after:
         _record_risk_history(
-            customer, "periodic_review", current_user.id, db,
+            customer,
+            "periodic_review",
+            current_user.id,
+            db,
             notes=payload.outcome_notes,
         )
     db.commit()
@@ -1022,14 +1267,20 @@ def list_reviews(
     db: Session = Depends(get_db),
 ):
     _get_customer(customer_id, org_id_for(current_user), db)
-    return db.query(CustomerReview).filter(
-        CustomerReview.customer_id == customer_id
-    ).order_by(CustomerReview.review_date.desc()).all()
+    return (
+        db.query(CustomerReview)
+        .filter(CustomerReview.customer_id == customer_id)
+        .order_by(CustomerReview.review_date.desc())
+        .all()
+    )
 
 
 # ── Compliance Notes ───────────────────────────────────────────────────────────
 
-@router.post("/{customer_id}/notes", response_model=CustomerNoteResponse, status_code=201)
+
+@router.post(
+    "/{customer_id}/notes", response_model=CustomerNoteResponse, status_code=201
+)
 def add_note(
     customer_id: str,
     payload: CustomerNoteCreate,
@@ -1067,6 +1318,7 @@ def list_notes(
 
 # ── Bulk Import ───────────────────────────────────────────────────────────────
 
+
 @router.get("/import/template")
 def download_import_template(
     current_user: User = Depends(require_analyst_or_above),
@@ -1090,13 +1342,16 @@ def download_import_template(
     CDD must be completed before the customer can be activated.
     """
     from fastapi.responses import Response
+
     from app.services.bulk_import import generate_csv_template
 
     content = generate_csv_template()
     return Response(
         content=content,
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=\"verigo_customer_import_template.csv\""},
+        headers={
+            "Content-Disposition": 'attachment; filename="verigo_customer_import_template.csv"'
+        },
     )
 
 
@@ -1109,6 +1364,7 @@ def import_field_guide(
     Includes accepted aliases, examples, and field descriptions.
     """
     from app.services.bulk_import import get_template_field_guide
+
     return {
         "total_fields": len(get_template_field_guide()),
         "fields": get_template_field_guide(),
@@ -1125,7 +1381,9 @@ def import_field_guide(
 
 @router.post("/import/upload")
 async def bulk_import_customers(
-    file: UploadFile = File(..., description="CSV or Excel (.xlsx) customer import file"),
+    file: UploadFile = File(
+        ..., description="CSV or Excel (.xlsx) customer import file"
+    ),
     current_user: User = Depends(require_compliance_or_above),
     db: Session = Depends(get_db),
 ):
@@ -1154,11 +1412,14 @@ async def bulk_import_customers(
     before onboarding is finalised. All compliance decisions remain
     with the reporting entity.
     """
-    from app.services.bulk_import import parse_csv, parse_excel
     from app.models.customer import CustomerType, OnboardingChannel, RiskLevel
+    from app.services.bulk_import import parse_csv, parse_excel
 
     if file is None:
-        raise HTTPException(422, "No file uploaded. Provide a CSV or Excel file as multipart form-data field 'file'.")
+        raise HTTPException(
+            422,
+            "No file uploaded. Provide a CSV or Excel file as multipart form-data field 'file'.",
+        )
 
     filename = file.filename or ""
     content = await file.read()
@@ -1174,7 +1435,9 @@ async def bulk_import_customers(
         try:
             rows, warnings, errors = parse_excel(content)
         except ImportError:
-            raise HTTPException(500, "Excel support requires openpyxl — contact your administrator")
+            raise HTTPException(
+                500, "Excel support requires openpyxl — contact your administrator"
+            )
     elif ext == "csv" or "csv" in content_type or "text" in content_type:
         rows, warnings, errors = parse_csv(content)
     else:
@@ -1207,11 +1470,13 @@ async def bulk_import_customers(
         if email:
             existing = db.query(Customer).filter_by(org_id=org_id, email=email).first()
             if existing:
-                skipped.append({
-                    "full_name": full_name,
-                    "email": email,
-                    "reason": f"Email already exists (customer: {existing.customer_ref})",
-                })
+                skipped.append(
+                    {
+                        "full_name": full_name,
+                        "email": email,
+                        "reason": f"Email already exists (customer: {existing.customer_ref})",
+                    }
+                )
                 continue
 
         # Resolve enums safely
@@ -1239,10 +1504,13 @@ async def bulk_import_customers(
         if dob_str:
             try:
                 from datetime import date as _date
+
                 parts = dob_str.split("-")
                 dob = _date(int(parts[0]), int(parts[1]), int(parts[2]))
             except Exception:
-                warnings.append(f"Row {i + 2}: date_of_birth '{dob_str}' could not be parsed — skipped")
+                warnings.append(
+                    f"Row {i + 2}: date_of_birth '{dob_str}' could not be parsed — skipped"
+                )
 
         customer_ref = _next_customer_ref(org_id, db)
 
@@ -1261,7 +1529,8 @@ async def bulk_import_customers(
             occupation=row.get("occupation") or None,
             employer_name=row.get("employer_name") or None,
             tax_identification_number=row.get("tax_identification_number") or None,
-            tax_residency_country=row.get("tax_residency_country", "AU").upper() or "AU",
+            tax_residency_country=row.get("tax_residency_country", "AU").upper()
+            or "AU",
             address_line1=row.get("address_line1") or None,
             address_line2=row.get("address_line2") or None,
             city=row.get("city") or None,
@@ -1280,19 +1549,25 @@ async def bulk_import_customers(
         # Create onboarding checklist
         _create_checklist(customer, db)
 
-        created.append({
-            "customer_ref": customer_ref,
-            "full_name": full_name,
-            "email": email,
-            "customer_type": ctype.value,
-            "status": "draft",
-        })
+        created.append(
+            {
+                "customer_ref": customer_ref,
+                "full_name": full_name,
+                "email": email,
+                "customer_type": ctype.value,
+                "status": "draft",
+            }
+        )
 
     db.commit()
 
     log.info(
         "bulk_import.complete org=%s created=%d skipped=%d errors=%d by=%s",
-        org_id, len(created), len(skipped), len(errors), current_user.id
+        org_id,
+        len(created),
+        len(skipped),
+        len(errors),
+        current_user.id,
     )
 
     return {

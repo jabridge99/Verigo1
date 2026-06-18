@@ -216,6 +216,7 @@ class SubscriptionAddon(Base):
     """Enterprise add-on purchase — gates access to partially-built/sales-gated
     providers (e.g. Elliptic, TRM Labs crypto wallet screening) independent of
     the base subscription plan."""
+
     __tablename__ = "subscription_addons"
 
     id = Column(Integer, primary_key=True, index=True)

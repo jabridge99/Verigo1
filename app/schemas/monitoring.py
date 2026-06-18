@@ -1,4 +1,5 @@
 """Pydantic schemas for Monitoring Rules and Transaction Alerts."""
+
 from datetime import datetime
 from typing import Any, Optional
 
@@ -14,13 +15,16 @@ from app.models.monitoring import (
     RuleStatus,
 )
 
-
 # ── Rule Builder ───────────────────────────────────────────────────────────────
+
 
 class RuleConditionCreate(BaseModel):
     condition_order: int = 0
-    field_path: str = Field(..., max_length=255,
-                            description="Dot-notation field: amount_aud, customer.risk_level, crypto_detail.mixer_exposure_pct")
+    field_path: str = Field(
+        ...,
+        max_length=255,
+        description="Dot-notation field: amount_aud, customer.risk_level, crypto_detail.mixer_exposure_pct",
+    )
     operator: RuleConditionOperator
     value: Optional[Any] = None
     value_label: Optional[str] = Field(None, max_length=255)
@@ -126,6 +130,7 @@ class MonitoringRuleListOut(BaseModel):
 
 # ── Alert Workflow ─────────────────────────────────────────────────────────────
 
+
 class AlertAssignRequest(BaseModel):
     assign_to: str = Field(..., description="User ID to assign alert to")
 
@@ -133,7 +138,9 @@ class AlertAssignRequest(BaseModel):
 class AlertReviewRequest(BaseModel):
     review_notes: Optional[str] = None
     is_false_positive: bool = False
-    resolution: str = Field(..., description="dismissed | escalated_to_case | smr_candidate | cleared")
+    resolution: str = Field(
+        ..., description="dismissed | escalated_to_case | smr_candidate | cleared"
+    )
     is_smr_candidate: bool = False
 
 

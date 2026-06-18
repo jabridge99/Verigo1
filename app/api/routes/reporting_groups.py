@@ -7,26 +7,33 @@ under a single group with an optional shared AML program.
 
 All routes require the requesting user's org to be a group member.
 """
+
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_current_user, require_admin, require_mlro_or_above,
-    require_compliance_or_above, require_analyst_or_above, get_db,
+    get_db,
+    require_analyst_or_above,
+    require_compliance_or_above,
+    require_mlro_or_above,
+)
+from app.models.reporting_group import (
+    GroupMemberRole,
+    GroupType,
+    ReportingGroupMember,
+    ReportingGroupStatus,
 )
 from app.models.user import User
-from app.models.reporting_group import (
-    ReportingGroup, ReportingGroupMember,
-    ReportingGroupStatus, GroupType, GroupMemberRole,
-)
 from app.services import reporting_group_service
 
 router = APIRouter(prefix="/reporting-groups", tags=["Reporting Groups"])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class CreateGroupRequest(BaseModel):
     name: str
@@ -54,6 +61,7 @@ class AssignAMLProgramRequest(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @router.post("/", summary="Create a reporting group")
 def create_group(
     body: CreateGroupRequest,
@@ -69,7 +77,12 @@ def create_group(
         shared_aml_program_id=body.shared_aml_program_id,
         created_by=current_user.id,
     )
-    return {"id": group.id, "name": group.name, "status": group.status, "holding_org_id": group.holding_org_id}
+    return {
+        "id": group.id,
+        "name": group.name,
+        "status": group.status,
+        "holding_org_id": group.holding_org_id,
+    }
 
 
 @router.get("/", summary="List reporting groups for current org")
@@ -86,8 +99,14 @@ def get_group(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    group = reporting_group_service.validate_group_access(db, group_id, current_user.org_id)
-    members = db.query(ReportingGroupMember).filter_by(group_id=group_id, is_active=True).all()
+    group = reporting_group_service.validate_group_access(
+        db, group_id, current_user.org_id
+    )
+    members = (
+        db.query(ReportingGroupMember)
+        .filter_by(group_id=group_id, is_active=True)
+        .all()
+    )
     return {
         "id": group.id,
         "name": group.name,
@@ -117,9 +136,13 @@ def update_group(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_mlro_or_above),
 ):
-    group = reporting_group_service.validate_group_access(db, group_id, current_user.org_id)
+    group = reporting_group_service.validate_group_access(
+        db, group_id, current_user.org_id
+    )
     if group.holding_org_id != current_user.org_id:
-        raise HTTPException(403, "Only the holding organisation can update group details")
+        raise HTTPException(
+            403, "Only the holding organisation can update group details"
+        )
 
     if body.name is not None:
         group.name = body.name
@@ -135,7 +158,9 @@ def update_group(
     return {"id": group.id, "name": group.name, "status": group.status}
 
 
-@router.post("/{group_id}/members", summary="Add a subsidiary organisation to the group")
+@router.post(
+    "/{group_id}/members", summary="Add a subsidiary organisation to the group"
+)
 def add_member(
     group_id: str,
     body: AddMemberRequest,
@@ -159,14 +184,19 @@ def add_member(
     }
 
 
-@router.delete("/{group_id}/members/{org_id}", summary="Remove a member organisation from the group")
+@router.delete(
+    "/{group_id}/members/{org_id}",
+    summary="Remove a member organisation from the group",
+)
 def remove_member(
     group_id: str,
     org_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_mlro_or_above),
 ):
-    return reporting_group_service.remove_member(db, group_id, org_id, current_user.org_id)
+    return reporting_group_service.remove_member(
+        db, group_id, org_id, current_user.org_id
+    )
 
 
 @router.get("/{group_id}/dashboard", summary="Group-level aggregated dashboard")
@@ -175,31 +205,44 @@ def group_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    return reporting_group_service.get_group_dashboard(db, group_id, current_user.org_id)
+    return reporting_group_service.get_group_dashboard(
+        db, group_id, current_user.org_id
+    )
 
 
-@router.put("/{group_id}/aml-program", summary="Assign or update the shared AML program for this group")
+@router.put(
+    "/{group_id}/aml-program",
+    summary="Assign or update the shared AML program for this group",
+)
 def assign_aml_program(
     group_id: str,
     body: AssignAMLProgramRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_mlro_or_above),
 ):
-    group = reporting_group_service.validate_group_access(db, group_id, current_user.org_id)
+    group = reporting_group_service.validate_group_access(
+        db, group_id, current_user.org_id
+    )
     if group.holding_org_id != current_user.org_id:
-        raise HTTPException(403, "Only the holding organisation can assign the shared AML program")
+        raise HTTPException(
+            403, "Only the holding organisation can assign the shared AML program"
+        )
     group.shared_aml_program_id = body.shared_aml_program_id
     db.commit()
     return {"group_id": group.id, "shared_aml_program_id": group.shared_aml_program_id}
 
 
-@router.get("/{group_id}/aml-program", summary="Get the shared AML program for this group")
+@router.get(
+    "/{group_id}/aml-program", summary="Get the shared AML program for this group"
+)
 def get_aml_program(
     group_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    group = reporting_group_service.validate_group_access(db, group_id, current_user.org_id)
+    group = reporting_group_service.validate_group_access(
+        db, group_id, current_user.org_id
+    )
     return {
         "group_id": group.id,
         "shared_aml_program_id": group.shared_aml_program_id,

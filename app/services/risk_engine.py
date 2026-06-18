@@ -15,12 +15,11 @@ Risk Rating Thresholds (residual):
 GOVERNANCE DISCLAIMER: This engine is a calculation tool only. Final risk ratings
 and conclusions remain the sole responsibility of the reporting entity.
 """
+
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
-
 
 # ── Scoring constants ─────────────────────────────────────────────────────────
 
@@ -33,13 +32,14 @@ CEF_MAP: Dict[int, float] = {
 }
 
 RISK_THRESHOLDS = [
-    (5,  "low"),
+    (5, "low"),
     (12, "medium"),
     (19, "high"),
 ]
 
 
 # ── Core scoring functions ────────────────────────────────────────────────────
+
 
 def inherent_risk(likelihood: int, consequence: int) -> float:
     """Compute inherent risk score. Both inputs must be 1-5."""
@@ -68,6 +68,7 @@ def risk_rating(score: float) -> str:
 
 # ── Factor-level result ───────────────────────────────────────────────────────
 
+
 @dataclass
 class FactorResult:
     factor_id: str
@@ -84,7 +85,11 @@ class FactorResult:
 
     @property
     def effective_residual(self) -> float:
-        return self.override_residual if self.override_residual is not None else self.residual_score
+        return (
+            self.override_residual
+            if self.override_residual is not None
+            else self.residual_score
+        )
 
     @property
     def effective_rating(self) -> str:
@@ -120,6 +125,7 @@ def score_factor(
 
 # ── Category-level result ─────────────────────────────────────────────────────
 
+
 @dataclass
 class CategoryResult:
     category_id: str
@@ -138,7 +144,9 @@ class CategoryResult:
     def avg_residual_score(self) -> float:
         if not self.factors:
             return 0.0
-        return round(sum(f.effective_residual for f in self.factors) / len(self.factors), 4)
+        return round(
+            sum(f.effective_residual for f in self.factors) / len(self.factors), 4
+        )
 
     @property
     def residual_rating(self) -> str:
@@ -153,6 +161,7 @@ class CategoryResult:
 
 # ── Overall assessment result ─────────────────────────────────────────────────
 
+
 @dataclass
 class AssessmentResult:
     categories: List[CategoryResult] = field(default_factory=list)
@@ -163,7 +172,9 @@ class AssessmentResult:
         total_weight = sum(c.weight for c in self.categories if c.factors)
         if total_weight == 0:
             return 0.0
-        weighted_sum = sum(c.avg_inherent_score * c.weight for c in self.categories if c.factors)
+        weighted_sum = sum(
+            c.avg_inherent_score * c.weight for c in self.categories if c.factors
+        )
         return round(weighted_sum / total_weight, 4)
 
     @property
@@ -172,7 +183,9 @@ class AssessmentResult:
         total_weight = sum(c.weight for c in self.categories if c.factors)
         if total_weight == 0:
             return 0.0
-        weighted_sum = sum(c.avg_residual_score * c.weight for c in self.categories if c.factors)
+        weighted_sum = sum(
+            c.avg_residual_score * c.weight for c in self.categories if c.factors
+        )
         return round(weighted_sum / total_weight, 4)
 
     @property
@@ -202,6 +215,7 @@ class AssessmentResult:
 
 # ── Heat map ──────────────────────────────────────────────────────────────────
 
+
 def build_heat_map(factors: List[FactorResult]) -> List[List[List[str]]]:
     """
     Returns a 5×5 grid (row=Consequence 5→1, col=Likelihood 1→5).
@@ -222,10 +236,10 @@ def cell_rating(likelihood: int, consequence: int) -> str:
 
 # ── Executive summary builder ─────────────────────────────────────────────────
 
+
 def build_executive_summary(result: AssessmentResult, org_name: str) -> str:
     high_critical = [
-        c for c in result.categories
-        if c.residual_rating in ("high", "critical")
+        c for c in result.categories if c.residual_rating in ("high", "critical")
     ]
     top_factors = sorted(
         [f for c in result.categories for f in c.factors],
@@ -234,13 +248,13 @@ def build_executive_summary(result: AssessmentResult, org_name: str) -> str:
     )[:5]
 
     lines = [
-        f"ML/TF Risk Assessment — Executive Summary",
+        "ML/TF Risk Assessment — Executive Summary",
         f"Organisation: {org_name}",
-        f"",
+        "",
         f"Overall Inherent Risk:  {result.overall_inherent_score:.2f} ({result.overall_inherent_rating.upper()})",
         f"Overall Residual Risk:  {result.overall_residual_score:.2f} ({result.overall_residual_rating.upper()})",
-        f"",
-        f"Risk Category Breakdown:",
+        "",
+        "Risk Category Breakdown:",
     ]
     for c in result.categories:
         lines.append(
@@ -250,12 +264,16 @@ def build_executive_summary(result: AssessmentResult, org_name: str) -> str:
     if high_critical:
         lines += ["", "Elevated Risk Areas:"]
         for c in high_critical:
-            lines.append(f"  • {c.name} ({c.residual_rating.upper()}) — {len(c.factors)} factors assessed")
+            lines.append(
+                f"  • {c.name} ({c.residual_rating.upper()}) — {len(c.factors)} factors assessed"
+            )
 
     if top_factors:
         lines += ["", "Top 5 Highest Residual Risk Factors:"]
         for i, f in enumerate(top_factors, 1):
-            lines.append(f"  {i}. [{f.factor_ref}] {f.name} — {f.effective_residual:.1f} ({f.effective_rating.upper()})")
+            lines.append(
+                f"  {i}. [{f.factor_ref}] {f.name} — {f.effective_residual:.1f} ({f.effective_rating.upper()})"
+            )
 
     lines += [
         "",
@@ -268,6 +286,7 @@ def build_executive_summary(result: AssessmentResult, org_name: str) -> str:
 
 
 # ── Mitigation register helper ────────────────────────────────────────────────
+
 
 def priority_order(factors: List[FactorResult]) -> List[FactorResult]:
     """Return factors sorted by effective residual score descending (for mitigation triage)."""

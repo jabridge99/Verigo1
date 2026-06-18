@@ -5,9 +5,9 @@ Every route that touches org data must use these dependencies.
 Tenant isolation: all DB queries MUST filter by org_id = current_user.org_id
 (admin users may pass ?org_id= to cross-scope).
 """
+
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Callable, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, status
@@ -17,8 +17,8 @@ from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.services.auth_service import TOKEN_BLACKLIST, decode_token
 
-
 # ── Token extraction ──────────────────────────────────────────────────────────
+
 
 def _extract_token(authorization: Optional[str] = Header(None)) -> str:
     if not authorization or not authorization.startswith("Bearer "):
@@ -31,6 +31,7 @@ def _extract_token(authorization: Optional[str] = Header(None)) -> str:
 
 
 # ── Current user ──────────────────────────────────────────────────────────────
+
 
 def get_current_user(
     token: str = Depends(_extract_token),
@@ -63,6 +64,7 @@ def get_current_user(
 
 
 # ── Role enforcement ──────────────────────────────────────────────────────────
+
 
 def require_roles(*roles: UserRole) -> Callable:
     """
@@ -109,12 +111,18 @@ def require_compliance_or_above(user: User = Depends(get_current_user)) -> User:
 
 
 def require_analyst_or_above(user: User = Depends(get_current_user)) -> User:
-    if user.role not in {UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst}:
+    if user.role not in {
+        UserRole.admin,
+        UserRole.mlro,
+        UserRole.compliance,
+        UserRole.analyst,
+    }:
         raise HTTPException(403, "Analyst role or above required")
     return user
 
 
 # ── Org-scoped DB access ──────────────────────────────────────────────────────
+
 
 def org_id_for(user: User) -> str:
     """Return the org_id to scope all queries to for this user."""
@@ -127,6 +135,7 @@ def org_id_for(user: User) -> str:
 
 
 # ── Pagination ────────────────────────────────────────────────────────────────
+
 
 class Pagination:
     def __init__(self, page: int = 1, page_size: int = 25):

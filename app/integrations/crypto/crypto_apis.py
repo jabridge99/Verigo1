@@ -12,6 +12,7 @@ rather than hard-coded to one assumed shape. Confirm exact field names
 against a live sandbox call before relying on this in production, and
 extend `_is_flagged`/field lookups if the real response differs.
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +20,7 @@ import logging
 import httpx
 
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
+
 from .base import CryptoWalletProvider, WalletIdentification, WalletScreeningResult
 
 log = logging.getLogger("verigo.integrations.crypto.crypto_apis")
@@ -41,10 +43,14 @@ class CryptoAPIsProvider(CryptoWalletProvider):
 
     def __init__(self, api_key: str):
         if not api_key:
-            raise ProviderUnavailableError("crypto_apis", "CRYPTOAPIS_API_KEY not configured")
+            raise ProviderUnavailableError(
+                "crypto_apis", "CRYPTOAPIS_API_KEY not configured"
+            )
         self.api_key = api_key
 
-    async def screen_address(self, address: str, network: str | None = None) -> WalletScreeningResult:
+    async def screen_address(
+        self, address: str, network: str | None = None
+    ) -> WalletScreeningResult:
         blockchain = NETWORK_TO_BLOCKCHAIN.get(network or "", network or "")
         async with httpx.AsyncClient(timeout=15, base_url=BASE_URL) as client:
             resp = await client.get(
@@ -53,11 +59,17 @@ class CryptoAPIsProvider(CryptoWalletProvider):
                 headers={"x-api-key": self.api_key},
             )
         if resp.status_code >= 400:
-            raise ProviderRejectedError("crypto_apis", f"{resp.status_code}: {resp.text}", raw=resp.text)
+            raise ProviderRejectedError(
+                "crypto_apis", f"{resp.status_code}: {resp.text}", raw=resp.text
+            )
 
         data = resp.json()
         item = data.get("data", data) if isinstance(data, dict) else {}
-        attrs = item.get("item", item.get("attributes", item)) if isinstance(item, dict) else {}
+        attrs = (
+            item.get("item", item.get("attributes", item))
+            if isinstance(item, dict)
+            else {}
+        )
 
         is_sanctioned = bool(
             attrs.get("isSanctioned")

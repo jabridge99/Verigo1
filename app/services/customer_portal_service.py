@@ -11,6 +11,7 @@ Security design:
   - Tokens expire (default 7 days)
   - All portal access is logged (IP, timestamp)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,11 +22,14 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.customer_portal import (
-    CustomerPortalSession, CustomerPortalDocument, CustomerPortalQuestionnaireResponse,
-    PortalSessionStatus, PortalDocumentStatus,
-)
 from app.models.customer import Customer, CustomerStatus
+from app.models.customer_portal import (
+    CustomerPortalDocument,
+    CustomerPortalQuestionnaireResponse,
+    CustomerPortalSession,
+    PortalDocumentStatus,
+    PortalSessionStatus,
+)
 
 
 def _hash_token(raw_token: str) -> str:
@@ -69,7 +73,9 @@ def create_portal_session(
     return session, raw_token
 
 
-def validate_portal_token(db: Session, raw_token: str, client_ip: Optional[str] = None) -> CustomerPortalSession:
+def validate_portal_token(
+    db: Session, raw_token: str, client_ip: Optional[str] = None
+) -> CustomerPortalSession:
     token_hash = _hash_token(raw_token)
     session = db.query(CustomerPortalSession).filter_by(token_hash=token_hash).first()
 
@@ -101,9 +107,15 @@ def validate_portal_token(db: Session, raw_token: str, client_ip: Optional[str] 
 
 def get_portal_state(db: Session, session: CustomerPortalSession) -> dict:
     docs = db.query(CustomerPortalDocument).filter_by(session_id=session.id).all()
-    responses = db.query(CustomerPortalQuestionnaireResponse).filter_by(session_id=session.id).all()
+    responses = (
+        db.query(CustomerPortalQuestionnaireResponse)
+        .filter_by(session_id=session.id)
+        .all()
+    )
 
-    uploaded_categories = {d.document_category for d in docs if d.status != PortalDocumentStatus.pending}
+    uploaded_categories = {
+        d.document_category for d in docs if d.status != PortalDocumentStatus.pending
+    }
     required_docs = session.required_documents or []
     required_sections = session.required_questionnaire_sections or []
     completed_sections = {r.section_key for r in responses if r.completed}
@@ -111,7 +123,9 @@ def get_portal_state(db: Session, session: CustomerPortalSession) -> dict:
     docs_complete = all(c in uploaded_categories for c in required_docs)
     sections_complete = all(s in completed_sections for s in required_sections)
     total_steps = len(required_docs) + len(required_sections)
-    completed_steps = len(uploaded_categories.intersection(required_docs)) + len(completed_sections.intersection(required_sections))
+    completed_steps = len(uploaded_categories.intersection(required_docs)) + len(
+        completed_sections.intersection(required_sections)
+    )
     progress_pct = int((completed_steps / total_steps * 100) if total_steps else 100)
 
     return {
@@ -156,7 +170,10 @@ async def upload_portal_document(
     mime_type: str,
 ) -> CustomerPortalDocument:
     if document_category not in (session.required_documents or []):
-        raise HTTPException(422, f"Document category '{document_category}' is not required for this portal session")
+        raise HTTPException(
+            422,
+            f"Document category '{document_category}' is not required for this portal session",
+        )
 
     from app.models.document import DocumentCategory
     from app.services import document_service
@@ -179,9 +196,11 @@ async def upload_portal_document(
         sha256_hash=hashlib.sha256(file_content).hexdigest(),
     )
 
-    existing = db.query(CustomerPortalDocument).filter_by(
-        session_id=session.id, document_category=document_category
-    ).first()
+    existing = (
+        db.query(CustomerPortalDocument)
+        .filter_by(session_id=session.id, document_category=document_category)
+        .first()
+    )
 
     now = datetime.now(timezone.utc)
 
@@ -216,9 +235,11 @@ def save_questionnaire_response(
     responses: dict,
     mark_complete: bool = False,
 ) -> CustomerPortalQuestionnaireResponse:
-    existing = db.query(CustomerPortalQuestionnaireResponse).filter_by(
-        session_id=session.id, section_key=section_key
-    ).first()
+    existing = (
+        db.query(CustomerPortalQuestionnaireResponse)
+        .filter_by(session_id=session.id, section_key=section_key)
+        .first()
+    )
 
     now = datetime.now(timezone.utc)
 
@@ -249,7 +270,10 @@ def save_questionnaire_response(
 def submit_portal_session(db: Session, session: CustomerPortalSession) -> dict:
     state = get_portal_state(db, session)
     if not state["ready_to_submit"]:
-        raise HTTPException(422, "Portal submission incomplete — please upload all required documents and complete all questionnaire sections")
+        raise HTTPException(
+            422,
+            "Portal submission incomplete — please upload all required documents and complete all questionnaire sections",
+        )
 
     session.status = PortalSessionStatus.submitted
     session.submitted_at = datetime.now(timezone.utc)
@@ -277,13 +301,19 @@ def staff_review_document(
     accepted: bool,
     rejection_reason: Optional[str] = None,
 ) -> CustomerPortalDocument:
-    doc = db.query(CustomerPortalDocument).filter_by(id=doc_id, session_id=session_id).first()
+    doc = (
+        db.query(CustomerPortalDocument)
+        .filter_by(id=doc_id, session_id=session_id)
+        .first()
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     if doc.org_id != org_id:
         raise HTTPException(403, "Access denied")
 
-    doc.status = PortalDocumentStatus.accepted if accepted else PortalDocumentStatus.rejected
+    doc.status = (
+        PortalDocumentStatus.accepted if accepted else PortalDocumentStatus.rejected
+    )
     doc.reviewed_by = reviewer_user_id
     doc.reviewed_at = datetime.now(timezone.utc)
     doc.rejection_reason = rejection_reason if not accepted else None
@@ -294,10 +324,16 @@ def staff_review_document(
 
 def expire_stale_sessions(db: Session) -> int:
     now = datetime.now(timezone.utc)
-    stale = db.query(CustomerPortalSession).filter(
-        CustomerPortalSession.expires_at < now,
-        CustomerPortalSession.status.in_([PortalSessionStatus.pending, PortalSessionStatus.in_progress]),
-    ).all()
+    stale = (
+        db.query(CustomerPortalSession)
+        .filter(
+            CustomerPortalSession.expires_at < now,
+            CustomerPortalSession.status.in_(
+                [PortalSessionStatus.pending, PortalSessionStatus.in_progress]
+            ),
+        )
+        .all()
+    )
     for s in stale:
         s.status = PortalSessionStatus.expired
     db.commit()

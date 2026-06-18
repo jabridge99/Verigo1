@@ -6,6 +6,7 @@ Roles:
   POST/PATCH endpoints  — compliance+
   Escalate              — mlro+
 """
+
 from datetime import date
 from typing import Optional
 
@@ -15,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     Pagination,
-    get_current_user,
     org_id_for,
     require_analyst_or_above,
     require_compliance_or_above,
@@ -27,7 +27,6 @@ from app.models.compliance_calendar import (
     CalendarItemType,
     ComplianceCalendarItem,
     ComplianceReminder,
-    ReminderStage,
 )
 from app.models.user import User
 from app.services.compliance_calendar_service import (
@@ -107,33 +106,52 @@ def get_calendar_dashboard(
     current_user: User = Depends(require_analyst_or_above),
 ):
     from sqlalchemy import func
+
     org_id = org_id_for(current_user)
 
-    total = db.query(func.count(ComplianceCalendarItem.id)).filter(
-        ComplianceCalendarItem.org_id == org_id,
-        ComplianceCalendarItem.status.notin_([CalendarItemStatus.completed, CalendarItemStatus.cancelled]),
-    ).scalar()
+    total = (
+        db.query(func.count(ComplianceCalendarItem.id))
+        .filter(
+            ComplianceCalendarItem.org_id == org_id,
+            ComplianceCalendarItem.status.notin_(
+                [CalendarItemStatus.completed, CalendarItemStatus.cancelled]
+            ),
+        )
+        .scalar()
+    )
 
-    overdue = db.query(func.count(ComplianceCalendarItem.id)).filter(
-        ComplianceCalendarItem.org_id == org_id,
-        ComplianceCalendarItem.is_overdue == True,
-        ComplianceCalendarItem.status.notin_([CalendarItemStatus.completed, CalendarItemStatus.cancelled]),
-    ).scalar()
+    overdue = (
+        db.query(func.count(ComplianceCalendarItem.id))
+        .filter(
+            ComplianceCalendarItem.org_id == org_id,
+            ComplianceCalendarItem.is_overdue == True,
+            ComplianceCalendarItem.status.notin_(
+                [CalendarItemStatus.completed, CalendarItemStatus.cancelled]
+            ),
+        )
+        .scalar()
+    )
 
     upcoming_30d = len(get_upcoming_items(db, org_id, days_ahead=30))
 
     by_type = (
-        db.query(ComplianceCalendarItem.item_type, func.count(ComplianceCalendarItem.id))
+        db.query(
+            ComplianceCalendarItem.item_type, func.count(ComplianceCalendarItem.id)
+        )
         .filter(ComplianceCalendarItem.org_id == org_id)
         .group_by(ComplianceCalendarItem.item_type)
         .all()
     )
 
-    pending_reminders = db.query(func.count(ComplianceReminder.id)).filter(
-        ComplianceReminder.org_id == org_id,
-        ComplianceReminder.is_sent == False,
-        ComplianceReminder.send_failed == False,
-    ).scalar()
+    pending_reminders = (
+        db.query(func.count(ComplianceReminder.id))
+        .filter(
+            ComplianceReminder.org_id == org_id,
+            ComplianceReminder.is_sent == False,
+            ComplianceReminder.send_failed == False,
+        )
+        .scalar()
+    )
 
     return {
         "open_items": total,
@@ -186,7 +204,9 @@ def get_upcoming(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    items = get_upcoming_items(db, org_id_for(current_user), days_ahead=days_ahead, item_type=item_type)
+    items = get_upcoming_items(
+        db, org_id_for(current_user), days_ahead=days_ahead, item_type=item_type
+    )
     return [_item_dict(i) for i in items]
 
 
@@ -197,10 +217,14 @@ def get_item(
     current_user: User = Depends(require_analyst_or_above),
 ):
     org_id = org_id_for(current_user)
-    item = db.query(ComplianceCalendarItem).filter(
-        ComplianceCalendarItem.id == item_id,
-        ComplianceCalendarItem.org_id == org_id,
-    ).first()
+    item = (
+        db.query(ComplianceCalendarItem)
+        .filter(
+            ComplianceCalendarItem.id == item_id,
+            ComplianceCalendarItem.org_id == org_id,
+        )
+        .first()
+    )
     if not item:
         raise HTTPException(404, "Calendar item not found.")
     return _item_dict(item)
@@ -214,10 +238,14 @@ def complete_calendar_item(
     current_user: User = Depends(require_compliance_or_above),
 ):
     org_id = org_id_for(current_user)
-    item = db.query(ComplianceCalendarItem).filter(
-        ComplianceCalendarItem.id == item_id,
-        ComplianceCalendarItem.org_id == org_id,
-    ).first()
+    item = (
+        db.query(ComplianceCalendarItem)
+        .filter(
+            ComplianceCalendarItem.id == item_id,
+            ComplianceCalendarItem.org_id == org_id,
+        )
+        .first()
+    )
     if not item:
         raise HTTPException(404, "Calendar item not found.")
     if item.status == CalendarItemStatus.completed:
@@ -271,11 +299,15 @@ def list_pending_reminders(
     current_user: User = Depends(require_analyst_or_above),
 ):
     org_id = org_id_for(current_user)
-    q = db.query(ComplianceReminder).filter(
-        ComplianceReminder.org_id == org_id,
-        ComplianceReminder.is_sent == False,
-        ComplianceReminder.send_failed == False,
-    ).order_by(ComplianceReminder.created_at)
+    q = (
+        db.query(ComplianceReminder)
+        .filter(
+            ComplianceReminder.org_id == org_id,
+            ComplianceReminder.is_sent == False,
+            ComplianceReminder.send_failed == False,
+        )
+        .order_by(ComplianceReminder.created_at)
+    )
     return [_reminder_dict(r) for r in pagination.apply(q).all()]
 
 
@@ -287,11 +319,16 @@ def mark_reminder_sent(
 ):
     """Mark a reminder as sent (called by notification delivery layer)."""
     from datetime import datetime, timezone
+
     org_id = org_id_for(current_user)
-    r = db.query(ComplianceReminder).filter(
-        ComplianceReminder.id == reminder_id,
-        ComplianceReminder.org_id == org_id,
-    ).first()
+    r = (
+        db.query(ComplianceReminder)
+        .filter(
+            ComplianceReminder.id == reminder_id,
+            ComplianceReminder.org_id == org_id,
+        )
+        .first()
+    )
     if not r:
         raise HTTPException(404, "Reminder not found.")
     r.is_sent = True

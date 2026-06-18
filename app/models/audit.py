@@ -8,6 +8,7 @@ class LegacyAuditLog(Base):
     """Legacy simple audit log — superseded by app.models.audit_log.AuditLog.
     Kept only for existing analytics_service/audit_service/routes.audit consumers;
     table and class renamed to avoid colliding with the canonical AuditLog."""
+
     __tablename__ = "legacy_audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)

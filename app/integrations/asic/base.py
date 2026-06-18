@@ -1,4 +1,5 @@
 """Abstract interface for ASIC company lookups."""
+
 from __future__ import annotations
 
 import abc
@@ -10,19 +11,18 @@ from typing import Any
 class CompanyRecord:
     acn: str
     name: str
-    status: str               # Registered, Deregistered, etc.
-    company_type: str         # Proprietary, Public, etc.
+    status: str  # Registered, Deregistered, etc.
+    company_type: str  # Proprietary, Public, etc.
     registered_date: str | None = None
     deregistered_date: str | None = None
     abn: str | None = None
     registered_address: str | None = None
     principal_place: str | None = None
-    directors: list[dict] = field(default_factory=list)   # [{name, dob, role}]
+    directors: list[dict] = field(default_factory=list)  # [{name, dob, role}]
     raw: Any = None
 
 
 class ASICProvider(abc.ABC):
-
     @abc.abstractmethod
     async def lookup_company(self, acn: str) -> CompanyRecord | None:
         """Look up a company by ACN."""

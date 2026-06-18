@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from .base import SMSProvider, SMSMessage
+
+from .base import SMSMessage, SMSProvider
 
 log = logging.getLogger("verigo.integrations.sms")
 

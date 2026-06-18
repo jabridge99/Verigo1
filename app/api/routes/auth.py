@@ -110,7 +110,9 @@ def register(payload: UserCreate, request: Request, db: Session = Depends(get_db
         # Self-serve signup with no existing org — create one for this user.
         from app.models.organisation import IndustryType, Organisation
 
-        org = Organisation(name=f"{payload.full_name}'s Organisation", industry_type=IndustryType.other)
+        org = Organisation(
+            name=f"{payload.full_name}'s Organisation", industry_type=IndustryType.other
+        )
         db.add(org)
         db.flush()
         org_id = org.id
@@ -224,13 +226,9 @@ def mfa_challenge(
     if not current_user.mfa_enabled or not current_user.mfa_secret:
         raise HTTPException(400, "MFA not enabled")
     if not verify_totp(current_user.mfa_secret, code):
-        record_security_event(
-            db, "mfa_failed", current_user.id, ip=_client_ip(request)
-        )
+        record_security_event(db, "mfa_failed", current_user.id, ip=_client_ip(request))
         raise HTTPException(401, "Invalid TOTP code")
-    record_security_event(
-        db, "mfa_success", current_user.id, ip=_client_ip(request)
-    )
+    record_security_event(db, "mfa_success", current_user.id, ip=_client_ip(request))
     return build_token_response(current_user)
 
 

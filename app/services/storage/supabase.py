@@ -43,7 +43,9 @@ class SupabaseStorageProvider(StorageProvider):
     ) -> StoredObject:
         headers = {**self._headers, "Content-Type": content_type}
         async with httpx.AsyncClient() as client:
-            resp = await client.post(self._object_url(key), content=data, headers=headers)
+            resp = await client.post(
+                self._object_url(key), content=data, headers=headers
+            )
             resp.raise_for_status()
         return StoredObject(key=key, size=len(data), content_type=content_type)
 
@@ -55,7 +57,9 @@ class SupabaseStorageProvider(StorageProvider):
 
     async def stream(self, key: str, chunk_size: int = 65_536) -> AsyncIterator[bytes]:
         async with httpx.AsyncClient() as client:
-            async with client.stream("GET", self._object_url(key), headers=self._headers) as resp:
+            async with client.stream(
+                "GET", self._object_url(key), headers=self._headers
+            ) as resp:
                 resp.raise_for_status()
                 async for chunk in resp.aiter_bytes(chunk_size):
                     yield chunk
@@ -91,7 +95,10 @@ class SupabaseStorageProvider(StorageProvider):
             resp.raise_for_status()
         objects = []
         for item in resp.json():
-            ct = mimetypes.guess_type(item.get("name", ""))[0] or "application/octet-stream"
+            ct = (
+                mimetypes.guess_type(item.get("name", ""))[0]
+                or "application/octet-stream"
+            )
             objects.append(
                 StoredObject(
                     key=item["name"],

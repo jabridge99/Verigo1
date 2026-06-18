@@ -88,9 +88,7 @@ def list_retention_policies(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.org_id
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
     return list_policies(db, industry_id)
 
 
@@ -100,9 +98,7 @@ def set_retention_policy(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.org_id
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
     try:
         return upsert_policy(
             db,
@@ -125,9 +121,7 @@ def get_retention_policy(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.org_id
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
     return get_policy(db, entity_scope, industry_id)
 
 
@@ -199,9 +193,7 @@ def check_deletion_eligibility(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.org_id
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
     return is_deletion_eligible(
         db,
         entity_scope=payload.entity_scope,
@@ -221,7 +213,5 @@ def purge_report(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     """Dry-run purge report — identifies eligible records without deleting them."""
-    industry_id = (
-        None if current_user.role == UserRole.admin else current_user.org_id
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
     return generate_purge_report(db, industry_id)

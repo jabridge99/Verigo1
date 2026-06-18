@@ -1,7 +1,20 @@
 import enum
 from uuid import uuid4
-from sqlalchemy import Column, String, Enum, DateTime, Date, Float, Boolean, Text, ForeignKey, func
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import relationship
+
 from app.db.database import Base
 
 
@@ -15,8 +28,18 @@ class BeneficialOwner(Base):
     __tablename__ = "beneficial_owners"
 
     id = Column(String, primary_key=True, default=lambda: f"bo_{uuid4().hex[:12]}")
-    customer_id = Column(String, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = Column(
+        String,
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     full_name = Column(String(255), nullable=False)
     date_of_birth = Column(Date)

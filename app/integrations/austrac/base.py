@@ -2,6 +2,7 @@
 Abstract interface for AUSTRAC regulatory reporting.
 Covers IFTI, TTR, and SMR lodgement via AUSTRAC Online API.
 """
+
 from __future__ import annotations
 
 import abc
@@ -20,10 +21,10 @@ class SubmissionStatus(str, Enum):
 @dataclass
 class SubmissionResult:
     success: bool
-    reference: str | None       # AUSTRAC lodgement reference number
+    reference: str | None  # AUSTRAC lodgement reference number
     status: SubmissionStatus
     message: str | None = None
-    raw: Any = None             # full API response for audit trail
+    raw: Any = None  # full API response for audit trail
 
 
 class AUSTRACProvider(abc.ABC):

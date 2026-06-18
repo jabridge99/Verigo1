@@ -6,6 +6,7 @@ so revocation is shared across all workers/instances and entries expire
 automatically. Falls back to an in-process set in dev when Redis isn't
 configured — acceptable locally, NOT safe for multi-worker production.
 """
+
 import logging
 
 from app.config import settings

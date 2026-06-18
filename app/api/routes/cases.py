@@ -22,6 +22,7 @@ DISCLAIMER: The platform provides case management tooling only. Decisions to
 lodge Suspicious Matter Reports, refer matters to law enforcement, or take
 other action remain entirely with the reporting entity.
 """
+
 from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -82,22 +83,34 @@ CLOSED_STATUSES = {
 
 # Valid status transitions
 CASE_TRANSITIONS: dict[CaseStatus, set[CaseStatus]] = {
-    CaseStatus.open: {CaseStatus.under_investigation, CaseStatus.additional_information},
+    CaseStatus.open: {
+        CaseStatus.under_investigation,
+        CaseStatus.additional_information,
+    },
     CaseStatus.under_investigation: {
-        CaseStatus.additional_information, CaseStatus.escalated, CaseStatus.decision,
+        CaseStatus.additional_information,
+        CaseStatus.escalated,
+        CaseStatus.decision,
         CaseStatus.closed_no_action,
     },
-    CaseStatus.additional_information: {CaseStatus.under_investigation, CaseStatus.escalated},
+    CaseStatus.additional_information: {
+        CaseStatus.under_investigation,
+        CaseStatus.escalated,
+    },
     CaseStatus.escalated: {CaseStatus.decision, CaseStatus.under_investigation},
     CaseStatus.decision: CLOSED_STATUSES,
 }
 
 
 def _get_case_or_404(case_id: str, org_id: str, db: Session) -> Case:
-    case = db.query(Case).filter(
-        Case.id == case_id,
-        Case.org_id == org_id,
-    ).first()
+    case = (
+        db.query(Case)
+        .filter(
+            Case.id == case_id,
+            Case.org_id == org_id,
+        )
+        .first()
+    )
     if not case:
         raise HTTPException(status_code=404, detail="Case not found.")
     return case
@@ -349,7 +362,10 @@ def close_case(
 
 # ── Notes (append-only) ────────────────────────────────────────────────────────
 
-@router.post("/{case_id}/notes", response_model=CaseNoteOut, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{case_id}/notes", response_model=CaseNoteOut, status_code=status.HTTP_201_CREATED
+)
 def add_note(
     case_id: str,
     payload: CaseNoteCreate,
@@ -362,6 +378,7 @@ def add_note(
     # Confidential notes restricted to MLRO
     if payload.is_confidential or payload.is_legal_privilege:
         from app.models.user import UserRole
+
         if current_user.role not in (UserRole.mlro, UserRole.admin):
             raise HTTPException(
                 status_code=403,
@@ -396,6 +413,7 @@ def list_notes(
 
     # Non-MLRO users cannot see confidential notes
     from app.models.user import UserRole
+
     if current_user.role not in (UserRole.mlro, UserRole.admin):
         q = q.filter(CaseNote.is_confidential == False)
 
@@ -404,7 +422,12 @@ def list_notes(
 
 # ── Evidence ───────────────────────────────────────────────────────────────────
 
-@router.post("/{case_id}/evidence", response_model=CaseEvidenceOut, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{case_id}/evidence",
+    response_model=CaseEvidenceOut,
+    status_code=status.HTTP_201_CREATED,
+)
 def add_evidence(
     case_id: str,
     payload: CaseEvidenceCreate,
@@ -436,7 +459,9 @@ def list_evidence(
     return db.query(CaseEvidence).filter(CaseEvidence.case_id == case_id).all()
 
 
-@router.patch("/{case_id}/evidence/{evidence_id}/verify", response_model=CaseEvidenceOut)
+@router.patch(
+    "/{case_id}/evidence/{evidence_id}/verify", response_model=CaseEvidenceOut
+)
 def verify_evidence(
     case_id: str,
     evidence_id: str,
@@ -445,10 +470,14 @@ def verify_evidence(
 ):
     _get_case_or_404(case_id, org_id_for(current_user), db)
 
-    ev = db.query(CaseEvidence).filter(
-        CaseEvidence.id == evidence_id,
-        CaseEvidence.case_id == case_id,
-    ).first()
+    ev = (
+        db.query(CaseEvidence)
+        .filter(
+            CaseEvidence.id == evidence_id,
+            CaseEvidence.case_id == case_id,
+        )
+        .first()
+    )
     if not ev:
         raise HTTPException(status_code=404, detail="Evidence not found.")
 
@@ -462,6 +491,7 @@ def verify_evidence(
 
 # ── Link Alert ─────────────────────────────────────────────────────────────────
 
+
 @router.post("/{case_id}/link-alert", status_code=status.HTTP_201_CREATED)
 def link_alert(
     case_id: str,
@@ -472,12 +502,18 @@ def link_alert(
     case = _get_case_or_404(case_id, org_id_for(current_user), db)
 
     # Check for duplicate link
-    existing = db.query(CaseAlert).filter(
-        CaseAlert.case_id == case_id,
-        CaseAlert.alert_id == payload.alert_id,
-    ).first()
+    existing = (
+        db.query(CaseAlert)
+        .filter(
+            CaseAlert.case_id == case_id,
+            CaseAlert.alert_id == payload.alert_id,
+        )
+        .first()
+    )
     if existing:
-        raise HTTPException(status_code=409, detail="Alert already linked to this case.")
+        raise HTTPException(
+            status_code=409, detail="Alert already linked to this case."
+        )
 
     link = CaseAlert(
         id=f"ca_{uuid4().hex[:10]}",
@@ -495,6 +531,7 @@ def link_alert(
 
 
 # ── SMR Workflow ──────────────────────────────────────────────────────────────
+
 
 @router.post("/{case_id}/smr/consider", response_model=CaseOut)
 def smr_consider(

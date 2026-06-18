@@ -3,6 +3,7 @@ ComplyAdvantage sanctions screening provider.
 Docs: https://docs.complyadvantage.com/api-docs
 Set SANCTIONS_PROVIDER=complyadvantage and COMPLYADVANTAGE_API_KEY in env.
 """
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,8 @@ import logging
 import httpx
 
 from app.integrations.base import ProviderRejectedError
-from .base import SanctionsProvider, SanctionsResult, SanctionsMatch
+
+from .base import SanctionsMatch, SanctionsProvider, SanctionsResult
 
 log = logging.getLogger("verigo.integrations.sanctions.complyadvantage")
 
@@ -55,12 +57,14 @@ class ComplyAdvantageProvider(SanctionsProvider):
             score = hit.get("score", 0.0)
             for source in doc.get("sources", []):
                 if source.get("types", []):
-                    matches.append(SanctionsMatch(
-                        list_name=source.get("name", "unknown"),
-                        match_name=doc.get("name", name),
-                        match_score=min(score / 100, 1.0),
-                        details=doc,
-                    ))
+                    matches.append(
+                        SanctionsMatch(
+                            list_name=source.get("name", "unknown"),
+                            match_name=doc.get("name", name),
+                            match_score=min(score / 100, 1.0),
+                            details=doc,
+                        )
+                    )
 
         return SanctionsResult(
             is_match=bool(matches),

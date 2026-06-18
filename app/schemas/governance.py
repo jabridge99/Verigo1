@@ -1,22 +1,35 @@
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 from app.models.governance import (
-    AttestationType, PolicyCategory, PolicyLifecycleStatus, PolicyType,
+    AttestationType,
+    PolicyCategory,
+    PolicyLifecycleStatus,
+    PolicyType,
 )
 from app.models.governance_controls import (
-    ControlEffectiveness, ControlFrequency, ControlMethod,
-    ControlRiskArea, ControlStatus, ControlType,
-    FindingSeverity, RemediationStatus, TestResult,
+    ControlEffectiveness,
+    ControlFrequency,
+    ControlMethod,
+    ControlRiskArea,
+    ControlStatus,
+    ControlType,
+    FindingSeverity,
+    RemediationStatus,
+    TestResult,
 )
-from app.models.governance_training import AssignmentTrigger, TrainingStatus, TrainingType
-
+from app.models.governance_training import (
+    AssignmentTrigger,
+    TrainingStatus,
+    TrainingType,
+)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # POLICY SCHEMAS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class PolicyCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=255)
@@ -28,7 +41,7 @@ class PolicyCreate(BaseModel):
     scope: Optional[str] = None
     review_due_date: date
     effective_date: Optional[date] = None
-    document_owner: str            # user_id
+    document_owner: str  # user_id
     compliance_reviewer: Optional[str] = None
     approver: Optional[str] = None
     regulatory_references: List[str] = []
@@ -56,9 +69,9 @@ class PolicyUpdate(BaseModel):
 
 
 class PolicyWorkflowAction(BaseModel):
-    action: str   # submit_for_review | approve | publish | request_changes | archive
+    action: str  # submit_for_review | approve | publish | request_changes | archive
     comments: Optional[str] = None
-    change_type: Optional[str] = None   # major | minor | administrative (on publish)
+    change_type: Optional[str] = None  # major | minor | administrative (on publish)
     change_summary: Optional[str] = None
 
 
@@ -133,6 +146,7 @@ class AttestationResponse(BaseModel):
 # CONTROL SCHEMAS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class ControlCreate(BaseModel):
     name: str = Field(..., min_length=3, max_length=255)
     description: Optional[str] = None
@@ -142,7 +156,7 @@ class ControlCreate(BaseModel):
     risk_area: ControlRiskArea
     risk_area_custom: Optional[str] = None
     linked_policy_id: Optional[str] = None
-    control_owner: str          # user_id
+    control_owner: str  # user_id
     business_unit: Optional[str] = None
     reviewer_id: Optional[str] = None
     frequency: ControlFrequency
@@ -286,6 +300,7 @@ class RemediationResponse(BaseModel):
 # TRAINING SCHEMAS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TrainingCourseCreate(BaseModel):
     name: str
     training_type: TrainingType
@@ -339,8 +354,8 @@ class BulkAssignRequest(BaseModel):
     course_id: str
     due_date: date
     trigger: AssignmentTrigger
-    user_ids: Optional[List[str]] = None     # specific users
-    roles: Optional[List[str]] = None        # assign by role
+    user_ids: Optional[List[str]] = None  # specific users
+    roles: Optional[List[str]] = None  # assign by role
     business_units: Optional[List[str]] = None
     notes: Optional[str] = None
 
@@ -348,6 +363,7 @@ class BulkAssignRequest(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 # DASHBOARD SCHEMAS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class GovernanceDashboardResponse(BaseModel):
     as_of_date: date

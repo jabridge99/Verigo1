@@ -108,7 +108,9 @@ def kyc_status_breakdown(db: Session, industry_id: Optional[str] = None):
         q = q.filter(CustomerIdentityDocument.org_id == industry_id)
     breakdown = {}
     for status in VerificationResult:
-        breakdown[status.value] = q.filter(CustomerIdentityDocument.verification_result == status).count()
+        breakdown[status.value] = q.filter(
+            CustomerIdentityDocument.verification_result == status
+        ).count()
     return {"total": q.count(), "by_status": breakdown}
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.config import settings
+
 from .base import ASICProvider
 
 
@@ -10,4 +11,5 @@ def get_provider() -> ASICProvider:
         # Future: from .asic_connect import ASICConnectProvider
         raise NotImplementedError("ASIC Connect API provider not yet implemented")
     from .stub import StubASICProvider
+
     return StubASICProvider()

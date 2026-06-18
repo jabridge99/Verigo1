@@ -166,7 +166,12 @@ def send_compliance_notification(
     urgency: str = "info",
 ) -> bool:
     """Generic compliance notification — used by compliance_event_notifier for all event types."""
-    color_map = {"critical": "#ef4444", "high": "#f97316", "warning": "#f59e0b", "info": "#60a5fa"}
+    color_map = {
+        "critical": "#ef4444",
+        "high": "#f97316",
+        "warning": "#f59e0b",
+        "info": "#60a5fa",
+    }
     accent = color_map.get(urgency, "#60a5fa")
     url = action_url or APP_URL
     badge = (
@@ -185,7 +190,9 @@ def send_compliance_notification(
     return _send(to, subject, html)
 
 
-def send_portal_invite(to: str, customer_name: str, portal_url: str, expires_hours: int = 72) -> bool:
+def send_portal_invite(
+    to: str, customer_name: str, portal_url: str, expires_hours: int = 72
+) -> bool:
     html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
 <h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Complete your compliance verification</h2>
 <p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {customer_name},<br><br>
@@ -194,7 +201,9 @@ You have been invited to complete your identity verification and compliance docu
 <a href="{portal_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Start Verification</a>
 <p style="color:#64748b;font-size:12px;margin-top:20px;">If you did not expect this email, please contact the organisation that sent it. Do not click the link if you are unsure.</p>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, "Action required: Complete your compliance verification — Verigo", html)
+    return _send(
+        to, "Action required: Complete your compliance verification — Verigo", html
+    )
 
 
 def send_aml_alert(

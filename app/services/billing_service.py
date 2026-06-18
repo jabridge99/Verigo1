@@ -498,7 +498,9 @@ def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> Subscriptio
 
     existing = (
         db.query(SubscriptionAddon)
-        .filter(SubscriptionAddon.org_id == org_id, SubscriptionAddon.addon_key == addon_key)
+        .filter(
+            SubscriptionAddon.org_id == org_id, SubscriptionAddon.addon_key == addon_key
+        )
         .first()
     )
     addon = existing or SubscriptionAddon(
@@ -513,10 +515,14 @@ def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> Subscriptio
     return addon
 
 
-def cancel_addon(db: Session, org_id: str, addon_key: AddonKey) -> Optional[SubscriptionAddon]:
+def cancel_addon(
+    db: Session, org_id: str, addon_key: AddonKey
+) -> Optional[SubscriptionAddon]:
     addon = (
         db.query(SubscriptionAddon)
-        .filter(SubscriptionAddon.org_id == org_id, SubscriptionAddon.addon_key == addon_key)
+        .filter(
+            SubscriptionAddon.org_id == org_id, SubscriptionAddon.addon_key == addon_key
+        )
         .first()
     )
     if not addon:

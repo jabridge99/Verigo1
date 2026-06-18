@@ -19,6 +19,7 @@ DISCLAIMER: Screening results are data inputs to the compliance workflow.
 The platform does not determine whether a match constitutes a sanctions violation
 or regulatory breach. All decisions remain with the reporting entity.
 """
+
 from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
@@ -68,14 +69,15 @@ DISCLAIMER = (
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class ScreeningRunRequest(BaseModel):
     customer_id: str
     screening_types: List[ScreeningType] = Field(
         ..., description="One or more screening types to run"
     )
     entity_type: ScreeningEntityType = ScreeningEntityType.customer
-    entity_id: Optional[str] = None      # defaults to customer_id
-    entity_name: Optional[str] = None    # override — uses customer name if omitted
+    entity_id: Optional[str] = None  # defaults to customer_id
+    entity_name: Optional[str] = None  # override — uses customer name if omitted
     entity_dob: Optional[str] = None
     entity_nationality: Optional[str] = None
     provider: ScreeningProvider = ScreeningProvider.internal
@@ -90,8 +92,7 @@ class BatchScreeningRequest(BaseModel):
 
 class AlertReviewRequest(BaseModel):
     action: str = Field(
-        ...,
-        description="One of: dismiss (false positive), confirm, escalate, close"
+        ..., description="One of: dismiss (false positive), confirm, escalate, close"
     )
     notes: str = Field(..., min_length=10, description="Resolution notes required")
     assigned_to: Optional[str] = None
@@ -118,6 +119,7 @@ class AdverseMediaRequest(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _record_dict(r: ScreeningRecord) -> dict:
     return {
@@ -166,10 +168,14 @@ def _alert_dict(a: ScreeningAlert) -> dict:
 
 
 def _resolve_customer(customer_id: str, org_id: str, db: Session) -> Customer:
-    customer = db.query(Customer).filter(
-        Customer.id == customer_id,
-        Customer.org_id == org_id,
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(
+            Customer.id == customer_id,
+            Customer.org_id == org_id,
+        )
+        .first()
+    )
     if not customer:
         raise HTTPException(404, f"Customer '{customer_id}' not found.")
     return customer
@@ -194,7 +200,9 @@ def _simulate_screening(
     }
 
 
-def _severity_for_type(screening_type: ScreeningType, match_count: int) -> AlertSeverity:
+def _severity_for_type(
+    screening_type: ScreeningType, match_count: int
+) -> AlertSeverity:
     if screening_type == ScreeningType.sanctions:
         return AlertSeverity.critical
     if screening_type in (ScreeningType.pep, ScreeningType.ubo_pep):
@@ -205,6 +213,7 @@ def _severity_for_type(screening_type: ScreeningType, match_count: int) -> Alert
 
 
 # ── Screening Records ─────────────────────────────────────────────────────────
+
 
 @router.post("/run", status_code=201)
 def run_screening(
@@ -227,7 +236,9 @@ def run_screening(
     customer = _resolve_customer(payload.customer_id, org_id, db)
 
     entity_id = payload.entity_id or customer.id
-    entity_name = payload.entity_name or getattr(customer, "full_name", None) or customer.id
+    entity_name = (
+        payload.entity_name or getattr(customer, "full_name", None) or customer.id
+    )
 
     created_records = []
     for stype in payload.screening_types:
@@ -255,7 +266,10 @@ def run_screening(
         db.flush()
 
         # Raise alert on any match
-        if result["match_count"] > 0 or result["status"] == ScreeningStatus.potential_match:
+        if (
+            result["match_count"] > 0
+            or result["status"] == ScreeningStatus.potential_match
+        ):
             alert = ScreeningAlert(
                 id=f"alert_{uuid4().hex[:10]}",
                 org_id=org_id,
@@ -306,7 +320,12 @@ def list_screening_records(
     if status:
         q = q.filter(ScreeningRecord.status == status)
 
-    records = q.order_by(ScreeningRecord.screened_at.desc()).offset(page.offset).limit(page.limit).all()
+    records = (
+        q.order_by(ScreeningRecord.screened_at.desc())
+        .offset(page.offset)
+        .limit(page.limit)
+        .all()
+    )
 
     if has_alerts is not None:
         if has_alerts:
@@ -330,50 +349,84 @@ def screening_dashboard(
     org_id = org_id_for(current_user)
 
     total = db.query(ScreeningRecord).filter(ScreeningRecord.org_id == org_id).count()
-    pending = db.query(ScreeningRecord).filter(
-        ScreeningRecord.org_id == org_id,
-        ScreeningRecord.status == ScreeningStatus.pending,
-    ).count()
-    potential_matches = db.query(ScreeningRecord).filter(
-        ScreeningRecord.org_id == org_id,
-        ScreeningRecord.status == ScreeningStatus.potential_match,
-    ).count()
-    confirmed_matches = db.query(ScreeningRecord).filter(
-        ScreeningRecord.org_id == org_id,
-        ScreeningRecord.status == ScreeningStatus.confirmed_match,
-    ).count()
+    pending = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.org_id == org_id,
+            ScreeningRecord.status == ScreeningStatus.pending,
+        )
+        .count()
+    )
+    potential_matches = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.org_id == org_id,
+            ScreeningRecord.status == ScreeningStatus.potential_match,
+        )
+        .count()
+    )
+    confirmed_matches = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.org_id == org_id,
+            ScreeningRecord.status == ScreeningStatus.confirmed_match,
+        )
+        .count()
+    )
 
     # Alerts
-    open_alerts = db.query(ScreeningAlert).filter(
-        ScreeningAlert.org_id == org_id,
-        ScreeningAlert.status == AlertStatus.open,
-    ).count()
-    critical_alerts = db.query(ScreeningAlert).filter(
-        ScreeningAlert.org_id == org_id,
-        ScreeningAlert.status == AlertStatus.open,
-        ScreeningAlert.severity == AlertSeverity.critical,
-    ).count()
-    escalated_alerts = db.query(ScreeningAlert).filter(
-        ScreeningAlert.org_id == org_id,
-        ScreeningAlert.status == AlertStatus.escalated,
-    ).count()
+    open_alerts = (
+        db.query(ScreeningAlert)
+        .filter(
+            ScreeningAlert.org_id == org_id,
+            ScreeningAlert.status == AlertStatus.open,
+        )
+        .count()
+    )
+    critical_alerts = (
+        db.query(ScreeningAlert)
+        .filter(
+            ScreeningAlert.org_id == org_id,
+            ScreeningAlert.status == AlertStatus.open,
+            ScreeningAlert.severity == AlertSeverity.critical,
+        )
+        .count()
+    )
+    escalated_alerts = (
+        db.query(ScreeningAlert)
+        .filter(
+            ScreeningAlert.org_id == org_id,
+            ScreeningAlert.status == AlertStatus.escalated,
+        )
+        .count()
+    )
 
     # Crypto
-    crypto_high_risk = db.query(CryptoWalletScreening).filter(
-        CryptoWalletScreening.org_id == org_id,
-        CryptoWalletScreening.risk_category.in_([
-            WalletRiskCategory.high_risk,
-            WalletRiskCategory.sanctioned,
-            WalletRiskCategory.darknet,
-            WalletRiskCategory.mixer,
-        ]),
-    ).count()
+    crypto_high_risk = (
+        db.query(CryptoWalletScreening)
+        .filter(
+            CryptoWalletScreening.org_id == org_id,
+            CryptoWalletScreening.risk_category.in_(
+                [
+                    WalletRiskCategory.high_risk,
+                    WalletRiskCategory.sanctioned,
+                    WalletRiskCategory.darknet,
+                    WalletRiskCategory.mixer,
+                ]
+            ),
+        )
+        .count()
+    )
 
     # Adverse media
-    open_media = db.query(AdverseMediaResult).filter(
-        AdverseMediaResult.org_id == org_id,
-        AdverseMediaResult.review_status == AlertStatus.open,
-    ).count()
+    open_media = (
+        db.query(AdverseMediaResult)
+        .filter(
+            AdverseMediaResult.org_id == org_id,
+            AdverseMediaResult.review_status == AlertStatus.open,
+        )
+        .count()
+    )
 
     def _light(count, warn, danger):
         if count >= danger:
@@ -426,7 +479,12 @@ def list_alerts(
     if customer_id:
         q = q.filter(ScreeningAlert.customer_id == customer_id)
 
-    alerts = q.order_by(ScreeningAlert.created_at.desc()).offset(page.offset).limit(page.limit).all()
+    alerts = (
+        q.order_by(ScreeningAlert.created_at.desc())
+        .offset(page.offset)
+        .limit(page.limit)
+        .all()
+    )
     return {"alerts": [_alert_dict(a) for a in alerts], "count": len(alerts)}
 
 
@@ -438,10 +496,14 @@ def get_screening_record(
 ):
     """Get a specific screening record with its alerts."""
     org_id = org_id_for(current_user)
-    record = db.query(ScreeningRecord).filter(
-        ScreeningRecord.id == record_id,
-        ScreeningRecord.org_id == org_id,
-    ).first()
+    record = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.id == record_id,
+            ScreeningRecord.org_id == org_id,
+        )
+        .first()
+    )
     if not record:
         raise HTTPException(404, "Screening record not found.")
     return _record_dict(record)
@@ -458,14 +520,20 @@ def re_screen(
     Creates a fresh ScreeningRecord — previous records are preserved (append-only audit trail).
     """
     org_id = org_id_for(current_user)
-    original = db.query(ScreeningRecord).filter(
-        ScreeningRecord.id == record_id,
-        ScreeningRecord.org_id == org_id,
-    ).first()
+    original = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.id == record_id,
+            ScreeningRecord.org_id == org_id,
+        )
+        .first()
+    )
     if not original:
         raise HTTPException(404, "Screening record not found.")
 
-    result = _simulate_screening(original.screening_type, original.entity_name or "", original.provider)
+    result = _simulate_screening(
+        original.screening_type, original.entity_name or "", original.provider
+    )
 
     new_record = ScreeningRecord(
         id=f"scr_{uuid4().hex[:12]}",
@@ -497,6 +565,7 @@ def re_screen(
 
 # ── Alert Management ──────────────────────────────────────────────────────────
 
+
 @router.post("/alerts/{alert_id}/review")
 def review_alert(
     alert_id: str,
@@ -517,10 +586,14 @@ def review_alert(
     All decisions remain with the reporting entity.
     """
     org_id = org_id_for(current_user)
-    alert = db.query(ScreeningAlert).filter(
-        ScreeningAlert.id == alert_id,
-        ScreeningAlert.org_id == org_id,
-    ).first()
+    alert = (
+        db.query(ScreeningAlert)
+        .filter(
+            ScreeningAlert.id == alert_id,
+            ScreeningAlert.org_id == org_id,
+        )
+        .first()
+    )
     if not alert:
         raise HTTPException(404, "Alert not found.")
 
@@ -536,9 +609,11 @@ def review_alert(
         alert.resolved_at = now
         alert.resolution_notes = payload.notes
         # Mark screening record as false positive
-        record = db.query(ScreeningRecord).filter(
-            ScreeningRecord.id == alert.screening_record_id
-        ).first()
+        record = (
+            db.query(ScreeningRecord)
+            .filter(ScreeningRecord.id == alert.screening_record_id)
+            .first()
+        )
         if record:
             record.is_false_positive = True
             record.status = ScreeningStatus.false_positive
@@ -550,9 +625,11 @@ def review_alert(
         alert.status = AlertStatus.under_review
         alert.resolved_by = current_user.id
         alert.resolution_notes = payload.notes
-        record = db.query(ScreeningRecord).filter(
-            ScreeningRecord.id == alert.screening_record_id
-        ).first()
+        record = (
+            db.query(ScreeningRecord)
+            .filter(ScreeningRecord.id == alert.screening_record_id)
+            .first()
+        )
         if record:
             record.status = ScreeningStatus.confirmed_match
             record.reviewed_by = current_user.id
@@ -572,7 +649,9 @@ def review_alert(
         alert.resolution_notes = payload.notes
 
     else:
-        raise HTTPException(400, f"Unknown action '{action}'. Use: dismiss, confirm, escalate, close.")
+        raise HTTPException(
+            400, f"Unknown action '{action}'. Use: dismiss, confirm, escalate, close."
+        )
 
     if payload.assigned_to and action != "escalate":
         alert.assigned_to = payload.assigned_to
@@ -595,10 +674,14 @@ def assign_alert(
 ):
     """Assign a screening alert to a reviewer."""
     org_id = org_id_for(current_user)
-    alert = db.query(ScreeningAlert).filter(
-        ScreeningAlert.id == alert_id,
-        ScreeningAlert.org_id == org_id,
-    ).first()
+    alert = (
+        db.query(ScreeningAlert)
+        .filter(
+            ScreeningAlert.id == alert_id,
+            ScreeningAlert.org_id == org_id,
+        )
+        .first()
+    )
     if not alert:
         raise HTTPException(404, "Alert not found.")
     alert.assigned_to = assigned_to
@@ -609,6 +692,7 @@ def assign_alert(
 
 
 # ── Batch Screening ───────────────────────────────────────────────────────────
+
 
 @router.post("/batch", status_code=202)
 def batch_screen(
@@ -627,10 +711,14 @@ def batch_screen(
     """
     org_id = org_id_for(current_user)
 
-    customers = db.query(Customer).filter(
-        Customer.id.in_(payload.customer_ids),
-        Customer.org_id == org_id,
-    ).all()
+    customers = (
+        db.query(Customer)
+        .filter(
+            Customer.id.in_(payload.customer_ids),
+            Customer.org_id == org_id,
+        )
+        .all()
+    )
 
     found_ids = {c.id for c in customers}
     missing = [cid for cid in payload.customer_ids if cid not in found_ids]
@@ -671,6 +759,7 @@ def batch_screen(
 
 # ── Crypto Wallet Screening ───────────────────────────────────────────────────
 
+
 @router.post("/crypto-wallet", status_code=201)
 async def screen_crypto_wallet(
     payload: WalletScreeningRequest,
@@ -703,7 +792,9 @@ async def screen_crypto_wallet(
                     f"{billing_svc.ADDON_CATALOGUE[addon_key]['name']} add-on."
                 ),
                 "addon_key": addon_key.value,
-                "purchase_url": "/api/v1/billing/addons/{}/purchase".format(addon_key.value),
+                "purchase_url": "/api/v1/billing/addons/{}/purchase".format(
+                    addon_key.value
+                ),
             },
         )
 
@@ -714,10 +805,16 @@ async def screen_crypto_wallet(
 
     if provider is not None:
         try:
-            result = await provider.screen_address(payload.wallet_address, payload.network.value)
+            result = await provider.screen_address(
+                payload.wallet_address, payload.network.value
+            )
         except ProviderRejectedError as exc:
             raise HTTPException(502, str(exc))
-        risk_category = WalletRiskCategory.sanctioned if result.is_sanctioned else WalletRiskCategory.clear
+        risk_category = (
+            WalletRiskCategory.sanctioned
+            if result.is_sanctioned
+            else WalletRiskCategory.clear
+        )
         screening = CryptoWalletScreening(
             id=f"cws_{uuid4().hex[:12]}",
             org_id=org_id,
@@ -731,7 +828,12 @@ async def screen_crypto_wallet(
             risk_category=risk_category,
             risk_details={
                 "identifications": [
-                    {"category": i.category, "name": i.name, "description": i.description, "url": i.url}
+                    {
+                        "category": i.category,
+                        "name": i.name,
+                        "description": i.description,
+                        "url": i.url,
+                    }
                     for i in result.identifications
                 ]
             },
@@ -741,7 +843,9 @@ async def screen_crypto_wallet(
             high_risk_exchange_pct=0.0,
             scam_exposure_pct=0.0,
             provider_raw_response=str(result.raw),
-            status=ScreeningStatus.potential_match if result.is_sanctioned else ScreeningStatus.clear,
+            status=ScreeningStatus.potential_match
+            if result.is_sanctioned
+            else ScreeningStatus.clear,
             triggered_by=current_user.id,
         )
     else:
@@ -793,10 +897,15 @@ def list_wallet_screenings(
 ):
     """List all wallet screenings for a customer."""
     org_id = org_id_for(current_user)
-    screenings = db.query(CryptoWalletScreening).filter(
-        CryptoWalletScreening.org_id == org_id,
-        CryptoWalletScreening.customer_id == customer_id,
-    ).order_by(CryptoWalletScreening.screened_at.desc()).all()
+    screenings = (
+        db.query(CryptoWalletScreening)
+        .filter(
+            CryptoWalletScreening.org_id == org_id,
+            CryptoWalletScreening.customer_id == customer_id,
+        )
+        .order_by(CryptoWalletScreening.screened_at.desc())
+        .all()
+    )
 
     return [
         {
@@ -818,6 +927,7 @@ def list_wallet_screenings(
 
 
 # ── Adverse Media ─────────────────────────────────────────────────────────────
+
 
 @router.post("/adverse-media", status_code=201)
 def record_adverse_media(
@@ -876,10 +986,15 @@ def list_adverse_media(
 ):
     """List all adverse media results for a customer."""
     org_id = org_id_for(current_user)
-    results = db.query(AdverseMediaResult).filter(
-        AdverseMediaResult.org_id == org_id,
-        AdverseMediaResult.customer_id == customer_id,
-    ).order_by(AdverseMediaResult.created_at.desc()).all()
+    results = (
+        db.query(AdverseMediaResult)
+        .filter(
+            AdverseMediaResult.org_id == org_id,
+            AdverseMediaResult.customer_id == customer_id,
+        )
+        .order_by(AdverseMediaResult.created_at.desc())
+        .all()
+    )
 
     return [
         {
@@ -911,10 +1026,14 @@ def review_adverse_media(
 ):
     """Review an adverse media result — confirm the match or dismiss as false positive."""
     org_id = org_id_for(current_user)
-    result = db.query(AdverseMediaResult).filter(
-        AdverseMediaResult.id == result_id,
-        AdverseMediaResult.org_id == org_id,
-    ).first()
+    result = (
+        db.query(AdverseMediaResult)
+        .filter(
+            AdverseMediaResult.id == result_id,
+            AdverseMediaResult.org_id == org_id,
+        )
+        .first()
+    )
     if not result:
         raise HTTPException(404, "Adverse media result not found.")
 
@@ -945,6 +1064,7 @@ def review_adverse_media(
 
 # ── Customer Screening Summary ────────────────────────────────────────────────
 
+
 @router.get("/customers/{customer_id}/summary")
 def customer_screening_summary(
     customer_id: str,
@@ -958,32 +1078,51 @@ def customer_screening_summary(
     org_id = org_id_for(current_user)
     _resolve_customer(customer_id, org_id, db)
 
-    records = db.query(ScreeningRecord).filter(
-        ScreeningRecord.org_id == org_id,
-        ScreeningRecord.customer_id == customer_id,
-    ).order_by(ScreeningRecord.screened_at.desc()).all()
+    records = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.org_id == org_id,
+            ScreeningRecord.customer_id == customer_id,
+        )
+        .order_by(ScreeningRecord.screened_at.desc())
+        .all()
+    )
 
     latest_by_type: dict = {}
     for r in records:
         if r.screening_type.value not in latest_by_type:
             latest_by_type[r.screening_type.value] = _record_dict(r)
 
-    open_alerts = db.query(ScreeningAlert).filter(
-        ScreeningAlert.org_id == org_id,
-        ScreeningAlert.customer_id == customer_id,
-        ScreeningAlert.status.in_([AlertStatus.open, AlertStatus.under_review, AlertStatus.escalated]),
-    ).all()
+    open_alerts = (
+        db.query(ScreeningAlert)
+        .filter(
+            ScreeningAlert.org_id == org_id,
+            ScreeningAlert.customer_id == customer_id,
+            ScreeningAlert.status.in_(
+                [AlertStatus.open, AlertStatus.under_review, AlertStatus.escalated]
+            ),
+        )
+        .all()
+    )
 
-    wallets = db.query(CryptoWalletScreening).filter(
-        CryptoWalletScreening.org_id == org_id,
-        CryptoWalletScreening.customer_id == customer_id,
-    ).count()
+    wallets = (
+        db.query(CryptoWalletScreening)
+        .filter(
+            CryptoWalletScreening.org_id == org_id,
+            CryptoWalletScreening.customer_id == customer_id,
+        )
+        .count()
+    )
 
-    media = db.query(AdverseMediaResult).filter(
-        AdverseMediaResult.org_id == org_id,
-        AdverseMediaResult.customer_id == customer_id,
-        AdverseMediaResult.is_false_positive == False,
-    ).count()
+    media = (
+        db.query(AdverseMediaResult)
+        .filter(
+            AdverseMediaResult.org_id == org_id,
+            AdverseMediaResult.customer_id == customer_id,
+            AdverseMediaResult.is_false_positive == False,
+        )
+        .count()
+    )
 
     return {
         "customer_id": customer_id,

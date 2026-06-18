@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -61,6 +61,7 @@ class OrgResponse(BaseModel):
 
 class OrgOnboardRequest(BaseModel):
     """Used in the Step 1-4 signup wizard."""
+
     # Step 2 — Industry
     industry_type: IndustryType
     # Step 3 — Org details

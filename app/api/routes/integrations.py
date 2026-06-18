@@ -12,6 +12,7 @@ DISCLAIMER: Integrations provide data to the compliance workflow only.
 Results from third-party providers are not compliance determinations.
 All decisions remain with the reporting entity.
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -20,7 +21,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import org_id_for, require_analyst_or_above, require_compliance_or_above
+from app.api.deps import (
+    org_id_for,
+    require_analyst_or_above,
+    require_compliance_or_above,
+)
 from app.db.database import get_db
 from app.models.integration import (
     PROVIDER_CATALOG,
@@ -44,9 +49,14 @@ DISCLAIMER = (
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class IntegrationEnable(BaseModel):
-    credentials:    dict = Field(..., description="Provider credentials (encrypted at rest)")
-    config:         dict = Field(default_factory=dict, description="Non-sensitive configuration")
+    credentials: dict = Field(
+        ..., description="Provider credentials (encrypted at rest)"
+    )
+    config: dict = Field(
+        default_factory=dict, description="Non-sensitive configuration"
+    )
 
 
 class IntegrationUpdate(BaseModel):
@@ -54,11 +64,14 @@ class IntegrationUpdate(BaseModel):
 
 
 class CredentialRotation(BaseModel):
-    new_credentials: dict = Field(..., description="New credentials to replace existing")
-    reason:          str = Field(..., min_length=5)
+    new_credentials: dict = Field(
+        ..., description="New credentials to replace existing"
+    )
+    reason: str = Field(..., min_length=5)
 
 
 # ── Seed provider catalog ─────────────────────────────────────────────────────
+
 
 def _seed_providers(db: Session):
     """Ensure the platform provider catalog is populated (idempotent)."""
@@ -66,21 +79,25 @@ def _seed_providers(db: Session):
     if count >= len(PROVIDER_CATALOG):
         return
     for p in PROVIDER_CATALOG:
-        existing = db.query(IntegrationProvider).filter(
-            IntegrationProvider.slug == p["slug"]
-        ).first()
+        existing = (
+            db.query(IntegrationProvider)
+            .filter(IntegrationProvider.slug == p["slug"])
+            .first()
+        )
         if not existing:
-            db.add(IntegrationProvider(
-                id=f"prv_{uuid4().hex[:10]}",
-                slug=p["slug"],
-                name=p["name"],
-                category=p["category"],
-                integration_type=p["type"],
-                auth_type=p["auth"],
-                description=p["description"],
-                is_active=True,
-                is_featured=p.get("featured", False),
-            ))
+            db.add(
+                IntegrationProvider(
+                    id=f"prv_{uuid4().hex[:10]}",
+                    slug=p["slug"],
+                    name=p["name"],
+                    category=p["category"],
+                    integration_type=p["type"],
+                    auth_type=p["auth"],
+                    description=p["description"],
+                    is_active=True,
+                    is_featured=p.get("featured", False),
+                )
+            )
     db.commit()
 
 
@@ -94,16 +111,18 @@ def _audit(
     actor_id: str,
     db: Session,
 ):
-    db.add(IntegrationAuditLog(
-        id=f"ial_{uuid4().hex[:12]}",
-        org_id=org_id,
-        integration_id=integration_id,
-        provider_slug=provider_slug,
-        event_type=event_type,
-        success=success,
-        message=message,
-        actor_id=actor_id,
-    ))
+    db.add(
+        IntegrationAuditLog(
+            id=f"ial_{uuid4().hex[:12]}",
+            org_id=org_id,
+            integration_id=integration_id,
+            provider_slug=provider_slug,
+            event_type=event_type,
+            success=success,
+            message=message,
+            actor_id=actor_id,
+        )
+    )
 
 
 def _integration_dict(i: OrgIntegration, include_credentials: bool = False) -> dict:
@@ -129,7 +148,9 @@ def _integration_dict(i: OrgIntegration, include_credentials: bool = False) -> d
     return d
 
 
-def _provider_dict(p: IntegrationProvider, org_integration: Optional[OrgIntegration] = None) -> dict:
+def _provider_dict(
+    p: IntegrationProvider, org_integration: Optional[OrgIntegration] = None
+) -> dict:
     d = {
         "id": p.id,
         "slug": p.slug,
@@ -152,6 +173,7 @@ def _provider_dict(p: IntegrationProvider, org_integration: Optional[OrgIntegrat
 
 
 # ── Provider Catalog ──────────────────────────────────────────────────────────
+
 
 @router.get("/catalog")
 def list_catalog(
@@ -185,10 +207,12 @@ def list_catalog(
     provider_ids = [p.id for p in providers]
     org_integrations = {
         i.provider_id: i
-        for i in db.query(OrgIntegration).filter(
+        for i in db.query(OrgIntegration)
+        .filter(
             OrgIntegration.org_id == org_id,
             OrgIntegration.provider_id.in_(provider_ids),
-        ).all()
+        )
+        .all()
     }
 
     by_category: dict[str, list] = {}
@@ -198,10 +222,14 @@ def list_catalog(
             _provider_dict(p, org_integrations.get(p.id))
         )
 
-    enabled_count = db.query(OrgIntegration).filter(
-        OrgIntegration.org_id == org_id,
-        OrgIntegration.is_enabled == True,
-    ).count()
+    enabled_count = (
+        db.query(OrgIntegration)
+        .filter(
+            OrgIntegration.org_id == org_id,
+            OrgIntegration.is_enabled == True,
+        )
+        .count()
+    )
 
     return {
         "total_providers": len(providers),
@@ -221,21 +249,26 @@ def get_provider(
     _seed_providers(db)
     org_id = org_id_for(current_user)
 
-    provider = db.query(IntegrationProvider).filter(
-        IntegrationProvider.slug == slug
-    ).first()
+    provider = (
+        db.query(IntegrationProvider).filter(IntegrationProvider.slug == slug).first()
+    )
     if not provider:
         raise HTTPException(404, f"Provider '{slug}' not found.")
 
-    org_int = db.query(OrgIntegration).filter(
-        OrgIntegration.org_id == org_id,
-        OrgIntegration.provider_id == provider.id,
-    ).first()
+    org_int = (
+        db.query(OrgIntegration)
+        .filter(
+            OrgIntegration.org_id == org_id,
+            OrgIntegration.provider_id == provider.id,
+        )
+        .first()
+    )
 
     return _provider_dict(provider, org_int)
 
 
 # ── Org Integration Management ────────────────────────────────────────────────
+
 
 @router.get("")
 def list_org_integrations(
@@ -254,9 +287,10 @@ def list_org_integrations(
     # Enrich with provider name/category
     provider_ids = [i.provider_id for i in integrations]
     providers = {
-        p.id: p for p in db.query(IntegrationProvider).filter(
-            IntegrationProvider.id.in_(provider_ids)
-        ).all()
+        p.id: p
+        for p in db.query(IntegrationProvider)
+        .filter(IntegrationProvider.id.in_(provider_ids))
+        .all()
     }
 
     result = []
@@ -292,17 +326,25 @@ def enable_integration(
     _seed_providers(db)
     org_id = org_id_for(current_user)
 
-    provider = db.query(IntegrationProvider).filter(
-        IntegrationProvider.slug == slug,
-        IntegrationProvider.is_active == True,
-    ).first()
+    provider = (
+        db.query(IntegrationProvider)
+        .filter(
+            IntegrationProvider.slug == slug,
+            IntegrationProvider.is_active == True,
+        )
+        .first()
+    )
     if not provider:
         raise HTTPException(404, f"Provider '{slug}' not found or not available.")
 
-    existing = db.query(OrgIntegration).filter(
-        OrgIntegration.org_id == org_id,
-        OrgIntegration.provider_id == provider.id,
-    ).first()
+    existing = (
+        db.query(OrgIntegration)
+        .filter(
+            OrgIntegration.org_id == org_id,
+            OrgIntegration.provider_id == provider.id,
+        )
+        .first()
+    )
 
     # Simple encryption placeholder — production must use KMS/Vault
     # The actual credentials are masked here; real implementation encrypts via app-layer AES-256
@@ -329,8 +371,16 @@ def enable_integration(
         db.add(integration)
 
     db.flush()
-    _audit(org_id, integration.id, slug, "enabled", True,
-           f"Integration enabled by {current_user.id}", current_user.id, db)
+    _audit(
+        org_id,
+        integration.id,
+        slug,
+        "enabled",
+        True,
+        f"Integration enabled by {current_user.id}",
+        current_user.id,
+        db,
+    )
     db.commit()
     db.refresh(integration)
     return _integration_dict(integration)
@@ -344,16 +394,28 @@ def disable_integration(
 ):
     """Disable an integration without removing credentials."""
     org_id = org_id_for(current_user)
-    integration = db.query(OrgIntegration).filter(
-        OrgIntegration.org_id == org_id,
-        OrgIntegration.provider_slug == slug,
-    ).first()
+    integration = (
+        db.query(OrgIntegration)
+        .filter(
+            OrgIntegration.org_id == org_id,
+            OrgIntegration.provider_slug == slug,
+        )
+        .first()
+    )
     if not integration:
         raise HTTPException(404, "Integration not configured.")
 
     integration.is_enabled = False
-    _audit(org_id, integration.id, slug, "disabled", True,
-           f"Disabled by {current_user.id}", current_user.id, db)
+    _audit(
+        org_id,
+        integration.id,
+        slug,
+        "disabled",
+        True,
+        f"Disabled by {current_user.id}",
+        current_user.id,
+        db,
+    )
     db.commit()
     return {"slug": slug, "is_enabled": False}
 
@@ -371,10 +433,14 @@ def test_connection(
     test API call to the provider. Currently returns a validated-config response.
     """
     org_id = org_id_for(current_user)
-    integration = db.query(OrgIntegration).filter(
-        OrgIntegration.org_id == org_id,
-        OrgIntegration.provider_slug == slug,
-    ).first()
+    integration = (
+        db.query(OrgIntegration)
+        .filter(
+            OrgIntegration.org_id == org_id,
+            OrgIntegration.provider_slug == slug,
+        )
+        .first()
+    )
     if not integration:
         raise HTTPException(404, "Integration not configured.")
     if not integration.is_enabled:
@@ -383,19 +449,34 @@ def test_connection(
     now = datetime.now(timezone.utc)
     # Placeholder: in production, call provider health endpoint
     test_passed = bool(integration.credentials_encrypted)
-    message = "Connection validated (credentials present)." if test_passed else "No credentials configured."
+    message = (
+        "Connection validated (credentials present)."
+        if test_passed
+        else "No credentials configured."
+    )
 
     integration.last_tested_at = now
     integration.last_test_result = test_passed
     integration.last_test_message = message
     integration.last_health_check_at = now
-    integration.health_status = IntegrationHealthStatus.healthy if test_passed else IntegrationHealthStatus.down
+    integration.health_status = (
+        IntegrationHealthStatus.healthy if test_passed else IntegrationHealthStatus.down
+    )
     if test_passed:
         integration.consecutive_failures = 0
     else:
         integration.consecutive_failures = (integration.consecutive_failures or 0) + 1
 
-    _audit(org_id, integration.id, slug, "tested", test_passed, message, current_user.id, db)
+    _audit(
+        org_id,
+        integration.id,
+        slug,
+        "tested",
+        test_passed,
+        message,
+        current_user.id,
+        db,
+    )
     db.commit()
 
     return {
@@ -419,10 +500,14 @@ def rotate_credentials(
     Old credentials are overwritten. The rotation is audit-logged.
     """
     org_id = org_id_for(current_user)
-    integration = db.query(OrgIntegration).filter(
-        OrgIntegration.org_id == org_id,
-        OrgIntegration.provider_slug == slug,
-    ).first()
+    integration = (
+        db.query(OrgIntegration)
+        .filter(
+            OrgIntegration.org_id == org_id,
+            OrgIntegration.provider_slug == slug,
+        )
+        .first()
+    )
     if not integration:
         raise HTTPException(404, "Integration not configured.")
 
@@ -431,8 +516,16 @@ def rotate_credentials(
     integration.health_status = IntegrationHealthStatus.unknown
     integration.last_tested_at = None
 
-    _audit(org_id, integration.id, slug, "rotated", True,
-           f"Credentials rotated: {payload.reason}", current_user.id, db)
+    _audit(
+        org_id,
+        integration.id,
+        slug,
+        "rotated",
+        True,
+        f"Credentials rotated: {payload.reason}",
+        current_user.id,
+        db,
+    )
     db.commit()
     return {"slug": slug, "rotated": True, "reason": payload.reason}
 

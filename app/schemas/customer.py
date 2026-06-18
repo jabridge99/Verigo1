@@ -4,24 +4,40 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 from app.models.customer import (
-    CDDLevel, CustomerStatus, CustomerType, NoteType,
-    OnboardingChannel, PEPType, ReviewOutcome, RiskLevel, UBOType,
+    CDDLevel,
     CorporateDocumentType,
+    CustomerStatus,
+    CustomerType,
+    NoteType,
+    OnboardingChannel,
+    PEPType,
+    ReviewOutcome,
+    RiskLevel,
+    UBOType,
 )
 from app.models.kyc import (
-    AddressDocumentType, IdentityDocumentType, LivenessCheckType,
-    VerificationProvider, VerificationResult, VerificationSource,
+    AddressDocumentType,
+    IdentityDocumentType,
+    LivenessCheckType,
+    VerificationProvider,
+    VerificationResult,
+    VerificationSource,
 )
 from app.models.screening import (
-    AdverseMediaCategory, AlertSeverity, AlertStatus,
-    CryptoNetwork, CryptoProvider, ScreeningProvider, ScreeningStatus, ScreeningType,
+    AlertSeverity,
+    AlertStatus,
+    CryptoNetwork,
+    CryptoProvider,
+    ScreeningProvider,
+    ScreeningStatus,
+    ScreeningType,
     WalletRiskCategory,
 )
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER SCHEMAS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class CustomerCreate(BaseModel):
     customer_type: CustomerType = CustomerType.individual
@@ -143,9 +159,10 @@ class CustomerResponse(BaseModel):
 # PREVIOUS NAME
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class PreviousNameCreate(BaseModel):
     full_name: str
-    name_type: Optional[str] = None     # birth_name | maiden_name | alias | previous_name
+    name_type: Optional[str] = None  # birth_name | maiden_name | alias | previous_name
     used_from: Optional[date] = None
     used_to: Optional[date] = None
     reason: Optional[str] = None
@@ -166,6 +183,7 @@ class PreviousNameResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 # BUSINESS DETAIL (KYB)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class BusinessDetailCreate(BaseModel):
     legal_name: str
@@ -219,6 +237,7 @@ class BusinessDetailResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 # BENEFICIAL OWNER
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class BeneficialOwnerCreate(BaseModel):
     ubo_type: UBOType
@@ -279,9 +298,10 @@ class BeneficialOwnerResponse(BaseModel):
 # CORPORATE DOCUMENTS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class CorporateDocumentCreate(BaseModel):
     document_type: CorporateDocumentType
-    document_ref: str               # storage key
+    document_ref: str  # storage key
     file_name: Optional[str] = None
     description: Optional[str] = None
     issue_date: Optional[date] = None
@@ -307,6 +327,7 @@ class CorporateDocumentResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 # KYC VERIFICATION
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class IdentityDocumentCreate(BaseModel):
     document_type: IdentityDocumentType
@@ -440,12 +461,13 @@ class EmailVerificationResponse(BaseModel):
 # SCREENING
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class ScreeningTriggerRequest(BaseModel):
     screening_types: List[ScreeningType] = Field(
         ..., description="Types of screening to run"
     )
     entity_type: Optional[str] = "customer"
-    entity_id: Optional[str] = None     # defaults to customer_id if not provided
+    entity_id: Optional[str] = None  # defaults to customer_id if not provided
     provider: ScreeningProvider = ScreeningProvider.internal
     force_rescan: bool = False
 
@@ -522,6 +544,7 @@ class AlertResponse(BaseModel):
 # REVIEW & NOTES
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class CustomerReviewCreate(BaseModel):
     review_type: str = "periodic"
     trigger_reason: Optional[str] = None
@@ -572,6 +595,7 @@ class CustomerNoteResponse(BaseModel):
 # ONBOARDING CHECKLIST
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class OnboardingChecklistResponse(BaseModel):
     id: str
     customer_id: str
@@ -601,6 +625,7 @@ class OnboardingChecklistResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 # RISK SCORE HISTORY
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class RiskScoreHistoryResponse(BaseModel):
     id: str

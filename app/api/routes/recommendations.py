@@ -11,6 +11,7 @@ Roles:
 DISCLAIMER: All recommendations are compliance workflow guidance only.
 The reporting entity bears sole responsibility for all regulatory decisions.
 """
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -56,7 +57,9 @@ class DismissRequest(BaseModel):
 def _rec_dict(r: RegulatoryRecommendation) -> dict:
     return {
         "id": r.id,
-        "recommendation_type": r.recommendation_type.value if r.recommendation_type else None,
+        "recommendation_type": r.recommendation_type.value
+        if r.recommendation_type
+        else None,
         "priority": r.priority.value if r.priority else None,
         "status": r.status.value if r.status else None,
         "source": r.source.value if r.source else None,
@@ -80,10 +83,14 @@ def _rec_dict(r: RegulatoryRecommendation) -> dict:
 
 
 def _get_rec_or_404(rec_id: str, org_id: str, db: Session) -> RegulatoryRecommendation:
-    r = db.query(RegulatoryRecommendation).filter(
-        RegulatoryRecommendation.id == rec_id,
-        RegulatoryRecommendation.org_id == org_id,
-    ).first()
+    r = (
+        db.query(RegulatoryRecommendation)
+        .filter(
+            RegulatoryRecommendation.id == rec_id,
+            RegulatoryRecommendation.org_id == org_id,
+        )
+        .first()
+    )
     if not r:
         raise HTTPException(404, "Recommendation not found.")
     return r
@@ -117,7 +124,9 @@ def list_recommendations(
     if status:
         q = q.filter(RegulatoryRecommendation.status == status)
     if recommendation_type:
-        q = q.filter(RegulatoryRecommendation.recommendation_type == recommendation_type)
+        q = q.filter(
+            RegulatoryRecommendation.recommendation_type == recommendation_type
+        )
     if priority:
         q = q.filter(RegulatoryRecommendation.priority == priority)
 
@@ -132,6 +141,7 @@ def recommendation_dashboard(
 ):
     """Pending recommendation counts by type and priority for the compliance dashboard."""
     from sqlalchemy import func
+
     org_id = org_id_for(current_user)
 
     pending_q = db.query(RegulatoryRecommendation).filter(
@@ -142,7 +152,10 @@ def recommendation_dashboard(
     total_pending = pending_q.count()
 
     by_type = (
-        db.query(RegulatoryRecommendation.recommendation_type, func.count(RegulatoryRecommendation.id))
+        db.query(
+            RegulatoryRecommendation.recommendation_type,
+            func.count(RegulatoryRecommendation.id),
+        )
         .filter(
             RegulatoryRecommendation.org_id == org_id,
             RegulatoryRecommendation.status == RecommendationStatus.pending,
@@ -152,7 +165,9 @@ def recommendation_dashboard(
     )
 
     by_priority = (
-        db.query(RegulatoryRecommendation.priority, func.count(RegulatoryRecommendation.id))
+        db.query(
+            RegulatoryRecommendation.priority, func.count(RegulatoryRecommendation.id)
+        )
         .filter(
             RegulatoryRecommendation.org_id == org_id,
             RegulatoryRecommendation.status == RecommendationStatus.pending,
@@ -195,7 +210,9 @@ def action_rec(
     Required field: action_taken — a description of the action the compliance officer took.
     """
     try:
-        rec = action_recommendation(rec_id, payload.action_taken, current_user.id, db, org_id_for(current_user))
+        rec = action_recommendation(
+            rec_id, payload.action_taken, current_user.id, db, org_id_for(current_user)
+        )
     except ValueError as e:
         raise HTTPException(409, str(e))
     return _rec_dict(rec)
@@ -214,7 +231,13 @@ def dismiss_rec(
     Dismissal is auditable and cannot be undone.
     """
     try:
-        rec = dismiss_recommendation(rec_id, payload.dismissed_reason, current_user.id, db, org_id_for(current_user))
+        rec = dismiss_recommendation(
+            rec_id,
+            payload.dismissed_reason,
+            current_user.id,
+            db,
+            org_id_for(current_user),
+        )
     except ValueError as e:
         raise HTTPException(409, str(e))
     return _rec_dict(rec)

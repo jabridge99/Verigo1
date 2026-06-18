@@ -103,6 +103,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 # ── In-process fallback (single-worker / dev) ─────────────────────────────────
 
+
 class _InProcessRateLimiter:
     """
     Sliding-window rate limiter backed by in-process Python dicts.
@@ -131,7 +132,10 @@ _in_process_limiter = _InProcessRateLimiter()
 
 # ── Redis sliding-window helper ───────────────────────────────────────────────
 
-async def _redis_allow(redis_client, key: str, limit: int, window_seconds: int = 60) -> bool:
+
+async def _redis_allow(
+    redis_client, key: str, limit: int, window_seconds: int = 60
+) -> bool:
     """
     Redis sliding-window rate check using a sorted set.
     Key format expected: rl:{bucket}:{client_ip}
@@ -151,11 +155,14 @@ async def _redis_allow(redis_client, key: str, limit: int, window_seconds: int =
         count = results[2]
         return count <= limit
     except Exception as exc:
-        logger.warning("Redis rate-limit error for key %s: %s — allowing request", key, exc)
+        logger.warning(
+            "Redis rate-limit error for key %s: %s — allowing request", key, exc
+        )
         return True  # Fail open
 
 
 # ── Unified RateLimitMiddleware ────────────────────────────────────────────────
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
@@ -181,19 +188,29 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not self._redis_checked:
             self._redis_checked = True
             from app.config import settings
+
             if settings.redis_url:
                 try:
                     import redis.asyncio as aioredis
+
                     self._redis = aioredis.from_url(
                         settings.redis_url,
                         encoding="utf-8",
                         decode_responses=True,
                     )
-                    logger.info("RateLimitMiddleware: using Redis backend (%s)", settings.redis_url)
+                    logger.info(
+                        "RateLimitMiddleware: using Redis backend (%s)",
+                        settings.redis_url,
+                    )
                 except Exception as exc:
-                    logger.warning("RateLimitMiddleware: Redis init failed, using in-process fallback: %s", exc)
+                    logger.warning(
+                        "RateLimitMiddleware: Redis init failed, using in-process fallback: %s",
+                        exc,
+                    )
             else:
-                logger.info("RateLimitMiddleware: REDIS_URL not set — using in-process fallback")
+                logger.info(
+                    "RateLimitMiddleware: REDIS_URL not set — using in-process fallback"
+                )
         return self._redis
 
     def _real_ip(self, request: Request) -> str:

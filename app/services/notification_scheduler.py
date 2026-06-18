@@ -18,11 +18,11 @@ Governance deadline rules:
   Policy review due  — review_due_date within 30 days
   Independent review due — target_completion within 30 days
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -37,14 +37,14 @@ def run_all_deadline_checks(db: Session) -> dict:
     Called by the scheduled endpoint or a background worker.
     """
     results = {}
-    results["smr_deadlines"]       = check_smr_deadlines(db)
-    results["ifti_deadlines"]      = check_ifti_deadlines(db)
-    results["ttr_deadlines"]       = check_ttr_deadlines(db)
-    results["training_overdue"]    = check_training_overdue(db)
+    results["smr_deadlines"] = check_smr_deadlines(db)
+    results["ifti_deadlines"] = check_ifti_deadlines(db)
+    results["ttr_deadlines"] = check_ttr_deadlines(db)
+    results["training_overdue"] = check_training_overdue(db)
     results["control_test_overdue"] = check_control_test_overdue(db)
-    results["policy_review_due"]   = check_policy_review_due(db)
-    results["ir_review_due"]       = check_independent_review_due(db)
-    results["checked_at"]          = datetime.now(timezone.utc).isoformat()
+    results["policy_review_due"] = check_policy_review_due(db)
+    results["ir_review_due"] = check_independent_review_due(db)
+    results["checked_at"] = datetime.now(timezone.utc).isoformat()
 
     total = sum(v for v in results.values() if isinstance(v, int))
     results["total_notifications_sent"] = total
@@ -56,19 +56,25 @@ def run_all_deadline_checks(db: Session) -> dict:
 # REGULATORY REPORTING DEADLINES
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def check_smr_deadlines(db: Session) -> int:
     """
     Fire notifications for SMRs not yet filed where the suspicion date
     means the 3-business-day deadline is approaching (1 day and 3 days warning).
     """
     try:
-        from app.models.report import SMRReport, ReportStatus
+        from app.models.report import ReportStatus, SMRReport
+
         today = date.today()
         total = 0
 
-        pending_smrs = db.query(SMRReport).filter(
-            SMRReport.status.in_([ReportStatus.draft, ReportStatus.pending_review]),
-        ).all()
+        pending_smrs = (
+            db.query(SMRReport)
+            .filter(
+                SMRReport.status.in_([ReportStatus.draft, ReportStatus.pending_review]),
+            )
+            .all()
+        )
 
         for smr in pending_smrs:
             # SMR deadline: 3 business days from suspicion_date or created_at
@@ -92,21 +98,34 @@ def check_smr_deadlines(db: Session) -> int:
 def check_ifti_deadlines(db: Session) -> int:
     try:
         from app.models.report import IFTIReport, ReportStatus
+
         today = date.today()
         total = 0
 
-        pending = db.query(IFTIReport).filter(
-            IFTIReport.status.in_([ReportStatus.draft, ReportStatus.pending_review]),
-        ).all()
+        pending = (
+            db.query(IFTIReport)
+            .filter(
+                IFTIReport.status.in_(
+                    [ReportStatus.draft, ReportStatus.pending_review]
+                ),
+            )
+            .all()
+        )
 
         for ifti in pending:
             ref_date = getattr(ifti, "transfer_date", None)
             if not ref_date:
                 ref_date = ifti.created_at.date() if ifti.created_at else today
             deadline = ref_date + timedelta(days=4)
-            hours_remaining = max(0, int((
-                datetime.combine(deadline, datetime.min.time()) - datetime.now()
-            ).total_seconds() / 3600))
+            hours_remaining = max(
+                0,
+                int(
+                    (
+                        datetime.combine(deadline, datetime.min.time()) - datetime.now()
+                    ).total_seconds()
+                    / 3600
+                ),
+            )
 
             if 0 < hours_remaining <= 48:
                 ref = getattr(ifti, "report_ref", ifti.id)
@@ -121,13 +140,18 @@ def check_ifti_deadlines(db: Session) -> int:
 
 def check_ttr_deadlines(db: Session) -> int:
     try:
-        from app.models.report import TTRReport, ReportStatus
+        from app.models.report import ReportStatus, TTRReport
+
         today = date.today()
         total = 0
 
-        pending = db.query(TTRReport).filter(
-            TTRReport.status.in_([ReportStatus.draft, ReportStatus.pending_review]),
-        ).all()
+        pending = (
+            db.query(TTRReport)
+            .filter(
+                TTRReport.status.in_([ReportStatus.draft, ReportStatus.pending_review]),
+            )
+            .all()
+        )
 
         for ttr in pending:
             ref_date = getattr(ttr, "transaction_date", None)
@@ -151,18 +175,27 @@ def check_ttr_deadlines(db: Session) -> int:
 # TRAINING
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def check_training_overdue(db: Session) -> int:
     try:
-        from app.models.governance_training import GovernanceTrainingRecord, TrainingStatus
+        from app.models.governance_training import (
+            GovernanceTrainingRecord,
+            TrainingStatus,
+        )
+
         today = date.today()
         total = 0
 
-        overdue_records = db.query(GovernanceTrainingRecord).filter(
-            GovernanceTrainingRecord.due_date < today,
-            GovernanceTrainingRecord.status.in_([
-                TrainingStatus.assigned, TrainingStatus.in_progress
-            ]),
-        ).all()
+        overdue_records = (
+            db.query(GovernanceTrainingRecord)
+            .filter(
+                GovernanceTrainingRecord.due_date < today,
+                GovernanceTrainingRecord.status.in_(
+                    [TrainingStatus.assigned, TrainingStatus.in_progress]
+                ),
+            )
+            .all()
+        )
 
         for record in overdue_records:
             days_overdue = (today - record.due_date).days
@@ -188,16 +221,25 @@ def check_training_overdue(db: Session) -> int:
 # GOVERNANCE CONTROLS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def check_control_test_overdue(db: Session) -> int:
     try:
-        from app.models.governance_controls import GovernanceControl, ControlTest, TestResult
+        from app.models.governance_controls import (
+            ControlTest,
+            GovernanceControl,
+        )
+
         today = date.today()
         total = 0
 
-        overdue_tests = db.query(ControlTest).filter(
-            ControlTest.scheduled_date < today,
-            ControlTest.result.is_(None),
-        ).all()
+        overdue_tests = (
+            db.query(ControlTest)
+            .filter(
+                ControlTest.scheduled_date < today,
+                ControlTest.result.is_(None),
+            )
+            .all()
+        )
 
         for test in overdue_tests:
             days_overdue = (today - test.scheduled_date).days
@@ -207,8 +249,11 @@ def check_control_test_overdue(db: Session) -> int:
             if not control:
                 continue
             notifier.notify_control_test_overdue(
-                db, control.org_id, control.id,
-                getattr(control, "control_ref", control.id), days_overdue
+                db,
+                control.org_id,
+                control.id,
+                getattr(control, "control_ref", control.id),
+                days_overdue,
             )
             total += 1
         return total
@@ -221,22 +266,30 @@ def check_control_test_overdue(db: Session) -> int:
 # POLICY REVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def check_policy_review_due(db: Session) -> int:
     try:
         from app.models.governance import Policy, PolicyLifecycleStatus
+
         today = date.today()
         in_30_days = today + timedelta(days=30)
         total = 0
 
-        due_policies = db.query(Policy).filter(
-            Policy.review_due_date.isnot(None),
-            Policy.review_due_date <= in_30_days,
-            Policy.review_due_date >= today,
-            Policy.lifecycle_status.in_([
-                PolicyLifecycleStatus.approved,
-                PolicyLifecycleStatus.published,
-            ]),
-        ).all()
+        due_policies = (
+            db.query(Policy)
+            .filter(
+                Policy.review_due_date.isnot(None),
+                Policy.review_due_date <= in_30_days,
+                Policy.review_due_date >= today,
+                Policy.lifecycle_status.in_(
+                    [
+                        PolicyLifecycleStatus.approved,
+                        PolicyLifecycleStatus.published,
+                    ]
+                ),
+            )
+            .all()
+        )
 
         for policy in due_policies:
             days_remaining = (policy.review_due_date - today).days
@@ -256,27 +309,38 @@ def check_policy_review_due(db: Session) -> int:
 # INDEPENDENT REVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def check_independent_review_due(db: Session) -> int:
     try:
         from app.models.independent_review import IndependentReview, ReviewStatus
+
         today = date.today()
         in_30_days = today + timedelta(days=30)
         total = 0
 
-        due_reviews = db.query(IndependentReview).filter(
-            IndependentReview.target_completion.isnot(None),
-            IndependentReview.target_completion <= in_30_days,
-            IndependentReview.target_completion >= today,
-            IndependentReview.status.notin_([ReviewStatus.completed, ReviewStatus.cancelled]),
-        ).all()
+        due_reviews = (
+            db.query(IndependentReview)
+            .filter(
+                IndependentReview.target_completion.isnot(None),
+                IndependentReview.target_completion <= in_30_days,
+                IndependentReview.target_completion >= today,
+                IndependentReview.status.notin_(
+                    [ReviewStatus.completed, ReviewStatus.cancelled]
+                ),
+            )
+            .all()
+        )
 
         for review in due_reviews:
             days_remaining = (review.target_completion - today).days
             if days_remaining not in (1, 7, 14, 30):
                 continue
             notifier.notify_independent_review_due(
-                db, review.org_id, review.id,
-                getattr(review, "review_ref", review.id), days_remaining
+                db,
+                review.org_id,
+                review.id,
+                getattr(review, "review_ref", review.id),
+                days_remaining,
             )
             total += 1
         return total

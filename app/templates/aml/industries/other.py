@@ -3,8 +3,10 @@ Generic / Other industry AML template — Tranche 2 fallback.
 Used for: insurance, trust & company services, precious metals, and other
 Tranche 2 entities not covered by a dedicated template.
 """
-from app.templates.aml.base import AMLTemplateBase, BASE_CONTROLS, BASE_POLICIES
+
 import copy
+
+from app.templates.aml.base import BASE_CONTROLS, BASE_POLICIES, AMLTemplateBase
 
 
 def get_template(risk_level: str = "medium") -> AMLTemplateBase:

@@ -11,21 +11,27 @@ Sections:
 
 Notification: MLRO receives in-app + email notification when pack is ready.
 """
+
 from datetime import date
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_current_user, require_mlro_or_above, require_compliance_or_above,
-    require_analyst_or_above, get_db,
+    get_db,
+    require_analyst_or_above,
+    require_compliance_or_above,
+    require_mlro_or_above,
+)
+from app.models.examination_pack import (
+    EXAMINATION_SECTIONS,
+    ExaminationPack,
+    ExaminationPackStatus,
 )
 from app.models.user import User
-from app.models.examination_pack import (
-    ExaminationPack, ExaminationPackStatus, EXAMINATION_SECTIONS,
-)
 from app.services import examination_pack_service as svc
 
 router = APIRouter(prefix="/examination-packs", tags=["AUSTRAC Examination Pack"])
@@ -33,13 +39,14 @@ router = APIRouter(prefix="/examination-packs", tags=["AUSTRAC Examination Pack"
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class GeneratePackRequest(BaseModel):
     period_start: date
     period_end: date
-    sections: Optional[List[str]] = None          # null = all sections
+    sections: Optional[List[str]] = None  # null = all sections
     examiner_name: Optional[str] = None
     examiner_agency: str = "AUSTRAC"
-    examination_ref: Optional[str] = None         # AUSTRAC's own reference number
+    examination_ref: Optional[str] = None  # AUSTRAC's own reference number
 
 
 class DeliverPackRequest(BaseModel):
@@ -47,6 +54,7 @@ class DeliverPackRequest(BaseModel):
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/", summary="Generate an AUSTRAC examination pack")
 def generate_pack(
@@ -57,7 +65,9 @@ def generate_pack(
     if body.sections:
         invalid = [s for s in body.sections if s not in EXAMINATION_SECTIONS]
         if invalid:
-            raise HTTPException(422, f"Unknown sections: {invalid}. Valid: {EXAMINATION_SECTIONS}")
+            raise HTTPException(
+                422, f"Unknown sections: {invalid}. Valid: {EXAMINATION_SECTIONS}"
+            )
 
     pack = svc.generate_pack(
         db=db,
@@ -117,9 +127,11 @@ def get_pack(
     return _pack_to_dict(pack, include_snapshot=include_snapshot)
 
 
-@router.get("/{pack_id}/export-html",
-            response_class=HTMLResponse,
-            summary="Export examination pack as print-ready HTML")
+@router.get(
+    "/{pack_id}/export-html",
+    response_class=HTMLResponse,
+    summary="Export examination pack as print-ready HTML",
+)
 def export_html(
     pack_id: str,
     db: Session = Depends(get_db),
@@ -131,9 +143,11 @@ def export_html(
     return HTMLResponse(content=svc.export_html(pack))
 
 
-@router.get("/{pack_id}/export-csv",
-            response_class=PlainTextResponse,
-            summary="Export examination pack metrics as CSV index")
+@router.get(
+    "/{pack_id}/export-csv",
+    response_class=PlainTextResponse,
+    summary="Export examination pack metrics as CSV index",
+)
 def export_csv(
     pack_id: str,
     db: Session = Depends(get_db),
@@ -149,8 +163,7 @@ def export_csv(
     )
 
 
-@router.post("/{pack_id}/deliver",
-             summary="Mark pack as delivered to AUSTRAC examiner")
+@router.post("/{pack_id}/deliver", summary="Mark pack as delivered to AUSTRAC examiner")
 def deliver_pack(
     pack_id: str,
     body: DeliverPackRequest,
@@ -158,9 +171,12 @@ def deliver_pack(
     current_user: User = Depends(require_mlro_or_above),
 ):
     from datetime import datetime, timezone
+
     pack = _get_pack(db, pack_id, current_user.org_id)
     if pack.status != ExaminationPackStatus.ready:
-        raise HTTPException(422, "Only packs with status 'ready' can be marked as delivered")
+        raise HTTPException(
+            422, "Only packs with status 'ready' can be marked as delivered"
+        )
     pack.status = ExaminationPackStatus.delivered
     pack.delivered_at = datetime.now(timezone.utc)
     pack.delivered_by = current_user.id
@@ -192,6 +208,7 @@ def get_enums():
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _get_pack(db: Session, pack_id: str, org_id: str) -> ExaminationPack:
     pack = db.query(ExaminationPack).filter_by(id=pack_id, org_id=org_id).first()

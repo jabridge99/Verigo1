@@ -2,8 +2,10 @@
 Remittance / Independent Remittance Dealer (IRD) AML template.
 Tranche 1 — IFTI ✓  TTR ✓  Travel Rule ✓
 """
-from app.templates.aml.base import AMLTemplateBase, BASE_CONTROLS, BASE_POLICIES
+
 import copy
+
+from app.templates.aml.base import BASE_CONTROLS, BASE_POLICIES, AMLTemplateBase
 
 
 def get_template(risk_level: str = "medium") -> AMLTemplateBase:
@@ -97,20 +99,36 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
 
     # Add IFTI-specific controls
     extra_controls = [
-        {"control_ref": "CTL-010", "title": "IFTI Reporting — Outgoing Transfers",
-         "control_type": "detective", "risk_area": "ifti_reporting"},
-        {"control_ref": "CTL-011", "title": "IFTI Reporting — Incoming Transfers",
-         "control_type": "detective", "risk_area": "ifti_reporting"},
-        {"control_ref": "CTL-012", "title": "Travel Rule Information Transmission",
-         "control_type": "preventive", "risk_area": "travel_rule"},
-        {"control_ref": "CTL-013", "title": "Sub-Agent Due Diligence and Monitoring",
-         "control_type": "preventive", "risk_area": "agent_oversight"},
+        {
+            "control_ref": "CTL-010",
+            "title": "IFTI Reporting — Outgoing Transfers",
+            "control_type": "detective",
+            "risk_area": "ifti_reporting",
+        },
+        {
+            "control_ref": "CTL-011",
+            "title": "IFTI Reporting — Incoming Transfers",
+            "control_type": "detective",
+            "risk_area": "ifti_reporting",
+        },
+        {
+            "control_ref": "CTL-012",
+            "title": "Travel Rule Information Transmission",
+            "control_type": "preventive",
+            "risk_area": "travel_rule",
+        },
+        {
+            "control_ref": "CTL-013",
+            "title": "Sub-Agent Due Diligence and Monitoring",
+            "control_type": "preventive",
+            "risk_area": "agent_oversight",
+        },
     ]
 
     t._policies = copy.deepcopy(BASE_POLICIES) + [
-        {"title": "IFTI Reporting Procedures",    "policy_type": "ifti"},
+        {"title": "IFTI Reporting Procedures", "policy_type": "ifti"},
         {"title": "Travel Rule Compliance Policy", "policy_type": "travel_rule"},
-        {"title": "Sub-Agent Management Policy",   "policy_type": "agent_oversight"},
+        {"title": "Sub-Agent Management Policy", "policy_type": "agent_oversight"},
     ]
     t._controls = copy.deepcopy(BASE_CONTROLS) + extra_controls
 

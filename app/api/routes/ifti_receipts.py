@@ -10,6 +10,7 @@ SHA-256 audit hash supports integrity verification at any future point.
 DISCLAIMER: These receipts are compliance workflow documents only.
 They do not constitute reports to AUSTRAC or any regulator.
 """
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,7 +18,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     Pagination,
-    get_current_user,
     org_id_for,
     require_analyst_or_above,
     require_compliance_or_above,
@@ -37,9 +37,11 @@ router = APIRouter(prefix="/ifti-receipts", tags=["IFTI Receipts"])
 
 
 def _get_receipt_or_404(receipt_id: str, org_id: str, db: Session) -> IFTIReceipt:
-    r = db.query(IFTIReceipt).filter(
-        IFTIReceipt.id == receipt_id, IFTIReceipt.org_id == org_id
-    ).first()
+    r = (
+        db.query(IFTIReceipt)
+        .filter(IFTIReceipt.id == receipt_id, IFTIReceipt.org_id == org_id)
+        .first()
+    )
     if not r:
         raise HTTPException(404, "IFTI receipt not found.")
     return r
@@ -70,10 +72,15 @@ def get_receipts_for_transaction(
     current_user: User = Depends(require_analyst_or_above),
 ):
     org_id = org_id_for(current_user)
-    receipts = db.query(IFTIReceipt).filter(
-        IFTIReceipt.org_id == org_id,
-        IFTIReceipt.transaction_id == txn_id,
-    ).order_by(IFTIReceipt.created_at.desc()).all()
+    receipts = (
+        db.query(IFTIReceipt)
+        .filter(
+            IFTIReceipt.org_id == org_id,
+            IFTIReceipt.transaction_id == txn_id,
+        )
+        .order_by(IFTIReceipt.created_at.desc())
+        .all()
+    )
     return [_receipt_dict(r) for r in receipts]
 
 
@@ -94,19 +101,25 @@ def generate_receipt(
     The audit hash is computed and stored at generation time.
     """
     org_id = org_id_for(current_user)
-    txn = db.query(Transaction).filter(
-        Transaction.id == txn_id, Transaction.org_id == org_id
-    ).first()
+    txn = (
+        db.query(Transaction)
+        .filter(Transaction.id == txn_id, Transaction.org_id == org_id)
+        .first()
+    )
     if not txn:
         raise HTTPException(404, "Transaction not found.")
     if not txn.is_cross_border:
-        raise HTTPException(422, "IFTI receipts are for cross-border transactions only.")
+        raise HTTPException(
+            422, "IFTI receipts are for cross-border transactions only."
+        )
 
     ifti_report = None
     if ifti_report_id:
-        ifti_report = db.query(IFTIReport).filter(
-            IFTIReport.id == ifti_report_id, IFTIReport.org_id == org_id
-        ).first()
+        ifti_report = (
+            db.query(IFTIReport)
+            .filter(IFTIReport.id == ifti_report_id, IFTIReport.org_id == org_id)
+            .first()
+        )
         if not ifti_report:
             raise HTTPException(404, "IFTI report not found.")
 
@@ -177,17 +190,21 @@ def supersede_existing_receipt(
     org_id = org_id_for(current_user)
     _get_receipt_or_404(receipt_id, org_id, db)  # ensure belongs to org
 
-    txn = db.query(Transaction).filter(
-        Transaction.id == txn_id, Transaction.org_id == org_id
-    ).first()
+    txn = (
+        db.query(Transaction)
+        .filter(Transaction.id == txn_id, Transaction.org_id == org_id)
+        .first()
+    )
     if not txn:
         raise HTTPException(404, "Transaction not found.")
 
     ifti_report = None
     if ifti_report_id:
-        ifti_report = db.query(IFTIReport).filter(
-            IFTIReport.id == ifti_report_id, IFTIReport.org_id == org_id
-        ).first()
+        ifti_report = (
+            db.query(IFTIReport)
+            .filter(IFTIReport.id == ifti_report_id, IFTIReport.org_id == org_id)
+            .first()
+        )
 
     try:
         new_receipt = supersede_receipt(

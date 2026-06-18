@@ -19,19 +19,30 @@ Statutory deadlines (AML/CTF Act 2006):
 DISCLAIMER: This module stores compliance records as a tool only.
 Decisions to lodge reports with AUSTRAC remain entirely with the reporting entity.
 """
+
 import enum
 from uuid import uuid4
 
 from sqlalchemy import (
-    JSON, Boolean, Column, Date, DateTime, Enum,
-    Float, ForeignKey, Index, String, Text, func,
+    JSON,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    func,
 )
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
-
 # ── Enums ─────────────────────────────────────────────────────────────────────
+
 
 class ReportType(str, enum.Enum):
     ifti_incoming = "ifti_incoming"
@@ -66,10 +77,11 @@ class TTRIndustryType(str, enum.Enum):
     AUSTRAC-defined industry classifications for TTR reporting.
     Each industry has a distinct set of mandatory and optional fields.
     """
-    FBS = "FBS"   # Financial and Bullion Services — banks, financial institutions, bullion dealers
-    GS  = "GS"    # Gambling Services — casinos, betting agencies, gaming operators
-    ISI = "ISI"   # Investment/Superannuation/Insurance — wealth management, super funds, life insurance
-    MSB = "MSB"   # Money Services Business — remittance, currency exchange
+
+    FBS = "FBS"  # Financial and Bullion Services — banks, financial institutions, bullion dealers
+    GS = "GS"  # Gambling Services — casinos, betting agencies, gaming operators
+    ISI = "ISI"  # Investment/Superannuation/Insurance — wealth management, super funds, life insurance
+    MSB = "MSB"  # Money Services Business — remittance, currency exchange
 
 
 class SMRDesignatedSvc(str, enum.Enum):
@@ -78,29 +90,30 @@ class SMRDesignatedSvc(str, enum.Enum):
     27 valid codes; AFSL_ARR is SMR-only (absent from TTR schemas).
     Mandatory: 1..26 per report.
     """
-    ACC_DEP  = "ACC_DEP"   # Accepting deposits
+
+    ACC_DEP = "ACC_DEP"  # Accepting deposits
     AFSL_ARR = "AFSL_ARR"  # Arranging financial products (AFSL — SMR only)
-    BET_ACC  = "BET_ACC"   # Betting accounts
-    BULSER   = "BULSER"    # Bullion services
+    BET_ACC = "BET_ACC"  # Betting accounts
+    BULSER = "BULSER"  # Bullion services
     BUS_LOAN = "BUS_LOAN"  # Business loans
-    BUS_RSA  = "BUS_RSA"   # Business/RSA accounts
+    BUS_RSA = "BUS_RSA"  # Business/RSA accounts
     CHQACCSS = "CHQACCSS"  # Cheque access
     CRDACCSS = "CRDACCSS"  # Credit access
     CUR_EXCH = "CUR_EXCH"  # Currency exchange
     CUST_DEP = "CUST_DEP"  # Custodian/depository
-    DCE      = "DCE"       # Digital currency exchange
+    DCE = "DCE"  # Digital currency exchange
     DEBTINST = "DEBTINST"  # Debt instruments
-    FIN_EFT  = "FIN_EFT"   # Financial EFT
+    FIN_EFT = "FIN_EFT"  # Financial EFT
     GAMCHSKL = "GAMCHSKL"  # Gaming — chance/skill
     GAM_BETT = "GAM_BETT"  # Gaming — betting
     GAM_EXCH = "GAM_EXCH"  # Gaming — exchange
     GAM_MACH = "GAM_MACH"  # Gaming — machine
-    LEASING  = "LEASING"   # Leasing
+    LEASING = "LEASING"  # Leasing
     LIFE_INS = "LIFE_INS"  # Life insurance
     PAYORDRS = "PAYORDRS"  # Payment orders
-    PAYROLL  = "PAYROLL"   # Payroll services
+    PAYROLL = "PAYROLL"  # Payroll services
     PENSIONS = "PENSIONS"  # Pensions/annuities
-    RS       = "RS"        # Remittance services
+    RS = "RS"  # Remittance services
     SECURITY = "SECURITY"  # Securities
     SUPERANN = "SUPERANN"  # Superannuation
     TRAVLCHQ = "TRAVLCHQ"  # Traveller's cheques
@@ -112,16 +125,17 @@ class SMRSuspReason(str, enum.Enum):
     AUSTRAC SMR-2-0 suspReason enum (section smDetails).
     One or more reasons MUST be selected. Requires explicit human selection.
     """
-    PROCEEDS   = "PROCEEDS"    # Proceeds of crime
-    TERRORISM  = "TERRORISM"   # Terrorism financing
-    EVASION    = "EVASION"     # Tax evasion
-    FRAUD      = "FRAUD"       # Fraud
-    BRIBERY    = "BRIBERY"     # Bribery/corruption
-    DRUG       = "DRUG"        # Drug trafficking
-    PEOPLE     = "PEOPLE"      # People smuggling/trafficking
-    WEAPON     = "WEAPON"      # Weapons proliferation
-    ENVIRON    = "ENVIRON"     # Environmental crime
-    OTHER      = "OTHER"       # Other
+
+    PROCEEDS = "PROCEEDS"  # Proceeds of crime
+    TERRORISM = "TERRORISM"  # Terrorism financing
+    EVASION = "EVASION"  # Tax evasion
+    FRAUD = "FRAUD"  # Fraud
+    BRIBERY = "BRIBERY"  # Bribery/corruption
+    DRUG = "DRUG"  # Drug trafficking
+    PEOPLE = "PEOPLE"  # People smuggling/trafficking
+    WEAPON = "WEAPON"  # Weapons proliferation
+    ENVIRON = "ENVIRON"  # Environmental crime
+    OTHER = "OTHER"  # Other
 
 
 # SMR-2-0 uses the same offence categories for both suspReason and additionalDetails.offence.
@@ -131,24 +145,34 @@ SMROffenceType = SMRSuspReason
 
 # ── IFTI Report ───────────────────────────────────────────────────────────────
 
+
 class IFTIReport(Base):
     """
     AUSTRAC International Funds Transfer Instruction.
     Due within 10 business days of receiving/sending the instruction.
     """
+
     __tablename__ = "ifti_reports"
 
     id = Column(String, primary_key=True, default=lambda: f"ifti_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"),
-                    nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
     transaction_id = Column(String, ForeignKey("transactions.id"), nullable=True)
 
-    report_ref = Column(String(60), unique=True, index=True)        # PSPE-IFTI-I-20260615-0001
+    report_ref = Column(
+        String(60), unique=True, index=True
+    )  # PSPE-IFTI-I-20260615-0001
     reference_number = Column(String(100), index=True)
 
     direction = Column(Enum(IFTIDirection), nullable=False, index=True)
-    status = Column(Enum(ReportStatus), default=ReportStatus.draft, nullable=False, index=True)
+    status = Column(
+        Enum(ReportStatus), default=ReportStatus.draft, nullable=False, index=True
+    )
     priority = Column(Enum(ReportPriority), default=ReportPriority.normal)
 
     # Core transfer
@@ -232,24 +256,32 @@ class IFTIReport(Base):
 
 # ── TTR Report ────────────────────────────────────────────────────────────────
 
+
 class TTRReport(Base):
     """Threshold Transaction Report — cash >= AUD 10,000."""
+
     __tablename__ = "ttr_reports"
 
     id = Column(String, primary_key=True, default=lambda: f"ttr_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"),
-                    nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
     transaction_id = Column(String, ForeignKey("transactions.id"), nullable=True)
 
     report_ref = Column(String(60), unique=True, index=True)
-    status = Column(Enum(ReportStatus), default=ReportStatus.draft, nullable=False, index=True)
+    status = Column(
+        Enum(ReportStatus), default=ReportStatus.draft, nullable=False, index=True
+    )
     priority = Column(Enum(ReportPriority), default=ReportPriority.normal)
 
     transaction_date = Column(Date, nullable=False)
     total_amount = Column(Float, nullable=False)
     currency = Column(String(3), default="AUD")
-    transaction_type = Column(String(50))   # cash_in | cash_out | combined
+    transaction_type = Column(String(50))  # cash_in | cash_out | combined
 
     # Customer snapshot
     customer_name = Column(String(255))
@@ -311,6 +343,7 @@ class TTRReport(Base):
 
 # ── SMR Report ────────────────────────────────────────────────────────────────
 
+
 class SMRReport(Base):
     """
     Suspicious Matter Report — aligned to AUSTRAC SMR-2-0.xsd.
@@ -318,40 +351,55 @@ class SMRReport(Base):
     DISCLAIMER: The decision to lodge an SMR remains entirely with the reporting entity.
     All SMR fields require explicit human action — never auto-set.
     """
+
     __tablename__ = "smr_reports"
 
     id = Column(String, primary_key=True, default=lambda: f"smr_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"),
-                    nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
     case_id = Column(String, ForeignKey("cases.id"), nullable=True, index=True)
 
     report_ref = Column(String(60), unique=True, index=True)
-    status = Column(Enum(ReportStatus), default=ReportStatus.draft, nullable=False, index=True)
+    status = Column(
+        Enum(ReportStatus), default=ReportStatus.draft, nullable=False, index=True
+    )
     priority = Column(Enum(ReportPriority), default=ReportPriority.high)
 
     # ── <header> ─────────────────────────────────────────────────────────────────
-    re_report_ref = Column(String(100))          # reReportRef — reference to original report if re-lodging
-    intercept_flag = Column(String(3))           # interceptFlag YesNo — law enforcement intercept
-    reporting_branch_id = Column(String(100))    # reportingBranch.branchId (optional)
-    reporting_branch_name = Column(String(255))  # reportingBranch.name (MANDATORY if branch supplied)
+    re_report_ref = Column(
+        String(100)
+    )  # reReportRef — reference to original report if re-lodging
+    intercept_flag = Column(
+        String(3)
+    )  # interceptFlag YesNo — law enforcement intercept
+    reporting_branch_id = Column(String(100))  # reportingBranch.branchId (optional)
+    reporting_branch_name = Column(
+        String(255)
+    )  # reportingBranch.name (MANDATORY if branch supplied)
 
     # ── <smDetails> — MANDATORY ───────────────────────────────────────────────────
     # designated_svcs: list of SMRDesignatedSvc codes — 1..26 entries MANDATORY
     # All values must be valid SMRDesignatedSvc enum members (validated at service layer)
     designated_svcs = Column(JSON, default=list)
-    designated_svc_provided = Column(String(3))   # YesNo — service was provided
+    designated_svc_provided = Column(String(3))  # YesNo — service was provided
     designated_svc_requested = Column(String(3))  # YesNo — service was requested
-    designated_svc_enquiry = Column(String(3))    # YesNo — enquiry only
+    designated_svc_enquiry = Column(String(3))  # YesNo — enquiry only
 
     # susp_reason_codes: list of SMRSuspReason codes — 1..* MANDATORY
     # Requires explicit human selection — never auto-populate
     susp_reason_codes = Column(JSON, default=list)
-    grand_total = Column(Float)                   # smDetails.grandTotal (MANDATORY Amount)
+    grand_total = Column(Float)  # smDetails.grandTotal (MANDATORY Amount)
     grand_total_currency = Column(String(3), default="AUD")
 
     matter_date = Column(Date, nullable=False)
-    suspicion_grounds = Column(Text, nullable=False)   # <suspGrounds> — MANDATORY free text
+    suspicion_grounds = Column(
+        Text, nullable=False
+    )  # <suspGrounds> — MANDATORY free text
 
     # ── Primary suspect — <suspPerson> (first entry; additional via susp_persons JSON) ───
     # Retains legacy single-subject fields for backwards compat; additional persons in JSON
@@ -369,23 +417,31 @@ class SMRReport(Base):
     subject_arbn = Column(String(9))
     subject_id_type = Column(String(100))
     subject_id_number = Column(String(100))
-    subject_id_issue_date = Column(Date)     # SMR Identification extends base with idIssueDate
-    subject_id_expiry_date = Column(Date)    # SMR Identification extends base with idExpiryDate
+    subject_id_issue_date = Column(
+        Date
+    )  # SMR Identification extends base with idIssueDate
+    subject_id_expiry_date = Column(
+        Date
+    )  # SMR Identification extends base with idExpiryDate
     subject_id_issuer = Column(String(255))
     subject_electronic_source = Column(String(255))
     subject_device_identifier = Column(String(255))
     subject_business_name = Column(String(255))
     subject_business_struct = Column(String(100))
-    subject_business_ben_name = Column(String(255))   # beneficiary/holder name
+    subject_business_ben_name = Column(String(255))  # beneficiary/holder name
     subject_business_holder_name = Column(String(255))
     subject_incorp_country = Column(String(100))
-    subject_citizen_countries = Column(JSON, default=list)  # citizenCountry 0..* (multiple citizenships)
-    subject_digital_currency_wallets = Column(JSON, default=list)  # [{network, address}]
+    subject_citizen_countries = Column(
+        JSON, default=list
+    )  # citizenCountry 0..* (multiple citizenships)
+    subject_digital_currency_wallets = Column(
+        JSON, default=list
+    )  # [{network, address}]
     subject_account_number = Column(String(100))
     subject_account_bsb = Column(String(10))
     subject_account_name = Column(String(255))
     subject_account_institution = Column(String(255))
-    subject_is_customer = Column(String(3))   # personIsCustomer YesNo
+    subject_is_customer = Column(String(3))  # personIsCustomer YesNo
 
     # ── Additional persons — stored as JSON arrays ──────────────────────────────
     # susp_persons: [{name, dob, address, abn, acn, id_type, id_number, ...}] — suspPerson[1..*]
@@ -410,9 +466,15 @@ class SMRReport(Base):
     # ── <additionalDetails> — MANDATORY ─────────────────────────────────────────
     # offence_type: SMROffenceType enum value — MANDATORY, exactly 1, human-selected
     offence_type = Column(String(50))
-    is_terrorism_related = Column(Boolean, default=False)  # derived from offence_type == TERRORISM; 24h deadline
-    prev_reported_refs = Column(JSON, default=list)        # prevReported — prior AUSTRAC report refs
-    other_aus_gov_reports = Column(JSON, default=list)     # otherAusGov — other Australian gov agency reports
+    is_terrorism_related = Column(
+        Boolean, default=False
+    )  # derived from offence_type == TERRORISM; 24h deadline
+    prev_reported_refs = Column(
+        JSON, default=list
+    )  # prevReported — prior AUSTRAC report refs
+    other_aus_gov_reports = Column(
+        JSON, default=list
+    )  # otherAusGov — other Australian gov agency reports
 
     # ── MLRO-authored narrative ──────────────────────────────────────────────────
     narrative = Column(Text)
@@ -429,7 +491,7 @@ class SMRReport(Base):
     # Workflow — all fields require explicit human action
     prepared_by = Column(String)
     reviewed_by = Column(String)
-    mlro_sign_off = Column(String)          # MLRO user_id
+    mlro_sign_off = Column(String)  # MLRO user_id
     mlro_signed_at = Column(DateTime(timezone=True))
     mlro_sign_off_notes = Column(Text)
     submitted_by = Column(String)
@@ -448,30 +510,36 @@ class SMRReport(Base):
 
 # ── Filing Register (immutable) ────────────────────────────────────────────────
 
+
 class FilingRegisterEntry(Base):
     """
     Immutable regulatory filing register — one row per AUSTRAC submission.
     This record is NEVER modified after creation.
     Corrections create a new entry with supersedes_id referencing the original.
     """
+
     __tablename__ = "filing_register"
 
     id = Column(String, primary_key=True, default=lambda: f"fil_{uuid4().hex[:12]}")
     org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
 
     report_type = Column(Enum(ReportType), nullable=False, index=True)
-    report_id = Column(String, nullable=False)                  # id of IFTIReport/TTRReport/SMRReport
-    report_ref = Column(String(60), unique=True, index=True)    # PSPE-IFTI-I-20260615-0001
+    report_id = Column(String, nullable=False)  # id of IFTIReport/TTRReport/SMRReport
+    report_ref = Column(
+        String(60), unique=True, index=True
+    )  # PSPE-IFTI-I-20260615-0001
 
-    austrac_submission_ref = Column(String(100))                # AUSTRAC confirmation ref
-    submitted_by = Column(String, nullable=False)               # user_id
+    austrac_submission_ref = Column(String(100))  # AUSTRAC confirmation ref
+    submitted_by = Column(String, nullable=False)  # user_id
     submitted_at = Column(DateTime(timezone=True), nullable=False)
 
     period_start = Column(Date)
     period_end = Column(Date)
     amount_aud = Column(Float)
 
-    status = Column(String(20), nullable=False, default="submitted")  # submitted|acknowledged|rejected
+    status = Column(
+        String(20), nullable=False, default="submitted"
+    )  # submitted|acknowledged|rejected
     acknowledgement_ref = Column(String(100))
     acknowledgement_at = Column(DateTime(timezone=True))
     rejected_reason = Column(Text)
@@ -482,6 +550,4 @@ class FilingRegisterEntry(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     # Intentionally NO updated_at — immutable record
 
-    __table_args__ = (
-        Index("ix_filing_org_type", "org_id", "report_type"),
-    )
+    __table_args__ = (Index("ix_filing_org_type", "org_id", "report_type"),)

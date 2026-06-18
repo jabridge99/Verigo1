@@ -12,6 +12,7 @@ Role permissions:
 DISCLAIMER: This API provides compliance workflow tooling only.
 All decisions to lodge reports with AUSTRAC remain with the reporting entity.
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -21,7 +22,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     Pagination,
-    get_current_user,
     org_id_for,
     require_analyst_or_above,
     require_compliance_or_above,
@@ -34,7 +34,6 @@ from app.models.report import (
     FilingRegisterEntry,
     IFTIDirection,
     IFTIReport,
-    ReportPriority,
     ReportStatus,
     ReportType,
     SMRDesignatedSvc,
@@ -54,8 +53,8 @@ from app.services.reporting_service import (
     reporting_summary,
 )
 from app.services.ttr_service import (
-    build_industry_detail,
     build_austrac_submission_payload,
+    build_industry_detail,
     generate_ttr_csv,
 )
 
@@ -64,28 +63,35 @@ router = APIRouter(prefix="/reports", tags=["Regulatory Reports"])
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _get_ifti_or_404(report_id: str, org_id: str, db: Session) -> IFTIReport:
-    r = db.query(IFTIReport).filter(
-        IFTIReport.id == report_id, IFTIReport.org_id == org_id
-    ).first()
+    r = (
+        db.query(IFTIReport)
+        .filter(IFTIReport.id == report_id, IFTIReport.org_id == org_id)
+        .first()
+    )
     if not r:
         raise HTTPException(404, "IFTI report not found.")
     return r
 
 
 def _get_ttr_or_404(report_id: str, org_id: str, db: Session) -> TTRReport:
-    r = db.query(TTRReport).filter(
-        TTRReport.id == report_id, TTRReport.org_id == org_id
-    ).first()
+    r = (
+        db.query(TTRReport)
+        .filter(TTRReport.id == report_id, TTRReport.org_id == org_id)
+        .first()
+    )
     if not r:
         raise HTTPException(404, "TTR report not found.")
     return r
 
 
 def _get_smr_or_404(report_id: str, org_id: str, db: Session) -> SMRReport:
-    r = db.query(SMRReport).filter(
-        SMRReport.id == report_id, SMRReport.org_id == org_id
-    ).first()
+    r = (
+        db.query(SMRReport)
+        .filter(SMRReport.id == report_id, SMRReport.org_id == org_id)
+        .first()
+    )
     if not r:
         raise HTTPException(404, "SMR report not found.")
     return r
@@ -93,15 +99,20 @@ def _get_smr_or_404(report_id: str, org_id: str, db: Session) -> SMRReport:
 
 def _assert_editable(report, label: str):
     if report.status not in (ReportStatus.draft, ReportStatus.under_review):
-        raise HTTPException(409, f"{label} cannot be edited in status: {report.status.value}")
+        raise HTTPException(
+            409, f"{label} cannot be edited in status: {report.status.value}"
+        )
 
 
 def _assert_maker_checker(report, approver_id: str):
     if report.reviewed_by and report.reviewed_by == approver_id:
-        raise HTTPException(403, "Maker-checker violation: approver cannot be the same as reviewer.")
+        raise HTTPException(
+            403, "Maker-checker violation: approver cannot be the same as reviewer."
+        )
 
 
 # ── Summary / Dashboard ───────────────────────────────────────────────────────
+
 
 @router.get("/summary")
 def get_reporting_summary(
@@ -112,6 +123,7 @@ def get_reporting_summary(
 
 
 # ── IFTI ─────────────────────────────────────────────────────────────────────
+
 
 @router.get("/ifti", response_model=list[dict])
 def list_ifti(
@@ -135,7 +147,9 @@ def list_ifti(
     return [_ifti_dict(r) for r in reports]
 
 
-@router.post("/ifti/generate-from-transaction/{txn_id}", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/ifti/generate-from-transaction/{txn_id}", status_code=status.HTTP_201_CREATED
+)
 def generate_ifti(
     txn_id: str,
     db: Session = Depends(get_db),
@@ -143,17 +157,23 @@ def generate_ifti(
 ):
     """Generate a draft IFTI report pre-populated from a cross-border transaction."""
     org_id = org_id_for(current_user)
-    txn = db.query(Transaction).filter(
-        Transaction.id == txn_id, Transaction.org_id == org_id
-    ).first()
+    txn = (
+        db.query(Transaction)
+        .filter(Transaction.id == txn_id, Transaction.org_id == org_id)
+        .first()
+    )
     if not txn:
         raise HTTPException(404, "Transaction not found.")
     if not txn.is_cross_border:
-        raise HTTPException(422, "Transaction is not cross-border — IFTI may not be required.")
+        raise HTTPException(
+            422, "Transaction is not cross-border — IFTI may not be required."
+        )
 
-    customer = db.query(Customer).filter(
-        Customer.id == txn.customer_id, Customer.org_id == org_id
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == txn.customer_id, Customer.org_id == org_id)
+        .first()
+    )
     if not customer:
         raise HTTPException(404, "Customer not found.")
 
@@ -185,9 +205,18 @@ def update_ifti(
     org_id = org_id_for(current_user)
     r = _get_ifti_or_404(report_id, org_id, db)
     _assert_editable(r, "IFTI report")
-    _PROTECTED = {"id", "org_id", "report_ref", "prepared_by", "approved_by",
-                  "approved_at", "submitted_by", "submitted_at", "acknowledged_at",
-                  "created_at"}
+    _PROTECTED = {
+        "id",
+        "org_id",
+        "report_ref",
+        "prepared_by",
+        "approved_by",
+        "approved_at",
+        "submitted_by",
+        "submitted_at",
+        "acknowledged_at",
+        "created_at",
+    }
     for k, v in payload.items():
         if k not in _PROTECTED:
             setattr(r, k, v)
@@ -206,12 +235,18 @@ def review_ifti(
     org_id = org_id_for(current_user)
     r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.draft:
-        raise HTTPException(409, f"Report must be in draft status (current: {r.status.value})")
+        raise HTTPException(
+            409, f"Report must be in draft status (current: {r.status.value})"
+        )
     r.status = ReportStatus.under_review
     r.reviewed_by = current_user.id
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"report_id": report_id, "status": r.status.value, "reviewed_by": r.reviewed_by}
+    return {
+        "report_id": report_id,
+        "status": r.status.value,
+        "reviewed_by": r.reviewed_by,
+    }
 
 
 @router.post("/ifti/{report_id}/approve")
@@ -223,14 +258,20 @@ def approve_ifti(
     org_id = org_id_for(current_user)
     r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.under_review:
-        raise HTTPException(409, f"Report must be under_review (current: {r.status.value})")
+        raise HTTPException(
+            409, f"Report must be under_review (current: {r.status.value})"
+        )
     _assert_maker_checker(r, current_user.id)
     r.status = ReportStatus.approved
     r.approved_by = current_user.id
     r.approved_at = datetime.now(timezone.utc)
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"report_id": report_id, "status": r.status.value, "approved_by": r.approved_by}
+    return {
+        "report_id": report_id,
+        "status": r.status.value,
+        "approved_by": r.approved_by,
+    }
 
 
 @router.post("/ifti/{report_id}/submit")
@@ -243,10 +284,19 @@ def submit_ifti(
     org_id = org_id_for(current_user)
     r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.approved:
-        raise HTTPException(409, f"Report must be approved before submission (current: {r.status.value})")
+        raise HTTPException(
+            409,
+            f"Report must be approved before submission (current: {r.status.value})",
+        )
     errors = _validate_ifti(r)
     if errors:
-        raise HTTPException(422, {"detail": "Validation failed — fix errors before submitting", "errors": errors})
+        raise HTTPException(
+            422,
+            {
+                "detail": "Validation failed — fix errors before submitting",
+                "errors": errors,
+            },
+        )
     r.status = ReportStatus.submitted
     r.submitted_by = current_user.id
     r.submitted_at = datetime.now(timezone.utc)
@@ -258,7 +308,9 @@ def submit_ifti(
     register_submission(
         db=db,
         org_id=org_id,
-        report_type=ReportType.ifti_incoming if r.direction == IFTIDirection.incoming else ReportType.ifti_outgoing,
+        report_type=ReportType.ifti_incoming
+        if r.direction == IFTIDirection.incoming
+        else ReportType.ifti_outgoing,
         report_id=r.id,
         report_ref=r.report_ref,
         submitted_by=current_user.id,
@@ -266,7 +318,11 @@ def submit_ifti(
         amount_aud=r.amount_aud,
     )
 
-    return {"report_id": report_id, "status": r.status.value, "submitted_at": r.submitted_at}
+    return {
+        "report_id": report_id,
+        "status": r.status.value,
+        "submitted_at": r.submitted_at,
+    }
 
 
 @router.post("/ifti/{report_id}/acknowledge")
@@ -279,7 +335,9 @@ def acknowledge_ifti(
     org_id = org_id_for(current_user)
     r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.submitted:
-        raise HTTPException(409, f"Report must be submitted (current: {r.status.value})")
+        raise HTTPException(
+            409, f"Report must be submitted (current: {r.status.value})"
+        )
     r.status = ReportStatus.acknowledged
     r.acknowledged_at = datetime.now(timezone.utc)
     if acknowledgement_ref:
@@ -307,6 +365,7 @@ def reject_ifti(
 
 # ── TTR ──────────────────────────────────────────────────────────────────────
 
+
 @router.get("/ttr", response_model=list[dict])
 def list_ttr(
     status: Optional[ReportStatus] = Query(None),
@@ -325,7 +384,9 @@ def list_ttr(
     return [_ttr_dict(r) for r in pagination.apply(q).all()]
 
 
-@router.post("/ttr/generate-from-transaction/{txn_id}", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/ttr/generate-from-transaction/{txn_id}", status_code=status.HTTP_201_CREATED
+)
 def generate_ttr(
     txn_id: str,
     db: Session = Depends(get_db),
@@ -333,23 +394,31 @@ def generate_ttr(
 ):
     """Generate a draft TTR from a transaction >= AUD 10,000."""
     org_id = org_id_for(current_user)
-    txn = db.query(Transaction).filter(
-        Transaction.id == txn_id, Transaction.org_id == org_id
-    ).first()
+    txn = (
+        db.query(Transaction)
+        .filter(Transaction.id == txn_id, Transaction.org_id == org_id)
+        .first()
+    )
     if not txn:
         raise HTTPException(404, "Transaction not found.")
 
     amount_aud = txn.amount_aud or txn.amount
     if amount_aud < 10_000:
-        raise HTTPException(422, "Transaction amount is below the AUD 10,000 TTR threshold.")
+        raise HTTPException(
+            422, "Transaction amount is below the AUD 10,000 TTR threshold."
+        )
 
-    customer = db.query(Customer).filter(
-        Customer.id == txn.customer_id, Customer.org_id == org_id
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == txn.customer_id, Customer.org_id == org_id)
+        .first()
+    )
     if not customer:
         raise HTTPException(404, "Customer not found.")
 
-    report = generate_ttr_from_transaction(txn, customer, db, prepared_by=current_user.id)
+    report = generate_ttr_from_transaction(
+        txn, customer, db, prepared_by=current_user.id
+    )
     db.add(report)
     db.commit()
     db.refresh(report)
@@ -359,7 +428,9 @@ def generate_ttr(
 @router.post("/ttr/auto-draft/{txn_id}", status_code=status.HTTP_201_CREATED)
 def auto_draft_ttr(
     txn_id: str,
-    industry_type: TTRIndustryType = Query(..., description="AUSTRAC industry classification: FBS | GS | ISI | MSB"),
+    industry_type: TTRIndustryType = Query(
+        ..., description="AUSTRAC industry classification: FBS | GS | ISI | MSB"
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
@@ -368,23 +439,31 @@ def auto_draft_ttr(
     industry_type determines which metadata schema is applied (FBS/GS/ISI/MSB).
     """
     org_id = org_id_for(current_user)
-    txn = db.query(Transaction).filter(
-        Transaction.id == txn_id, Transaction.org_id == org_id
-    ).first()
+    txn = (
+        db.query(Transaction)
+        .filter(Transaction.id == txn_id, Transaction.org_id == org_id)
+        .first()
+    )
     if not txn:
         raise HTTPException(404, "Transaction not found.")
 
     amount_aud = txn.amount_aud or txn.amount
     if amount_aud < 10_000:
-        raise HTTPException(422, "Transaction amount is below the AUD 10,000 TTR threshold.")
+        raise HTTPException(
+            422, "Transaction amount is below the AUD 10,000 TTR threshold."
+        )
 
-    customer = db.query(Customer).filter(
-        Customer.id == txn.customer_id, Customer.org_id == org_id
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == txn.customer_id, Customer.org_id == org_id)
+        .first()
+    )
     if not customer:
         raise HTTPException(404, "Customer not found.")
 
-    report = generate_ttr_from_transaction(txn, customer, db, prepared_by=current_user.id)
+    report = generate_ttr_from_transaction(
+        txn, customer, db, prepared_by=current_user.id
+    )
     report.industry_type = industry_type
     report.industry_detail = build_industry_detail(txn, customer, industry_type)
     db.add(report)
@@ -406,7 +485,9 @@ def export_ttr_csv(
     """
     r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
     if not r.industry_type:
-        raise HTTPException(422, "Report has no industry_type set. Update the report first.")
+        raise HTTPException(
+            422, "Report has no industry_type set. Update the report first."
+        )
 
     csv_bytes = generate_ttr_csv(r).encode("utf-8")
     filename = f"TTR_{r.report_ref or r.id}.csv"
@@ -467,8 +548,18 @@ def update_ttr(
 ):
     r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
     _assert_editable(r, "TTR report")
-    _PROTECTED = {"id", "org_id", "report_ref", "prepared_by", "approved_by",
-                  "approved_at", "submitted_by", "submitted_at", "acknowledged_at", "created_at"}
+    _PROTECTED = {
+        "id",
+        "org_id",
+        "report_ref",
+        "prepared_by",
+        "approved_by",
+        "approved_at",
+        "submitted_by",
+        "submitted_at",
+        "acknowledged_at",
+        "created_at",
+    }
     for k, v in payload.items():
         if k not in _PROTECTED:
             setattr(r, k, v)
@@ -502,7 +593,9 @@ def approve_ttr(
 ):
     r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
     if r.status != ReportStatus.under_review:
-        raise HTTPException(409, f"Report must be under_review (current: {r.status.value})")
+        raise HTTPException(
+            409, f"Report must be under_review (current: {r.status.value})"
+        )
     _assert_maker_checker(r, current_user.id)
     r.status = ReportStatus.approved
     r.approved_by = current_user.id
@@ -524,7 +617,13 @@ def submit_ttr(
         raise HTTPException(409, "Report must be approved before submission.")
     errors = _validate_ttr(r)
     if errors:
-        raise HTTPException(422, {"detail": "Validation failed — fix errors before submitting", "errors": errors})
+        raise HTTPException(
+            422,
+            {
+                "detail": "Validation failed — fix errors before submitting",
+                "errors": errors,
+            },
+        )
     r.status = ReportStatus.submitted
     r.submitted_by = current_user.id
     r.submitted_at = datetime.now(timezone.utc)
@@ -566,6 +665,7 @@ def acknowledge_ttr(
 
 
 # ── SMR ──────────────────────────────────────────────────────────────────────
+
 
 # IMPORTANT: /smr/enums MUST be registered before /smr/{report_id} — FastAPI matches
 # routes in declaration order and "enums" would otherwise be treated as a report_id.
@@ -621,11 +721,15 @@ def generate_smr(
     if not case.is_smr_candidate:
         raise HTTPException(422, "Case has not been flagged as an SMR candidate.")
     if not case.smr_considered:
-        raise HTTPException(422, "MLRO must complete smr/consider on the case before generating an SMR.")
+        raise HTTPException(
+            422, "MLRO must complete smr/consider on the case before generating an SMR."
+        )
 
-    customer = db.query(Customer).filter(
-        Customer.id == case.customer_id, Customer.org_id == org_id
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == case.customer_id, Customer.org_id == org_id)
+        .first()
+    )
     if not customer:
         raise HTTPException(404, "Customer not found.")
 
@@ -662,14 +766,25 @@ def update_smr(
     """Only draft/under_review SMRs can be edited. All SMR fields require explicit human action."""
     r = _get_smr_or_404(report_id, org_id_for(current_user), db)
     _assert_editable(r, "SMR report")
-    _PROTECTED = {"id", "org_id", "report_ref", "prepared_by", "mlro_sign_off",
-                  "mlro_signed_at", "submitted_by", "submitted_at", "acknowledged_at",
-                  "created_at", "updated_at", "is_terrorism_related"}
+    _PROTECTED = {
+        "id",
+        "org_id",
+        "report_ref",
+        "prepared_by",
+        "mlro_sign_off",
+        "mlro_signed_at",
+        "submitted_by",
+        "submitted_at",
+        "acknowledged_at",
+        "created_at",
+        "updated_at",
+        "is_terrorism_related",
+    }
     for k, v in payload.items():
         if k not in _PROTECTED:
             setattr(r, k, v)
     # Derive 24h deadline flag from offence_type — never trust the caller to set it
-    r.is_terrorism_related = (r.offence_type == SMROffenceType.TERRORISM.value)
+    r.is_terrorism_related = r.offence_type == SMROffenceType.TERRORISM.value
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(r)
@@ -732,10 +847,18 @@ def submit_smr(
 ):
     r = _get_smr_or_404(report_id, org_id_for(current_user), db)
     if r.status != ReportStatus.approved:
-        raise HTTPException(409, "SMR requires MLRO sign-off (approved status) before submission.")
+        raise HTTPException(
+            409, "SMR requires MLRO sign-off (approved status) before submission."
+        )
     errors = _validate_smr(r)
     if errors:
-        raise HTTPException(422, {"detail": "Validation failed — fix errors before submitting", "errors": errors})
+        raise HTTPException(
+            422,
+            {
+                "detail": "Validation failed — fix errors before submitting",
+                "errors": errors,
+            },
+        )
     r.status = ReportStatus.submitted
     r.submitted_by = current_user.id
     r.submitted_at = datetime.now(timezone.utc)
@@ -783,6 +906,7 @@ def acknowledge_smr(
 
 # ── Filing Register ───────────────────────────────────────────────────────────
 
+
 @router.get("/filing-register")
 def list_filing_register(
     report_type: Optional[ReportType] = Query(None),
@@ -806,9 +930,13 @@ def get_filing_entry(
     current_user: User = Depends(require_analyst_or_above),
 ):
     org_id = org_id_for(current_user)
-    e = db.query(FilingRegisterEntry).filter(
-        FilingRegisterEntry.id == entry_id, FilingRegisterEntry.org_id == org_id
-    ).first()
+    e = (
+        db.query(FilingRegisterEntry)
+        .filter(
+            FilingRegisterEntry.id == entry_id, FilingRegisterEntry.org_id == org_id
+        )
+        .first()
+    )
     if not e:
         raise HTTPException(404, "Filing register entry not found.")
     return _filing_dict(e)
@@ -824,6 +952,7 @@ def export_filing_register_csv(
     """Export the full filing register as CSV — one row per AUSTRAC submission."""
     import csv
     import io
+
     org_id = org_id_for(current_user)
     q = db.query(FilingRegisterEntry).filter(FilingRegisterEntry.org_id == org_id)
     if report_type:
@@ -832,22 +961,43 @@ def export_filing_register_csv(
 
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\r\n")
-    writer.writerow([
-        "id", "report_type", "report_ref", "report_id",
-        "austrac_submission_ref", "submitted_by", "submitted_at",
-        "status", "acknowledgement_ref", "acknowledgement_at",
-        "amount_aud", "notes", "supersedes_id", "created_at",
-    ])
+    writer.writerow(
+        [
+            "id",
+            "report_type",
+            "report_ref",
+            "report_id",
+            "austrac_submission_ref",
+            "submitted_by",
+            "submitted_at",
+            "status",
+            "acknowledgement_ref",
+            "acknowledgement_at",
+            "amount_aud",
+            "notes",
+            "supersedes_id",
+            "created_at",
+        ]
+    )
     for e in entries:
-        writer.writerow([
-            e.id, e.report_type.value if e.report_type else "",
-            e.report_ref or "", e.report_id or "",
-            e.austrac_submission_ref or "", e.submitted_by or "",
-            e.submitted_at or "", e.status or "",
-            e.acknowledgement_ref or "", e.acknowledgement_at or "",
-            e.amount_aud or "", e.notes or "",
-            e.supersedes_id or "", e.created_at or "",
-        ])
+        writer.writerow(
+            [
+                e.id,
+                e.report_type.value if e.report_type else "",
+                e.report_ref or "",
+                e.report_id or "",
+                e.austrac_submission_ref or "",
+                e.submitted_by or "",
+                e.submitted_at or "",
+                e.status or "",
+                e.acknowledgement_ref or "",
+                e.acknowledgement_at or "",
+                e.amount_aud or "",
+                e.notes or "",
+                e.supersedes_id or "",
+                e.created_at or "",
+            ]
+        )
 
     buf.seek(0)
     filename = f"filing-register-{org_id}.csv"
@@ -859,6 +1009,7 @@ def export_filing_register_csv(
 
 
 # ── Pre-submission validation ─────────────────────────────────────────────────
+
 
 def _validate_ifti(r: IFTIReport) -> list[str]:
     errors = []
@@ -875,7 +1026,9 @@ def _validate_ifti(r: IFTIReport) -> list[str]:
     if not r.reporter_name:
         errors.append("reporter_name is required")
     if not r.reporter_austrac_id:
-        errors.append("reporter_austrac_id is required (your AUSTRAC reporting entity ID)")
+        errors.append(
+            "reporter_austrac_id is required (your AUSTRAC reporting entity ID)"
+        )
     return errors
 
 
@@ -901,13 +1054,19 @@ def _validate_smr(r: SMRReport) -> list[str]:
     if not r.suspicion_grounds or len(r.suspicion_grounds.strip()) < 10:
         errors.append("suspicion_grounds must be provided (minimum 10 characters)")
     if not r.designated_svcs:
-        errors.append("designated_svcs is required (at least 1 AUSTRAC service code, per SMR-2-0)")
+        errors.append(
+            "designated_svcs is required (at least 1 AUSTRAC service code, per SMR-2-0)"
+        )
     if not r.susp_reason_codes:
         errors.append("susp_reason_codes is required (at least 1 suspicion reason)")
     if not r.offence_type:
-        errors.append("offence_type is required (additionalDetails.offence — MANDATORY per SMR-2-0)")
+        errors.append(
+            "offence_type is required (additionalDetails.offence — MANDATORY per SMR-2-0)"
+        )
     if not r.grand_total or r.grand_total <= 0:
-        errors.append("grand_total is required (smDetails.grandTotal — MANDATORY per SMR-2-0)")
+        errors.append(
+            "grand_total is required (smDetails.grandTotal — MANDATORY per SMR-2-0)"
+        )
     if not r.mlro_sign_off:
         errors.append("MLRO sign-off is required before submission")
     if not r.reporter_name:
@@ -926,8 +1085,12 @@ def validate_ifti(
     """Validate mandatory AUSTRAC fields before submission. Returns error list."""
     r = _get_ifti_or_404(report_id, org_id_for(current_user), db)
     errors = _validate_ifti(r)
-    return {"report_id": report_id, "valid": len(errors) == 0,
-            "errors": errors, "error_count": len(errors)}
+    return {
+        "report_id": report_id,
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "error_count": len(errors),
+    }
 
 
 @router.get("/ttr/{report_id}/validate")
@@ -939,8 +1102,12 @@ def validate_ttr(
     """Validate mandatory AUSTRAC fields before submission."""
     r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
     errors = _validate_ttr(r)
-    return {"report_id": report_id, "valid": len(errors) == 0,
-            "errors": errors, "error_count": len(errors)}
+    return {
+        "report_id": report_id,
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "error_count": len(errors),
+    }
 
 
 @router.get("/smr/{report_id}/validate")
@@ -966,6 +1133,7 @@ def validate_smr_report(
 
 # ── Rejection → re-draft ──────────────────────────────────────────────────────
 
+
 @router.post("/ifti/{report_id}/redraft")
 def redraft_ifti(
     report_id: str,
@@ -976,7 +1144,9 @@ def redraft_ifti(
     """Reset a rejected IFTI to draft for correction and resubmission."""
     r = _get_ifti_or_404(report_id, org_id_for(current_user), db)
     if r.status != ReportStatus.rejected:
-        raise HTTPException(409, f"Only rejected reports can be redrafted (current: {r.status.value})")
+        raise HTTPException(
+            409, f"Only rejected reports can be redrafted (current: {r.status.value})"
+        )
     r.status = ReportStatus.draft
     r.rejected_reason = None
     r.approved_by = None
@@ -986,8 +1156,11 @@ def redraft_ifti(
     r.submission_reference = None
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"report_id": report_id, "status": r.status.value,
-            "note": reason or "Redrafted for correction after rejection"}
+    return {
+        "report_id": report_id,
+        "status": r.status.value,
+        "note": reason or "Redrafted for correction after rejection",
+    }
 
 
 @router.post("/ttr/{report_id}/redraft")
@@ -1000,7 +1173,9 @@ def redraft_ttr(
     """Reset a rejected TTR to draft for correction."""
     r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
     if r.status != ReportStatus.rejected:
-        raise HTTPException(409, f"Only rejected reports can be redrafted (current: {r.status.value})")
+        raise HTTPException(
+            409, f"Only rejected reports can be redrafted (current: {r.status.value})"
+        )
     r.status = ReportStatus.draft
     r.rejected_reason = None
     r.approved_by = None
@@ -1026,7 +1201,9 @@ def redraft_smr(
     """
     r = _get_smr_or_404(report_id, org_id_for(current_user), db)
     if r.status != ReportStatus.rejected:
-        raise HTTPException(409, f"Only rejected reports can be redrafted (current: {r.status.value})")
+        raise HTTPException(
+            409, f"Only rejected reports can be redrafted (current: {r.status.value})"
+        )
     r.status = ReportStatus.draft
     r.rejected_reason = None
     r.mlro_sign_off = None
@@ -1045,6 +1222,7 @@ def redraft_smr(
 
 
 # ── Serialisers ───────────────────────────────────────────────────────────────
+
 
 def _ifti_dict(r: IFTIReport) -> dict:
     return {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.config import settings
+
 from .base import SanctionsProvider
 
 
@@ -9,6 +10,7 @@ def get_provider() -> SanctionsProvider:
 
     if provider == "complyadvantage":
         from .complyadvantage import ComplyAdvantageProvider
+
         return ComplyAdvantageProvider(api_key=settings.complyadvantage_api_key)
 
     if provider == "worldcheck":
@@ -17,4 +19,5 @@ def get_provider() -> SanctionsProvider:
 
     # Default: internal list matching
     from .internal import InternalSanctionsProvider
+
     return InternalSanctionsProvider()

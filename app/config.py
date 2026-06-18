@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./tvg.db"
 
     # ── Supabase ──────────────────────────────────────────────────────────────
-    supabase_url: str = ""               # https://[ref].supabase.co
-    supabase_anon_key: str = ""          # public anon key (frontend)
+    supabase_url: str = ""  # https://[ref].supabase.co
+    supabase_anon_key: str = ""  # public anon key (frontend)
     supabase_service_role_key: str = ""  # secret service role key (backend only)
 
     # ── Auth ─────────────────────────────────────────────────────────────────
@@ -95,13 +95,15 @@ class Settings(BaseSettings):
     # Identity verification (KYC/KYB): internal | sumsub
     identity_provider: str = "internal"
     sumsub_app_token: str = ""
-    sumsub_secret_key: str = ""          # used for both API request signing and webhook verification
+    sumsub_secret_key: str = (
+        ""  # used for both API request signing and webhook verification
+    )
     sumsub_base_url: str = "https://api.sumsub.com"
     sumsub_level_name: str = "basic-kyc-level"
     sumsub_kyb_level_name: str = "basic-kyb-level"
     # Per-check cost we pay the provider, and our markup when billing tenants
     sumsub_unit_cost_aud: float = 2.50
-    usage_markup_pct: float = 50.0       # tenant is billed unit_cost * (1 + pct/100)
+    usage_markup_pct: float = 50.0  # tenant is billed unit_cost * (1 + pct/100)
     # Crypto wallet screening: internal | chainalysis | ofac_sdn | crypto_apis |
     # scorechain | goplus | trm_labs | elliptic
     # chainalysis/ofac_sdn/scorechain/goplus = free or free-tier sanctions-only

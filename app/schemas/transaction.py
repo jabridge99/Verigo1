@@ -1,4 +1,5 @@
 """Pydantic schemas for Transaction and related models."""
+
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
@@ -13,8 +14,8 @@ from app.models.transaction import (
     TransactionType,
 )
 
-
 # ── Crypto Detail ──────────────────────────────────────────────────────────────
+
 
 class CryptoDetailCreate(BaseModel):
     network: CryptoNetwork
@@ -23,7 +24,7 @@ class CryptoDetailCreate(BaseModel):
     source_wallet: Optional[str] = None
     destination_wallet: Optional[str] = None
     transaction_hash: Optional[str] = None
-    source_wallet_type: Optional[str] = None      # self_hosted | exchange | unknown
+    source_wallet_type: Optional[str] = None  # self_hosted | exchange | unknown
     destination_wallet_type: Optional[str] = None
 
 
@@ -56,6 +57,7 @@ class CryptoDetailOut(BaseModel):
 
 
 # ── Transaction ────────────────────────────────────────────────────────────────
+
 
 class TransactionCreate(BaseModel):
     transaction_ref: str = Field(..., max_length=50)
@@ -121,6 +123,7 @@ class TransactionCreate(BaseModel):
 
 class TransactionUpdate(BaseModel):
     """Only non-risk, non-scoring fields may be updated after creation."""
+
     purpose: Optional[str] = Field(None, max_length=500)
     description: Optional[str] = None
     reference: Optional[str] = Field(None, max_length=255)

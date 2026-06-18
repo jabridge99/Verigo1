@@ -14,6 +14,6 @@ Usage:
     record = await abr.get_provider().lookup_abn("51 824 753 556")
 """
 
-from app.integrations import austrac, asic, abr, sanctions, pep, ocr, email, sms
+from app.integrations import abr, asic, austrac, email, ocr, pep, sanctions, sms
 
 __all__ = ["austrac", "asic", "abr", "sanctions", "pep", "ocr", "email", "sms"]

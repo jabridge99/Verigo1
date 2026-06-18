@@ -133,9 +133,6 @@ def get_log(
     if not entry:
         raise HTTPException(404, "Log entry not found")
     # Tenant isolation: non-admin cannot read another tenant's log entry
-    if (
-        current_user.role != UserRole.admin
-        and entry.industry_id != current_user.org_id
-    ):
+    if current_user.role != UserRole.admin and entry.industry_id != current_user.org_id:
         raise HTTPException(403, "Cross-tenant access denied")
     return entry

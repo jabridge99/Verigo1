@@ -23,7 +23,9 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.user import MagicLinkToken, User, UserStatus
-from app.services.token_blacklist import TOKEN_BLACKLIST  # noqa: F401 — re-exported for callers
+from app.services.token_blacklist import (
+    TOKEN_BLACKLIST,  # noqa: F401 — re-exported for callers
+)
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

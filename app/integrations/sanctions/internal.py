@@ -3,11 +3,13 @@ Internal sanctions screener using locally cached OFAC/UN/DFAT lists.
 Suitable for basic screening; replace with a commercial provider for
 production-grade fuzzy matching and real-time list updates.
 """
+
 from __future__ import annotations
 
 import difflib
 import logging
-from .base import SanctionsProvider, SanctionsResult, SanctionsMatch
+
+from .base import SanctionsMatch, SanctionsProvider, SanctionsResult
 
 log = logging.getLogger("verigo.integrations.sanctions")
 
@@ -15,7 +17,9 @@ log = logging.getLogger("verigo.integrations.sanctions")
 # Production: fetch and cache these from official sources on a schedule.
 LISTS: dict[str, list[str]] = {
     "DFAT_AU": [
-        "Al-Qaeda", "Islamic State", "Taliban",
+        "Al-Qaeda",
+        "Islamic State",
+        "Taliban",
     ],
     "OFAC_SDN": [],
     "UN_CONSOLIDATED": [],
@@ -41,11 +45,13 @@ class InternalSanctionsProvider(SanctionsProvider):
             for entry in entries:
                 ratio = difflib.SequenceMatcher(None, name_lower, entry.lower()).ratio()
                 if ratio >= MATCH_THRESHOLD:
-                    matches.append(SanctionsMatch(
-                        list_name=list_name,
-                        match_name=entry,
-                        match_score=round(ratio, 3),
-                    ))
+                    matches.append(
+                        SanctionsMatch(
+                            list_name=list_name,
+                            match_name=entry,
+                            match_score=round(ratio, 3),
+                        )
+                    )
 
         return SanctionsResult(
             is_match=bool(matches),

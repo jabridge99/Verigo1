@@ -256,7 +256,7 @@ def submit_onboarding(db, session, ip_address=None):
         "completed" if not sanctions["match_found"] else "rejected",
         {
             "customer_id": customer.customer_id,
-            "kyc_id": kyc.kyc_id,
+            "kyc_id": session.kyc_id,
             "risk_score": risk_score,
             "risk_level": score_to_level(risk_score),
             "sanctions_match": sanctions["match_found"],
@@ -266,7 +266,7 @@ def submit_onboarding(db, session, ip_address=None):
     return {
         "status": session.status,
         "customer_id": customer.customer_id,
-        "kyc_id": kyc.kyc_id,
+        "kyc_id": session.kyc_id,
         "risk_score": risk_score,
         "risk_level": score_to_level(risk_score),
         "sanctions_match": sanctions["match_found"],

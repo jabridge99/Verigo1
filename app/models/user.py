@@ -1,7 +1,18 @@
 import enum
 from uuid import uuid4
-from sqlalchemy import Column, String, Enum, DateTime, Boolean, Integer, ForeignKey, func
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    func,
+)
 from sqlalchemy.orm import relationship
+
 from app.db.database import Base
 
 
@@ -24,7 +35,12 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=lambda: f"usr_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     email = Column(String(255), unique=True, nullable=False, index=True)
     full_name = Column(String(255), nullable=False)
     hashed_password = Column(String(255), nullable=False)

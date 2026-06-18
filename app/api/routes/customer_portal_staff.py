@@ -4,25 +4,32 @@ Phase 10 — Customer Portal (Staff-side)
 Staff create portal sessions, monitor progress, and review uploaded documents.
 All routes require standard JWT authentication.
 """
+
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_current_user, require_compliance_or_above, require_analyst_or_above, get_db,
+    get_db,
+    require_analyst_or_above,
+    require_compliance_or_above,
+)
+from app.models.customer_portal import (
+    CustomerPortalDocument,
+    CustomerPortalSession,
+    PortalSessionStatus,
+    PortalType,
 )
 from app.models.user import User
-from app.models.customer_portal import (
-    CustomerPortalSession, CustomerPortalDocument,
-    PortalSessionStatus, PortalType,
-)
 from app.services import customer_portal_service
 
 router = APIRouter(prefix="/customer-portal", tags=["Customer Portal (Staff)"])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class CreatePortalSessionRequest(BaseModel):
     customer_id: str
@@ -39,7 +46,10 @@ class ReviewDocumentRequest(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.post("/sessions", summary="Create a customer portal session and return the portal URL")
+
+@router.post(
+    "/sessions", summary="Create a customer portal session and return the portal URL"
+)
 def create_session(
     body: CreatePortalSessionRequest,
     db: Session = Depends(get_db),
@@ -91,7 +101,9 @@ def list_sessions(
             "status": s.status,
             "expires_at": s.expires_at.isoformat() if s.expires_at else None,
             "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
-            "last_activity_at": s.last_activity_at.isoformat() if s.last_activity_at else None,
+            "last_activity_at": s.last_activity_at.isoformat()
+            if s.last_activity_at
+            else None,
         }
         for s in sessions
     ]
@@ -103,7 +115,11 @@ def get_session(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    session = db.query(CustomerPortalSession).filter_by(id=session_id, org_id=current_user.org_id).first()
+    session = (
+        db.query(CustomerPortalSession)
+        .filter_by(id=session_id, org_id=current_user.org_id)
+        .first()
+    )
     if not session:
         raise HTTPException(404, "Portal session not found")
     return customer_portal_service.get_portal_state(db, session)
@@ -115,26 +131,42 @@ def cancel_session(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    session = db.query(CustomerPortalSession).filter_by(id=session_id, org_id=current_user.org_id).first()
+    session = (
+        db.query(CustomerPortalSession)
+        .filter_by(id=session_id, org_id=current_user.org_id)
+        .first()
+    )
     if not session:
         raise HTTPException(404, "Portal session not found")
-    if session.status not in (PortalSessionStatus.pending, PortalSessionStatus.in_progress):
-        raise HTTPException(422, f"Cannot cancel a session with status '{session.status}'")
+    if session.status not in (
+        PortalSessionStatus.pending,
+        PortalSessionStatus.in_progress,
+    ):
+        raise HTTPException(
+            422, f"Cannot cancel a session with status '{session.status}'"
+        )
     session.status = PortalSessionStatus.cancelled
     db.commit()
     return {"cancelled": True, "session_id": session_id}
 
 
-@router.post("/sessions/{session_id}/resend", summary="Regenerate token and resend portal link")
+@router.post(
+    "/sessions/{session_id}/resend", summary="Regenerate token and resend portal link"
+)
 def resend_session(
     session_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    import secrets, hashlib
+    import hashlib
+    import secrets
     from datetime import datetime, timedelta, timezone
 
-    session = db.query(CustomerPortalSession).filter_by(id=session_id, org_id=current_user.org_id).first()
+    session = (
+        db.query(CustomerPortalSession)
+        .filter_by(id=session_id, org_id=current_user.org_id)
+        .first()
+    )
     if not session:
         raise HTTPException(404, "Portal session not found")
     if session.status == PortalSessionStatus.submitted:
@@ -155,13 +187,19 @@ def resend_session(
     }
 
 
-@router.get("/sessions/{session_id}/documents", summary="List documents uploaded for a session")
+@router.get(
+    "/sessions/{session_id}/documents", summary="List documents uploaded for a session"
+)
 def list_session_documents(
     session_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    session = db.query(CustomerPortalSession).filter_by(id=session_id, org_id=current_user.org_id).first()
+    session = (
+        db.query(CustomerPortalSession)
+        .filter_by(id=session_id, org_id=current_user.org_id)
+        .first()
+    )
     if not session:
         raise HTTPException(404, "Portal session not found")
     docs = db.query(CustomerPortalDocument).filter_by(session_id=session_id).all()
@@ -180,7 +218,10 @@ def list_session_documents(
     ]
 
 
-@router.post("/sessions/{session_id}/documents/{doc_id}/review", summary="Accept or reject an uploaded document")
+@router.post(
+    "/sessions/{session_id}/documents/{doc_id}/review",
+    summary="Accept or reject an uploaded document",
+)
 def review_document(
     session_id: str,
     doc_id: str,
@@ -189,7 +230,9 @@ def review_document(
     current_user: User = Depends(require_compliance_or_above),
 ):
     if not body.accepted and not body.rejection_reason:
-        raise HTTPException(422, "rejection_reason is required when rejecting a document")
+        raise HTTPException(
+            422, "rejection_reason is required when rejecting a document"
+        )
     doc = customer_portal_service.staff_review_document(
         db=db,
         session_id=session_id,
@@ -208,17 +251,29 @@ def review_document(
     }
 
 
-@router.get("/sessions/{session_id}/questionnaire", summary="View questionnaire responses submitted by the customer")
+@router.get(
+    "/sessions/{session_id}/questionnaire",
+    summary="View questionnaire responses submitted by the customer",
+)
 def get_questionnaire_responses(
     session_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
     from app.models.customer_portal import CustomerPortalQuestionnaireResponse
-    session = db.query(CustomerPortalSession).filter_by(id=session_id, org_id=current_user.org_id).first()
+
+    session = (
+        db.query(CustomerPortalSession)
+        .filter_by(id=session_id, org_id=current_user.org_id)
+        .first()
+    )
     if not session:
         raise HTTPException(404, "Portal session not found")
-    responses = db.query(CustomerPortalQuestionnaireResponse).filter_by(session_id=session_id).all()
+    responses = (
+        db.query(CustomerPortalQuestionnaireResponse)
+        .filter_by(session_id=session_id)
+        .all()
+    )
     return [
         {
             "id": r.id,

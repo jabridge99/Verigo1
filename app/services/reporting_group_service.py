@@ -4,6 +4,7 @@ Reporting Group Service — Phase 9
 Supports multi-entity group structures aligned with AUSTRAC group reporting
 reforms (AML/CTF Act s.229C — group reporting obligations).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -12,14 +13,15 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.reporting_group import (
-    ReportingGroup, ReportingGroupMember,
-    ReportingGroupStatus, GroupMemberRole,
-)
-from app.models.organisation import Organisation
-from app.models.customer import Customer
 from app.models.case import Case, CaseStatus
-from app.models.monitoring import TransactionAlert, AlertStatus
+from app.models.customer import Customer
+from app.models.monitoring import AlertStatus, TransactionAlert
+from app.models.organisation import Organisation
+from app.models.reporting_group import (
+    GroupMemberRole,
+    ReportingGroup,
+    ReportingGroupMember,
+)
 
 
 def create_group(
@@ -73,11 +75,15 @@ def add_member(
     if not org:
         raise HTTPException(404, "Organisation not found")
 
-    existing = db.query(ReportingGroupMember).filter_by(
-        group_id=group_id, org_id=org_id, is_active=True
-    ).first()
+    existing = (
+        db.query(ReportingGroupMember)
+        .filter_by(group_id=group_id, org_id=org_id, is_active=True)
+        .first()
+    )
     if existing:
-        raise HTTPException(409, "Organisation is already an active member of this group")
+        raise HTTPException(
+            409, "Organisation is already an active member of this group"
+        )
 
     member = ReportingGroupMember(
         group_id=group_id,
@@ -91,15 +97,21 @@ def add_member(
     return member
 
 
-def remove_member(db: Session, group_id: str, org_id: str, requesting_org_id: str) -> dict:
+def remove_member(
+    db: Session, group_id: str, org_id: str, requesting_org_id: str
+) -> dict:
     group = _get_group(db, group_id, requesting_org_id)
 
     if group.holding_org_id == org_id:
-        raise HTTPException(422, "Cannot remove the holding organisation from its own group")
+        raise HTTPException(
+            422, "Cannot remove the holding organisation from its own group"
+        )
 
-    member = db.query(ReportingGroupMember).filter_by(
-        group_id=group_id, org_id=org_id, is_active=True
-    ).first()
+    member = (
+        db.query(ReportingGroupMember)
+        .filter_by(group_id=group_id, org_id=org_id, is_active=True)
+        .first()
+    )
     if not member:
         raise HTTPException(404, "Active membership not found")
 
@@ -111,24 +123,38 @@ def remove_member(db: Session, group_id: str, org_id: str, requesting_org_id: st
 
 def get_group_dashboard(db: Session, group_id: str, requesting_org_id: str) -> dict:
     group = _get_group(db, group_id, requesting_org_id)
-    active_members = db.query(ReportingGroupMember).filter_by(
-        group_id=group_id, is_active=True
-    ).all()
+    active_members = (
+        db.query(ReportingGroupMember)
+        .filter_by(group_id=group_id, is_active=True)
+        .all()
+    )
     member_org_ids = [m.org_id for m in active_members]
 
     customers = db.query(Customer).filter(Customer.org_id.in_(member_org_ids)).all()
-    open_cases = db.query(Case).filter(
-        Case.org_id.in_(member_org_ids),
-        Case.status.notin_([CaseStatus.closed, CaseStatus.withdrawn]),
-    ).count()
-    open_alerts = db.query(TransactionAlert).filter(
-        TransactionAlert.org_id.in_(member_org_ids),
-        TransactionAlert.status == AlertStatus.open,
-    ).count()
+    open_cases = (
+        db.query(Case)
+        .filter(
+            Case.org_id.in_(member_org_ids),
+            Case.status.notin_([CaseStatus.closed, CaseStatus.withdrawn]),
+        )
+        .count()
+    )
+    open_alerts = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.org_id.in_(member_org_ids),
+            TransactionAlert.status == AlertStatus.open,
+        )
+        .count()
+    )
 
     risk_breakdown = {"low": 0, "medium": 0, "high": 0, "critical": 0}
     for c in customers:
-        lvl = (c.risk_level.value if hasattr(c.risk_level, "value") else str(c.risk_level or "low")).lower()
+        lvl = (
+            c.risk_level.value
+            if hasattr(c.risk_level, "value")
+            else str(c.risk_level or "low")
+        ).lower()
         if lvl in risk_breakdown:
             risk_breakdown[lvl] += 1
 
@@ -136,14 +162,18 @@ def get_group_dashboard(db: Session, group_id: str, requesting_org_id: str) -> d
     for m in active_members:
         org = db.query(Organisation).filter_by(id=m.org_id).first()
         org_customers = [c for c in customers if c.org_id == m.org_id]
-        member_summaries.append({
-            "org_id": m.org_id,
-            "org_name": org.name if org else m.org_id,
-            "member_role": m.member_role.value if hasattr(m.member_role, "value") else m.member_role,
-            "jurisdiction": m.jurisdiction,
-            "customer_count": len(org_customers),
-            "is_active": m.is_active,
-        })
+        member_summaries.append(
+            {
+                "org_id": m.org_id,
+                "org_name": org.name if org else m.org_id,
+                "member_role": m.member_role.value
+                if hasattr(m.member_role, "value")
+                else m.member_role,
+                "jurisdiction": m.jurisdiction,
+                "customer_count": len(org_customers),
+                "is_active": m.is_active,
+            }
+        )
 
     return {
         "group_id": group.id,
@@ -162,7 +192,9 @@ def get_group_dashboard(db: Session, group_id: str, requesting_org_id: str) -> d
 
 
 def list_groups(db: Session, org_id: str) -> list:
-    memberships = db.query(ReportingGroupMember).filter_by(org_id=org_id, is_active=True).all()
+    memberships = (
+        db.query(ReportingGroupMember).filter_by(org_id=org_id, is_active=True).all()
+    )
     group_ids = {m.group_id for m in memberships}
 
     held = db.query(ReportingGroup).filter_by(holding_org_id=org_id).all()
@@ -175,16 +207,22 @@ def list_groups(db: Session, org_id: str) -> list:
     groups = db.query(ReportingGroup).filter(ReportingGroup.id.in_(group_ids)).all()
     result = []
     for g in groups:
-        member_count = db.query(ReportingGroupMember).filter_by(group_id=g.id, is_active=True).count()
-        result.append({
-            "id": g.id,
-            "name": g.name,
-            "group_type": g.group_type,
-            "status": g.status,
-            "member_count": member_count,
-            "austrac_group_id": g.austrac_group_id,
-            "is_holding_org": g.holding_org_id == org_id,
-        })
+        member_count = (
+            db.query(ReportingGroupMember)
+            .filter_by(group_id=g.id, is_active=True)
+            .count()
+        )
+        result.append(
+            {
+                "id": g.id,
+                "name": g.name,
+                "group_type": g.group_type,
+                "status": g.status,
+                "member_count": member_count,
+                "austrac_group_id": g.austrac_group_id,
+                "is_holding_org": g.holding_org_id == org_id,
+            }
+        )
     return result
 
 
@@ -197,9 +235,11 @@ def _get_group(db: Session, group_id: str, requesting_org_id: str) -> ReportingG
     if not group:
         raise HTTPException(404, "Reporting group not found")
 
-    is_member = db.query(ReportingGroupMember).filter_by(
-        group_id=group_id, org_id=requesting_org_id, is_active=True
-    ).first()
+    is_member = (
+        db.query(ReportingGroupMember)
+        .filter_by(group_id=group_id, org_id=requesting_org_id, is_active=True)
+        .first()
+    )
     if not is_member and group.holding_org_id != requesting_org_id:
         raise HTTPException(403, "Your organisation is not a member of this group")
 

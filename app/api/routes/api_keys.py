@@ -43,9 +43,7 @@ def create_key(
 ):
     if current_user.role not in ("admin", "mlro"):
         raise HTTPException(403, "Insufficient permissions")
-    key, raw = svc.create_api_key(
-        db, data, current_user.id, current_user.org_id
-    )
+    key, raw = svc.create_api_key(db, data, current_user.id, current_user.org_id)
     return {**key.__dict__, "raw_key": raw}
 
 

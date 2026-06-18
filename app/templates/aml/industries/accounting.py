@@ -2,8 +2,10 @@
 Accounting / Bookkeeping / Tax Agent AML template — Tranche 2 (2026 reform).
 NO IFTI.  Key risks: client trust accounts, structuring advice, shell companies.
 """
-from app.templates.aml.base import AMLTemplateBase, BASE_CONTROLS, BASE_POLICIES
+
 import copy
+
+from app.templates.aml.base import BASE_CONTROLS, BASE_POLICIES, AMLTemplateBase
 
 
 def get_template(risk_level: str = "medium") -> AMLTemplateBase:
@@ -82,18 +84,33 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     )
 
     extra_controls = [
-        {"control_ref": "CTL-010", "title": "Client Trust Account Monitoring",
-         "control_type": "detective", "risk_area": "trust_accounts"},
-        {"control_ref": "CTL-011", "title": "Company Formation CDD",
-         "control_type": "preventive", "risk_area": "corporate_structures"},
-        {"control_ref": "CTL-012", "title": "Cash Payment Prohibition",
-         "control_type": "preventive", "risk_area": "transaction_monitoring"},
+        {
+            "control_ref": "CTL-010",
+            "title": "Client Trust Account Monitoring",
+            "control_type": "detective",
+            "risk_area": "trust_accounts",
+        },
+        {
+            "control_ref": "CTL-011",
+            "title": "Company Formation CDD",
+            "control_type": "preventive",
+            "risk_area": "corporate_structures",
+        },
+        {
+            "control_ref": "CTL-012",
+            "title": "Cash Payment Prohibition",
+            "control_type": "preventive",
+            "risk_area": "transaction_monitoring",
+        },
     ]
 
     t._policies = copy.deepcopy(BASE_POLICIES) + [
-        {"title": "Client Trust Account AML Policy",  "policy_type": "trust_accounts"},
-        {"title": "Company Formation CDD Policy",     "policy_type": "corporate_structures"},
-        {"title": "Cash Prohibition Policy",          "policy_type": "transaction_monitoring"},
+        {"title": "Client Trust Account AML Policy", "policy_type": "trust_accounts"},
+        {
+            "title": "Company Formation CDD Policy",
+            "policy_type": "corporate_structures",
+        },
+        {"title": "Cash Prohibition Policy", "policy_type": "transaction_monitoring"},
     ]
     t._controls = copy.deepcopy(BASE_CONTROLS) + extra_controls
 

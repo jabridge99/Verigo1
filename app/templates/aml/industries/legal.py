@@ -2,8 +2,10 @@
 Legal / Conveyancing AML template — Tranche 2 (2026 reform).
 NO IFTI.  Key risks: client trust accounts, conveyancing, company/trust formation.
 """
-from app.templates.aml.base import AMLTemplateBase, BASE_CONTROLS, BASE_POLICIES
+
 import copy
+
+from app.templates.aml.base import BASE_CONTROLS, BASE_POLICIES, AMLTemplateBase
 
 
 def get_template(risk_level: str = "medium") -> AMLTemplateBase:
@@ -71,23 +73,33 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
         "Any client who offers cash must be referred to the Compliance Officer."
     )
 
-    t.ifti_procedures = (
-        "IFTI reporting does not apply to this Organisation's designated legal services."
-    )
+    t.ifti_procedures = "IFTI reporting does not apply to this Organisation's designated legal services."
 
     extra_controls = [
-        {"control_ref": "CTL-010", "title": "Legal Trust Account AML Controls",
-         "control_type": "preventive", "risk_area": "trust_accounts"},
-        {"control_ref": "CTL-011", "title": "Conveyancing CDD — Property Purchasers",
-         "control_type": "preventive", "risk_area": "kyc"},
-        {"control_ref": "CTL-012", "title": "Cash Prohibition — Client Payments",
-         "control_type": "preventive", "risk_area": "transaction_monitoring"},
+        {
+            "control_ref": "CTL-010",
+            "title": "Legal Trust Account AML Controls",
+            "control_type": "preventive",
+            "risk_area": "trust_accounts",
+        },
+        {
+            "control_ref": "CTL-011",
+            "title": "Conveyancing CDD — Property Purchasers",
+            "control_type": "preventive",
+            "risk_area": "kyc",
+        },
+        {
+            "control_ref": "CTL-012",
+            "title": "Cash Prohibition — Client Payments",
+            "control_type": "preventive",
+            "risk_area": "transaction_monitoring",
+        },
     ]
 
     t._policies = copy.deepcopy(BASE_POLICIES) + [
-        {"title": "Legal Trust Account AML Policy",    "policy_type": "trust_accounts"},
-        {"title": "Conveyancing CDD Policy",           "policy_type": "kyc"},
-        {"title": "Cash Prohibition Policy",           "policy_type": "transaction_monitoring"},
+        {"title": "Legal Trust Account AML Policy", "policy_type": "trust_accounts"},
+        {"title": "Conveyancing CDD Policy", "policy_type": "kyc"},
+        {"title": "Cash Prohibition Policy", "policy_type": "transaction_monitoring"},
     ]
     t._controls = copy.deepcopy(BASE_CONTROLS) + extra_controls
 

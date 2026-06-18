@@ -11,6 +11,7 @@ integration time, so the exact response field names below are a best-effort
 guess based on public summaries, not a confirmed schema. Confirm against a
 live API key before relying on this in production.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,6 +19,7 @@ import logging
 import httpx
 
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
+
 from .base import CryptoWalletProvider, WalletIdentification, WalletScreeningResult
 
 log = logging.getLogger("verigo.integrations.crypto.scorechain")
@@ -30,10 +32,14 @@ class ScorechainProvider(CryptoWalletProvider):
 
     def __init__(self, api_key: str):
         if not api_key:
-            raise ProviderUnavailableError("scorechain", "SCORECHAIN_API_KEY not configured")
+            raise ProviderUnavailableError(
+                "scorechain", "SCORECHAIN_API_KEY not configured"
+            )
         self.api_key = api_key
 
-    async def screen_address(self, address: str, network: str | None = None) -> WalletScreeningResult:
+    async def screen_address(
+        self, address: str, network: str | None = None
+    ) -> WalletScreeningResult:
         async with httpx.AsyncClient(timeout=15, base_url=BASE_URL) as client:
             resp = await client.get(
                 "/v1/sanction",
@@ -41,7 +47,9 @@ class ScorechainProvider(CryptoWalletProvider):
                 headers={"X-API-KEY": self.api_key},
             )
         if resp.status_code >= 400:
-            raise ProviderRejectedError("scorechain", f"{resp.status_code}: {resp.text}", raw=resp.text)
+            raise ProviderRejectedError(
+                "scorechain", f"{resp.status_code}: {resp.text}", raw=resp.text
+            )
 
         data = resp.json()
         matches = data.get("matches") or data.get("hits") or []

@@ -9,6 +9,7 @@ Review frequency by risk level:
 
 Reminder chain: 30 days → 14 days → 7 days → due date → overdue
 """
+
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -133,7 +134,11 @@ def complete_item(
     """
     Mark a calendar item complete. If recurring, create the next occurrence.
     """
-    item = db.query(ComplianceCalendarItem).filter(ComplianceCalendarItem.id == item_id).first()
+    item = (
+        db.query(ComplianceCalendarItem)
+        .filter(ComplianceCalendarItem.id == item_id)
+        .first()
+    )
     if not item:
         raise ValueError(f"Calendar item {item_id} not found")
 
@@ -144,7 +149,9 @@ def complete_item(
 
     next_item = None
     if item.is_recurring and item.recurrence_months:
-        next_due = (datetime.now(timezone.utc) + timedelta(days=item.recurrence_months * 30)).date()
+        next_due = (
+            datetime.now(timezone.utc) + timedelta(days=item.recurrence_months * 30)
+        ).date()
         item.next_due_date = next_due
         next_item = ComplianceCalendarItem(
             org_id=item.org_id,
@@ -179,10 +186,12 @@ def get_upcoming_items(
     q = db.query(ComplianceCalendarItem).filter(
         ComplianceCalendarItem.org_id == org_id,
         ComplianceCalendarItem.due_date <= cutoff,
-        ComplianceCalendarItem.status.notin_([
-            CalendarItemStatus.completed,
-            CalendarItemStatus.cancelled,
-        ]),
+        ComplianceCalendarItem.status.notin_(
+            [
+                CalendarItemStatus.completed,
+                CalendarItemStatus.cancelled,
+            ]
+        ),
     )
     if item_type:
         q = q.filter(ComplianceCalendarItem.item_type == item_type)
@@ -200,10 +209,12 @@ def process_due_reminders(db: Session, org_id: str) -> list[ComplianceReminder]:
         db.query(ComplianceCalendarItem)
         .filter(
             ComplianceCalendarItem.org_id == org_id,
-            ComplianceCalendarItem.status.notin_([
-                CalendarItemStatus.completed,
-                CalendarItemStatus.cancelled,
-            ]),
+            ComplianceCalendarItem.status.notin_(
+                [
+                    CalendarItemStatus.completed,
+                    CalendarItemStatus.cancelled,
+                ]
+            ),
         )
         .all()
     )

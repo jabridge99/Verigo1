@@ -14,6 +14,7 @@ integration time. The endpoint/response shape below follows GoPlus's
 publicly described "address_security" pattern from secondary sources, not a
 confirmed live schema — verify before relying on this in production.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,6 +22,7 @@ import logging
 import httpx
 
 from app.integrations.base import ProviderRejectedError
+
 from .base import CryptoWalletProvider, WalletIdentification, WalletScreeningResult
 
 log = logging.getLogger("verigo.integrations.crypto.goplus")
@@ -35,9 +37,16 @@ NETWORK_TO_CHAIN_ID: dict[str, str] = {
 }
 
 RISK_FLAGS = [
-    "cybercrime", "money_laundering", "financial_crime", "darkweb_transactions",
-    "blacklist_doubt", "stealing_attack", "fake_kyc", "malicious_mining",
-    "mixer", "sanctioned",
+    "cybercrime",
+    "money_laundering",
+    "financial_crime",
+    "darkweb_transactions",
+    "blacklist_doubt",
+    "stealing_attack",
+    "fake_kyc",
+    "malicious_mining",
+    "mixer",
+    "sanctioned",
 ]
 
 
@@ -47,10 +56,14 @@ class GoPlusProvider(CryptoWalletProvider):
     def __init__(self, api_key: str = ""):
         self.api_key = api_key
 
-    async def screen_address(self, address: str, network: str | None = None) -> WalletScreeningResult:
+    async def screen_address(
+        self, address: str, network: str | None = None
+    ) -> WalletScreeningResult:
         chain_id = NETWORK_TO_CHAIN_ID.get(network or "")
         if not chain_id:
-            return WalletScreeningResult(is_sanctioned=False, identifications=[], provider=self.name, raw=None)
+            return WalletScreeningResult(
+                is_sanctioned=False, identifications=[], provider=self.name, raw=None
+            )
 
         headers = {"Authorization": self.api_key} if self.api_key else {}
         async with httpx.AsyncClient(timeout=15, base_url=BASE_URL) as client:
@@ -60,7 +73,9 @@ class GoPlusProvider(CryptoWalletProvider):
                 headers=headers,
             )
         if resp.status_code >= 400:
-            raise ProviderRejectedError("goplus", f"{resp.status_code}: {resp.text}", raw=resp.text)
+            raise ProviderRejectedError(
+                "goplus", f"{resp.status_code}: {resp.text}", raw=resp.text
+            )
 
         data = resp.json()
         result = (data.get("result") or {}).get(address.lower(), {})

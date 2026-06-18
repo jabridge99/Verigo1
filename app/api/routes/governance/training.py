@@ -23,6 +23,7 @@ Training record status is CALCULATED (not manually set):
 DISCLAIMER: This module is a governance tooling aid only.
 Training completion records do not constitute regulatory certification.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
@@ -32,7 +33,6 @@ from uuid import uuid4
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -45,9 +45,9 @@ from app.api.deps import (
 from app.db.database import get_db
 from app.models.aml_solution import AMLSolution
 from app.models.governance_training import (
+    STANDARD_TRAINING_COURSES,
     AssignmentTrigger,
     GovernanceTrainingRecord,
-    STANDARD_TRAINING_COURSES,
     TrainingAssignment,
     TrainingCourse,
     TrainingStatus,
@@ -65,6 +65,7 @@ DISCLAIMER = (
 
 
 # ── Status calculator ─────────────────────────────────────────────────────────
+
 
 def _compute_status(record: GovernanceTrainingRecord) -> TrainingStatus:
     today = date.today()
@@ -95,6 +96,7 @@ def _get_solution(org_id: str, db: Session) -> AMLSolution:
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class CourseCreate(BaseModel):
     course_code: str = Field(..., max_length=30)
@@ -167,6 +169,7 @@ class ExemptRequest(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _course_dict(c: TrainingCourse) -> dict:
     return {
@@ -244,26 +247,35 @@ def _assignment_dict(a: TrainingAssignment) -> dict:
 
 
 def _get_course(course_id: str, org_id: str, db: Session) -> TrainingCourse:
-    c = db.query(TrainingCourse).filter(
-        TrainingCourse.id == course_id,
-        TrainingCourse.org_id == org_id,
-    ).first()
+    c = (
+        db.query(TrainingCourse)
+        .filter(
+            TrainingCourse.id == course_id,
+            TrainingCourse.org_id == org_id,
+        )
+        .first()
+    )
     if not c:
         raise HTTPException(404, "Training course not found.")
     return c
 
 
 def _get_record(record_id: str, org_id: str, db: Session) -> GovernanceTrainingRecord:
-    r = db.query(GovernanceTrainingRecord).filter(
-        GovernanceTrainingRecord.id == record_id,
-        GovernanceTrainingRecord.org_id == org_id,
-    ).first()
+    r = (
+        db.query(GovernanceTrainingRecord)
+        .filter(
+            GovernanceTrainingRecord.id == record_id,
+            GovernanceTrainingRecord.org_id == org_id,
+        )
+        .first()
+    )
     if not r:
         raise HTTPException(404, "Training record not found.")
     return r
 
 
 # ── Course Catalogue ──────────────────────────────────────────────────────────
+
 
 @router.post("/courses/seed", status_code=201)
 def seed_standard_courses(
@@ -290,30 +302,34 @@ def seed_standard_courses(
 
     existing_codes = {
         c.course_code
-        for c in db.query(TrainingCourse.course_code).filter(
-            TrainingCourse.org_id == org_id
-        ).all()
+        for c in db.query(TrainingCourse.course_code)
+        .filter(TrainingCourse.org_id == org_id)
+        .all()
     }
 
     seeded = 0
     for seed in STANDARD_TRAINING_COURSES:
         if seed["course_code"] in existing_codes:
             continue
-        db.add(TrainingCourse(
-            id=f"tc_{uuid4().hex[:12]}",
-            org_id=org_id,
-            solution_id=solution.id,
-            is_custom=False,
-            created_by=current_user.id,
-            **seed,
-        ))
+        db.add(
+            TrainingCourse(
+                id=f"tc_{uuid4().hex[:12]}",
+                org_id=org_id,
+                solution_id=solution.id,
+                is_custom=False,
+                created_by=current_user.id,
+                **seed,
+            )
+        )
         seeded += 1
 
     db.commit()
     return {
         "seeded": seeded,
         "already_existed": len(existing_codes),
-        "message": f"{seeded} standard courses added." if seeded else "All standard courses already seeded.",
+        "message": f"{seeded} standard courses added."
+        if seeded
+        else "All standard courses already seeded.",
     }
 
 
@@ -351,10 +367,14 @@ def create_course(
     org_id = org_id_for(current_user)
     solution = _get_solution(org_id, db)
 
-    existing = db.query(TrainingCourse).filter(
-        TrainingCourse.org_id == org_id,
-        TrainingCourse.course_code == payload.course_code,
-    ).first()
+    existing = (
+        db.query(TrainingCourse)
+        .filter(
+            TrainingCourse.org_id == org_id,
+            TrainingCourse.course_code == payload.course_code,
+        )
+        .first()
+    )
     if existing:
         raise HTTPException(409, f"Course code '{payload.course_code}' already exists.")
 
@@ -400,7 +420,9 @@ def update_course(
             db.commit()
             db.refresh(course)
             return _course_dict(course)
-        raise HTTPException(409, "Standard courses cannot be modified. Only is_active can be toggled.")
+        raise HTTPException(
+            409, "Standard courses cannot be modified. Only is_active can be toggled."
+        )
 
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(course, field, value)
@@ -419,12 +441,15 @@ def delete_course(
     org_id = org_id_for(current_user)
     course = _get_course(course_id, org_id, db)
     if not course.is_custom:
-        raise HTTPException(409, "Standard courses cannot be deleted — set is_active = false instead.")
+        raise HTTPException(
+            409, "Standard courses cannot be deleted — set is_active = false instead."
+        )
     course.is_active = False
     db.commit()
 
 
 # ── Assignments (bulk) ────────────────────────────────────────────────────────
+
 
 @router.post("/assignments", status_code=201)
 def create_assignment(
@@ -465,18 +490,24 @@ def create_assignment(
     db.flush()
 
     records_created = 0
-    for user_id in (payload.user_ids or []):
+    for user_id in payload.user_ids or []:
         # Skip if already assigned and not yet completed/expired
-        existing = db.query(GovernanceTrainingRecord).filter(
-            GovernanceTrainingRecord.org_id == org_id,
-            GovernanceTrainingRecord.course_id == course.id,
-            GovernanceTrainingRecord.user_id == user_id,
-            GovernanceTrainingRecord.status.in_([
-                TrainingStatus.assigned,
-                TrainingStatus.in_progress,
-                TrainingStatus.completed,
-            ]),
-        ).first()
+        existing = (
+            db.query(GovernanceTrainingRecord)
+            .filter(
+                GovernanceTrainingRecord.org_id == org_id,
+                GovernanceTrainingRecord.course_id == course.id,
+                GovernanceTrainingRecord.user_id == user_id,
+                GovernanceTrainingRecord.status.in_(
+                    [
+                        TrainingStatus.assigned,
+                        TrainingStatus.in_progress,
+                        TrainingStatus.completed,
+                    ]
+                ),
+            )
+            .first()
+        )
         if existing:
             continue
 
@@ -522,8 +553,16 @@ def list_assignments(
         q = q.filter(TrainingAssignment.course_id == course_id)
     if trigger:
         q = q.filter(TrainingAssignment.trigger == trigger)
-    assignments = q.order_by(TrainingAssignment.created_at.desc()).offset(page.offset).limit(page.limit).all()
-    return {"assignments": [_assignment_dict(a) for a in assignments], "count": len(assignments)}
+    assignments = (
+        q.order_by(TrainingAssignment.created_at.desc())
+        .offset(page.offset)
+        .limit(page.limit)
+        .all()
+    )
+    return {
+        "assignments": [_assignment_dict(a) for a in assignments],
+        "count": len(assignments),
+    }
 
 
 @router.get("/assignments/{assignment_id}")
@@ -535,10 +574,14 @@ def get_assignment(
 ):
     """Get a specific assignment, optionally with all individual training records."""
     org_id = org_id_for(current_user)
-    a = db.query(TrainingAssignment).filter(
-        TrainingAssignment.id == assignment_id,
-        TrainingAssignment.org_id == org_id,
-    ).first()
+    a = (
+        db.query(TrainingAssignment)
+        .filter(
+            TrainingAssignment.id == assignment_id,
+            TrainingAssignment.org_id == org_id,
+        )
+        .first()
+    )
     if not a:
         raise HTTPException(404, "Assignment not found.")
     d = _assignment_dict(a)
@@ -548,6 +591,7 @@ def get_assignment(
 
 
 # ── Training Records ──────────────────────────────────────────────────────────
+
 
 @router.get("/records")
 def list_records(
@@ -596,7 +640,12 @@ def list_records(
             GovernanceTrainingRecord.expiry_date >= date.today(),
         )
 
-    records = q.order_by(GovernanceTrainingRecord.due_date).offset(page.offset).limit(page.limit).all()
+    records = (
+        q.order_by(GovernanceTrainingRecord.due_date)
+        .offset(page.offset)
+        .limit(page.limit)
+        .all()
+    )
 
     # Sync computed status before returning
     for r in records:
@@ -700,7 +749,9 @@ def complete_training(
     if record.completion_date and record.status == TrainingStatus.completed:
         raise HTTPException(409, "Training already marked as completed.")
 
-    course = db.query(TrainingCourse).filter(TrainingCourse.id == record.course_id).first()
+    course = (
+        db.query(TrainingCourse).filter(TrainingCourse.id == record.course_id).first()
+    )
 
     record.completion_date = payload.completion_date
     record.score = payload.score
@@ -716,7 +767,9 @@ def complete_training(
             record.passed = True  # no assessment course
 
         if course.expiry_months:
-            record.expiry_date = payload.completion_date + relativedelta(months=course.expiry_months)
+            record.expiry_date = payload.completion_date + relativedelta(
+                months=course.expiry_months
+            )
 
     _sync_status(record, db)
     db.commit()
@@ -777,6 +830,7 @@ def revoke_exemption(
 
 # ── Dashboard & Analytics ─────────────────────────────────────────────────────
 
+
 @router.get("/dashboard")
 def training_dashboard(
     db: Session = Depends(get_db),
@@ -802,9 +856,11 @@ def training_dashboard(
     today = date.today()
 
     # Sync all statuses first
-    all_records = db.query(GovernanceTrainingRecord).filter(
-        GovernanceTrainingRecord.org_id == org_id
-    ).all()
+    all_records = (
+        db.query(GovernanceTrainingRecord)
+        .filter(GovernanceTrainingRecord.org_id == org_id)
+        .all()
+    )
     for r in all_records:
         _sync_status(r, db)
     db.commit()
@@ -821,14 +877,19 @@ def training_dashboard(
     completion_pct = round(completed / non_exempt * 100, 1) if non_exempt > 0 else 100.0
 
     expiring_30d = sum(
-        1 for r in all_records
-        if r.expiry_date and r.status == TrainingStatus.completed
+        1
+        for r in all_records
+        if r.expiry_date
+        and r.status == TrainingStatus.completed
         and today <= r.expiry_date <= today + timedelta(days=30)
     )
 
     # By course
     by_course: dict = {}
-    courses = {c.id: c for c in db.query(TrainingCourse).filter(TrainingCourse.org_id == org_id).all()}
+    courses = {
+        c.id: c
+        for c in db.query(TrainingCourse).filter(TrainingCourse.org_id == org_id).all()
+    }
     for r in all_records:
         cid = r.course_id
         if cid not in by_course:
@@ -836,7 +897,10 @@ def training_dashboard(
             by_course[cid] = {
                 "course_id": cid,
                 "course_name": c.name if c else cid,
-                "total": 0, "completed": 0, "overdue": 0, "exempt": 0,
+                "total": 0,
+                "completed": 0,
+                "overdue": 0,
+                "exempt": 0,
             }
         by_course[cid]["total"] += 1
         if r.status == TrainingStatus.completed:
@@ -858,16 +922,23 @@ def training_dashboard(
     overdue_light = _light(overdue > 0)
     expiry_light = _light(False, expiring_30d > 0)
 
-    overall = "red" if "red" in [completion_light, overdue_light] else \
-              "amber" if "amber" in [completion_light, overdue_light, expiry_light] else "green"
+    overall = (
+        "red"
+        if "red" in [completion_light, overdue_light]
+        else "amber"
+        if "amber" in [completion_light, overdue_light, expiry_light]
+        else "green"
+    )
 
     # Health score (weighted)
-    not_overdue_pct = ((non_exempt - overdue) / non_exempt * 100) if non_exempt > 0 else 100.0
-    not_expiring_pct = ((completed - expiring_30d) / completed * 100) if completed > 0 else 100.0
+    not_overdue_pct = (
+        ((non_exempt - overdue) / non_exempt * 100) if non_exempt > 0 else 100.0
+    )
+    not_expiring_pct = (
+        ((completed - expiring_30d) / completed * 100) if completed > 0 else 100.0
+    )
     health_score = round(
-        (completion_pct * 0.40)
-        + (not_overdue_pct * 0.40)
-        + (not_expiring_pct * 0.20),
+        (completion_pct * 0.40) + (not_overdue_pct * 0.40) + (not_expiring_pct * 0.20),
         1,
     )
 
@@ -909,12 +980,17 @@ def list_overdue(
     org_id = org_id_for(current_user)
     today = date.today()
 
-    records = db.query(GovernanceTrainingRecord).filter(
-        GovernanceTrainingRecord.org_id == org_id,
-        GovernanceTrainingRecord.completion_date.is_(None),
-        GovernanceTrainingRecord.due_date < today,
-        GovernanceTrainingRecord.is_exempt == False,
-    ).order_by(GovernanceTrainingRecord.due_date).all()
+    records = (
+        db.query(GovernanceTrainingRecord)
+        .filter(
+            GovernanceTrainingRecord.org_id == org_id,
+            GovernanceTrainingRecord.completion_date.is_(None),
+            GovernanceTrainingRecord.due_date < today,
+            GovernanceTrainingRecord.is_exempt == False,
+        )
+        .order_by(GovernanceTrainingRecord.due_date)
+        .all()
+    )
 
     for r in records:
         r.status = TrainingStatus.overdue
@@ -938,13 +1014,18 @@ def list_expiring(
     today = date.today()
     target = today + timedelta(days=within_days)
 
-    records = db.query(GovernanceTrainingRecord).filter(
-        GovernanceTrainingRecord.org_id == org_id,
-        GovernanceTrainingRecord.expiry_date.isnot(None),
-        GovernanceTrainingRecord.expiry_date >= today,
-        GovernanceTrainingRecord.expiry_date <= target,
-        GovernanceTrainingRecord.status == TrainingStatus.completed,
-    ).order_by(GovernanceTrainingRecord.expiry_date).all()
+    records = (
+        db.query(GovernanceTrainingRecord)
+        .filter(
+            GovernanceTrainingRecord.org_id == org_id,
+            GovernanceTrainingRecord.expiry_date.isnot(None),
+            GovernanceTrainingRecord.expiry_date >= today,
+            GovernanceTrainingRecord.expiry_date <= target,
+            GovernanceTrainingRecord.status == TrainingStatus.completed,
+        )
+        .order_by(GovernanceTrainingRecord.expiry_date)
+        .all()
+    )
 
     return {
         "expiring_count": len(records),
@@ -970,15 +1051,20 @@ def training_compliance_report(
     org_id = org_id_for(current_user)
     today = date.today()
 
-    records = db.query(GovernanceTrainingRecord).filter(
-        GovernanceTrainingRecord.org_id == org_id
-    ).all()
+    records = (
+        db.query(GovernanceTrainingRecord)
+        .filter(GovernanceTrainingRecord.org_id == org_id)
+        .all()
+    )
 
     for r in records:
         _sync_status(r, db)
     db.commit()
 
-    courses = {c.id: c for c in db.query(TrainingCourse).filter(TrainingCourse.org_id == org_id).all()}
+    courses = {
+        c.id: c
+        for c in db.query(TrainingCourse).filter(TrainingCourse.org_id == org_id).all()
+    }
 
     by_type: dict = {}
     for r in records:
@@ -987,7 +1073,13 @@ def training_compliance_report(
             continue
         ttype = c.training_type.value
         if ttype not in by_type:
-            by_type[ttype] = {"training_type": ttype, "total_assigned": 0, "completed": 0, "overdue": 0, "exempt": 0}
+            by_type[ttype] = {
+                "training_type": ttype,
+                "total_assigned": 0,
+                "completed": 0,
+                "overdue": 0,
+                "exempt": 0,
+            }
         by_type[ttype]["total_assigned"] += 1
         if r.status == TrainingStatus.completed:
             by_type[ttype]["completed"] += 1
@@ -998,7 +1090,9 @@ def training_compliance_report(
 
     for row in by_type.values():
         denom = row["total_assigned"] - row["exempt"]
-        row["completion_pct"] = round(row["completed"] / denom * 100, 1) if denom > 0 else 100.0
+        row["completion_pct"] = (
+            round(row["completed"] / denom * 100, 1) if denom > 0 else 100.0
+        )
 
     total = len(records)
     exempt = sum(1 for r in records if r.status == TrainingStatus.exempt)
@@ -1019,8 +1113,12 @@ def training_compliance_report(
         "mandatory_courses_100pct": all(
             row["completion_pct"] >= 100.0
             for row in by_type.values()
-            if any(courses.get(r.course_id) and courses[r.course_id].is_mandatory
-                   for r in records if courses.get(r.course_id) and courses[r.course_id].training_type.value == row["training_type"])
+            if any(
+                courses.get(r.course_id) and courses[r.course_id].is_mandatory
+                for r in records
+                if courses.get(r.course_id)
+                and courses[r.course_id].training_type.value == row["training_type"]
+            )
         ),
         "disclaimer": DISCLAIMER,
     }

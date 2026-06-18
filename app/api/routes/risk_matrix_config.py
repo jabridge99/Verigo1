@@ -12,7 +12,7 @@ Every change creates an immutable OrgRiskMatrixVersion snapshot.
 DISCLAIMER: Risk matrix configuration is a compliance workflow tool.
 Risk ratings and scoring decisions remain the responsibility of the reporting entity.
 """
-from datetime import datetime, timezone
+
 from typing import Optional
 from uuid import uuid4
 
@@ -20,7 +20,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import org_id_for, require_analyst_or_above, require_compliance_or_above
+from app.api.deps import (
+    org_id_for,
+    require_analyst_or_above,
+    require_compliance_or_above,
+)
 from app.db.database import get_db
 from app.models.risk_matrix_config import (
     DEFAULT_RISK_PROFILES,
@@ -43,40 +47,42 @@ DISCLAIMER = (
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class RiskFactorCreate(BaseModel):
-    category:       RiskFactorCategory
-    factor_key:     str = Field(..., min_length=3, max_length=100)
-    label:          str = Field(..., min_length=3, max_length=255)
-    description:    Optional[str] = None
-    weight:         float = Field(..., ge=0.0, le=1.0)
-    display_order:  int = Field(default=0, ge=0)
+    category: RiskFactorCategory
+    factor_key: str = Field(..., min_length=3, max_length=100)
+    label: str = Field(..., min_length=3, max_length=255)
+    description: Optional[str] = None
+    weight: float = Field(..., ge=0.0, le=1.0)
+    display_order: int = Field(default=0, ge=0)
 
 
 class RiskFactorUpdate(BaseModel):
-    label:          Optional[str] = Field(None, max_length=255)
-    description:    Optional[str] = None
-    weight:         Optional[float] = Field(None, ge=0.0, le=1.0)
-    is_active:      Optional[bool] = None
-    display_order:  Optional[int] = None
+    label: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    weight: Optional[float] = Field(None, ge=0.0, le=1.0)
+    is_active: Optional[bool] = None
+    display_order: Optional[int] = None
 
 
 class RiskProfileUpdate(BaseModel):
-    score_min:                  Optional[float] = Field(None, ge=0.0, le=100.0)
-    score_max:                  Optional[float] = Field(None, ge=0.0, le=100.0)
-    review_frequency_months:    Optional[int] = Field(None, ge=1, le=120)
-    edd_required:               Optional[bool] = None
-    enhanced_monitoring:        Optional[bool] = None
-    senior_approval_required:   Optional[bool] = None
-    description:                Optional[str] = None
+    score_min: Optional[float] = Field(None, ge=0.0, le=100.0)
+    score_max: Optional[float] = Field(None, ge=0.0, le=100.0)
+    review_frequency_months: Optional[int] = Field(None, ge=1, le=120)
+    edd_required: Optional[bool] = None
+    enhanced_monitoring: Optional[bool] = None
+    senior_approval_required: Optional[bool] = None
+    description: Optional[str] = None
 
 
 class WeightRebalanceRequest(BaseModel):
-    category:   RiskFactorCategory
-    weights:    dict[str, float]    # {factor_key: weight}
-    reason:     str = Field(..., min_length=10)
+    category: RiskFactorCategory
+    weights: dict[str, float]  # {factor_key: weight}
+    reason: str = Field(..., min_length=10)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _factor_dict(f: OrgRiskFactor) -> dict:
     return {
@@ -139,19 +145,21 @@ def _record_version(
     previous_value=None,
     new_value=None,
 ):
-    db.add(OrgRiskMatrixVersion(
-        id=f"rmv_{uuid4().hex[:12]}",
-        org_id=org_id,
-        version_number=_next_version(org_id, db),
-        change_type=change_type,
-        change_summary=change_summary,
-        factors_snapshot=_snapshot_factors(org_id, db),
-        profiles_snapshot=_snapshot_profiles(org_id, db),
-        changed_by=user_id,
-        change_reason=reason or change_summary,
-        previous_value=previous_value,
-        new_value=new_value,
-    ))
+    db.add(
+        OrgRiskMatrixVersion(
+            id=f"rmv_{uuid4().hex[:12]}",
+            org_id=org_id,
+            version_number=_next_version(org_id, db),
+            change_type=change_type,
+            change_summary=change_summary,
+            factors_snapshot=_snapshot_factors(org_id, db),
+            profiles_snapshot=_snapshot_profiles(org_id, db),
+            changed_by=user_id,
+            change_reason=reason or change_summary,
+            previous_value=previous_value,
+            new_value=new_value,
+        )
+    )
 
 
 def _ensure_defaults(org_id: str, user_id: str, db: Session):
@@ -162,40 +170,46 @@ def _ensure_defaults(org_id: str, user_id: str, db: Session):
 
     for category, factors in SYSTEM_RISK_FACTORS.items():
         for i, f in enumerate(factors):
-            db.add(OrgRiskFactor(
-                id=f"orf_{uuid4().hex[:10]}",
-                org_id=org_id,
-                category=category,
-                factor_key=f["key"],
-                label=f["label"],
-                description=f["description"],
-                weight=f["weight"],
-                is_system=True,
-                is_active=True,
-                display_order=i,
-                created_by=user_id,
-            ))
+            db.add(
+                OrgRiskFactor(
+                    id=f"orf_{uuid4().hex[:10]}",
+                    org_id=org_id,
+                    category=category,
+                    factor_key=f["key"],
+                    label=f["label"],
+                    description=f["description"],
+                    weight=f["weight"],
+                    is_system=True,
+                    is_active=True,
+                    display_order=i,
+                    created_by=user_id,
+                )
+            )
 
     for prof in DEFAULT_RISK_PROFILES:
-        db.add(OrgRiskProfile(
-            id=f"orp_{uuid4().hex[:10]}",
-            org_id=org_id,
-            risk_level=prof["risk_level"],
-            score_min=prof["score_min"],
-            score_max=prof["score_max"],
-            review_frequency_months=prof["review_frequency_months"],
-            edd_required=prof["edd_required"],
-            enhanced_monitoring=prof["enhanced_monitoring"],
-            description=prof["description"],
-            updated_by=user_id,
-        ))
+        db.add(
+            OrgRiskProfile(
+                id=f"orp_{uuid4().hex[:10]}",
+                org_id=org_id,
+                risk_level=prof["risk_level"],
+                score_min=prof["score_min"],
+                score_max=prof["score_max"],
+                review_frequency_months=prof["review_frequency_months"],
+                edd_required=prof["edd_required"],
+                enhanced_monitoring=prof["enhanced_monitoring"],
+                description=prof["description"],
+                updated_by=user_id,
+            )
+        )
 
     db.flush()
-    _record_version(org_id, user_id, "seeded_defaults",
-                    "System defaults seeded at first access", db)
+    _record_version(
+        org_id, user_id, "seeded_defaults", "System defaults seeded at first access", db
+    )
 
 
 # ── Risk Factor Endpoints ─────────────────────────────────────────────────────
+
 
 @router.get("/factors")
 def list_risk_factors(
@@ -225,8 +239,10 @@ def list_risk_factors(
         by_category.setdefault(cat, []).append(_factor_dict(f))
 
     # Category weight totals (for validation UI)
-    weight_totals = {cat: round(sum(f["weight"] for f in items), 4)
-                     for cat, items in by_category.items()}
+    weight_totals = {
+        cat: round(sum(f["weight"] for f in items), 4)
+        for cat, items in by_category.items()
+    }
 
     return {
         "by_category": by_category,
@@ -249,17 +265,25 @@ def add_risk_factor(
     org_id = org_id_for(current_user)
     _ensure_defaults(org_id, current_user.id, db)
 
-    existing_key = db.query(OrgRiskFactor).filter(
-        OrgRiskFactor.org_id == org_id,
-        OrgRiskFactor.factor_key == payload.factor_key,
-    ).first()
+    existing_key = (
+        db.query(OrgRiskFactor)
+        .filter(
+            OrgRiskFactor.org_id == org_id,
+            OrgRiskFactor.factor_key == payload.factor_key,
+        )
+        .first()
+    )
     if existing_key:
         raise HTTPException(409, f"Factor key '{payload.factor_key}' already exists.")
 
-    count = db.query(OrgRiskFactor).filter(
-        OrgRiskFactor.org_id == org_id,
-        OrgRiskFactor.category == payload.category,
-    ).count()
+    count = (
+        db.query(OrgRiskFactor)
+        .filter(
+            OrgRiskFactor.org_id == org_id,
+            OrgRiskFactor.category == payload.category,
+        )
+        .count()
+    )
     if count >= 20:
         raise HTTPException(409, "Maximum of 20 factors per category.")
 
@@ -279,9 +303,15 @@ def add_risk_factor(
     )
     db.add(f)
     db.flush()
-    _record_version(org_id, current_user.id, "factor_added",
-                    f"Added factor '{payload.label}' to {payload.category.value}", db,
-                    reason=reason, new_value=_factor_dict(f))
+    _record_version(
+        org_id,
+        current_user.id,
+        "factor_added",
+        f"Added factor '{payload.label}' to {payload.category.value}",
+        db,
+        reason=reason,
+        new_value=_factor_dict(f),
+    )
     db.commit()
     db.refresh(f)
     return _factor_dict(f)
@@ -300,10 +330,14 @@ def update_risk_factor(
     System factors (is_system=True) can have their weight changed but cannot be deleted.
     """
     org_id = org_id_for(current_user)
-    f = db.query(OrgRiskFactor).filter(
-        OrgRiskFactor.id == factor_id,
-        OrgRiskFactor.org_id == org_id,
-    ).first()
+    f = (
+        db.query(OrgRiskFactor)
+        .filter(
+            OrgRiskFactor.id == factor_id,
+            OrgRiskFactor.org_id == org_id,
+        )
+        .first()
+    )
     if not f:
         raise HTTPException(404, "Risk factor not found.")
 
@@ -313,9 +347,16 @@ def update_risk_factor(
     f.updated_by = current_user.id
 
     db.flush()
-    _record_version(org_id, current_user.id, "factor_updated",
-                    f"Updated factor '{f.label}'", db,
-                    reason=reason, previous_value=prev, new_value=_factor_dict(f))
+    _record_version(
+        org_id,
+        current_user.id,
+        "factor_updated",
+        f"Updated factor '{f.label}'",
+        db,
+        reason=reason,
+        previous_value=prev,
+        new_value=_factor_dict(f),
+    )
     db.commit()
     db.refresh(f)
     return _factor_dict(f)
@@ -333,19 +374,32 @@ def delete_risk_factor(
     System factors (is_system=True) cannot be deleted — deactivate instead.
     """
     org_id = org_id_for(current_user)
-    f = db.query(OrgRiskFactor).filter(
-        OrgRiskFactor.id == factor_id,
-        OrgRiskFactor.org_id == org_id,
-    ).first()
+    f = (
+        db.query(OrgRiskFactor)
+        .filter(
+            OrgRiskFactor.id == factor_id,
+            OrgRiskFactor.org_id == org_id,
+        )
+        .first()
+    )
     if not f:
         raise HTTPException(404, "Risk factor not found.")
     if f.is_system:
-        raise HTTPException(409, "System risk factors cannot be deleted. Set is_active=False to disable.")
+        raise HTTPException(
+            409,
+            "System risk factors cannot be deleted. Set is_active=False to disable.",
+        )
 
     prev = _factor_dict(f)
-    _record_version(org_id, current_user.id, "factor_deleted",
-                    f"Deleted custom factor '{f.label}'", db,
-                    reason=reason, previous_value=prev)
+    _record_version(
+        org_id,
+        current_user.id,
+        "factor_deleted",
+        f"Deleted custom factor '{f.label}'",
+        db,
+        reason=reason,
+        previous_value=prev,
+    )
     db.delete(f)
     db.commit()
 
@@ -366,11 +420,15 @@ def rebalance_weights(
     if abs(total - 1.0) > 0.01:
         raise HTTPException(422, f"Weights must sum to 1.0 (got {total:.4f}).")
 
-    factors = db.query(OrgRiskFactor).filter(
-        OrgRiskFactor.org_id == org_id,
-        OrgRiskFactor.category == payload.category,
-        OrgRiskFactor.is_active == True,
-    ).all()
+    factors = (
+        db.query(OrgRiskFactor)
+        .filter(
+            OrgRiskFactor.org_id == org_id,
+            OrgRiskFactor.category == payload.category,
+            OrgRiskFactor.is_active == True,
+        )
+        .all()
+    )
 
     prev = {f.factor_key: f.weight for f in factors}
     updated = []
@@ -381,14 +439,26 @@ def rebalance_weights(
             updated.append(f.factor_key)
 
     db.flush()
-    _record_version(org_id, current_user.id, "weights_rebalanced",
-                    f"Rebalanced {len(updated)} weights in {payload.category.value}", db,
-                    reason=payload.reason, previous_value=prev, new_value=payload.weights)
+    _record_version(
+        org_id,
+        current_user.id,
+        "weights_rebalanced",
+        f"Rebalanced {len(updated)} weights in {payload.category.value}",
+        db,
+        reason=payload.reason,
+        previous_value=prev,
+        new_value=payload.weights,
+    )
     db.commit()
-    return {"category": payload.category.value, "updated": updated, "new_weights": payload.weights}
+    return {
+        "category": payload.category.value,
+        "updated": updated,
+        "new_weights": payload.weights,
+    }
 
 
 # ── Risk Profile Endpoints ────────────────────────────────────────────────────
+
 
 @router.get("/profiles")
 def list_risk_profiles(
@@ -429,12 +499,18 @@ def update_risk_profile(
     DISCLAIMER: Risk threshold changes affect all future risk assessments.
     """
     org_id = org_id_for(current_user)
-    profile = db.query(OrgRiskProfile).filter(
-        OrgRiskProfile.org_id == org_id,
-        OrgRiskProfile.risk_level == risk_level,
-    ).first()
+    profile = (
+        db.query(OrgRiskProfile)
+        .filter(
+            OrgRiskProfile.org_id == org_id,
+            OrgRiskProfile.risk_level == risk_level,
+        )
+        .first()
+    )
     if not profile:
-        raise HTTPException(404, "Risk profile not found. Ensure defaults are loaded first.")
+        raise HTTPException(
+            404, "Risk profile not found. Ensure defaults are loaded first."
+        )
 
     prev = _profile_dict(profile)
 
@@ -447,9 +523,16 @@ def update_risk_profile(
     profile.updated_by = current_user.id
 
     db.flush()
-    _record_version(org_id, current_user.id, "profile_updated",
-                    f"Updated {risk_level.value} risk profile thresholds", db,
-                    reason=reason, previous_value=prev, new_value=_profile_dict(profile))
+    _record_version(
+        org_id,
+        current_user.id,
+        "profile_updated",
+        f"Updated {risk_level.value} risk profile thresholds",
+        db,
+        reason=reason,
+        previous_value=prev,
+        new_value=_profile_dict(profile),
+    )
     db.commit()
     db.refresh(profile)
     return _profile_dict(profile)
@@ -457,9 +540,12 @@ def update_risk_profile(
 
 # ── Restore Defaults ──────────────────────────────────────────────────────────
 
+
 @router.post("/restore-defaults")
 def restore_defaults(
-    category: Optional[RiskFactorCategory] = Query(None, description="Restore only this category; omit for full restore"),
+    category: Optional[RiskFactorCategory] = Query(
+        None, description="Restore only this category; omit for full restore"
+    ),
     section: Optional[str] = Query(None, description="profiles | factors | all"),
     reason: str = Query(..., min_length=10),
     db: Session = Depends(get_db),
@@ -495,40 +581,52 @@ def restore_defaults(
             db.delete(f)
 
         # Reset system factor weights
-        cats_to_restore = [category.value] if category else list(SYSTEM_RISK_FACTORS.keys())
+        cats_to_restore = (
+            [category.value] if category else list(SYSTEM_RISK_FACTORS.keys())
+        )
         for cat in cats_to_restore:
             for default_f in SYSTEM_RISK_FACTORS.get(cat, []):
-                existing = db.query(OrgRiskFactor).filter(
-                    OrgRiskFactor.org_id == org_id,
-                    OrgRiskFactor.factor_key == default_f["key"],
-                ).first()
+                existing = (
+                    db.query(OrgRiskFactor)
+                    .filter(
+                        OrgRiskFactor.org_id == org_id,
+                        OrgRiskFactor.factor_key == default_f["key"],
+                    )
+                    .first()
+                )
                 if existing:
                     existing.weight = default_f["weight"]
                     existing.label = default_f["label"]
                     existing.is_active = True
                     existing.updated_by = current_user.id
                 else:
-                    db.add(OrgRiskFactor(
-                        id=f"orf_{uuid4().hex[:10]}",
-                        org_id=org_id,
-                        category=cat,
-                        factor_key=default_f["key"],
-                        label=default_f["label"],
-                        description=default_f["description"],
-                        weight=default_f["weight"],
-                        is_system=True,
-                        is_active=True,
-                        created_by=current_user.id,
-                        updated_by=current_user.id,
-                    ))
+                    db.add(
+                        OrgRiskFactor(
+                            id=f"orf_{uuid4().hex[:10]}",
+                            org_id=org_id,
+                            category=cat,
+                            factor_key=default_f["key"],
+                            label=default_f["label"],
+                            description=default_f["description"],
+                            weight=default_f["weight"],
+                            is_system=True,
+                            is_active=True,
+                            created_by=current_user.id,
+                            updated_by=current_user.id,
+                        )
+                    )
         restored.append("factors")
 
     if restore_section in ("profiles", "all"):
         for default_p in DEFAULT_RISK_PROFILES:
-            existing = db.query(OrgRiskProfile).filter(
-                OrgRiskProfile.org_id == org_id,
-                OrgRiskProfile.risk_level == default_p["risk_level"],
-            ).first()
+            existing = (
+                db.query(OrgRiskProfile)
+                .filter(
+                    OrgRiskProfile.org_id == org_id,
+                    OrgRiskProfile.risk_level == default_p["risk_level"],
+                )
+                .first()
+            )
             if existing:
                 existing.score_min = default_p["score_min"]
                 existing.score_max = default_p["score_max"]
@@ -540,10 +638,15 @@ def restore_defaults(
         restored.append("profiles")
 
     db.flush()
-    _record_version(org_id, current_user.id, "restored_defaults",
-                    f"Restored defaults: {', '.join(restored)}"
-                    + (f" (category: {category.value})" if category else ""),
-                    db, reason=reason)
+    _record_version(
+        org_id,
+        current_user.id,
+        "restored_defaults",
+        f"Restored defaults: {', '.join(restored)}"
+        + (f" (category: {category.value})" if category else ""),
+        db,
+        reason=reason,
+    )
     db.commit()
     return {
         "restored": restored,
@@ -553,6 +656,7 @@ def restore_defaults(
 
 
 # ── Version History ───────────────────────────────────────────────────────────
+
 
 @router.get("/versions")
 def list_versions(
@@ -596,10 +700,14 @@ def get_version_snapshot(
 ):
     """Return the full factors and profiles snapshot for a specific version."""
     org_id = org_id_for(current_user)
-    v = db.query(OrgRiskMatrixVersion).filter(
-        OrgRiskMatrixVersion.id == version_id,
-        OrgRiskMatrixVersion.org_id == org_id,
-    ).first()
+    v = (
+        db.query(OrgRiskMatrixVersion)
+        .filter(
+            OrgRiskMatrixVersion.id == version_id,
+            OrgRiskMatrixVersion.org_id == org_id,
+        )
+        .first()
+    )
     if not v:
         raise HTTPException(404, "Version not found.")
     return {

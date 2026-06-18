@@ -7,6 +7,7 @@ Lifecycle:    draft → internal_review → compliance_review → pending_approv
 Version control: every publish creates an immutable PolicyVersion snapshot.
 Audit trail:     every status transition creates an immutable PolicyWorkflowEvent.
 """
+
 import logging
 from datetime import date, datetime, timezone
 from typing import List, Optional
@@ -15,21 +16,34 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    Pagination, get_current_user, org_id_for,
-    require_compliance_or_above, require_mlro_or_above,
+    Pagination,
+    get_current_user,
+    org_id_for,
+    require_compliance_or_above,
 )
 from app.db.database import get_db
+from app.models.audit_log import AuditLog
 from app.models.governance import (
-    ALLOWED_TRANSITIONS, POLICY_NUMBER_PREFIX, AttestationType,
-    Policy, PolicyAttestation, PolicyLifecycleStatus,
-    PolicyReviewReminder, PolicyType, PolicyVersion, PolicyWorkflowEvent,
+    ALLOWED_TRANSITIONS,
+    POLICY_NUMBER_PREFIX,
+    Policy,
+    PolicyAttestation,
+    PolicyLifecycleStatus,
+    PolicyReviewReminder,
+    PolicyType,
+    PolicyVersion,
+    PolicyWorkflowEvent,
     ReminderType,
 )
-from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.schemas.governance import (
-    AttestationCreate, AttestationResponse, PolicyCreate, PolicyResponse,
-    PolicyUpdate, PolicyVersionResponse, PolicyWorkflowAction,
+    AttestationCreate,
+    AttestationResponse,
+    PolicyCreate,
+    PolicyResponse,
+    PolicyUpdate,
+    PolicyVersionResponse,
+    PolicyWorkflowAction,
 )
 
 log = logging.getLogger("verigo.api.governance.policies")
@@ -43,9 +57,7 @@ DISCLAIMER = (
 
 
 def _get_policy(policy_id: str, org_id: str, db: Session) -> Policy:
-    p = db.query(Policy).filter(
-        Policy.id == policy_id, Policy.org_id == org_id
-    ).first()
+    p = db.query(Policy).filter(Policy.id == policy_id, Policy.org_id == org_id).first()
     if not p:
         raise HTTPException(404, "Policy not found")
     return p
@@ -53,10 +65,14 @@ def _get_policy(policy_id: str, org_id: str, db: Session) -> Policy:
 
 def _next_policy_number(policy_type: PolicyType, org_id: str, db: Session) -> str:
     prefix = POLICY_NUMBER_PREFIX.get(policy_type, "GOV")
-    count = db.query(Policy).filter(
-        Policy.org_id == org_id,
-        Policy.policy_type == policy_type,
-    ).count()
+    count = (
+        db.query(Policy)
+        .filter(
+            Policy.org_id == org_id,
+            Policy.policy_type == policy_type,
+        )
+        .count()
+    )
     return f"{prefix}-{str(count + 1).zfill(3)}"
 
 
@@ -69,17 +85,19 @@ def _create_workflow_event(
     comments: Optional[str],
     db: Session,
 ) -> None:
-    db.add(PolicyWorkflowEvent(
-        policy_id=policy.id,
-        org_id=policy.org_id,
-        from_status=from_status,
-        to_status=to_status,
-        action=action,
-        actor_id=actor_id,
-        comments=comments,
-        version_at_event=policy.version_string,
-        occurred_at=datetime.now(timezone.utc),
-    ))
+    db.add(
+        PolicyWorkflowEvent(
+            policy_id=policy.id,
+            org_id=policy.org_id,
+            from_status=from_status,
+            to_status=to_status,
+            action=action,
+            actor_id=actor_id,
+            comments=comments,
+            version_at_event=policy.version_string,
+            occurred_at=datetime.now(timezone.utc),
+        )
+    )
 
 
 def _create_version_snapshot(
@@ -89,25 +107,27 @@ def _create_version_snapshot(
     actor_id: str,
     db: Session,
 ) -> None:
-    db.add(PolicyVersion(
-        policy_id=policy.id,
-        org_id=policy.org_id,
-        version_major=policy.version_major,
-        version_minor=policy.version_minor,
-        version_label=policy.version_string,
-        title=policy.title,
-        content=policy.content,
-        summary=policy.summary,
-        scope=policy.scope,
-        attachments=policy.attachments or [],
-        approved_by=policy.approver,
-        approved_at=datetime.now(timezone.utc),
-        effective_date=policy.effective_date,
-        review_due_date=policy.review_due_date,
-        change_type=change_type,
-        change_summary=change_summary,
-        created_by=actor_id,
-    ))
+    db.add(
+        PolicyVersion(
+            policy_id=policy.id,
+            org_id=policy.org_id,
+            version_major=policy.version_major,
+            version_minor=policy.version_minor,
+            version_label=policy.version_string,
+            title=policy.title,
+            content=policy.content,
+            summary=policy.summary,
+            scope=policy.scope,
+            attachments=policy.attachments or [],
+            approved_by=policy.approver,
+            approved_at=datetime.now(timezone.utc),
+            effective_date=policy.effective_date,
+            review_due_date=policy.review_due_date,
+            change_type=change_type,
+            change_summary=change_summary,
+            created_by=actor_id,
+        )
+    )
 
 
 def _schedule_reminders(policy: Policy, db: Session) -> None:
@@ -115,6 +135,7 @@ def _schedule_reminders(policy: Policy, db: Session) -> None:
     if not policy.review_due_date:
         return
     from datetime import timedelta
+
     for reminder_type, days_before in [
         (ReminderType.sixty_day, 60),
         (ReminderType.thirty_day, 30),
@@ -123,21 +144,28 @@ def _schedule_reminders(policy: Policy, db: Session) -> None:
     ]:
         scheduled = policy.review_due_date - timedelta(days=days_before)
         if scheduled >= date.today():
-            db.add(PolicyReviewReminder(
-                policy_id=policy.id,
-                org_id=policy.org_id,
-                reminder_type=reminder_type,
-                scheduled_date=scheduled,
-                review_due_date=policy.review_due_date,
-                recipient_ids=[p for p in [
-                    policy.document_owner,
-                    policy.compliance_reviewer,
-                    policy.approver,
-                ] if p],
-            ))
+            db.add(
+                PolicyReviewReminder(
+                    policy_id=policy.id,
+                    org_id=policy.org_id,
+                    reminder_type=reminder_type,
+                    scheduled_date=scheduled,
+                    review_due_date=policy.review_due_date,
+                    recipient_ids=[
+                        p
+                        for p in [
+                            policy.document_owner,
+                            policy.compliance_reviewer,
+                            policy.approver,
+                        ]
+                        if p
+                    ],
+                )
+            )
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
+
 
 @router.post("", response_model=PolicyResponse, status_code=201)
 def create_policy(
@@ -146,7 +174,13 @@ def create_policy(
     db: Session = Depends(get_db),
 ):
     oid = org_id_for(current_user)
-    sol = db.query(__import__("app.models.aml_solution", fromlist=["AMLSolution"]).AMLSolution).filter_by(org_id=oid).first()
+    sol = (
+        db.query(
+            __import__("app.models.aml_solution", fromlist=["AMLSolution"]).AMLSolution
+        )
+        .filter_by(org_id=oid)
+        .first()
+    )
     if not sol:
         raise HTTPException(404, "AML Solution not found — complete onboarding first")
 
@@ -180,8 +214,13 @@ def create_policy(
     db.flush()
 
     _create_workflow_event(
-        policy, PolicyLifecycleStatus.draft, PolicyLifecycleStatus.draft,
-        "created", current_user.id, None, db,
+        policy,
+        PolicyLifecycleStatus.draft,
+        PolicyLifecycleStatus.draft,
+        "created",
+        current_user.id,
+        None,
+        db,
     )
     db.commit()
     db.refresh(policy)
@@ -193,7 +232,9 @@ def create_policy(
 def list_policies(
     status: Optional[PolicyLifecycleStatus] = Query(None),
     policy_type: Optional[PolicyType] = Query(None),
-    due_for_review: bool = Query(False, description="Only policies with review_due_date within 30 days"),
+    due_for_review: bool = Query(
+        False, description="Only policies with review_due_date within 30 days"
+    ),
     pagination: Pagination = Depends(),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -206,6 +247,7 @@ def list_policies(
         q = q.filter(Policy.policy_type == policy_type)
     if due_for_review:
         from datetime import timedelta
+
         cutoff = date.today() + timedelta(days=30)
         q = q.filter(
             Policy.review_due_date <= cutoff,
@@ -238,20 +280,25 @@ def update_policy(
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(policy, field, value)
 
-    db.add(AuditLog(
-        org_id=policy.org_id,
-        actor_id=current_user.id,
-        action="governance.policy.update",
-        entity_type="Policy",
-        entity_id=policy.id,
-        detail={"fields_updated": list(payload.model_dump(exclude_none=True).keys())},
-    ))
+    db.add(
+        AuditLog(
+            org_id=policy.org_id,
+            actor_id=current_user.id,
+            action="governance.policy.update",
+            entity_type="Policy",
+            entity_id=policy.id,
+            detail={
+                "fields_updated": list(payload.model_dump(exclude_none=True).keys())
+            },
+        )
+    )
     db.commit()
     db.refresh(policy)
     return policy
 
 
 # ── Workflow transitions ───────────────────────────────────────────────────────
+
 
 @router.post("/{policy_id}/workflow", response_model=PolicyResponse)
 def policy_workflow_action(
@@ -271,14 +318,14 @@ def policy_workflow_action(
     from_status = policy.status
 
     ACTION_TO_STATUS = {
-        "submit_for_review":       PolicyLifecycleStatus.internal_review,
-        "submit_for_compliance":   PolicyLifecycleStatus.compliance_review,
-        "submit_for_approval":     PolicyLifecycleStatus.pending_approval,
-        "request_changes":         PolicyLifecycleStatus.internal_review,
-        "publish":                 PolicyLifecycleStatus.published,
+        "submit_for_review": PolicyLifecycleStatus.internal_review,
+        "submit_for_compliance": PolicyLifecycleStatus.compliance_review,
+        "submit_for_approval": PolicyLifecycleStatus.pending_approval,
+        "request_changes": PolicyLifecycleStatus.internal_review,
+        "publish": PolicyLifecycleStatus.published,
         "trigger_periodic_review": PolicyLifecycleStatus.periodic_review,
-        "supersede":               PolicyLifecycleStatus.superseded,
-        "archive":                 PolicyLifecycleStatus.archived,
+        "supersede": PolicyLifecycleStatus.superseded,
+        "archive": PolicyLifecycleStatus.archived,
     }
 
     to_status = ACTION_TO_STATUS.get(payload.action)
@@ -288,8 +335,7 @@ def policy_workflow_action(
     allowed = ALLOWED_TRANSITIONS.get(from_status, [])
     if to_status not in allowed:
         raise HTTPException(
-            422,
-            f"Cannot move from '{from_status.value}' to '{to_status.value}'"
+            422, f"Cannot move from '{from_status.value}' to '{to_status.value}'"
         )
 
     # Role gates for privileged transitions
@@ -313,27 +359,37 @@ def policy_workflow_action(
 
     elif payload.action == "submit_for_approval":
         if current_user.role.value not in ("admin", "mlro", "compliance"):
-            raise HTTPException(403, "Compliance role or above required to submit for approval")
+            raise HTTPException(
+                403, "Compliance role or above required to submit for approval"
+            )
 
     policy.status = to_status
     _create_workflow_event(
-        policy, from_status, to_status, payload.action,
-        current_user.id, payload.comments, db,
+        policy,
+        from_status,
+        to_status,
+        payload.action,
+        current_user.id,
+        payload.comments,
+        db,
     )
-    db.add(AuditLog(
-        org_id=policy.org_id,
-        actor_id=current_user.id,
-        action=f"governance.policy.{payload.action}",
-        entity_type="Policy",
-        entity_id=policy.id,
-        detail={"from": from_status.value, "to": to_status.value},
-    ))
+    db.add(
+        AuditLog(
+            org_id=policy.org_id,
+            actor_id=current_user.id,
+            action=f"governance.policy.{payload.action}",
+            entity_type="Policy",
+            entity_id=policy.id,
+            detail={"from": from_status.value, "to": to_status.value},
+        )
+    )
     db.commit()
     db.refresh(policy)
     return policy
 
 
 # ── Version history ───────────────────────────────────────────────────────────
+
 
 @router.get("/{policy_id}/versions", response_model=List[PolicyVersionResponse])
 def list_policy_versions(
@@ -342,12 +398,16 @@ def list_policy_versions(
     db: Session = Depends(get_db),
 ):
     _get_policy(policy_id, org_id_for(current_user), db)
-    return db.query(PolicyVersion).filter(
-        PolicyVersion.policy_id == policy_id
-    ).order_by(PolicyVersion.created_at.desc()).all()
+    return (
+        db.query(PolicyVersion)
+        .filter(PolicyVersion.policy_id == policy_id)
+        .order_by(PolicyVersion.created_at.desc())
+        .all()
+    )
 
 
 # ── Workflow audit trail ──────────────────────────────────────────────────────
+
 
 @router.get("/{policy_id}/audit", response_model=List[dict])
 def get_policy_audit(
@@ -356,9 +416,12 @@ def get_policy_audit(
     db: Session = Depends(get_db),
 ):
     _get_policy(policy_id, org_id_for(current_user), db)
-    events = db.query(PolicyWorkflowEvent).filter(
-        PolicyWorkflowEvent.policy_id == policy_id
-    ).order_by(PolicyWorkflowEvent.occurred_at.asc()).all()
+    events = (
+        db.query(PolicyWorkflowEvent)
+        .filter(PolicyWorkflowEvent.policy_id == policy_id)
+        .order_by(PolicyWorkflowEvent.occurred_at.asc())
+        .all()
+    )
     return [
         {
             "action": e.action,
@@ -375,6 +438,7 @@ def get_policy_audit(
 
 # ── Attestations ──────────────────────────────────────────────────────────────
 
+
 @router.post("/{policy_id}/attest", response_model=AttestationResponse, status_code=201)
 def attest_policy(
     policy_id: str,
@@ -386,16 +450,21 @@ def attest_policy(
     if policy.status != PolicyLifecycleStatus.published:
         raise HTTPException(422, "Can only attest to published policies")
 
-    existing = db.query(PolicyAttestation).filter(
-        PolicyAttestation.policy_id == policy_id,
-        PolicyAttestation.user_id == current_user.id,
-        PolicyAttestation.attestation_type == payload.attestation_type,
-        PolicyAttestation.policy_version == policy.version_string,
-    ).first()
+    existing = (
+        db.query(PolicyAttestation)
+        .filter(
+            PolicyAttestation.policy_id == policy_id,
+            PolicyAttestation.user_id == current_user.id,
+            PolicyAttestation.attestation_type == payload.attestation_type,
+            PolicyAttestation.policy_version == policy.version_string,
+        )
+        .first()
+    )
     if existing:
         raise HTTPException(409, "You have already attested to this version")
 
     from datetime import timedelta
+
     attestation = PolicyAttestation(
         policy_id=policy_id,
         org_id=policy.org_id,
@@ -424,6 +493,9 @@ def list_attestations(
     db: Session = Depends(get_db),
 ):
     _get_policy(policy_id, org_id_for(current_user), db)
-    return db.query(PolicyAttestation).filter(
-        PolicyAttestation.policy_id == policy_id
-    ).order_by(PolicyAttestation.attested_at.desc()).all()
+    return (
+        db.query(PolicyAttestation)
+        .filter(PolicyAttestation.policy_id == policy_id)
+        .order_by(PolicyAttestation.attested_at.desc())
+        .all()
+    )

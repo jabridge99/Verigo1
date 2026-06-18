@@ -10,6 +10,7 @@ Public API:
   create_assessment_flag()       — called when staff fail a training assessment
   get_training_gap_report()      — links training completion to risk decision quality
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,19 +20,28 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.training_trigger import (
-    TrainingTriggerRule, TrainingTriggerLog, RegulatoryUpdateEvent,
-    AssessmentOutcomeFlag,
-    TriggerEventType, TriggerTargetType, TriggerStatus,
-    RegulatoryUpdateStatus, AssessmentFlagStatus,
-    SYSTEM_TRIGGER_RULES,
-)
 from app.models.governance_training import (
-    TrainingCourse, TrainingAssignment, GovernanceTrainingRecord,
-    TrainingStatus, AssignmentTrigger, TrainingType,
+    AssignmentTrigger,
+    GovernanceTrainingRecord,
+    TrainingAssignment,
+    TrainingCourse,
+    TrainingStatus,
+    TrainingType,
+)
+from app.models.organisation import Organisation
+from app.models.training_trigger import (
+    SYSTEM_TRIGGER_RULES,
+    AssessmentFlagStatus,
+    AssessmentOutcomeFlag,
+    RegulatoryUpdateEvent,
+    RegulatoryUpdateStatus,
+    TrainingTriggerLog,
+    TrainingTriggerRule,
+    TriggerEventType,
+    TriggerStatus,
+    TriggerTargetType,
 )
 from app.models.user import User, UserRole
-from app.models.organisation import Organisation
 
 log = logging.getLogger("tvg.training_trigger")
 
@@ -39,6 +49,7 @@ log = logging.getLogger("tvg.training_trigger")
 # ══════════════════════════════════════════════════════════════════════════════
 # MAIN ENTRY POINT — called by other services when a risk event fires
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def evaluate_risk_event(
     db: Session,
@@ -57,21 +68,29 @@ def evaluate_risk_event(
     Returns summary of assignments created.
     """
     # Load active rules for this org + event type (org rules + unoverridden system rules)
-    org_rules = db.query(TrainingTriggerRule).filter(
-        TrainingTriggerRule.org_id == org_id,
-        TrainingTriggerRule.event_type == event_type,
-        TrainingTriggerRule.status == TriggerStatus.active,
-    ).all()
+    org_rules = (
+        db.query(TrainingTriggerRule)
+        .filter(
+            TrainingTriggerRule.org_id == org_id,
+            TrainingTriggerRule.event_type == event_type,
+            TrainingTriggerRule.status == TriggerStatus.active,
+        )
+        .all()
+    )
 
     # System rules only apply if the org hasn't created an override rule for this event
     org_overrides_event = any(r.override_system for r in org_rules)
     if not org_overrides_event:
-        system_rules = db.query(TrainingTriggerRule).filter(
-            TrainingTriggerRule.org_id.is_(None),
-            TrainingTriggerRule.event_type == event_type,
-            TrainingTriggerRule.status == TriggerStatus.active,
-            TrainingTriggerRule.is_system == True,
-        ).all()
+        system_rules = (
+            db.query(TrainingTriggerRule)
+            .filter(
+                TrainingTriggerRule.org_id.is_(None),
+                TrainingTriggerRule.event_type == event_type,
+                TrainingTriggerRule.status == TriggerStatus.active,
+                TrainingTriggerRule.is_system == True,
+            )
+            .all()
+        )
         all_rules = org_rules + system_rules
     else:
         all_rules = org_rules
@@ -115,7 +134,12 @@ def evaluate_risk_event(
 
     log.info(
         "Risk event %s (org=%s, entity=%s/%s) → %d assignments across %d rules",
-        event_type, org_id, entity_type, entity_id, total_assignments, len(logs_created),
+        event_type,
+        org_id,
+        entity_type,
+        entity_id,
+        total_assignments,
+        len(logs_created),
     )
 
     return {
@@ -129,6 +153,7 @@ def evaluate_risk_event(
 # ══════════════════════════════════════════════════════════════════════════════
 # REGULATORY UPDATE BROADCAST
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def publish_regulatory_update(
     db: Session,
@@ -145,7 +170,9 @@ def publish_regulatory_update(
     if not update:
         raise HTTPException(404, "Regulatory update not found")
     if update.status != RegulatoryUpdateStatus.draft:
-        raise HTTPException(422, f"Cannot publish — current status is '{update.status}'")
+        raise HTTPException(
+            422, f"Cannot publish — current status is '{update.status}'"
+        )
 
     affected_industries = update.affected_industries or []
     affected_roles = update.affected_roles or []
@@ -154,7 +181,9 @@ def publish_regulatory_update(
     # Find all affected orgs
     org_query = db.query(Organisation).filter(Organisation.status == "active")
     if affected_industries:
-        org_query = org_query.filter(Organisation.industry_type.in_(affected_industries))
+        org_query = org_query.filter(
+            Organisation.industry_type.in_(affected_industries)
+        )
     orgs = org_query.all()
 
     total_assignments = 0
@@ -167,7 +196,9 @@ def publish_regulatory_update(
             continue
 
         # Find target users
-        user_query = db.query(User).filter(User.org_id == org.id, User.status == "active")
+        user_query = db.query(User).filter(
+            User.org_id == org.id, User.status == "active"
+        )
         if affected_roles:
             user_query = user_query.filter(User.role.in_(affected_roles))
         target_users = user_query.all()
@@ -216,7 +247,9 @@ def publish_regulatory_update(
 
     log.info(
         "Regulatory update %s published → %d orgs notified, %d assignments created",
-        update.event_ref, orgs_notified, total_assignments,
+        update.event_ref,
+        orgs_notified,
+        total_assignments,
     )
 
     return {
@@ -231,6 +264,7 @@ def publish_regulatory_update(
 # ══════════════════════════════════════════════════════════════════════════════
 # ASSESSMENT OUTCOME FLAG
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def create_assessment_flag(
     db: Session,
@@ -247,29 +281,41 @@ def create_assessment_flag(
     Called when staff fail a training assessment.
     Links training failure to recent risk decisions by that user.
     """
-    from app.models.transaction import Transaction
-    from app.models.monitoring import TransactionAlert
     from app.models.case import Case
+    from app.models.monitoring import TransactionAlert
+    from app.models.transaction import Transaction
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
 
     # Gather recent risk decisions by this user
     recent_txn_ids = [
-        t.id for t in db.query(Transaction).filter(
+        t.id
+        for t in db.query(Transaction)
+        .filter(
             Transaction.org_id == org_id,
             Transaction.created_at >= cutoff,
-        ).limit(20).all()
+        )
+        .limit(20)
+        .all()
     ]
-    recent_alert_count = db.query(TransactionAlert).filter(
-        TransactionAlert.org_id == org_id,
-        TransactionAlert.assigned_to == user_id,
-        TransactionAlert.created_at >= cutoff,
-    ).count()
-    recent_case_count = db.query(Case).filter(
-        Case.org_id == org_id,
-        Case.assigned_to == user_id,
-        Case.created_at >= cutoff,
-    ).count()
+    recent_alert_count = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.org_id == org_id,
+            TransactionAlert.assigned_to == user_id,
+            TransactionAlert.created_at >= cutoff,
+        )
+        .count()
+    )
+    recent_case_count = (
+        db.query(Case)
+        .filter(
+            Case.org_id == org_id,
+            Case.assigned_to == user_id,
+            Case.created_at >= cutoff,
+        )
+        .count()
+    )
 
     # Require MLRO oversight if this is the 2nd+ failed attempt
     requires_oversight = attempt_number >= 2
@@ -301,6 +347,7 @@ def create_assessment_flag(
 # TRAINING GAP REPORT
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def get_training_gap_report(db: Session, org_id: str) -> dict:
     """
     Cross-references training completion with risk decision activity.
@@ -308,24 +355,32 @@ def get_training_gap_report(db: Session, org_id: str) -> dict:
     the required training — the core audit-readiness metric.
     """
     users = db.query(User).filter(User.org_id == org_id, User.status == "active").all()
-    courses = db.query(TrainingCourse).filter(
-        TrainingCourse.org_id == org_id,
-        TrainingCourse.is_mandatory == True,
-        TrainingCourse.is_active == True,
-    ).all()
+    courses = (
+        db.query(TrainingCourse)
+        .filter(
+            TrainingCourse.org_id == org_id,
+            TrainingCourse.is_mandatory == True,
+            TrainingCourse.is_active == True,
+        )
+        .all()
+    )
 
     gaps = []
     for user in users:
-        user_records = db.query(GovernanceTrainingRecord).filter(
-            GovernanceTrainingRecord.org_id == org_id,
-            GovernanceTrainingRecord.user_id == user.id,
-        ).all()
+        user_records = (
+            db.query(GovernanceTrainingRecord)
+            .filter(
+                GovernanceTrainingRecord.org_id == org_id,
+                GovernanceTrainingRecord.user_id == user.id,
+            )
+            .all()
+        )
         completed_course_ids = {
-            r.course_id for r in user_records
-            if r.status == TrainingStatus.completed
+            r.course_id for r in user_records if r.status == TrainingStatus.completed
         }
         overdue_course_ids = {
-            r.course_id for r in user_records
+            r.course_id
+            for r in user_records
             if r.status in (TrainingStatus.overdue, TrainingStatus.expired)
         }
 
@@ -333,37 +388,56 @@ def get_training_gap_report(db: Session, org_id: str) -> dict:
         for course in courses:
             if course.id not in completed_course_ids:
                 is_overdue = course.id in overdue_course_ids
-                user_gaps.append({
-                    "course_id": course.id,
-                    "course_name": course.name,
-                    "training_type": course.training_type,
-                    "is_overdue": is_overdue,
-                    "regulatory_references": course.regulatory_references,
-                })
+                user_gaps.append(
+                    {
+                        "course_id": course.id,
+                        "course_name": course.name,
+                        "training_type": course.training_type,
+                        "is_overdue": is_overdue,
+                        "regulatory_references": course.regulatory_references,
+                    }
+                )
 
-        open_flags = db.query(AssessmentOutcomeFlag).filter_by(
-            org_id=org_id,
-            user_id=user.id,
-            status=AssessmentFlagStatus.open,
-        ).count()
+        open_flags = (
+            db.query(AssessmentOutcomeFlag)
+            .filter_by(
+                org_id=org_id,
+                user_id=user.id,
+                status=AssessmentFlagStatus.open,
+            )
+            .count()
+        )
 
         if user_gaps or open_flags:
-            gaps.append({
-                "user_id": user.id,
-                "user_name": user.full_name if hasattr(user, "full_name") else user.email,
-                "role": user.role,
-                "missing_mandatory_courses": user_gaps,
-                "open_assessment_flags": open_flags,
-                "gap_count": len(user_gaps),
-                "risk_level": "high" if open_flags > 0 or any(g["is_overdue"] for g in user_gaps) else "medium",
-            })
+            gaps.append(
+                {
+                    "user_id": user.id,
+                    "user_name": user.full_name
+                    if hasattr(user, "full_name")
+                    else user.email,
+                    "role": user.role,
+                    "missing_mandatory_courses": user_gaps,
+                    "open_assessment_flags": open_flags,
+                    "gap_count": len(user_gaps),
+                    "risk_level": "high"
+                    if open_flags > 0 or any(g["is_overdue"] for g in user_gaps)
+                    else "medium",
+                }
+            )
 
     # Trigger log summary — how many assignments were auto-created this quarter
-    quarter_start = date.today().replace(month=((date.today().month - 1) // 3) * 3 + 1, day=1)
-    trigger_logs_this_quarter = db.query(TrainingTriggerLog).filter(
-        TrainingTriggerLog.org_id == org_id,
-        TrainingTriggerLog.fired_at >= datetime.combine(quarter_start, datetime.min.time()),
-    ).count()
+    quarter_start = date.today().replace(
+        month=((date.today().month - 1) // 3) * 3 + 1, day=1
+    )
+    trigger_logs_this_quarter = (
+        db.query(TrainingTriggerLog)
+        .filter(
+            TrainingTriggerLog.org_id == org_id,
+            TrainingTriggerLog.fired_at
+            >= datetime.combine(quarter_start, datetime.min.time()),
+        )
+        .count()
+    )
 
     total_gaps = sum(g["gap_count"] for g in gaps)
     high_risk_staff = [g for g in gaps if g["risk_level"] == "high"]
@@ -388,7 +462,10 @@ def get_training_gap_report(db: Session, org_id: str) -> dict:
 # ORG SEEDING — called at org creation
 # ══════════════════════════════════════════════════════════════════════════════
 
-def seed_default_trigger_rules(db: Session, org_id: str, solution_id: str, created_by: str) -> int:
+
+def seed_default_trigger_rules(
+    db: Session, org_id: str, solution_id: str, created_by: str
+) -> int:
     """
     Seeds system-level trigger rules for a new org.
     Matches each SYSTEM_TRIGGER_RULE to the org's seeded TrainingCourse
@@ -396,19 +473,26 @@ def seed_default_trigger_rules(db: Session, org_id: str, solution_id: str, creat
     """
     seeded = 0
     for rule_def in SYSTEM_TRIGGER_RULES:
-        course = db.query(TrainingCourse).filter_by(
-            org_id=org_id,
-        ).filter(
-            TrainingCourse.training_type == rule_def["course_training_type"]
-        ).first()
+        course = (
+            db.query(TrainingCourse)
+            .filter_by(
+                org_id=org_id,
+            )
+            .filter(TrainingCourse.training_type == rule_def["course_training_type"])
+            .first()
+        )
         if not course:
             continue
 
-        existing = db.query(TrainingTriggerRule).filter_by(
-            org_id=org_id,
-            event_type=rule_def["event_type"],
-            is_system=True,
-        ).first()
+        existing = (
+            db.query(TrainingTriggerRule)
+            .filter_by(
+                org_id=org_id,
+                event_type=rule_def["event_type"],
+                is_system=True,
+            )
+            .first()
+        )
         if existing:
             continue
 
@@ -437,6 +521,7 @@ def seed_default_trigger_rules(db: Session, org_id: str, solution_id: str, creat
 # ══════════════════════════════════════════════════════════════════════════════
 # INTERNAL HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def _conditions_match(condition_filter: dict, entity_snapshot: dict) -> bool:
     """Returns True if all conditions in the filter match the entity snapshot."""
@@ -474,43 +559,63 @@ def _resolve_target_users(
     if target == TriggerTargetType.handled_analyst:
         if not handled_by_user_id:
             return []
-        user = db.query(User).filter_by(id=handled_by_user_id, org_id=org_id, status="active").first()
+        user = (
+            db.query(User)
+            .filter_by(id=handled_by_user_id, org_id=org_id, status="active")
+            .first()
+        )
         return [user] if user else []
 
     if target == TriggerTargetType.all_role:
         roles = rule.target_roles or []
         if not roles:
             return []
-        return db.query(User).filter(
-            User.org_id == org_id,
-            User.status == "active",
-            User.role.in_(roles),
-        ).all()
+        return (
+            db.query(User)
+            .filter(
+                User.org_id == org_id,
+                User.status == "active",
+                User.role.in_(roles),
+            )
+            .all()
+        )
 
     if target == TriggerTargetType.all_staff:
         return db.query(User).filter_by(org_id=org_id, status="active").all()
 
     if target == TriggerTargetType.specific_users:
         ids = rule.specific_user_ids or []
-        return db.query(User).filter(
-            User.id.in_(ids),
-            User.org_id == org_id,
-            User.status == "active",
-        ).all()
+        return (
+            db.query(User)
+            .filter(
+                User.id.in_(ids),
+                User.org_id == org_id,
+                User.status == "active",
+            )
+            .all()
+        )
 
     if target == TriggerTargetType.mlro_only:
-        return db.query(User).filter(
-            User.org_id == org_id,
-            User.status == "active",
-            User.role.in_([UserRole.admin, UserRole.mlro]),
-        ).all()
+        return (
+            db.query(User)
+            .filter(
+                User.org_id == org_id,
+                User.status == "active",
+                User.role.in_([UserRole.admin, UserRole.mlro]),
+            )
+            .all()
+        )
 
     if target == TriggerTargetType.compliance_team:
-        return db.query(User).filter(
-            User.org_id == org_id,
-            User.status == "active",
-            User.role.in_([UserRole.admin, UserRole.mlro, UserRole.compliance]),
-        ).all()
+        return (
+            db.query(User)
+            .filter(
+                User.org_id == org_id,
+                User.status == "active",
+                User.role.in_([UserRole.admin, UserRole.mlro, UserRole.compliance]),
+            )
+            .all()
+        )
 
     return []
 
@@ -524,11 +629,15 @@ def _is_in_cooldown(
     if cooldown_days <= 0:
         return False
     cutoff = datetime.now(timezone.utc) - timedelta(days=cooldown_days)
-    recent = db.query(GovernanceTrainingRecord).filter(
-        GovernanceTrainingRecord.user_id == user_id,
-        GovernanceTrainingRecord.course_id == course_id,
-        GovernanceTrainingRecord.created_at >= cutoff,
-    ).first()
+    recent = (
+        db.query(GovernanceTrainingRecord)
+        .filter(
+            GovernanceTrainingRecord.user_id == user_id,
+            GovernanceTrainingRecord.course_id == course_id,
+            GovernanceTrainingRecord.created_at >= cutoff,
+        )
+        .first()
+    )
     return recent is not None
 
 
@@ -573,6 +682,7 @@ def _create_training_records_direct(
 ) -> tuple[list[str], list[User], list[User]]:
     # Find solution_id (use first AML solution for org)
     from app.models.aml_solution import AMLSolution
+
     solution = db.query(AMLSolution).filter_by(org_id=org_id).first()
     if not solution:
         return [], [], target_users
@@ -645,16 +755,24 @@ def _resolve_course_for_update(
         # Try to find an org-local version of this course type
         linked = db.query(TrainingCourse).filter_by(id=update.linked_course_id).first()
         if linked:
-            org_course = db.query(TrainingCourse).filter_by(
-                org_id=org_id,
-                training_type=linked.training_type,
-                is_active=True,
-            ).first()
+            org_course = (
+                db.query(TrainingCourse)
+                .filter_by(
+                    org_id=org_id,
+                    training_type=linked.training_type,
+                    is_active=True,
+                )
+                .first()
+            )
             return org_course or linked
 
     # Fall back to annual refresher
-    return db.query(TrainingCourse).filter_by(
-        org_id=org_id,
-        training_type=TrainingType.annual_aml_refresher,
-        is_active=True,
-    ).first()
+    return (
+        db.query(TrainingCourse)
+        .filter_by(
+            org_id=org_id,
+            training_type=TrainingType.annual_aml_refresher,
+            is_active=True,
+        )
+        .first()
+    )

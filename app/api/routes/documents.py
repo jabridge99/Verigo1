@@ -98,6 +98,7 @@ async def upload_document(
     current_user: User = Depends(_current_user),
 ):
     import hashlib
+
     content = await file.read()
     if len(content) > MAX_SIZE:
         raise HTTPException(413, f"File exceeds {MAX_SIZE // (1024 * 1024)} MB limit")
@@ -246,6 +247,7 @@ async def delete_document(
 
 # ── Legal hold ────────────────────────────────────────────────────────────────
 
+
 class LegalHoldPayload(BaseModel):
     reason: str
 
@@ -261,6 +263,7 @@ def place_legal_hold(
 ):
     """Place a legal hold on a document — blocks deletion and archival."""
     from datetime import datetime, timezone
+
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
@@ -300,6 +303,7 @@ def release_legal_hold(
 
 # ── Versioning ────────────────────────────────────────────────────────────────
 
+
 @router.get("/{doc_id}/versions")
 def get_versions(
     doc_id: str,
@@ -320,9 +324,11 @@ def get_versions(
     while current:
         chain.append(current)
         if current.previous_version_id:
-            current = db.query(Document).filter(
-                Document.id == current.previous_version_id
-            ).first()
+            current = (
+                db.query(Document)
+                .filter(Document.id == current.previous_version_id)
+                .first()
+            )
         else:
             break
     chain.reverse()
@@ -357,7 +363,6 @@ async def upload_new_version(
     The old version is retained (never deleted).
     """
     import hashlib
-    from app.models.document import Document
 
     existing = svc.get_document(db, doc_id)
     if not existing:

@@ -4,7 +4,6 @@ Fixes: authentication required, RBAC on review, reviewer_id from session,
 filename sanitisation, tenant isolation, MIME validation.
 """
 
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,7 +29,12 @@ from app.services.identity_verification import (
     verify_document,
 )
 from app.services.sanctions_screening import screen_name
-from app.services.usage_billing_service import find_by_reference, mark_completed, mark_failed, record_usage
+from app.services.usage_billing_service import (
+    find_by_reference,
+    mark_completed,
+    mark_failed,
+    record_usage,
+)
 
 router = APIRouter(prefix="/kyc", tags=["KYC"])
 
@@ -72,7 +76,11 @@ def initiate_kyc(
     if not customer:
         raise HTTPException(404, "Customer not found")
     _assert_tenant(current_user, customer.org_id)
-    if customer.status not in (CustomerStatus.draft, CustomerStatus.rejected, CustomerStatus.closed):
+    if customer.status not in (
+        CustomerStatus.draft,
+        CustomerStatus.rejected,
+        CustomerStatus.closed,
+    ):
         raise HTTPException(400, "Active KYC process already exists")
     customer.status = CustomerStatus.pending
     db.commit()
@@ -172,7 +180,9 @@ def review_kyc(
         customer.status = CustomerStatus.rejected
     elif approve:
         requires_ecdd = customer.is_pep or customer.risk_score >= 61
-        customer.status = CustomerStatus.edd_required if requires_ecdd else CustomerStatus.active
+        customer.status = (
+            CustomerStatus.edd_required if requires_ecdd else CustomerStatus.active
+        )
     else:
         customer.status = CustomerStatus.rejected
 
@@ -237,7 +247,9 @@ async def create_sumsub_token(
     record_usage(
         db,
         org_id=customer.org_id,
-        event_type=UsageEventType.business_verification if kyb else UsageEventType.identity_verification,
+        event_type=UsageEventType.business_verification
+        if kyb
+        else UsageEventType.identity_verification,
         provider=provider.name,
         customer_id=customer.id,
         provider_reference=customer.id,  # joined back to the webhook via externalUserId
@@ -284,7 +296,9 @@ async def sumsub_webhook(request: Request, db: Session = Depends(get_db)):
             org_id=customer.org_id,
             document_type=IdentityDocumentType.other,
             verification_result=(
-                VerificationResult.pass_ if result.review_result == "pass" else VerificationResult.fail
+                VerificationResult.pass_
+                if result.review_result == "pass"
+                else VerificationResult.fail
             ),
             verification_provider=VerificationProvider.sumsub,
             provider_reference=result.applicant_id,

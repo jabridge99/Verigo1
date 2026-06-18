@@ -8,10 +8,10 @@ DISCLAIMER: Guidance is compliance workflow assistance only.
 The platform does not make compliance decisions, provide legal advice,
 or determine tax obligations. All decisions remain with the reporting entity.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 DISCLAIMER = (
     "Recommendations are compliance workflow guidance only. "
@@ -24,8 +24,8 @@ DISCLAIMER = (
 class AssessmentRecommendation:
     action: str
     rationale: str
-    priority: str           # urgent | high | medium | low
-    category: str           # sof | sow | edd | escalation | smr | monitoring | documentation
+    priority: str  # urgent | high | medium | low
+    category: str  # sof | sow | edd | escalation | smr | monitoring | documentation
     regulatory_basis: str = ""
 
 
@@ -51,18 +51,24 @@ def generate_assessment_recommendations(
     """
     recs: list[AssessmentRecommendation] = []
 
-    def _add(action: str, rationale: str, priority: str, category: str, basis: str = ""):
-        recs.append(AssessmentRecommendation(
-            action=action,
-            rationale=rationale,
-            priority=priority,
-            category=category,
-            regulatory_basis=basis,
-        ))
+    def _add(
+        action: str, rationale: str, priority: str, category: str, basis: str = ""
+    ):
+        recs.append(
+            AssessmentRecommendation(
+                action=action,
+                rationale=rationale,
+                priority=priority,
+                category=category,
+                regulatory_basis=basis,
+            )
+        )
 
     customer_is_pep = getattr(customer, "is_pep", False)
     risk_level = getattr(customer, "risk_level", None)
-    risk_val = risk_level.value if hasattr(risk_level, "value") else str(risk_level or "low")
+    risk_val = (
+        risk_level.value if hasattr(risk_level, "value") else str(risk_level or "low")
+    )
 
     # ── SOF recommendations ───────────────────────────────────────────────────
     sof = getattr(assessment, "sof_assessment", None)
@@ -70,7 +76,8 @@ def generate_assessment_recommendations(
         _add(
             "Request Source of Funds documentation",
             "No SOF assessment has been initiated for this matter.",
-            "high", "sof",
+            "high",
+            "sof",
             "AML/CTF Act 2006 s.36 — Customer Due Diligence",
         )
     else:
@@ -78,27 +85,31 @@ def generate_assessment_recommendations(
             _add(
                 "Upload Source of Funds supporting documents",
                 "SOF assessment initiated but no evidence has been uploaded.",
-                "high", "sof",
+                "high",
+                "sof",
                 "AML/CTF Act 2006 s.36 — Customer Due Diligence",
             )
         elif not sof.evidence_reviewed:
             _add(
                 "Review uploaded Source of Funds evidence",
                 "SOF documents have been uploaded but not yet reviewed.",
-                "medium", "sof",
+                "medium",
+                "sof",
             )
         elif not sof.evidence_sufficient:
             _add(
                 "Request additional Source of Funds documentation",
                 "Existing SOF evidence has been reviewed but assessed as insufficient.",
-                "high", "sof",
+                "high",
+                "sof",
                 "AML/CTF Act 2006 s.36 — Customer Due Diligence",
             )
         if sof.additional_info_required:
             _add(
                 "Follow up — additional SOF information required from client",
                 "Reviewer has flagged that additional information is required.",
-                "high", "sof",
+                "high",
+                "sof",
             )
 
     # ── SOW recommendations ───────────────────────────────────────────────────
@@ -107,7 +118,8 @@ def generate_assessment_recommendations(
         _add(
             "Conduct Source of Wealth assessment",
             "Customer is PEP or high/critical risk — SOW assessment is required for EDD.",
-            "urgent", "sow",
+            "urgent",
+            "sow",
             "AML/CTF Act 2006 s.37 — Enhanced Customer Due Diligence",
         )
     elif sow is not None:
@@ -115,28 +127,32 @@ def generate_assessment_recommendations(
             _add(
                 "Obtain Source of Wealth explanation from client",
                 "SOW assessment initiated but no wealth explanation has been recorded.",
-                "high", "sow",
+                "high",
+                "sow",
                 "AML/CTF Act 2006 s.37 — Enhanced Customer Due Diligence",
             )
         elif not sow.evidence_reviewed:
             _add(
                 "Review Source of Wealth supporting evidence",
                 "SOW explanation provided but evidence has not yet been reviewed.",
-                "medium", "sow",
+                "medium",
+                "sow",
             )
         elif not sow.wealth_profile_consistent:
             _add(
                 "Escalate — Source of Wealth inconsistency identified",
                 "Reviewer has assessed the SOW profile as inconsistent. "
                 "Consider escalation and SMR assessment.",
-                "urgent", "sow",
+                "urgent",
+                "sow",
                 "AML/CTF Act 2006 s.41 — Suspicious Matter Reports",
             )
         if sow.additional_review_required:
             _add(
                 "Continue Source of Wealth review",
                 "Additional review has been flagged as required for SOW.",
-                "high", "sow",
+                "high",
+                "sow",
             )
 
     # ── Tax risk indicators ───────────────────────────────────────────────────
@@ -148,7 +164,8 @@ def generate_assessment_recommendations(
                 "Escalate to Compliance Officer — multiple tax risk indicators present",
                 f"{count} tax evasion risk indicators identified. Escalation and enhanced "
                 "scrutiny are recommended. Consider SMR assessment.",
-                "urgent", "escalation",
+                "urgent",
+                "escalation",
                 "AML/CTF Act 2006 s.41 — Suspicious Matter Reports; "
                 "AUSTRAC Tax Evasion Risk Indicators Guidance",
             )
@@ -156,21 +173,24 @@ def generate_assessment_recommendations(
             _add(
                 "Review tax risk indicators with Compliance Officer",
                 f"{count} tax risk indicators identified. Compliance Officer review recommended.",
-                "high", "escalation",
+                "high",
+                "escalation",
                 "AUSTRAC Tax Evasion Risk Indicators Guidance",
             )
         else:
             _add(
                 "Document response to identified tax risk indicator",
                 f"{count} tax risk indicator noted. Document the explanation and any mitigating factors.",
-                "medium", "documentation",
+                "medium",
+                "documentation",
             )
         if tax.indicator_unexplained_wealth or tax.indicator_income_inconsistency:
             _add(
                 "Consider SMR assessment — unexplained wealth or income inconsistency",
                 "Unexplained wealth or income inconsistency indicator is present. "
                 "Review whether a Suspicious Matter Report should be considered.",
-                "urgent", "smr",
+                "urgent",
+                "smr",
                 "AML/CTF Act 2006 s.41 — Suspicious Matter Reports",
             )
 
@@ -181,21 +201,24 @@ def generate_assessment_recommendations(
             _add(
                 "Verify funds destination — high-risk jurisdiction involved",
                 "Investment involves a high-risk jurisdiction but funds destination has not been verified.",
-                "urgent", "documentation",
+                "urgent",
+                "documentation",
                 "FATF Recommendation 19 — Higher-Risk Countries",
             )
         if not inv.beneficial_ownership_verified:
             _add(
                 "Verify beneficial ownership of investment counterparty",
                 "Investment legitimacy assessment is incomplete — beneficial ownership not verified.",
-                "high", "edd",
+                "high",
+                "edd",
                 "AML/CTF Act 2006 s.36 — Customer Due Diligence",
             )
         if not inv.regulatory_registration_verified:
             _add(
                 "Verify regulatory registration of investment counterparty (where applicable)",
                 "Regulatory registration of the counterparty has not been confirmed.",
-                "medium", "documentation",
+                "medium",
+                "documentation",
             )
 
     # ── Checklist completeness ────────────────────────────────────────────────
@@ -207,7 +230,8 @@ def generate_assessment_recommendations(
                 f"Complete professional judgment checklist ({unchecked} items remaining)",
                 "The judgment checklist is not fully completed. "
                 "All required items should be addressed before the assessment is finalised.",
-                "medium", "documentation",
+                "medium",
+                "documentation",
             )
 
     # ── PEP / High-risk customer ──────────────────────────────────────────────
@@ -215,7 +239,8 @@ def generate_assessment_recommendations(
         _add(
             "Conduct Enhanced Due Diligence — PEP customer",
             "Customer is a Politically Exposed Person. EDD is required under AUSTRAC rules.",
-            "urgent", "edd",
+            "urgent",
+            "edd",
             "AML/CTF Act 2006 s.37 — Enhanced Customer Due Diligence; "
             "FATF Recommendation 12 — Politically Exposed Persons",
         )
@@ -223,7 +248,8 @@ def generate_assessment_recommendations(
             "Obtain senior management approval for PEP relationship",
             "Senior management approval is required before establishing or continuing "
             "a business relationship with a PEP.",
-            "urgent", "escalation",
+            "urgent",
+            "escalation",
             "AML/CTF Act 2006 s.37 — Enhanced Customer Due Diligence",
         )
 
@@ -231,13 +257,18 @@ def generate_assessment_recommendations(
         _add(
             "Conduct Enhanced Due Diligence — high risk customer",
             f"Customer is rated {risk_val} risk. EDD measures should be applied.",
-            "high", "edd",
+            "high",
+            "edd",
             "AML/CTF Act 2006 s.37 — Enhanced Customer Due Diligence",
         )
 
     # ── Transaction signals ───────────────────────────────────────────────────
     if transaction is not None:
-        amount = getattr(transaction, "amount_aud", None) or getattr(transaction, "amount", 0) or 0
+        amount = (
+            getattr(transaction, "amount_aud", None)
+            or getattr(transaction, "amount", 0)
+            or 0
+        )
         is_cross_border = getattr(transaction, "is_cross_border", False)
         is_structuring = getattr(transaction, "is_structuring_suspect", False)
         is_near_threshold = getattr(transaction, "is_near_threshold", False)
@@ -247,7 +278,8 @@ def generate_assessment_recommendations(
                 "Consider SMR assessment — structuring indicators present",
                 "The linked transaction has been flagged for possible structuring. "
                 "Review whether a Suspicious Matter Report is required.",
-                "urgent", "smr",
+                "urgent",
+                "smr",
                 "AML/CTF Act 2006 s.41 — Suspicious Matter Reports; "
                 "AUSTRAC Structuring Indicators Guidance",
             )
@@ -255,14 +287,16 @@ def generate_assessment_recommendations(
             _add(
                 "Review transaction for TTR obligation",
                 "Linked transaction is near the AUD 10,000 TTR reporting threshold.",
-                "high", "documentation",
+                "high",
+                "documentation",
                 "AML/CTF Act 2006 s.43 — Threshold Transaction Reports",
             )
         if is_cross_border and amount >= 10_000:
             _add(
                 "Review transaction for IFTI obligation",
                 "Linked transaction is cross-border and may trigger IFTI reporting.",
-                "high", "documentation",
+                "high",
+                "documentation",
                 "AML/CTF Act 2006 s.45 — International Funds Transfer Instructions",
             )
 
@@ -272,7 +306,8 @@ def generate_assessment_recommendations(
             "Schedule ongoing transaction monitoring review",
             "High-risk customers require enhanced ongoing monitoring. "
             "Schedule a periodic review in the compliance calendar.",
-            "medium", "monitoring",
+            "medium",
+            "monitoring",
             "AML/CTF Act 2006 s.36 — Ongoing Customer Due Diligence",
         )
 
