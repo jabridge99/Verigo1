@@ -38,3 +38,4 @@ web/.vercel/
 .DS_Store
 Thumbs.db
 .claude/
+.coverage
