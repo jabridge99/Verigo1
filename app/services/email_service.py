@@ -15,7 +15,7 @@ _BRAND_HEADER = """
 """
 
 _WRAP_OPEN = '<div style="font-family:Inter,system-ui,sans-serif;max-width:580px;margin:0 auto;background:#0d1526;border-radius:12px;overflow:hidden;">'
-_WRAP_CLOSE = '<p style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Verigo · Australian Compliance Operating System<br>© 2025 Verigo Pty Ltd</p></div>'
+_WRAP_CLOSE = '<p style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Verigo · Australian Compliance Operating System<br>© 2025 PSP Education Pty Ltd (ABN 21 628 429 925), trading as Verigo</p></div>'
 _BODY_OPEN = '<div style="padding:28px 32px;">'
 _BODY_CLOSE = "</div>"
 

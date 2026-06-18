@@ -73,6 +73,11 @@ export async function confirmEmailVerification(token: string): Promise<void> {
   await asJson(r)
 }
 
+export async function listMyOrganisations(): Promise<Organisation[]> {
+  const r = await fetch(`${API}/api/v1/organisations`, { credentials: 'include' })
+  return asJson(r)
+}
+
 export async function createOrganisation(name: string): Promise<Organisation> {
   const r = await fetch(`${API}/api/v1/organisations`, {
     method: 'POST',
@@ -134,6 +139,61 @@ export async function generateRiskAssessment(orgId: string): Promise<RiskAssessm
     method: 'POST',
     credentials: 'include',
   })
+  return asJson(r)
+}
+
+export interface AmlProgramVersion {
+  version: number
+  generated_at?: string
+  item_count: number
+  content_hash: string
+  qr_token: string
+  is_current: boolean
+  locked?: boolean
+}
+
+export interface AmlProgramVersionList {
+  versions: AmlProgramVersion[]
+  full_history_available: boolean
+}
+
+export interface AmlProgramVersionDetail {
+  version: number
+  generated_at?: string
+  item_count: number
+  content_hash: string
+  qr_token: string
+  items: AmlProgramItem[]
+}
+
+export interface ProgramHealth {
+  score: number
+  up_to_date: boolean
+  suggestions: { category: string; title: string; description?: string }[]
+}
+
+export async function listAmlProgramVersions(orgId: string): Promise<AmlProgramVersionList> {
+  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/versions`, { credentials: 'include' })
+  return asJson(r)
+}
+
+export async function getAmlProgramVersion(orgId: string, version: number): Promise<AmlProgramVersionDetail> {
+  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/versions/${version}`, { credentials: 'include' })
+  return asJson(r)
+}
+
+export async function exportAmlProgram(orgId: string, reason: string): Promise<void> {
+  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/export`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  })
+  await asJson(r)
+}
+
+export async function getAmlProgramHealth(orgId: string): Promise<ProgramHealth> {
+  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/health`, { credentials: 'include' })
   return asJson(r)
 }
 
