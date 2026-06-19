@@ -17,7 +17,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("organisations", sa.Column("abn", sa.String(20), nullable=True))
+    # "abn" already exists on organisations (added by 06699922bb99); skip it
+    # here to avoid a duplicate-column error.
     op.add_column("organisations", sa.Column("business_address", sa.String(300), nullable=True))
     op.add_column("organisations", sa.Column("phone", sa.String(50), nullable=True))
     op.add_column("organisations", sa.Column("compliance_officer_name", sa.String(200), nullable=True))
@@ -29,4 +30,3 @@ def downgrade() -> None:
     op.drop_column("organisations", "compliance_officer_name")
     op.drop_column("organisations", "phone")
     op.drop_column("organisations", "business_address")
-    op.drop_column("organisations", "abn")

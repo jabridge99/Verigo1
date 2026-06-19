@@ -458,6 +458,9 @@ def upgrade() -> None:
     op.create_index("ix_task_events_task_id", "task_events", ["task_id"])
 
     # ── Documents ─────────────────────────────────────────────────────────────
+    # Redefines the documents table (yet again) with a different schema than
+    # the org_id-based one created earlier in the chain; drop the old one first.
+    op.drop_table("documents")
     op.create_table(
         "documents",
         sa.Column("id", sa.String(), nullable=False),
