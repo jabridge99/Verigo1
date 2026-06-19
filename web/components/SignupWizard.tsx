@@ -108,9 +108,9 @@ export default function SignupWizard() {
             </button>
             <p className="text-slate-400 text-xs text-center">
               By creating an account you agree to our{' '}
-              <Link href="#" className="underline hover:text-slate-600">Terms of Service</Link>{' '}
+              <Link href="/terms" className="underline hover:text-slate-600">Terms of Service</Link>{' '}
               and{' '}
-              <Link href="#" className="underline hover:text-slate-600">Privacy Policy</Link>.
+              <Link href="/privacy" className="underline hover:text-slate-600">Privacy Policy</Link>.
             </p>
           </form>
         </>
