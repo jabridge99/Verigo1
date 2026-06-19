@@ -24,7 +24,7 @@ def upgrade() -> None:
     # names (documents, magic_link_tokens, audit_logs, customers, users,
     # monitoring_cases, transactions, transaction_alerts). The legacy tables —
     # and the legacy-only tables that FK against them and are never recreated
-    # here (ecdd_records, kyc_records, kyc_documents) — are unused by current
+    # here (ecdd_records, kyc_records, kyc_documents, compliance_reports) — are unused by current
     # app code (app/models/*) and must be dropped first so the CREATE TABLE
     # statements below don't collide with the originals.
     op.drop_table('transaction_alerts')
@@ -33,6 +33,7 @@ def upgrade() -> None:
     op.drop_table('kyc_records')
     op.drop_table('ecdd_records')
     op.drop_table('transactions')
+    op.drop_table('compliance_reports')
     op.drop_table('customers')
     op.drop_table('users')
     op.drop_table('audit_logs')
