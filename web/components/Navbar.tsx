@@ -119,12 +119,16 @@ export default function Navbar() {
               <Link href="/" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Home</Link>
 
               {/* Solutions dropdown */}
-              <div className="relative">
+              <div className="relative flex items-center">
+                <Link href="/solutions" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                  Solutions
+                </Link>
                 <button
                   onClick={() => toggleDropdown('solutions')}
-                  className={`flex items-center gap-1 ${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}
+                  aria-label="Toggle solutions menu"
+                  className="p-2 rounded-lg hover:bg-slate-50"
                 >
-                  Solutions <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'solutions' ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'solutions' ? 'rotate-180' : ''}`} />
                 </button>
                 {activeDropdown === 'solutions' && (
                   <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[560px] bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-5 grid grid-cols-2 gap-1 z-50">
@@ -152,12 +156,16 @@ export default function Navbar() {
               </div>
 
               {/* Industries dropdown */}
-              <div className="relative">
+              <div className="relative flex items-center">
+                <Link href="/industries" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                  Industries
+                </Link>
                 <button
                   onClick={() => toggleDropdown('industries')}
-                  className={`flex items-center gap-1 ${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}
+                  aria-label="Toggle industries menu"
+                  className="p-2 rounded-lg hover:bg-slate-50"
                 >
-                  Industries <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'industries' ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'industries' ? 'rotate-180' : ''}`} />
                 </button>
                 {activeDropdown === 'industries' && (
                   <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
