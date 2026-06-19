@@ -1,6 +1,6 @@
 """Phase I — onboarding risk assessment + AML accountability sign-off
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: a1b2c3d4e5f7
 Revises: f4d5e6a7b8c9
 Create Date: 2026-06-18
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'a1b2c3d4e5f6'
+revision: str = 'a1b2c3d4e5f7'
 down_revision: Union[str, None] = 'f4d5e6a7b8c9'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
