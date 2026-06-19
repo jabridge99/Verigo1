@@ -26,50 +26,15 @@ def upgrade() -> None:
         ),
     )
 
-    op.create_table(
-        "aml_programs",
-        sa.Column("id", sa.Integer(), primary_key=True, index=True),
-        sa.Column("program_id", sa.String(60), unique=True, index=True, nullable=False),
-        sa.Column(
-            "organisation_id",
-            sa.Integer(),
-            sa.ForeignKey("organisations.id"),
-            unique=True,
-            index=True,
-            nullable=False,
-        ),
-        sa.Column("industry_id", sa.String(100), nullable=False),
-        sa.Column("risk_profile", sa.String(20), nullable=False),
-        sa.Column(
-            "status",
-            sa.Enum("draft", "active", name="amlprogramstatus"),
-            server_default="active",
-        ),
-        sa.Column("version", sa.Integer(), server_default="1"),
-        sa.Column("generated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True)),
-    )
-
-    op.create_table(
-        "aml_program_items",
-        sa.Column("id", sa.Integer(), primary_key=True, index=True),
-        sa.Column(
-            "program_id",
-            sa.Integer(),
-            sa.ForeignKey("aml_programs.id"),
-            index=True,
-            nullable=False,
-        ),
-        sa.Column("category", sa.String(50), nullable=False),
-        sa.Column("title", sa.String(200), nullable=False),
-        sa.Column("description", sa.Text()),
-        sa.Column("review_frequency", sa.String(50)),
-        sa.Column("is_required", sa.Boolean(), server_default=sa.true()),
-        sa.Column("sort_order", sa.Integer(), server_default="0"),
-    )
+    # NOTE: this migration originally created Integer-PK "aml_programs" /
+    # "aml_program_items" tables here, but those table names/shapes were
+    # superseded by the org_id/string-id "aml_programs" model in
+    # app/models/aml_solution.py (created earlier in the migration graph by
+    # 06699922bb99) and by app/models/aml_program.py's "aml_program_records" /
+    # "aml_program_items". Creating them here collided with the real
+    # "aml_programs" table and left "aml_program_items" with the wrong shape,
+    # so the create_table calls were removed.
 
 
 def downgrade() -> None:
-    op.drop_table("aml_program_items")
-    op.drop_table("aml_programs")
     op.drop_column("organisations", "risk_profile")
