@@ -35,6 +35,14 @@ class StorageConfigResponse(BaseModel):
         cfg = cfg or {}
         if not cfg:
             return cls(backend="local", configured=False)
-        allowed = {"backend", "bucket", "region", "access_key", "endpoint_url", "account_name", "container"}
+        allowed = {
+            "backend",
+            "bucket",
+            "region",
+            "access_key",
+            "endpoint_url",
+            "account_name",
+            "container",
+        }
         masked = {k: v for k, v in cfg.items() if k in allowed}
         return cls(**masked, configured=True, verified=cfg.get("verified"))

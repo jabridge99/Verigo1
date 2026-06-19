@@ -2,11 +2,10 @@
 StorageProvider factory.
 
 Resolution order:
-1. Per-tenant config from IndustryTenant.storage_config JSON column
-2. Application-wide settings (STORAGE_BACKEND env var)
-3. Default: local filesystem
+1. Application-wide settings (STORAGE_BACKEND env var)
+2. Default: local filesystem
 
-Supported backends: local, s3, r2, azure, gcs
+Supported backends: local, supabase, s3, r2, azure, gcs
 """
 
 from __future__ import annotations
@@ -81,6 +80,11 @@ def _build_provider(backend: str, cfg: dict) -> StorageProvider:
             bucket=cfg["bucket"],
             credentials_json=cfg.get("credentials_json"),
         )
+
+    if backend == "supabase":
+        from .supabase import SupabaseStorageProvider
+
+        return SupabaseStorageProvider(bucket=cfg.get("bucket"))
 
     raise ValueError(f"Unknown storage backend: {backend}")
 
@@ -157,7 +161,9 @@ def _default_provider() -> StorageProvider:
     backend = getattr(settings, "storage_backend", "local")
     if backend not in _provider_cache:
         cfg: dict = {}
-        if backend == "s3":
+        if backend == "supabase":
+            cfg = {"bucket": getattr(settings, "document_bucket", "documents")}
+        elif backend == "s3":
             cfg = {
                 "bucket": getattr(settings, "s3_bucket", ""),
                 "region": getattr(settings, "s3_region", "us-east-1"),

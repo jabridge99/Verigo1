@@ -25,7 +25,7 @@ def get_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.get_summary(db, current_user.user_id)
+    return svc.get_summary(db, current_user.id)
 
 
 @router.get("", response_model=List[NotificationResponse])
@@ -36,7 +36,7 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.list_notifications(db, current_user.user_id, unread_only, limit, offset)
+    return svc.list_notifications(db, current_user.id, unread_only, limit, offset)
 
 
 @router.post("/{notif_id}/read", response_model=NotificationResponse)
@@ -45,7 +45,7 @@ def mark_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    notif = svc.mark_read(db, notif_id, current_user.user_id)
+    notif = svc.mark_read(db, notif_id, current_user.id)
     if not notif:
         raise HTTPException(404, "Notification not found")
     return notif
@@ -56,7 +56,7 @@ def mark_all_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    count = svc.mark_all_read(db, current_user.user_id)
+    count = svc.mark_all_read(db, current_user.id)
     return {"marked_read": count}
 
 
@@ -69,3 +69,25 @@ def create_notification(
     if current_user.role not in ("admin", "mlro"):
         raise HTTPException(403, "Insufficient permissions")
     return svc.create_notification(db, data, send_email=data.send_email)
+
+
+@router.post(
+    "/run-deadline-check",
+    summary="Run all compliance deadline checks and fire due notifications (admin/MLRO — call from cron)",
+)
+def run_deadline_check(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    if current_user.role not in ("admin", "mlro"):
+        raise HTTPException(403, "MLRO or Admin required")
+    from app.services.notification_scheduler import run_all_deadline_checks
+
+    return run_all_deadline_checks(db)
+
+
+@router.get("/types", summary="List all notification types")
+def list_notification_types():
+    from app.models.notification import NotificationType
+
+    return {"types": [e.value for e in NotificationType]}

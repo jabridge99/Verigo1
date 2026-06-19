@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.models.audit import AuditLog
+from app.models.audit import LegacyAuditLog as AuditLog
 
 
 def log_action(
@@ -18,7 +18,7 @@ def log_action(
     after_state=None,
     notes: str = None,
     industry_id: str = None,
-    organisation_id: int = None,
+    organisation_id: str = None,
     ip_address: str = None,
 ) -> AuditLog:
     entry = AuditLog(

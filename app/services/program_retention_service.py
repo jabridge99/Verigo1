@@ -16,7 +16,11 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.aml_program import AMLProgram, AMLProgramVersion, VersionRetrievalRequest
+from app.models.aml_program import (
+    AMLProgramRecord,
+    AMLProgramVersion,
+    VersionRetrievalRequest,
+)
 from app.models.organisation import Organisation
 from app.services import aml_program_service, email_service
 
@@ -36,7 +40,7 @@ def _history(db: Session, org: Organisation) -> list[VersionRetrievalRequest]:
 def request_old_version(
     db: Session,
     org: Organisation,
-    program: AMLProgram,
+    program: AMLProgramRecord,
     version: int,
     requested_by: str,
 ) -> AMLProgramVersion:

@@ -38,7 +38,7 @@ def _setup_program(client, db, plan="professional", status="active"):
     org = _create_org(client, headers, industry_id="banking-au")
     _set_plan(client, admin_headers, "banking-au", org["id"], plan, status)
     client.patch(
-        f"/api/v1/organisations/{org['org_id']}",
+        f"/api/v1/organisations/{org['id']}",
         json={"risk_profile": "high"},
         headers=headers,
     )
@@ -48,10 +48,10 @@ def _setup_program(client, db, plan="professional", status="active"):
 def test_generating_program_snapshots_each_version(client, db):
     org, headers, _ = _setup_program(client, db)
 
-    client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
-    client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
+    client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
 
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program/versions", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program/versions", headers=headers)
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["full_history_available"] is True
@@ -62,50 +62,50 @@ def test_generating_program_snapshots_each_version(client, db):
 
 def test_canceled_org_sees_latest_version_only(client, db):
     org, headers, admin_headers = _setup_program(client, db)
-    client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
-    client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
+    client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
 
     _set_plan(client, admin_headers, "banking-au", org["id"], "professional", "canceled")
 
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program/versions", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program/versions", headers=headers)
     body = res.json()
     assert body["full_history_available"] is False
     assert len(body["versions"]) == 1
     assert body["versions"][0]["version"] == 2
 
     # Latest version is still freely retrievable.
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program/versions/2", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program/versions/2", headers=headers)
     assert res.status_code == 200
 
     # An older version is throttled instead of an instant download.
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program/versions/1", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program/versions/1", headers=headers)
     assert res.status_code == 200, res.text
 
     # Second immediate retrieval of an old version is rate-limited.
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program/versions/1", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program/versions/1", headers=headers)
     assert res.status_code == 429
 
 
 def test_export_requires_reason_and_is_audited(client, db):
-    org, headers, _ = _setup_program(client, db)
-    client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    org, headers, admin_headers = _setup_program(client, db)
+    client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
 
     res = client.post(
-        f"/api/v1/organisations/{org['org_id']}/aml-program/export",
+        f"/api/v1/organisations/{org['id']}/aml-program/export",
         json={"reason": ""},
         headers=headers,
     )
     assert res.status_code == 400
 
     res = client.post(
-        f"/api/v1/organisations/{org['org_id']}/aml-program/export",
+        f"/api/v1/organisations/{org['id']}/aml-program/export",
         json={"reason": "Regulator requested evidence pack"},
         headers=headers,
     )
     assert res.status_code == 200, res.text
 
     res = client.get(
-        "/api/v1/audit/", params={"action": "aml_program_exported"}, headers=headers
+        "/api/v1/audit/", params={"action": "aml_program_exported"}, headers=admin_headers
     )
     assert res.status_code == 200, res.text
     entries = res.json()
@@ -115,9 +115,9 @@ def test_export_requires_reason_and_is_audited(client, db):
 
 def test_program_health_flags_missing_controls(client, db):
     org, headers, _ = _setup_program(client, db)
-    client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
 
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program/health", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program/health", headers=headers)
     assert res.status_code == 200, res.text
     health = res.json()
     assert health["up_to_date"] is True
@@ -127,9 +127,9 @@ def test_program_health_flags_missing_controls(client, db):
 
 def test_verification_endpoint_is_public_and_hides_content(client, db):
     org, headers, _ = _setup_program(client, db)
-    client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
 
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program/versions", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program/versions", headers=headers)
     qr_token = res.json()["versions"][0]["qr_token"]
 
     # No auth headers — public verification.
@@ -151,7 +151,7 @@ def test_accountability_ack_also_records_retention_terms(client, db):
     org = _create_org(client, headers, industry_id="banking-au")
 
     res = client.post(
-        f"/api/v1/organisations/{org['org_id']}/aml-accountability/ack",
+        f"/api/v1/organisations/{org['id']}/aml-accountability/ack",
         json={"acknowledged": True},
         headers=headers,
     )

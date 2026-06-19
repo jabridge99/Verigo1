@@ -4,14 +4,16 @@ Tests for customer CRUD, tenant isolation, and risk scoring RBAC.
 
 import pytest
 
+from tests.conftest import _auth, _make_user
+from app.models.user import UserRole
 
 CUSTOMER_PAYLOAD = {
     "full_name": "Jane Doe",
     "email": "jane@example.com",
     "phone": "+61400000001",
     "date_of_birth": "1990-01-15",
-    "nationality": "Australian",
-    "country_of_residence": "Australia",
+    "nationality": "AU",
+    "country_of_residence": "AU",
     "id_number": "PA123456",
     "id_type": "passport",
     "address": "1 Test St, Sydney NSW 2000",
@@ -32,20 +34,20 @@ class TestCustomerCreate:
 
     def test_analyst_can_create(self, client, analyst_headers):
         resp = client.post("/api/v1/customers/", json=CUSTOMER_PAYLOAD, headers=analyst_headers)
-        assert resp.status_code in (201, 500)  # 500 if Customer model missing industry_id column
+        assert resp.status_code in (201, 500)
         if resp.status_code == 201:
             data = resp.json()
             assert data["full_name"] == "Jane Doe"
-            assert "customer_id" in data
+            assert "id" in data
 
     def test_industry_id_set_from_session(self, client, db, analyst_user, analyst_headers):
         from app.models.customer import Customer
         resp = client.post("/api/v1/customers/", json={**CUSTOMER_PAYLOAD, "email": "ind-test@example.com"}, headers=analyst_headers)
         assert resp.status_code == 201
-        cid = resp.json()["customer_id"]
-        record = db.query(Customer).filter(Customer.customer_id == cid).first()
+        cid = resp.json()["id"]
+        record = db.query(Customer).filter(Customer.id == cid).first()
         assert record is not None
-        assert record.industry_id == analyst_user.industry_id
+        assert record.org_id == analyst_user.org_id
 
 
 class TestCustomerList:
@@ -59,20 +61,18 @@ class TestCustomerList:
         assert isinstance(resp.json(), list)
 
     def test_tenant_isolation(self, client, db, analyst_headers):
-        from tests.conftest import _make_user, _auth
-        from app.models.user import UserRole
         # Create a user from a different tenant
-        other_user = _make_user(db, UserRole.analyst, industry_id="IND-OTHER-999")
+        other_user = _make_user(db, UserRole.analyst)
         other_headers = _auth(other_user)
 
         # Create customer as other tenant
         resp = client.post("/api/v1/customers/", json={**CUSTOMER_PAYLOAD, "email": "other@example.com"}, headers=other_headers)
         assert resp.status_code == 201
-        customer_id = resp.json()["customer_id"]
+        customer_id = resp.json()["id"]
 
         # Original tenant should NOT see other tenant's customer
         list_resp = client.get("/api/v1/customers/", headers=analyst_headers)
-        ids = [c["customer_id"] for c in list_resp.json()]
+        ids = [c["id"] for c in list_resp.json()]
         assert customer_id not in ids
 
 
@@ -80,21 +80,19 @@ class TestCustomerGet:
     def test_get_own_customer(self, client, analyst_headers):
         create = client.post("/api/v1/customers/", json=CUSTOMER_PAYLOAD, headers=analyst_headers)
         assert create.status_code == 201
-        cid = create.json()["customer_id"]
+        cid = create.json()["id"]
 
         resp = client.get(f"/api/v1/customers/{cid}", headers=analyst_headers)
         assert resp.status_code == 200
-        assert resp.json()["customer_id"] == cid
+        assert resp.json()["id"] == cid
 
     def test_cannot_get_other_tenant_customer(self, client, db, analyst_headers):
-        from tests.conftest import _make_user, _auth
-        from app.models.user import UserRole
-        other_user = _make_user(db, UserRole.analyst, industry_id="IND-OTHER-888")
+        other_user = _make_user(db, UserRole.analyst)
         other_headers = _auth(other_user)
 
         create = client.post("/api/v1/customers/", json={**CUSTOMER_PAYLOAD, "email": "cross@example.com"}, headers=other_headers)
         assert create.status_code == 201
-        cid = create.json()["customer_id"]
+        cid = create.json()["id"]
 
         resp = client.get(f"/api/v1/customers/{cid}", headers=analyst_headers)
         assert resp.status_code in (403, 404)
@@ -103,7 +101,7 @@ class TestCustomerGet:
 class TestPrivilegedFields:
     def test_analyst_cannot_set_risk_score(self, client, analyst_headers):
         create = client.post("/api/v1/customers/", json=CUSTOMER_PAYLOAD, headers=analyst_headers)
-        cid = create.json()["customer_id"]
+        cid = create.json()["id"]
 
         # Analyst tries to set risk_score directly
         resp = client.patch(f"/api/v1/customers/{cid}", json={"risk_score": 99}, headers=analyst_headers)
@@ -113,7 +111,7 @@ class TestPrivilegedFields:
 
     def test_compliance_can_rescore(self, client, compliance_headers):
         create = client.post("/api/v1/customers/", json=CUSTOMER_PAYLOAD, headers=compliance_headers)
-        cid = create.json()["customer_id"]
+        cid = create.json()["id"]
 
         resp = client.post(f"/api/v1/customers/{cid}/rescore", headers=compliance_headers)
         assert resp.status_code in (200, 404)  # 404 if no KYC data yet

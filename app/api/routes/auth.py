@@ -24,7 +24,6 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
-from app.services import audit_service
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
     EmailVerificationConfirm,
@@ -40,6 +39,7 @@ from app.schemas.user import (
     UserResponse,
     UserUpdate,
 )
+from app.services import audit_service
 from app.services.auth_service import (
     TOKEN_BLACKLIST,
     authenticate_user,
@@ -125,33 +125,48 @@ def _client_ip(request: Request) -> str:
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 def register(
-    payload: UserCreate, request: Request, response: Response, db: Session = Depends(get_db)
+    payload: UserCreate,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
 ):
     if get_user_by_email(db, payload.email):
         raise HTTPException(409, "Email already registered")
+    org_id = payload.org_id
+    if not org_id:
+        # Self-serve signup with no existing org — create one for this user.
+        from app.models.organisation import IndustryType, Organisation
+
+        org = Organisation(
+            name=f"{payload.full_name}'s Organisation", industry_type=IndustryType.other
+        )
+        db.add(org)
+        db.flush()
+        org_id = org.id
     user = create_user(
         db,
         email=payload.email,
         full_name=payload.full_name,
         password=payload.password,
         role=(payload.role.value if payload.role else UserRole.analyst.value),
-        industry_id=payload.industry_id,
-        tenant_id=payload.tenant_id,
+        org_id=org_id,
     )
     record_security_event(
         db,
         "user_registered",
-        user.user_id,
+        user.id,
         ip=_client_ip(request),
         meta={"email": user.email},
     )
     if payload.organisation_name:
         from app.services.org_service import create_organisation
 
-        create_organisation(db, payload.organisation_name, user, industry_id=payload.industry_id)
+        create_organisation(
+            db, payload.organisation_name, user, industry_id=payload.industry_id
+        )
 
     verify_token = create_email_action_token(db, user.email, "verify_email")
-    record_security_event(db, "email_verification_requested", user.user_id)
+    record_security_event(db, "email_verification_requested", user.id)
     token = build_token_response(user)
     set_session_cookie(response, token["access_token"])
     if not settings.is_production:
@@ -164,7 +179,10 @@ def register(
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    payload: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)
+    payload: UserLogin,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
 ):
     ip = _client_ip(request)
     user = authenticate_user(db, payload.email, payload.password)
@@ -177,12 +195,12 @@ def login(
 
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    record_security_event(db, "login_success", user.user_id, ip=ip)
+    record_security_event(db, "login_success", user.id, ip=ip)
     audit_service.log_action(
         db,
         action="user_logged_in",
         entity_type="user",
-        entity_id=user.user_id,
+        entity_id=user.id,
         actor=user.email,
         actor_role=user.role.value if user.role else None,
         industry_id=user.industry_id,
@@ -213,11 +231,12 @@ def logout(
     raw = None
     if authorization and authorization.startswith("Bearer "):
         raw = authorization.removeprefix("Bearer ").strip()
-    elif settings.session_cookie_name in request.cookies:
-        raw = request.cookies[settings.session_cookie_name]
-    if raw:
-        TOKEN_BLACKLIST.add(hashlib.sha256(raw.encode()).hexdigest()[:16])
-    clear_session_cookie(response)
+        from app.services.auth_service import ACCESS_TOKEN_EXPIRY_MINUTES
+
+        TOKEN_BLACKLIST.add(
+            hashlib.sha256(raw.encode()).hexdigest()[:16],
+            ttl_seconds=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+        )
     return {"detail": "Logged out successfully"}
 
 
@@ -253,7 +272,7 @@ def mfa_verify_enrolment(
         raise HTTPException(400, "Invalid TOTP code")
     current_user.mfa_enabled = True
     db.commit()
-    record_security_event(db, "mfa_enabled", current_user.user_id)
+    record_security_event(db, "mfa_enabled", current_user.id)
     return {"detail": "MFA activated"}
 
 
@@ -270,16 +289,10 @@ def mfa_challenge(
     if not current_user.mfa_enabled or not current_user.mfa_secret:
         raise HTTPException(400, "MFA not enabled")
     if not verify_totp(current_user.mfa_secret, code):
-        record_security_event(
-            db, "mfa_failed", current_user.user_id, ip=_client_ip(request)
-        )
+        record_security_event(db, "mfa_failed", current_user.id, ip=_client_ip(request))
         raise HTTPException(401, "Invalid TOTP code")
-    record_security_event(
-        db, "mfa_success", current_user.user_id, ip=_client_ip(request)
-    )
-    token = build_token_response(current_user)
-    set_session_cookie(response, token["access_token"])
-    return token
+    record_security_event(db, "mfa_success", current_user.id, ip=_client_ip(request))
+    return build_token_response(current_user)
 
 
 @router.delete("/mfa/disable")
@@ -293,7 +306,7 @@ def mfa_disable(
     current_user.mfa_enabled = False
     current_user.mfa_secret = None
     db.commit()
-    record_security_event(db, "mfa_disabled", current_user.user_id)
+    record_security_event(db, "mfa_disabled", current_user.id)
     return {"detail": "MFA disabled"}
 
 
@@ -308,7 +321,7 @@ def request_magic_link(
     if user and user.status == UserStatus.active:
         token = create_magic_link(db, payload.email)  # hashed in service layer
         record_security_event(
-            db, "magic_link_requested", user.user_id, ip=_client_ip(request)
+            db, "magic_link_requested", user.id, ip=_client_ip(request)
         )
         from app.config import settings
 
@@ -320,7 +333,10 @@ def request_magic_link(
 
 @router.post("/magic-link/verify", response_model=TokenResponse)
 def verify_magic_link_endpoint(
-    payload: MagicLinkVerify, request: Request, response: Response, db: Session = Depends(get_db)
+    payload: MagicLinkVerify,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
 ):
     email = verify_magic_link(db, payload.token)
     if not email:
@@ -331,13 +347,11 @@ def verify_magic_link_endpoint(
         raise HTTPException(400, "Account not found or inactive")
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    record_security_event(db, "magic_link_used", user.user_id, ip=_client_ip(request))
-    token = build_token_response(user)
-    set_session_cookie(response, token["access_token"])
-    return token
+    record_security_event(db, "magic_link_used", user.id, ip=_client_ip(request))
+    return build_token_response(user)
 
 
-# ── Email verification ───────────────────────────────────────────────────────
+# ── Email verification ──────────────────────────────────────────────────────
 
 
 @router.post("/email/verify/request")
@@ -348,7 +362,7 @@ def request_email_verification(
     if user and not user.email_verified:
         token = create_email_action_token(db, user.email, "verify_email")
         record_security_event(
-            db, "email_verification_requested", user.user_id, ip=_client_ip(request)
+            db, "email_verification_requested", user.id, ip=_client_ip(request)
         )
         from app.services.email_service import send_email_verification
 
@@ -356,7 +370,9 @@ def request_email_verification(
         if not settings.is_production:
             return {"detail": "Verification email sent", "dev_token": token}
     # Always same response — prevents user enumeration
-    return {"detail": "If that email exists and is unverified, a verification link has been sent"}
+    return {
+        "detail": "If that email exists and is unverified, a verification link has been sent"
+    }
 
 
 @router.post("/email/verify/confirm")
@@ -371,7 +387,7 @@ def confirm_email_verification(
         raise HTTPException(400, "Account not found")
     user.email_verified = True
     db.commit()
-    record_security_event(db, "email_verified", user.user_id, ip=_client_ip(request))
+    record_security_event(db, "email_verified", user.id, ip=_client_ip(request))
     return {"detail": "Email verified"}
 
 
@@ -386,7 +402,7 @@ def request_password_reset(
     if user and user.status == UserStatus.active and user.hashed_password:
         token = create_email_action_token(db, user.email, "password_reset")
         record_security_event(
-            db, "password_reset_requested", user.user_id, ip=_client_ip(request)
+            db, "password_reset_requested", user.id, ip=_client_ip(request)
         )
         from app.services.email_service import send_password_reset
 
@@ -411,88 +427,10 @@ def confirm_password_reset(
         raise HTTPException(400, "Account not found")
     user.hashed_password = hash_password(payload.new_password)
     db.commit()
-    record_security_event(db, "password_reset_completed", user.user_id, ip=_client_ip(request))
-    return {"detail": "Password updated"}
-
-
-# ── OAuth (Google / Microsoft social login) ─────────────────────────────────
-
-OAUTH_STATE_COOKIE = "tvg_oauth_state"
-
-
-@router.get("/oauth/{provider}/login")
-def oauth_login(provider: str, response: Response):
-    if provider not in ("google", "microsoft"):
-        raise HTTPException(404, "Unknown OAuth provider")
-    if not get_provider(provider):
-        raise HTTPException(
-            503, f"{provider.title()} login is not configured on this server"
-        )
-    state = new_state()
-    redirect = RedirectResponse(build_authorize_url(provider, state))
-    redirect.set_cookie(
-        key=OAUTH_STATE_COOKIE,
-        value=state,
-        httponly=True,
-        secure=settings.is_production,
-        samesite="lax",
-        max_age=600,
-        path="/",
-    )
-    return redirect
-
-
-@router.get("/oauth/{provider}/callback")
-def oauth_callback(
-    provider: str,
-    code: str,
-    state: str,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    if provider not in ("google", "microsoft"):
-        raise HTTPException(404, "Unknown OAuth provider")
-    expected_state = request.cookies.get(OAUTH_STATE_COOKIE)
-    if not expected_state or expected_state != state:
-        raise HTTPException(400, "Invalid OAuth state — possible CSRF attempt")
-
-    try:
-        profile = exchange_code_for_profile(provider, code)
-    except Exception:
-        log.exception("OAuth exchange failed for %s", provider)
-        raise HTTPException(400, "OAuth sign-in failed")
-
-    if not profile.email:
-        raise HTTPException(400, "OAuth provider did not return an email address")
-
-    user = get_user_by_email(db, profile.email)
-    if user:
-        if not user.oauth_provider:
-            user.oauth_provider = profile.provider
-            user.oauth_id = profile.provider_user_id
-        user.email_verified = True
-    else:
-        user = create_user(
-            db,
-            email=profile.email,
-            full_name=profile.full_name,
-            password=secrets.token_urlsafe(32),  # unguessable; user signs in via OAuth only
-        )
-        user.oauth_provider = profile.provider
-        user.oauth_id = profile.provider_user_id
-        user.email_verified = True
-
-    user.last_login_at = datetime.now(timezone.utc)
-    db.commit()
     record_security_event(
-        db, "oauth_login", user.user_id, ip=_client_ip(request), meta={"provider": provider}
+        db, "password_reset_completed", user.id, ip=_client_ip(request)
     )
-
-    token = build_token_response(user)
-    redirect = RedirectResponse(f"{settings.app_url}/dashboard")
-    set_session_cookie(redirect, token["access_token"])
-    redirect.delete_cookie(key=OAUTH_STATE_COOKIE, path="/")
-    return redirect
+    return {"detail": "Password updated"}
 
 
 # ── Me ────────────────────────────────────────────────────────────────────────
@@ -531,7 +469,7 @@ def change_password(
         raise HTTPException(400, "Password must be at least 12 characters")
     current_user.hashed_password = hash_password(payload.new_password)
     db.commit()
-    record_security_event(db, "password_changed", current_user.user_id)
+    record_security_event(db, "password_changed", current_user.id)
     return {"detail": "Password updated"}
 
 
@@ -540,7 +478,7 @@ def change_password(
 
 @router.post("/verify")
 def verify_token(current_user: User = Depends(_current_user)):
-    return {"valid": True, "user_id": current_user.user_id, "role": current_user.role}
+    return {"valid": True, "user_id": current_user.id, "role": current_user.role}
 
 
 # ── Admin: User management ─────────────────────────────────────────────────────
@@ -553,7 +491,7 @@ def list_users(
 ):
     q = db.query(User)
     if current_user.role != UserRole.admin:
-        q = q.filter(User.industry_id == current_user.industry_id)
+        q = q.filter(User.org_id == current_user.org_id)
     return q.all()
 
 
@@ -572,14 +510,13 @@ def create_user_admin(
         full_name=payload.full_name,
         password=payload.password or secrets.token_urlsafe(16),
         role=(payload.role.value if payload.role else UserRole.analyst.value),
-        industry_id=payload.industry_id or current_user.industry_id,
-        tenant_id=payload.tenant_id,
+        org_id=payload.org_id or current_user.org_id,
     )
     record_security_event(
         db,
         "user_created_by_admin",
-        current_user.user_id,
-        meta={"target": user.user_id, "role": user.role.value},
+        current_user.id,
+        meta={"target": user.id, "role": user.role.value},
         ip=_client_ip(request),
     )
     return user
@@ -605,7 +542,7 @@ def update_user_admin(
         record_security_event(
             db,
             "role_changed",
-            current_user.user_id,
+            current_user.id,
             meta={"target": user_id, "from": old_role.value, "to": target.role.value},
             ip=_client_ip(request),
         )
@@ -622,14 +559,14 @@ def suspend_user(
     target = get_user_by_id(db, user_id)
     if not target:
         raise HTTPException(404, "User not found")
-    if target.user_id == current_user.user_id:
+    if target.id == current_user.id:
         raise HTTPException(400, "Cannot suspend yourself")
     target.status = UserStatus.suspended
     db.commit()
     record_security_event(
         db,
         "user_suspended",
-        current_user.user_id,
+        current_user.id,
         meta={"target": user_id},
         ip=_client_ip(request),
     )
@@ -651,7 +588,7 @@ def activate_user(
     record_security_event(
         db,
         "user_activated",
-        current_user.user_id,
+        current_user.id,
         meta={"target": user_id},
         ip=_client_ip(request),
     )

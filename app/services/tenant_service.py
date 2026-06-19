@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.models.customer import CUSTOM_PACKAGE_INDUSTRIES
+from app.models.organisation import CUSTOM_PACKAGE_INDUSTRIES
 from app.models.tenant import IndustryTenant
 from app.schemas.tenant import TenantCreate, TenantUpdate
 

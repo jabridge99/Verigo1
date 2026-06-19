@@ -1,13 +1,13 @@
 import enum
 
 from sqlalchemy import (
-    ForeignKey,
     JSON,
     Boolean,
     Column,
     DateTime,
     Enum,
     Float,
+    ForeignKey,
     Integer,
     String,
     Text,
@@ -47,6 +47,35 @@ class InvoiceStatus(str, enum.Enum):
     paid = "paid"
     void = "void"
     uncollectible = "uncollectible"
+
+
+class AddonKey(str, enum.Enum):
+    enterprise_crypto_screening = "enterprise_crypto_screening"
+
+
+class AddonStatus(str, enum.Enum):
+    active = "active"
+    canceled = "canceled"
+
+
+# ── Enterprise add-on catalogue ─────────────────────────────────────────────────
+# Add-ons unlock providers that are partially built (unverified response schema)
+# or sales-gated (no self-serve API access) — sold separately from the base plan
+# so tenants aren't charged for capability they haven't opted into.
+
+ADDON_CATALOGUE = {
+    AddonKey.enterprise_crypto_screening: {
+        "name": "Enterprise Crypto Wallet Screening",
+        "monthly_aud": 499.00,
+        "description": (
+            "Unlocks enterprise-grade crypto wallet risk providers (Elliptic, "
+            "TRM Labs) for cluster-level exposure scoring beyond the included "
+            "sanctions-only matching (Chainalysis, OFAC SDN, GoPlus, Scorechain)."
+        ),
+        "unlocks_providers": ["elliptic", "trm_labs"],
+        "requires_plan": [BillingPlan.enterprise, BillingPlan.vvip],
+    },
+}
 
 
 # ── Published plan catalogue ───────────────────────────────────────────────────
@@ -224,7 +253,9 @@ class PlanFeatureToggle(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     plan = Column(Enum(BillingPlan), nullable=False, index=True)
-    feature_code = Column(String(60), ForeignKey("features.code"), nullable=False, index=True)
+    feature_code = Column(
+        String(60), ForeignKey("features.code"), nullable=False, index=True
+    )
     enabled = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -239,7 +270,7 @@ class Subscription(Base):
 
     # Tenant link
     industry_id = Column(String(100), index=True, nullable=False)
-    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
+    organisation_id = Column(String, ForeignKey("organisations.id"), index=True)
     tenant_id = Column(String(60))
 
     # Plan
@@ -281,7 +312,7 @@ class Invoice(Base):
     invoice_id = Column(String(60), unique=True, index=True, nullable=False)
     subscription_id = Column(String(60), index=True)
     industry_id = Column(String(100), index=True)
-    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
+    organisation_id = Column(String, ForeignKey("organisations.id"), index=True)
 
     stripe_invoice_id = Column(String(100))
     amount_aud = Column(Float, nullable=False)
@@ -298,4 +329,26 @@ class Invoice(Base):
     stripe_hosted_url = Column(String(500))
     stripe_pdf_url = Column(String(500))
 
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class SubscriptionAddon(Base):
+    """Enterprise add-on purchase — gates access to partially-built/sales-gated
+    providers (e.g. Elliptic, TRM Labs crypto wallet screening) independent of
+    the base subscription plan."""
+
+    __tablename__ = "subscription_addons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    addon_id = Column(String(60), unique=True, index=True, nullable=False)
+    org_id = Column(String(100), index=True, nullable=False)
+
+    addon_key = Column(Enum(AddonKey), nullable=False)
+    status = Column(Enum(AddonStatus), default=AddonStatus.active, nullable=False)
+    price_aud = Column(Float)
+
+    stripe_subscription_id = Column(String(100))
+
+    purchased_at = Column(DateTime(timezone=True), server_default=func.now())
+    canceled_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

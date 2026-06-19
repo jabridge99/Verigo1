@@ -67,6 +67,8 @@ class IFTICreate(BaseModel):
     oc_email: Optional[str] = None
     oc_occupation: Optional[str] = None
     oc_abn: Optional[str] = None
+    oc_acn: Optional[str] = None
+    oc_arbn: Optional[str] = None
     oc_customer_number: Optional[str] = None
     oc_account_number: Optional[str] = None
     oc_business_structure: Optional[str] = None
@@ -99,10 +101,12 @@ class IFTICreate(BaseModel):
     bc_email: Optional[str] = None
     bc_occupation: Optional[str] = None
     bc_abn: Optional[str] = None
+    bc_acn: Optional[str] = None
+    bc_arbn: Optional[str] = None
     bc_business_structure: Optional[str] = None
     bc_account_number: Optional[str] = None
-    bc_institution_name: Optional[str] = None
-    bc_institution_city: Optional[str] = None
+    bc_institution_name: Optional[str] = None  # InstitutionWithAccount.name (MANDATORY)
+    bc_institution_city: Optional[str] = None  # InstitutionWithAccount.city (MANDATORY)
     bc_institution_country: Optional[str] = None
 
     # Accept block
@@ -124,6 +128,10 @@ class IFTICreate(BaseModel):
     accept_email: Optional[str] = None
     accept_occupation: Optional[str] = None
     accept_abn: Optional[str] = None
+    accept_acn: Optional[str] = None
+    # orderingInstn.foreignBased — MANDATORY per IFTI-DRA-1-2 schema
+    # "Yes" if ordering institution is foreign-based, "No" if Australian
+    accept_foreign_based: Optional[str] = "No"
     accept_business_structure: Optional[str] = None
     is_accepting_money: Optional[str] = "Yes"
     is_sending_instruction: Optional[str] = "Yes"
@@ -153,6 +161,8 @@ class IFTICreate(BaseModel):
     send_email: Optional[str] = None
     send_occupation: Optional[str] = None
     send_abn: Optional[str] = None
+    send_acn: Optional[str] = None
+    send_arbn: Optional[str] = None
     send_business_structure: Optional[str] = None
 
     # Receive block
@@ -180,6 +190,13 @@ class IFTICreate(BaseModel):
     retail_state: Optional[str] = None
     retail_postcode: Optional[str] = None
     retail_country: Optional[str] = None
+
+    # initiatingInstn (optional intermediate institution — IFTI-DRA section 7.6)
+    init_instn_same_as_ordering: Optional[str] = None  # Yes | No
+    init_instn_full_name: Optional[str] = None
+    init_instn_address: Optional[str] = None
+    init_instn_city: Optional[str] = None
+    init_instn_country: Optional[str] = None
 
     # Reason + reporter
     reason_for_transfer: Optional[str] = None
@@ -250,14 +267,8 @@ def list_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    scoped = scope_fields(current_user)
-    return list_ifti(
-        db,
-        industry_id=scoped.get("industry_id"),
-        direction=direction,
-        status=status,
-        organisation_id=scoped.get("organisation_id"),
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    return list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
 
 @router.post("/", response_model=IFTIResponse, status_code=201)
@@ -268,10 +279,9 @@ def create_record(
 ):
     record = IFTIRecord(
         ifti_id=f"IFTI-{uuid.uuid4().hex[:12].upper()}",
-        industry_id=current_user.industry_id,
-        organisation_id=current_user.primary_organisation_id,
+        industry_id=current_user.org_id,
         direction=payload.direction,
-        created_by=current_user.user_id,
+        created_by=current_user.id,
     )
     _apply_fields(record, payload)
     db.add(record)
@@ -289,7 +299,8 @@ def get_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    assert_tenant(current_user, r.organisation_id, r.industry_id)
+    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
     return r
 
 
@@ -303,7 +314,8 @@ def update_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    assert_tenant(current_user, r.organisation_id, r.industry_id)
+    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
     if r.status == IFTIStatus.submitted:
         raise HTTPException(400, "Cannot edit a submitted IFTI record")
     _apply_fields(r, payload)
@@ -352,7 +364,8 @@ def delete_record(
         raise HTTPException(404, "IFTI record not found")
     if r.status == IFTIStatus.submitted:
         raise HTTPException(400, "Cannot delete a submitted record")
-    assert_tenant(current_user, r.organisation_id, r.industry_id)
+    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
     db.delete(r)
     db.commit()
 
@@ -373,14 +386,8 @@ def export_excel(
     The downloaded file matches the official AUSTRAC IFTI-DRA IN / OUT template
     exactly — open it, verify, then copy-paste rows into AUSTRAC Online and submit.
     """
-    scoped = scope_fields(current_user)
-    records = list_ifti(
-        db,
-        industry_id=scoped.get("industry_id"),
-        direction=direction,
-        status=status,
-        organisation_id=scoped.get("organisation_id"),
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    records = list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
     if not records:
         raise HTTPException(
@@ -411,9 +418,9 @@ def export_selected(
     current_user: User = Depends(_WRITER),
 ):
     """Export a specific selection of IFTI records to Excel."""
-    from app.models.ifti import IFTIRecord as IFTIModel
-
     from sqlalchemy import or_
+
+    from app.models.ifti import IFTIRecord as IFTIModel
 
     scoped = scope_fields(current_user)
     industry_id = scoped.get("industry_id")

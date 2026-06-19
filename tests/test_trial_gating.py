@@ -25,12 +25,12 @@ def test_free_trial_aml_program_is_a_shrunken_preview(client, db):
 
     org = _create_org(client, headers, industry_id="banking-au")
     client.patch(
-        f"/api/v1/organisations/{org['org_id']}",
+        f"/api/v1/organisations/{org['id']}",
         json={"risk_profile": "high"},
         headers=headers,
     )
 
-    res = client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    res = client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
     assert res.status_code == 201, res.text
     program = res.json()
 
@@ -47,7 +47,7 @@ def test_free_trial_aml_program_is_a_shrunken_preview(client, db):
         assert item["review_frequency"] is None
 
     # Locked placeholders never reveal real control titles even via repeated GET.
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program", headers=headers)
     assert res.status_code == 200
     titles = {i["title"] for i in res.json()["items"]}
     assert "Enhanced Due Diligence (EDD) for All High-Risk Customers" not in titles
@@ -60,12 +60,12 @@ def test_free_trial_risk_assessment_is_a_shrunken_preview(client, db):
 
     org = _create_org(client, headers, industry_id="banking-au")
     client.patch(
-        f"/api/v1/organisations/{org['org_id']}",
+        f"/api/v1/organisations/{org['id']}",
         json={"risk_profile": "high"},
         headers=headers,
     )
 
-    res = client.post(f"/api/v1/organisations/{org['org_id']}/risk-assessment/generate", headers=headers)
+    res = client.post(f"/api/v1/organisations/{org['id']}/risk-assessment/generate", headers=headers)
     assert res.status_code == 201, res.text
     assessment = res.json()
 
@@ -94,17 +94,17 @@ def test_paid_plan_gets_full_program_and_assessment(client, db):
     assert res.status_code == 200, res.text
 
     client.patch(
-        f"/api/v1/organisations/{org['org_id']}",
+        f"/api/v1/organisations/{org['id']}",
         json={"risk_profile": "high"},
         headers=headers,
     )
 
-    res = client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    res = client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
     program = res.json()
     assert program["is_preview"] is False
     assert all(not i["locked"] for i in program["items"])
 
-    res = client.post(f"/api/v1/organisations/{org['org_id']}/risk-assessment/generate", headers=headers)
+    res = client.post(f"/api/v1/organisations/{org['id']}/risk-assessment/generate", headers=headers)
     assessment = res.json()
     assert assessment["is_preview"] is False
     assert all(not f["locked"] for f in assessment["factors"])

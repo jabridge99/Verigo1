@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
-from app.models.organisation import MembershipStatus, OrgStatus, RiskProfile
+from app.models.organisation import MembershipStatus, OrganisationStatus, RiskProfile
 
 
 class OrganisationCreate(BaseModel):
@@ -13,7 +13,7 @@ class OrganisationCreate(BaseModel):
 
 class OrganisationUpdate(BaseModel):
     name: Optional[str] = None
-    status: Optional[OrgStatus] = None
+    status: Optional[OrganisationStatus] = None
     industry_id: Optional[str] = None
     risk_profile: Optional[RiskProfile] = None
     abn: Optional[str] = None
@@ -24,13 +24,11 @@ class OrganisationUpdate(BaseModel):
 
 
 class OrganisationResponse(BaseModel):
-    id: int
-    org_id: str
+    id: str
     name: str
-    slug: str
     industry_id: Optional[str] = None
     risk_profile: Optional[RiskProfile] = None
-    status: OrgStatus
+    status: OrganisationStatus
     created_at: Optional[datetime] = None
     abn: Optional[str] = None
     business_address: Optional[str] = None
@@ -46,7 +44,9 @@ class OrganisationResponse(BaseModel):
 
 class MemberAdd(BaseModel):
     email: EmailStr
-    role_key: str = "staff"  # owner | admin | compliance_officer | mlro | director | staff | viewer
+    role_key: str = (
+        "staff"  # owner | admin | compliance_officer | mlro | director | staff | viewer
+    )
 
 
 class MemberUpdate(BaseModel):
@@ -69,7 +69,7 @@ class RoleResponse(BaseModel):
     name: str
     description: Optional[str] = None
     is_system: bool
-    organisation_id: Optional[int] = None
+    organisation_id: Optional[str] = None
     permissions: list[str]
 
 

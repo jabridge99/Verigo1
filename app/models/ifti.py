@@ -1,18 +1,27 @@
 """
 IFTI (International Funds Transfer Instruction) Record model.
 
-Stores AUSTRAC IFTI-DRA IN and IFTI-DRA OUT report data.
-Each row = one reportable transaction (≥$10,000 AUD equivalent
-sent/received cross-border under a Designated Remittance Arrangement).
+Covers AUSTRAC IFTI-DRA v1.2 (Domestic Recipient Agent) IN and OUT.
+IFTI-E v1.3 (E-currency / SWIFT) requires a separate model — see IFTI-E phase.
 
-Column structure reverse-engineered from AUSTRAC official spreadsheets:
-  IFTI-DRA OUT: 112 columns
-  IFTI-DRA IN:  115 columns
+IFTI-DRA XML schema: IFTI-DRA-1-2.xsd
+Namespace: http://austrac.gov.au/schema/reporting/IFTI-DRA-1-2
+Statutory deadline: 10 business days from receiving/sending the instruction.
+
+Party terminology (IFTI-DRA):
+  transferor      = ordering customer (oc_*) — the sender
+  orderingInstn   = institution accepting the instruction (accept_*) — mandatory foreignBased flag
+  initiatingInstn = intermediate institution (optional, not currently stored)
+  sendingInstn    = institution sending the instruction (send_*)
+  receivingInstn  = institution receiving the instruction (recv_*)
+  beneficiaryInstn = institution distributing to beneficiary (dist_*)
+  beneficiaryBranch = branch of beneficiary institution (optional, not stored)
+  transferee      = beneficiary customer (bc_*) — the recipient
 """
 
 import enum
 
-from sqlalchemy import Column, Date, DateTime, Float, Integer, String, ForeignKey
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.sql import func
 
@@ -36,7 +45,7 @@ class IFTIRecord(Base):
     id = Column(Integer, primary_key=True, index=True)
     ifti_id = Column(String(60), unique=True, index=True, nullable=False)
     industry_id = Column(String(60), index=True)
-    organisation_id = Column(Integer, ForeignKey("organisations.id"), index=True)
+    organisation_id = Column(String(36), ForeignKey("organisations.id"), index=True)
     direction = Column(SAEnum(IFTIDirection), nullable=False, index=True)
     status = Column(SAEnum(IFTIStatus), default=IFTIStatus.draft)
 
@@ -69,6 +78,8 @@ class IFTIRecord(Base):
     oc_email = Column(String(200))
     oc_occupation = Column(String(200))
     oc_abn = Column(String(50))
+    oc_acn = Column(String(9))  # Australian Company Number (9 digits)
+    oc_arbn = Column(String(9))  # Australian Registered Body Number (9 digits)
     oc_customer_number = Column(String(100))
     oc_account_number = Column(String(100))
     oc_business_structure = Column(String(100))
@@ -102,11 +113,13 @@ class IFTIRecord(Base):
     bc_email = Column(String(200))
     bc_occupation = Column(String(200))
     bc_abn = Column(String(50))
+    bc_acn = Column(String(9))
+    bc_arbn = Column(String(9))
     bc_business_structure = Column(String(100))
     bc_account_number = Column(String(100))
-    bc_institution_name = Column(String(200))
-    bc_institution_city = Column(String(100))
-    bc_institution_country = Column(String(100))
+    bc_institution_name = Column(String(200))  # InstitutionWithAccount.name (MANDATORY)
+    bc_institution_city = Column(String(100))  # InstitutionWithAccount.city (MANDATORY)
+    bc_institution_country = Column(String(100))  # InstitutionWithAccount.country
 
     # ── Person/org accepting transfer instruction from ordering customer ───────
     accept_id_number = Column(
@@ -130,6 +143,9 @@ class IFTIRecord(Base):
     accept_other_name = Column(String(200))  # IFTI-IN only
     accept_dob = Column(Date)  # IFTI-IN only
     accept_abn = Column(String(50))  # IFTI-IN only
+    accept_acn = Column(String(9))
+    # orderingInstn.foreignBased — MANDATORY per IFTI-DRA-1-2 schema (YesNo)
+    accept_foreign_based = Column(String(3), default="No")  # Yes | No
     is_accepting_money = Column(String(5), default="Yes")  # Yes/No
     is_sending_instruction = Column(String(5), default="Yes")  # Yes/No
 
@@ -159,6 +175,8 @@ class IFTIRecord(Base):
     send_email = Column(String(200))
     send_occupation = Column(String(200))
     send_abn = Column(String(50))
+    send_acn = Column(String(9))
+    send_arbn = Column(String(9))
     send_business_structure = Column(String(100))
 
     # ── Person/org receiving transfer instruction ─────────────────────────────
@@ -190,6 +208,15 @@ class IFTIRecord(Base):
 
     # ── Reason + Reporter ────────────────────────────────────────────────────
     reason_for_transfer = Column(String(500))
+
+    # initiatingInstn (0..1) — optional intermediate institution between
+    # orderingInstn and sendingInstn. Maps to XML <initiatingInstn> element.
+    init_instn_same_as_ordering = Column(String(3))  # Yes | No
+    init_instn_full_name = Column(String(200))
+    init_instn_address = Column(String(300))
+    init_instn_city = Column(String(100))
+    init_instn_country = Column(String(100))
+
     reporter_full_name = Column(String(200))
     reporter_job_title = Column(String(200))
     reporter_phone = Column(String(50))

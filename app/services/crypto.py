@@ -35,11 +35,13 @@ def encrypt_secret(plain: str) -> str:
 def decrypt_secret(value: str) -> str:
     if value is None or not value.startswith(ENC_PREFIX):
         return value
-    token = value[len(ENC_PREFIX):]
+    token = value[len(ENC_PREFIX) :]
     try:
         return _fernet.decrypt(token.encode()).decode()
     except InvalidToken:
-        raise ValueError("Stored credential could not be decrypted — encryption key may have changed")
+        raise ValueError(
+            "Stored credential could not be decrypted — encryption key may have changed"
+        )
 
 
 def is_encrypted(value) -> bool:

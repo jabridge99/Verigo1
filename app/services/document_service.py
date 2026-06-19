@@ -1,15 +1,15 @@
 """
 Document storage service — delegates byte storage to the per-tenant
-StorageProvider (local/S3/Azure/GCS) resolved via app.services.storage.factory.
-The Document row keeps a logical storage key (`stored_name`); only the
-factory knows which physical backend that key lives in.
+StorageProvider (local/Supabase/S3/Azure/GCS) resolved via
+app.services.storage.factory. The Document row keeps a logical storage key
+(`stored_name`); only the factory knows which physical backend that key lives in.
 """
 
 import uuid
 from typing import List, Optional
 
 from sqlalchemy import desc, or_
-from sqlalchemy.orm import Session, Query
+from sqlalchemy.orm import Query, Session
 
 from app.models.document import Document, DocumentCategory, DocumentStatus
 from app.schemas.document import DocumentUpdate
@@ -44,12 +44,15 @@ def _storage_key(industry_id: Optional[str], original_name: str) -> str:
     return f"{prefix}/{name}"
 
 
-def _scope(q: Query, industry_id: Optional[str], organisation_id: Optional[int]) -> Query:
+def _scope(
+    q: Query, industry_id: Optional[str], organisation_id: Optional[str]
+) -> Query:
     if organisation_id:
         return q.filter(
             or_(
                 Document.organisation_id == organisation_id,
-                (Document.organisation_id.is_(None)) & (Document.industry_id == industry_id),
+                (Document.organisation_id.is_(None))
+                & (Document.industry_id == industry_id),
             )
         )
     if industry_id:
@@ -64,11 +67,13 @@ async def create_document(
     mime_type: str,
     uploaded_by: str,
     industry_id: Optional[str],
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
     category: DocumentCategory = DocumentCategory.other,
     description: Optional[str] = None,
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
+    sha256_hash: Optional[str] = None,
+    retention_category: Optional[str] = None,
 ) -> Document:
     key = _storage_key(industry_id, filename)
     provider = get_storage_provider(industry_id)
@@ -86,6 +91,8 @@ async def create_document(
         uploaded_by=uploaded_by,
         industry_id=industry_id,
         organisation_id=organisation_id,
+        sha256_hash=sha256_hash,
+        retention_category=retention_category,
     )
     db.add(doc)
     db.commit()
@@ -96,7 +103,7 @@ async def create_document(
 def list_documents(
     db: Session,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
     category: Optional[DocumentCategory] = None,
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
@@ -138,12 +145,21 @@ async def get_access_url(doc: Document, expires_in: int = 300) -> str:
     return await provider.get_url(doc.stored_name, expires_in=expires_in)
 
 
+async def get_file_bytes(doc: Document) -> bytes:
+    return await download_bytes(doc)
+
+
+async def file_exists(doc: Document) -> bool:
+    provider = get_storage_provider(doc.industry_id)
+    return await provider.exists(doc.stored_name)
+
+
 def update_document(
     db: Session,
     doc_id: str,
     data: DocumentUpdate,
     industry_id: Optional[str],
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> Optional[Document]:
     q = db.query(Document).filter(
         Document.doc_id == doc_id, Document.status == DocumentStatus.active
@@ -160,7 +176,10 @@ def update_document(
 
 
 def archive_document(
-    db: Session, doc_id: str, industry_id: Optional[str], organisation_id: Optional[int] = None
+    db: Session,
+    doc_id: str,
+    industry_id: Optional[str],
+    organisation_id: Optional[str] = None,
 ) -> Optional[Document]:
     q = db.query(Document).filter(
         Document.doc_id == doc_id, Document.status == DocumentStatus.active
@@ -176,23 +195,31 @@ def archive_document(
 
 
 async def delete_document(
-    db: Session, doc_id: str, industry_id: Optional[str], organisation_id: Optional[int] = None
+    db: Session,
+    doc_id: str,
+    industry_id: Optional[str],
+    organisation_id: Optional[str] = None,
 ) -> bool:
     q = db.query(Document).filter(Document.doc_id == doc_id)
     q = _scope(q, industry_id, organisation_id)
     doc = q.first()
     if not doc:
         return False
-    # Soft delete — remove the underlying object, mark the row deleted
+    # Soft delete — remove object from storage backend, mark deleted
     provider = get_storage_provider(doc.industry_id)
-    await provider.delete(doc.stored_name)
+    try:
+        await provider.delete(doc.stored_name)
+    except Exception:
+        pass  # object may already be gone — don't block the soft-delete
     doc.status = DocumentStatus.deleted
     db.commit()
     return True
 
 
 def document_stats(
-    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ) -> dict:
     q = db.query(Document).filter(Document.status == DocumentStatus.active)
     q = _scope(q, industry_id, organisation_id)

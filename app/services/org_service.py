@@ -2,20 +2,17 @@
 Phase B — Organisation / membership / role / permission service layer.
 """
 
-import re
-import uuid
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.models.organisation import (
+    IndustryType,
     MembershipStatus,
     Organisation,
     OrganisationUser,
     Permission,
     Role,
-    new_org_id,
-    new_role_id,
 )
 from app.models.user import User
 
@@ -47,30 +44,62 @@ SYSTEM_ROLE_TEMPLATES: dict[str, tuple[str, set[str]]] = {
     "compliance_officer": (
         "Compliance Officer",
         {
-            "customers:read", "customers:write", "kyc:read", "kyc:write",
-            "transactions:read", "reports:read", "reports:write", "audit:read",
-            "cases:read", "cases:write", "ecdd:read", "ecdd:write",
+            "customers:read",
+            "customers:write",
+            "kyc:read",
+            "kyc:write",
+            "transactions:read",
+            "reports:read",
+            "reports:write",
+            "audit:read",
+            "cases:read",
+            "cases:write",
+            "ecdd:read",
+            "ecdd:write",
         },
     ),
     "mlro": (
         "MLRO",
         {
-            "customers:read", "customers:write", "kyc:read", "kyc:write",
-            "transactions:read", "reports:read", "reports:write", "reports:approve",
-            "audit:read", "cases:read", "cases:write", "cases:close",
-            "ecdd:read", "ecdd:write",
+            "customers:read",
+            "customers:write",
+            "kyc:read",
+            "kyc:write",
+            "transactions:read",
+            "reports:read",
+            "reports:write",
+            "reports:approve",
+            "audit:read",
+            "cases:read",
+            "cases:write",
+            "cases:close",
+            "ecdd:read",
+            "ecdd:write",
         },
     ),
     "director": (
         "Director",
         {
-            "customers:read", "kyc:read", "transactions:read",
-            "reports:read", "reports:approve", "audit:read", "cases:read", "ecdd:read",
+            "customers:read",
+            "kyc:read",
+            "transactions:read",
+            "reports:read",
+            "reports:approve",
+            "audit:read",
+            "cases:read",
+            "ecdd:read",
         },
     ),
     "staff": (
         "Staff",
-        {"customers:read", "kyc:read", "transactions:read", "reports:read", "cases:read", "ecdd:read"},
+        {
+            "customers:read",
+            "kyc:read",
+            "transactions:read",
+            "reports:read",
+            "cases:read",
+            "ecdd:read",
+        },
     ),
     "viewer": (
         "Viewer",
@@ -87,7 +116,9 @@ def seed_permission_catalog_and_roles(db: Session) -> None:
     db.commit()
 
     all_permissions = {p.code: p for p in db.query(Permission).all()}
-    existing_roles = {r.role_id for r in db.query(Role).filter(Role.organisation_id.is_(None))}
+    existing_roles = {
+        r.role_id for r in db.query(Role).filter(Role.organisation_id.is_(None))
+    }
 
     for role_key, (name, perm_codes) in SYSTEM_ROLE_TEMPLATES.items():
         role_id = f"ROLE-SYS-{role_key.upper()}"
@@ -110,22 +141,12 @@ def get_system_role(db: Session, role_key: str) -> Optional[Role]:
     return db.query(Role).filter(Role.role_id == f"ROLE-SYS-{role_key.upper()}").first()
 
 
-def slugify(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    return slug or uuid.uuid4().hex[:8]
-
-
 def create_organisation(
     db: Session, name: str, owner: User, industry_id: Optional[str] = None
 ) -> Organisation:
-    base_slug = slugify(name)
-    slug = base_slug
-    n = 1
-    while db.query(Organisation).filter(Organisation.slug == slug).first():
-        n += 1
-        slug = f"{base_slug}-{n}"
-
-    org = Organisation(org_id=new_org_id(), name=name, slug=slug, industry_id=industry_id)
+    org = Organisation(
+        name=name, industry_id=industry_id, industry_type=IndustryType.other
+    )
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -150,7 +171,10 @@ def add_user_to_organisation(
 ) -> OrganisationUser:
     existing = (
         db.query(OrganisationUser)
-        .filter(OrganisationUser.organisation_id == org.id, OrganisationUser.user_id == user.id)
+        .filter(
+            OrganisationUser.organisation_id == org.id,
+            OrganisationUser.user_id == user.id,
+        )
         .first()
     )
     if existing:
@@ -161,7 +185,10 @@ def add_user_to_organisation(
         raise ValueError(f"Unknown role: {role_key}")
 
     membership = OrganisationUser(
-        organisation_id=org.id, user_id=user.id, role_id=role.id, status=MembershipStatus.active
+        organisation_id=org.id,
+        user_id=user.id,
+        role_id=role.id,
+        status=MembershipStatus.active,
     )
     db.add(membership)
     if not user.primary_organisation_id:
@@ -171,10 +198,15 @@ def add_user_to_organisation(
     return membership
 
 
-def get_membership(db: Session, org_id: int, user_id: int) -> Optional[OrganisationUser]:
+def get_membership(
+    db: Session, org_id: str, user_id: str
+) -> Optional[OrganisationUser]:
     return (
         db.query(OrganisationUser)
-        .filter(OrganisationUser.organisation_id == org_id, OrganisationUser.user_id == user_id)
+        .filter(
+            OrganisationUser.organisation_id == org_id,
+            OrganisationUser.user_id == user_id,
+        )
         .first()
     )
 
@@ -188,7 +220,7 @@ def get_user_organisations(db: Session, user: User) -> list[Organisation]:
     )
 
 
-def has_org_permission(db: Session, user: User, org_id: int, permission: str) -> bool:
+def has_org_permission(db: Session, user: User, org_id: str, permission: str) -> bool:
     if getattr(user, "is_super_admin", False):
         return True
     membership = get_membership(db, org_id, user.id)

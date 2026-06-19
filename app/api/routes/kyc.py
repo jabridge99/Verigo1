@@ -4,33 +4,66 @@ Fixes: authentication required, RBAC on review, reviewer_id from session,
 filename sanitisation, tenant isolation, MIME validation.
 """
 
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
+from app.config import settings
 from app.db.database import get_db
+from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
+from app.integrations.identity import get_provider
 from app.models.customer import Customer, CustomerStatus
-from app.models.kyc import DocumentType, KYCDocument, KYCRecord, KYCStatus
+from app.models.kyc import (
+    CustomerIdentityDocument,
+    IdentityDocumentType,
+    VerificationProvider,
+    VerificationResult,
+)
+from app.models.usage import UsageEventType, UsageRecordStatus
 from app.models.user import User, UserRole
 from app.services.identity_verification import (
     compute_kyc_identity_score,
     verify_document,
 )
 from app.services.sanctions_screening import screen_name
-from app.services.tenant_scope import assert_tenant
+from app.services.usage_billing_service import (
+    find_by_reference,
+    mark_completed,
+    mark_failed,
+    record_usage,
+)
 
 router = APIRouter(prefix="/kyc", tags=["KYC"])
 
 ALLOWED_DOC_MIME = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
 MAX_DOC_SIZE = 10 * 1024 * 1024
 
+# AMBIGUOUS (whole file): the old `KYCRecord` (one row per customer, with its own
+# `KYCStatus` covering pending/document_submitted/approved/rejected/requires_ecdd) and
+# `KYCDocument` models no longer exist. KYC documents are now stored per verification
+# type, e.g. `CustomerIdentityDocument` (app/models/kyc.py), each with its own
+# `VerificationResult` (pass/fail/refer/not_performed) — there is no longer a single
+# customer-level KYC record/status; that responsibility has moved onto
+# `Customer.status` (CustomerStatus: draft/pending/under_review/edd_required/active/
+# suspended/rejected/closed). This file is adapted to treat `Customer` + its
+# `CustomerIdentityDocument`s as the "KYC record", using `Customer.status` in place of
+# `KYCStatus`. Other plausible candidates for the per-verification record were
+# CustomerSelfieVerification / CustomerAddressVerification — CustomerIdentityDocument
+# was chosen since identity document upload+review is what this route implements.
+# `KYC-xxxx` style `kyc_id` no longer exists; `Customer.id` is used as the path/lookup
+# key in its place. `DocumentType` -> `IdentityDocumentType`. `customer.customer_id`
+# (old PK lookup field) -> `Customer.id`. `industry_id` (Customer/User) -> `org_id`.
+# `current_user.user_id` -> `current_user.id`.
 
-def _assert_tenant(current_user: User, customer: Customer):
-    assert_tenant(current_user, customer.organisation_id, customer.industry_id)
+
+def _assert_tenant(current_user: User, record_org_id):
+    if current_user.role == UserRole.admin:
+        return
+    if record_org_id and record_org_id != current_user.org_id:
+        raise HTTPException(403, "Cross-tenant access denied")
 
 
 @router.post("/{customer_id}/initiate")
@@ -39,36 +72,26 @@ def initiate_kyc(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer)
-    existing = (
-        db.query(KYCRecord)
-        .filter(
-            KYCRecord.customer_id == customer.id,
-            KYCRecord.status.notin_([KYCStatus.rejected]),
-        )
-        .first()
-    )
-    if existing:
-        raise HTTPException(400, "Active KYC record already exists")
-    kyc = KYCRecord(
-        kyc_id=f"KYC-{uuid.uuid4().hex[:10].upper()}",
-        customer_id=customer.id,
-        status=KYCStatus.pending,
-    )
-    customer.status = CustomerStatus.kyc_in_progress
-    db.add(kyc)
+    _assert_tenant(current_user, customer.org_id)
+    if customer.status not in (
+        CustomerStatus.draft,
+        CustomerStatus.rejected,
+        CustomerStatus.closed,
+    ):
+        raise HTTPException(400, "Active KYC process already exists")
+    customer.status = CustomerStatus.pending
     db.commit()
-    db.refresh(kyc)
-    return {"kyc_id": kyc.kyc_id, "status": kyc.status}
+    db.refresh(customer)
+    return {"customer_id": customer.id, "status": customer.status}
 
 
-@router.post("/{kyc_id}/documents")
+@router.post("/{customer_id}/documents")
 async def upload_document(
-    kyc_id: str,
-    document_type: DocumentType = Form(...),
+    customer_id: str,
+    document_type: IdentityDocumentType = Form(...),
     extracted_name: str = Form(None),
     extracted_dob: str = Form(None),
     extracted_id_number: str = Form(None),
@@ -77,9 +100,10 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    kyc = db.query(KYCRecord).filter(KYCRecord.kyc_id == kyc_id).first()
-    if not kyc:
-        raise HTTPException(404, "KYC record not found")
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    _assert_tenant(current_user, customer.org_id)
 
     content = await file.read()
     if len(content) > MAX_DOC_SIZE:
@@ -91,38 +115,41 @@ async def upload_document(
     if not safe_name or safe_name.startswith("."):
         raise HTTPException(400, "Invalid filename")
 
-    customer = db.query(Customer).filter(Customer.id == kyc.customer_id).first()
-    if customer:
-        _assert_tenant(current_user, customer)
-
-    doc = KYCDocument(
-        kyc_record_id=kyc.id,
+    doc = CustomerIdentityDocument(
+        customer_id=customer.id,
+        org_id=customer.org_id,
         document_type=document_type,
-        file_name=safe_name,
+        document_ref_front=safe_name,
         extracted_name=extracted_name,
         extracted_dob=extracted_dob,
-        extracted_id_number=extracted_id_number,
-        extracted_expiry=extracted_expiry,
+        extracted_mrz=extracted_id_number,
+        uploaded_by=current_user.id,
     )
     db.add(doc)
     db.flush()
     result = verify_document(customer, doc)
     doc.confidence_score = result["confidence_score"]
-    doc.verification_result = result["verification_result"]
-    kyc.status = KYCStatus.document_submitted
+    # `verify_document` returns a "valid"/"invalid"/"review_required" string from the
+    # old verification_result vocabulary; mapped onto current VerificationResult values.
+    doc.verification_result = {
+        "valid": VerificationResult.pass_,
+        "invalid": VerificationResult.fail,
+        "review_required": VerificationResult.refer,
+    }.get(result["verification_result"], VerificationResult.not_performed)
+    customer.status = CustomerStatus.under_review
     db.commit()
     db.refresh(doc)
     return {
         "document_id": doc.id,
-        "verification_result": result["verification_result"],
+        "verification_result": doc.verification_result,
         "confidence_score": result["confidence_score"],
         "issues": result["issues"],
     }
 
 
-@router.post("/{kyc_id}/review")
+@router.post("/{customer_id}/review")
 def review_kyc(
-    kyc_id: str,
+    customer_id: str,
     approve: bool,
     notes: str = None,
     rejection_reason: str = None,
@@ -131,44 +158,40 @@ def review_kyc(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    kyc = db.query(KYCRecord).filter(KYCRecord.kyc_id == kyc_id).first()
-    if not kyc:
-        raise HTTPException(404, "KYC record not found")
-    customer = db.query(Customer).filter(Customer.id == kyc.customer_id).first()
-    if customer:
-        _assert_tenant(current_user, customer)
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    _assert_tenant(current_user, customer.org_id)
 
-    documents = db.query(KYCDocument).filter(KYCDocument.kyc_record_id == kyc.id).all()
+    documents = (
+        db.query(CustomerIdentityDocument)
+        .filter(CustomerIdentityDocument.customer_id == customer.id)
+        .all()
+    )
     sanctions = screen_name(customer.full_name)
-    kyc.sanctions_checked = 1
-    kyc.sanctions_match = 1 if sanctions["match_found"] else 0
-    kyc.identity_score = compute_kyc_identity_score(documents)
-    kyc.reviewer_id = current_user.user_id  # CRITICAL: from session, not request
-    kyc.reviewer_notes = notes
-    kyc.reviewed_at = datetime.utcnow()
+    # `kyc.identity_score`/`reviewer_id`/`reviewer_notes`/`reviewed_at` had no
+    # surviving columns on Customer or CustomerIdentityDocument to persist into;
+    # they are computed/used for the decision below but not stored, since there is no
+    # current equivalent field. This is a (non-blocking) loss of persistence noted here
+    # rather than silently dropped.
+    identity_score = compute_kyc_identity_score(documents)
 
     if sanctions["match_found"]:
-        kyc.status = KYCStatus.rejected
-        kyc.rejection_reason = "Sanctions match detected"
-        customer.status = CustomerStatus.kyc_rejected
+        customer.status = CustomerStatus.rejected
     elif approve:
         requires_ecdd = customer.is_pep or customer.risk_score >= 61
-        kyc.status = KYCStatus.requires_ecdd if requires_ecdd else KYCStatus.approved
         customer.status = (
-            CustomerStatus.kyc_approved
-            if not requires_ecdd
-            else CustomerStatus.kyc_in_progress
+            CustomerStatus.edd_required if requires_ecdd else CustomerStatus.active
         )
     else:
-        kyc.status = KYCStatus.rejected
-        kyc.rejection_reason = rejection_reason or "Manual rejection"
-        customer.status = CustomerStatus.kyc_rejected
+        customer.status = CustomerStatus.rejected
 
     db.commit()
     return {
-        "kyc_id": kyc.kyc_id,
-        "status": kyc.status,
-        "requires_ecdd": kyc.status == KYCStatus.requires_ecdd,
+        "customer_id": customer.id,
+        "status": customer.status,
+        "identity_score": identity_score,
+        "requires_ecdd": customer.status == CustomerStatus.edd_required,
     }
 
 
@@ -178,8 +201,114 @@ def get_kyc_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    _assert_tenant(current_user, customer)
-    return db.query(KYCRecord).filter(KYCRecord.customer_id == customer.id).all()
+    _assert_tenant(current_user, customer.org_id)
+    return (
+        db.query(CustomerIdentityDocument)
+        .filter(CustomerIdentityDocument.customer_id == customer.id)
+        .all()
+    )
+
+
+# ── Hosted verification (Sumsub) ─────────────────────────────────────────────
+# Set IDENTITY_PROVIDER=sumsub to enable. The customer completes document
+# upload + liveness directly in Sumsub's hosted widget using this token — we
+# never see the raw document images. Results land via the /webhooks/sumsub
+# callback below and are billed as metered usage at that point.
+
+
+@router.post("/{customer_id}/sumsub/token")
+async def create_sumsub_token(
+    customer_id: str,
+    kyb: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    _assert_tenant(current_user, customer.org_id)
+
+    try:
+        provider = get_provider()
+    except (NotImplementedError, ProviderUnavailableError) as exc:
+        raise HTTPException(503, str(exc))
+
+    level_name = settings.sumsub_kyb_level_name if kyb else settings.sumsub_level_name
+    try:
+        token = await provider.generate_access_token(customer.id, level_name)
+    except ProviderUnavailableError as exc:
+        raise HTTPException(503, str(exc))
+    except ProviderRejectedError as exc:
+        raise HTTPException(502, str(exc))
+
+    record_usage(
+        db,
+        org_id=customer.org_id,
+        event_type=UsageEventType.business_verification
+        if kyb
+        else UsageEventType.identity_verification,
+        provider=provider.name,
+        customer_id=customer.id,
+        provider_reference=customer.id,  # joined back to the webhook via externalUserId
+        status=UsageRecordStatus.pending,
+    )
+    return {
+        "token": token.token,
+        "applicant_id": token.applicant_id,
+        "expires_in_seconds": token.expires_in_seconds,
+    }
+
+
+@router.post("/webhooks/sumsub", include_in_schema=False)
+async def sumsub_webhook(request: Request, db: Session = Depends(get_db)):
+    """Unauthenticated — verified by HMAC signature on the raw body instead."""
+    try:
+        provider = get_provider()
+    except (NotImplementedError, ProviderUnavailableError) as exc:
+        raise HTTPException(503, str(exc))
+
+    body = await request.body()
+    signature = request.headers.get("x-payload-digest", "")
+    if not provider.verify_webhook_signature(body, signature):
+        raise HTTPException(401, "Invalid webhook signature")
+
+    payload = await request.json()
+    result = provider.parse_webhook_event(payload)
+
+    usage = find_by_reference(db, provider.name, result.external_user_id or "")
+    if usage and usage.status == UsageRecordStatus.pending:
+        if result.review_result in ("pass", "fail"):
+            mark_completed(db, usage)
+        elif payload.get("type") == "applicantReset":
+            mark_failed(db, usage)
+
+    customer = (
+        db.query(Customer).filter(Customer.id == result.external_user_id).first()
+        if result.external_user_id
+        else None
+    )
+    if customer and result.review_result:
+        doc = CustomerIdentityDocument(
+            customer_id=customer.id,
+            org_id=customer.org_id,
+            document_type=IdentityDocumentType.other,
+            verification_result=(
+                VerificationResult.pass_
+                if result.review_result == "pass"
+                else VerificationResult.fail
+            ),
+            verification_provider=VerificationProvider.sumsub,
+            provider_reference=result.applicant_id,
+            provider_raw_response=str(result.raw),
+            verified_by="sumsub",
+            verified_at=datetime.now(timezone.utc),
+        )
+        db.add(doc)
+        if result.review_result == "pass" and customer.status == CustomerStatus.pending:
+            customer.status = CustomerStatus.under_review
+        db.commit()
+
+    return {"status": "ok"}

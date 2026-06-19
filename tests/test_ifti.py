@@ -56,7 +56,7 @@ class TestIFTICreate:
     def test_industry_id_set_from_session(self, client, compliance_user, compliance_headers):
         resp = client.post("/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=compliance_headers)
         assert resp.status_code == 201
-        assert resp.json()["industry_id"] == compliance_user.industry_id
+        assert resp.json()["industry_id"] == compliance_user.org_id
 
 
 class TestIFTIList:
@@ -77,7 +77,7 @@ class TestIFTIList:
         from tests.conftest import _make_user, _auth
         from app.models.user import UserRole
 
-        other_user = _make_user(db, UserRole.compliance, industry_id="IND-IFTI-OTHER")
+        other_user = _make_user(db, UserRole.compliance)
         other_headers = _auth(other_user)
 
         # Create record as other tenant
@@ -158,7 +158,7 @@ class TestIFTIExport:
         from tests.conftest import _make_user, _auth
         from app.models.user import UserRole
         # Use a tenant with no IFTI records
-        empty_user = _make_user(db, UserRole.compliance, industry_id="IND-EMPTY-IFTI")
+        empty_user = _make_user(db, UserRole.compliance)
         empty_headers = _auth(empty_user)
         resp = client.get("/api/v1/ifti/export/outgoing", headers=empty_headers)
         assert resp.status_code == 404

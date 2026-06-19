@@ -34,14 +34,14 @@ def test_signup_flow_generates_program(client, db):
     assert res.status_code == 200, res.text
 
     res = client.patch(
-        f"/api/v1/organisations/{org['org_id']}",
+        f"/api/v1/organisations/{org['id']}",
         json={"risk_profile": "high"},
         headers=headers,
     )
     assert res.status_code == 200, res.text
     assert res.json()["risk_profile"] == "high"
 
-    res = client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    res = client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
     assert res.status_code == 201, res.text
     program = res.json()
     assert program["industry_id"] == "banking-au"
@@ -54,11 +54,11 @@ def test_signup_flow_generates_program(client, db):
     assert "Appoint an AML/CTF Compliance Officer (MLRO)" in titles
 
     # Regenerating bumps the version and replaces items.
-    res = client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    res = client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
     assert res.status_code == 201
     assert res.json()["version"] == 2
 
-    res = client.get(f"/api/v1/organisations/{org['org_id']}/aml-program", headers=headers)
+    res = client.get(f"/api/v1/organisations/{org['id']}/aml-program", headers=headers)
     assert res.status_code == 200
     assert res.json()["version"] == 2
 
@@ -69,7 +69,7 @@ def test_generate_program_requires_industry_and_risk_profile(client, db):
     headers = _auth(owner)
     org = _create_org(client, headers)
 
-    res = client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=headers)
+    res = client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=headers)
     assert res.status_code == 400
 
 
@@ -78,7 +78,7 @@ def test_non_member_cannot_generate_program(client, db):
     owner = _make_user(db, UserRole.analyst, industry_id=None)
     other = _make_user(db, UserRole.analyst, industry_id=None)
     org = _create_org(client, _auth(owner), industry_id="fintech")
-    client.patch(f"/api/v1/organisations/{org['org_id']}", json={"risk_profile": "low"}, headers=_auth(owner))
+    client.patch(f"/api/v1/organisations/{org['id']}", json={"risk_profile": "low"}, headers=_auth(owner))
 
-    res = client.post(f"/api/v1/organisations/{org['org_id']}/aml-program/generate", headers=_auth(other))
+    res = client.post(f"/api/v1/organisations/{org['id']}/aml-program/generate", headers=_auth(other))
     assert res.status_code == 403

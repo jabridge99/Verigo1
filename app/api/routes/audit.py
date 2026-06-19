@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
-from app.models.audit import AuditLog
+from app.models.audit import LegacyAuditLog as AuditLog
 from app.models.user import User, UserRole
 from app.schemas.audit import AuditLogCreate, AuditLogResponse
 from app.services.audit_service import log_action
@@ -26,7 +26,10 @@ router = APIRouter(prefix="/audit", tags=["Audit Trail"])
 
 def _scoped_query(db: Session, current_user: User):
     """Return a query scoped to the current user's tenant."""
-    return scope_query(db.query(AuditLog), AuditLog, current_user)
+    q = db.query(AuditLog)
+    if current_user.role != UserRole.admin:
+        q = q.filter(AuditLog.organisation_id == current_user.org_id)
+    return q
 
 
 @router.post("/", response_model=AuditLogResponse, status_code=201)
@@ -131,5 +134,6 @@ def get_log(
     if not entry:
         raise HTTPException(404, "Log entry not found")
     # Tenant isolation: non-admin cannot read another tenant's log entry
-    assert_tenant(current_user, entry.organisation_id, entry.industry_id)
+    if current_user.role != UserRole.admin and entry.industry_id != current_user.org_id:
+        raise HTTPException(403, "Cross-tenant access denied")
     return entry

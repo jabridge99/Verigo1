@@ -20,7 +20,14 @@ class BrandingConfig(BaseModel):
     footer_text: Optional[str] = None  # Replaces default footer tagline
     hide_verigo_badge: bool = False  # Remove "Powered by Verigo"
 
-    @field_validator("primary_color", "accent_color", "bg_color", "surface_color", "text_color", mode="before")
+    @field_validator(
+        "primary_color",
+        "accent_color",
+        "bg_color",
+        "surface_color",
+        "text_color",
+        mode="before",
+    )
     @classmethod
     def must_be_hex(cls, v):
         if v and not re.match(r"^#[0-9a-fA-F]{3,8}$", v):

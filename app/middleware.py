@@ -5,6 +5,12 @@ Zero Trust hardening:
 - Rate limiter keyed by X-Forwarded-For (real client IP behind load balancer)
 - Auth endpoints rate-limited per user identity (email) when available
 - Account lockout tracking for repeated failed logins
+
+Rate limiting:
+- When REDIS_URL is set: Redis sliding-window (ZADD + ZREMRANGEBYSCORE + ZCARD)
+  using a pipeline so each request costs one round-trip.
+- When REDIS_URL is not set: falls back to in-process token-bucket (_InProcessRateLimiter)
+  which does NOT share state across workers (fine for single-worker dev).
 """
 
 import logging
@@ -95,28 +101,20 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
+# ── In-process fallback (single-worker / dev) ─────────────────────────────────
+
+
+class _InProcessRateLimiter:
     """
-    In-process token-bucket rate limiter.
-    - Reads real client IP from X-Forwarded-For header
-    - Auth endpoints: 20 req/min per IP
-    - Security-sensitive paths (login/magic-link): 10 req/min per IP
-    - General API: configurable (default 200/min)
-    For production multi-worker deployments use slowapi + Redis.
+    Sliding-window rate limiter backed by in-process Python dicts.
+    Does NOT share state across multiple uvicorn workers.
+    Used as fallback when Redis is not configured.
     """
 
-    def __init__(self, app: FastAPI, requests_per_minute: int = 200):
-        super().__init__(app)
-        self._rpm = requests_per_minute
+    def __init__(self):
         self._buckets: dict = {}
 
-    def _real_ip(self, request: Request) -> str:
-        xff = request.headers.get("X-Forwarded-For", "")
-        if xff:
-            return xff.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
-
-    def _allow(self, key: str, limit: int) -> bool:
+    def allow(self, key: str, limit: int) -> bool:
         now = time.time()
         window_start = now - 60
         history = self._buckets.get(key, [])
@@ -127,6 +125,99 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         history.append(now)
         self._buckets[key] = history
         return True
+
+
+_in_process_limiter = _InProcessRateLimiter()
+
+
+# ── Redis sliding-window helper ───────────────────────────────────────────────
+
+
+async def _redis_allow(
+    redis_client, key: str, limit: int, window_seconds: int = 60
+) -> bool:
+    """
+    Redis sliding-window rate check using a sorted set.
+    Key format expected: rl:{bucket}:{client_ip}
+    TTL on the sorted set is window_seconds + 5 s for safety.
+    Returns True if the request is within the limit.
+    """
+    now = time.time()
+    window_start = now - window_seconds
+
+    try:
+        pipe = redis_client.pipeline()
+        pipe.zremrangebyscore(key, "-inf", window_start)
+        pipe.zadd(key, {str(now): now})
+        pipe.zcard(key)
+        pipe.expire(key, window_seconds + 5)
+        results = await pipe.execute()
+        count = results[2]
+        return count <= limit
+    except Exception as exc:
+        logger.warning(
+            "Redis rate-limit error for key %s: %s — allowing request", key, exc
+        )
+        return True  # Fail open
+
+
+# ── Unified RateLimitMiddleware ────────────────────────────────────────────────
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """
+    Tiered rate limiter with Redis sliding-window (multi-worker safe) and
+    in-process fallback when Redis is not configured.
+
+    Tiers:
+      login endpoints      10 req/min per IP
+      other auth endpoints 20 req/min per IP
+      general API          configurable (default 200/min)
+
+    Redis key format: rl:{bucket}:{client_ip}
+    Sorted set TTL: 65 s (auto-expiry)
+    """
+
+    def __init__(self, app: FastAPI, requests_per_minute: int = 200):
+        super().__init__(app)
+        self._rpm = requests_per_minute
+        self._redis = None
+        self._redis_checked = False
+
+    async def _get_redis(self):
+        if not self._redis_checked:
+            self._redis_checked = True
+            from app.config import settings
+
+            if settings.redis_url:
+                try:
+                    import redis.asyncio as aioredis
+
+                    self._redis = aioredis.from_url(
+                        settings.redis_url,
+                        encoding="utf-8",
+                        decode_responses=True,
+                    )
+                    logger.info(
+                        "RateLimitMiddleware: using Redis backend (%s)",
+                        settings.redis_url,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "RateLimitMiddleware: Redis init failed, using in-process fallback: %s",
+                        exc,
+                    )
+            else:
+                logger.info(
+                    "RateLimitMiddleware: REDIS_URL not set — using in-process fallback"
+                )
+        return self._redis
+
+    def _real_ip(self, request: Request) -> str:
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.client.host if request.client else "unknown"
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         path = request.url.path
@@ -140,8 +231,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         else:
             rpm, bucket_label = self._rpm, "api"
 
-        key = f"{client_ip}:{bucket_label}"
-        if not self._allow(key, rpm):
+        redis_client = await self._get_redis()
+
+        if redis_client is not None:
+            key = f"rl:{bucket_label}:{client_ip}"
+            allowed = await _redis_allow(redis_client, key, rpm)
+        else:
+            key = f"{client_ip}:{bucket_label}"
+            allowed = _in_process_limiter.allow(key, rpm)
+
+        if not allowed:
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many requests. Please slow down."},

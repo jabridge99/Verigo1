@@ -4,6 +4,8 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.models.billing import (
+    AddonKey,
+    AddonStatus,
     BillingInterval,
     BillingPlan,
     InvoiceStatus,
@@ -96,6 +98,29 @@ class PlanInfo(BaseModel):
     annual_discount_pct: float
     features: List[str]
     limits: dict
+
+
+class AddonInfo(BaseModel):
+    addon_key: str
+    name: str
+    monthly_aud: float
+    description: str
+    unlocks_providers: List[str]
+    requires_plan: List[str]
+
+
+class AddonResponse(BaseModel):
+    id: int
+    addon_id: str
+    org_id: str
+    addon_key: AddonKey
+    status: AddonStatus
+    price_aud: Optional[float] = None
+    purchased_at: Optional[datetime] = None
+    canceled_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
 
 
 class FeatureToggleRow(BaseModel):

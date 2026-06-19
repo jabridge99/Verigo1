@@ -32,7 +32,7 @@ router = APIRouter(tags=["api-keys"])
 def list_keys(
     db: Session = Depends(get_db), current_user: User = Depends(_current_user)
 ):
-    return svc.list_api_keys(db, current_user.user_id)
+    return svc.list_api_keys(db, current_user.id)
 
 
 @router.post("/api-keys", response_model=APIKeyCreated, status_code=201)
@@ -43,9 +43,7 @@ def create_key(
 ):
     if current_user.role not in ("admin", "mlro"):
         raise HTTPException(403, "Insufficient permissions")
-    key, raw = svc.create_api_key(
-        db, data, current_user.user_id, current_user.industry_id
-    )
+    key, raw = svc.create_api_key(db, data, current_user.id, current_user.org_id)
     return {**key.__dict__, "raw_key": raw}
 
 
@@ -55,7 +53,7 @@ def revoke_key(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    key = svc.revoke_api_key(db, key_id, current_user.user_id)
+    key = svc.revoke_api_key(db, key_id, current_user.id)
     if not key:
         raise HTTPException(404, "API key not found")
 
@@ -72,7 +70,7 @@ def list_events():
 def list_webhooks(
     db: Session = Depends(get_db), current_user: User = Depends(_current_user)
 ):
-    return svc.list_webhooks(db, current_user.user_id)
+    return svc.list_webhooks(db, current_user.id)
 
 
 @router.post("/webhooks", response_model=WebhookResponse, status_code=201)
@@ -83,7 +81,7 @@ def create_webhook(
 ):
     if current_user.role not in ("admin", "mlro"):
         raise HTTPException(403, "Insufficient permissions")
-    return svc.create_webhook(db, data, current_user.user_id, current_user.industry_id)
+    return svc.create_webhook(db, data, current_user.id, current_user.org_id)
 
 
 @router.patch("/webhooks/{webhook_id}", response_model=WebhookResponse)
@@ -93,7 +91,7 @@ def update_webhook(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    wh = svc.update_webhook(db, webhook_id, current_user.user_id, data)
+    wh = svc.update_webhook(db, webhook_id, current_user.id, data)
     if not wh:
         raise HTTPException(404, "Webhook not found")
     return wh
@@ -105,7 +103,7 @@ def delete_webhook(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    if not svc.delete_webhook(db, webhook_id, current_user.user_id):
+    if not svc.delete_webhook(db, webhook_id, current_user.id):
         raise HTTPException(404, "Webhook not found")
 
 
@@ -118,7 +116,7 @@ def get_deliveries(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    wh = svc.get_webhook(db, webhook_id, current_user.user_id)
+    wh = svc.get_webhook(db, webhook_id, current_user.id)
     if not wh:
         raise HTTPException(404, "Webhook not found")
     return svc.list_deliveries(db, webhook_id, limit)
@@ -130,7 +128,7 @@ def test_webhook(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    wh = svc.get_webhook(db, webhook_id, current_user.user_id)
+    wh = svc.get_webhook(db, webhook_id, current_user.id)
     if not wh:
         raise HTTPException(404, "Webhook not found")
     delivery = svc.fire_webhook(db, wh, "test.ping", {"message": "Verigo webhook test"})

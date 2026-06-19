@@ -11,8 +11,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.aml_program import (
-    AMLProgram,
     AMLProgramItem,
+    AMLProgramRecord,
     AMLProgramStatus,
     AMLProgramVersion,
     new_qr_token,
@@ -248,10 +248,17 @@ def _tighten_frequency(freq: Optional[str], risk_profile: RiskProfile) -> Option
 
 
 def build_program_items(industry_id: str, risk_profile: RiskProfile) -> list[dict]:
-    items = list(BASE_PROGRAM) + INDUSTRY_PROGRAM.get(_industry_category(industry_id), [])
+    items = list(BASE_PROGRAM) + INDUSTRY_PROGRAM.get(
+        _industry_category(industry_id), []
+    )
     items += RISK_PROFILE_PROGRAM.get(risk_profile, [])
     return [
-        {**item, "review_frequency": _tighten_frequency(item.get("review_frequency"), risk_profile)}
+        {
+            **item,
+            "review_frequency": _tighten_frequency(
+                item.get("review_frequency"), risk_profile
+            ),
+        }
         for item in items
     ]
 
@@ -261,7 +268,9 @@ def _content_hash(items: list[dict]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _snapshot_version(db: Session, program: AMLProgram, items: list[dict]) -> AMLProgramVersion:
+def _snapshot_version(
+    db: Session, program: AMLProgramRecord, items: list[dict]
+) -> AMLProgramVersion:
     """Record an immutable snapshot of this version's item set — Verigo's
     permanent record-keeping copy, independent of what the customer can see
     or whether they later cancel."""
@@ -280,7 +289,7 @@ def _snapshot_version(db: Session, program: AMLProgram, items: list[dict]) -> AM
     return snapshot
 
 
-def generate_program(db: Session, org: Organisation) -> AMLProgram:
+def generate_program(db: Session, org: Organisation) -> AMLProgramRecord:
     """Generate (or regenerate) an organisation's AML/CTF program from its
     chosen industry_id and risk_profile. Idempotent — re-running replaces
     the item set and bumps the version. Locked generation: there is no path
@@ -292,16 +301,20 @@ def generate_program(db: Session, org: Organisation) -> AMLProgram:
         raise ValueError("Organisation has no risk profile selected")
 
     program = (
-        db.query(AMLProgram).filter(AMLProgram.organisation_id == org.id).first()
+        db.query(AMLProgramRecord)
+        .filter(AMLProgramRecord.organisation_id == org.id)
+        .first()
     )
     if program:
-        db.query(AMLProgramItem).filter(AMLProgramItem.program_id == program.id).delete()
+        db.query(AMLProgramItem).filter(
+            AMLProgramItem.program_id == program.id
+        ).delete()
         program.industry_id = org.industry_id
         program.risk_profile = org.risk_profile.value
         program.status = AMLProgramStatus.active
         program.version = (program.version or 1) + 1
     else:
-        program = AMLProgram(
+        program = AMLProgramRecord(
             program_id=_new_program_id(),
             organisation_id=org.id,
             industry_id=org.industry_id,
@@ -334,11 +347,15 @@ def generate_program(db: Session, org: Organisation) -> AMLProgram:
     return program
 
 
-def get_program(db: Session, org: Organisation) -> Optional[AMLProgram]:
-    return db.query(AMLProgram).filter(AMLProgram.organisation_id == org.id).first()
+def get_program(db: Session, org: Organisation) -> Optional[AMLProgramRecord]:
+    return (
+        db.query(AMLProgramRecord)
+        .filter(AMLProgramRecord.organisation_id == org.id)
+        .first()
+    )
 
 
-def get_program_items(db: Session, program: AMLProgram) -> list[AMLProgramItem]:
+def get_program_items(db: Session, program: AMLProgramRecord) -> list[AMLProgramItem]:
     return (
         db.query(AMLProgramItem)
         .filter(AMLProgramItem.program_id == program.id)
@@ -350,7 +367,7 @@ def get_program_items(db: Session, program: AMLProgram) -> list[AMLProgramItem]:
 # ── Retention — version history ─────────────────────────────────────────────
 
 
-def list_versions(db: Session, program: AMLProgram) -> list[AMLProgramVersion]:
+def list_versions(db: Session, program: AMLProgramRecord) -> list[AMLProgramVersion]:
     return (
         db.query(AMLProgramVersion)
         .filter(AMLProgramVersion.program_id == program.id)
@@ -359,28 +376,39 @@ def list_versions(db: Session, program: AMLProgram) -> list[AMLProgramVersion]:
     )
 
 
-def get_version(db: Session, program: AMLProgram, version: int) -> Optional[AMLProgramVersion]:
+def get_version(
+    db: Session, program: AMLProgramRecord, version: int
+) -> Optional[AMLProgramVersion]:
     return (
         db.query(AMLProgramVersion)
-        .filter(AMLProgramVersion.program_id == program.id, AMLProgramVersion.version == version)
+        .filter(
+            AMLProgramVersion.program_id == program.id,
+            AMLProgramVersion.version == version,
+        )
         .first()
     )
 
 
 def get_version_by_qr_token(db: Session, qr_token: str) -> Optional[AMLProgramVersion]:
-    return db.query(AMLProgramVersion).filter(AMLProgramVersion.qr_token == qr_token).first()
+    return (
+        db.query(AMLProgramVersion)
+        .filter(AMLProgramVersion.qr_token == qr_token)
+        .first()
+    )
 
 
 # ── "Rev up" — program health score / improvement suggestions ──────────────
 
 
-def compute_health(db: Session, program: AMLProgram) -> dict:
+def compute_health(db: Session, program: AMLProgramRecord) -> dict:
     """Compare the org's current live item set against what the template
     would generate today for its industry/risk profile. Surfaces controls
     the template has gained since the program was last generated, so we can
     nudge the customer to regenerate rather than let the program go stale."""
     current_titles = {item.title for item in get_program_items(db, program)}
-    template_items = build_program_items(program.industry_id, RiskProfile(program.risk_profile))
+    template_items = build_program_items(
+        program.industry_id, RiskProfile(program.risk_profile)
+    )
     template_titles = {item["title"] for item in template_items}
 
     missing = [item for item in template_items if item["title"] not in current_titles]
@@ -391,7 +419,11 @@ def compute_health(db: Session, program: AMLProgram) -> dict:
         "score": score,
         "up_to_date": not missing,
         "suggestions": [
-            {"category": item["category"], "title": item["title"], "description": item.get("description")}
+            {
+                "category": item["category"],
+                "title": item["title"],
+                "description": item.get("description"),
+            }
             for item in missing
         ],
     }

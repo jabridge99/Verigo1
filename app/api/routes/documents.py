@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
@@ -75,17 +76,25 @@ def _verify_magic(content: bytes, declared_mime: str) -> bool:
     return False
 
 
-def _assert_tenant(current_user: User, doc) -> None:
-    assert_tenant(current_user, doc.organisation_id, doc.industry_id)
+def _assert_tenant(current_user: User, doc_industry_id: Optional[str]):
+    """Explicit check — admin sees all, non-admin must match their industry_id."""
+    if current_user.role == UserRole.admin:
+        return  # admin has cross-tenant read access by design
+    if doc_industry_id and doc_industry_id != current_user.org_id:
+        raise HTTPException(403, "Cross-tenant document access denied")
 
 
 def _industry_scope(current_user: User) -> Optional[str]:
     """Return the industry_id to filter on, or None for admin (no filter)."""
-    return None if current_user.role == UserRole.admin else current_user.industry_id
+    return None if current_user.role == UserRole.admin else current_user.org_id
 
 
-def _org_scope(current_user: User) -> Optional[int]:
-    return None if current_user.role == UserRole.admin else current_user.primary_organisation_id
+def _org_scope(current_user: User) -> Optional[str]:
+    return (
+        None
+        if current_user.role == UserRole.admin
+        else current_user.primary_organisation_id
+    )
 
 
 @router.post("", response_model=DocumentResponse, status_code=201)
@@ -95,9 +104,12 @@ async def upload_document(
     description: Optional[str] = Form(None),
     entity_type: Optional[str] = Form(None),
     entity_id: Optional[str] = Form(None),
+    retention_category: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
+    import hashlib
+
     content = await file.read()
     if len(content) > MAX_SIZE:
         raise HTTPException(413, f"File exceeds {MAX_SIZE // (1024 * 1024)} MB limit")
@@ -118,18 +130,23 @@ async def upload_document(
     if not _verify_magic(content, mime):
         raise HTTPException(415, "File content does not match declared content type")
 
+    # Server-side SHA-256 — never trusted from client
+    sha256_hash = hashlib.sha256(content).hexdigest()
+
     return await svc.create_document(
         db,
         filename=file.filename or "upload",
         content=content,
         mime_type=mime,
-        uploaded_by=current_user.user_id,
-        industry_id=current_user.industry_id,
-        organisation_id=current_user.primary_organisation_id,
+        uploaded_by=current_user.id,
+        industry_id=_industry_scope(current_user),
+        organisation_id=_org_scope(current_user),
         category=category,
         description=description,
         entity_type=entity_type,
         entity_id=entity_id,
+        sha256_hash=sha256_hash,
+        retention_category=retention_category,
     )
 
 
@@ -160,7 +177,9 @@ def document_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.document_stats(db, _industry_scope(current_user), _org_scope(current_user))
+    return svc.document_stats(
+        db, _industry_scope(current_user), _org_scope(current_user)
+    )
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)
@@ -185,28 +204,18 @@ async def download_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    _assert_tenant(current_user, doc)
-
-    provider = get_storage_provider(doc.industry_id)
-    if not await provider.exists(doc.stored_name):
+    _assert_tenant(current_user, doc.industry_id)
+    if not await svc.file_exists(doc):
         raise HTTPException(404, "File not found on storage")
-
-    if isinstance(provider, LocalStorageProvider):
-        # Stream straight from disk — no presigned-URL support for local dev.
-        content = await svc.download_bytes(doc)
-        return StreamingResponse(
-            iter([content]),
-            media_type=doc.mime_type or "application/octet-stream",
-            headers={
-                "Content-Disposition": f'attachment; filename="{doc.filename}"',
-                "X-Content-Type-Options": "nosniff",
-            },
-        )
-
-    # Cloud backends: redirect to a short-lived pre-signed URL so the file
-    # streams directly from the object store, not through this API process.
-    url = await svc.get_access_url(doc, expires_in=300)
-    return RedirectResponse(url)
+    content = await svc.get_file_bytes(doc)
+    return Response(
+        content=content,
+        media_type=doc.mime_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{doc.filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.patch("/{doc_id}", response_model=DocumentResponse)
@@ -246,8 +255,167 @@ async def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
-    deleted = await svc.delete_document(
-        db, doc_id, _industry_scope(current_user), _org_scope(current_user)
-    )
-    if not deleted:
+    doc = svc.get_document(db, doc_id)
+    if not doc:
         raise HTTPException(404, "Document not found")
+    if doc.legal_hold:
+        raise HTTPException(409, "Document is under legal hold and cannot be deleted.")
+    if not await svc.delete_document(db, doc_id, _industry_scope(current_user)):
+        raise HTTPException(404, "Document not found")
+
+
+# ── Legal hold ────────────────────────────────────────────────────────────────
+
+
+class LegalHoldPayload(BaseModel):
+    reason: str
+
+
+@router.post("/{doc_id}/legal-hold")
+def place_legal_hold(
+    doc_id: str,
+    payload: LegalHoldPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+    ),
+):
+    """Place a legal hold on a document — blocks deletion and archival."""
+    from datetime import datetime, timezone
+
+    doc = svc.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
+    if doc.legal_hold:
+        raise HTTPException(409, "Document is already under legal hold.")
+
+    doc.legal_hold = True
+    doc.legal_hold_reason = payload.reason
+    doc.legal_hold_by = current_user.id
+    doc.legal_hold_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"doc_id": doc_id, "legal_hold": True, "reason": payload.reason}
+
+
+@router.delete("/{doc_id}/legal-hold", status_code=200)
+def release_legal_hold(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
+):
+    """Release legal hold — MLRO/admin only."""
+    doc = svc.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
+    if not doc.legal_hold:
+        raise HTTPException(409, "Document is not under legal hold.")
+
+    doc.legal_hold = False
+    doc.legal_hold_reason = None
+    doc.legal_hold_by = None
+    doc.legal_hold_at = None
+    db.commit()
+    return {"doc_id": doc_id, "legal_hold": False}
+
+
+# ── Versioning ────────────────────────────────────────────────────────────────
+
+
+@router.get("/{doc_id}/versions")
+def get_versions(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    """Return the full version chain for a document (oldest first)."""
+    from app.models.document import Document
+
+    doc = svc.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
+
+    # Walk back to root then collect chain
+    chain = []
+    current = doc
+    while current:
+        chain.append(current)
+        if current.previous_version_id:
+            current = (
+                db.query(Document)
+                .filter(Document.id == current.previous_version_id)
+                .first()
+            )
+        else:
+            break
+    chain.reverse()
+
+    return [
+        {
+            "id": d.id,
+            "doc_id": d.doc_id,
+            "version": d.version,
+            "filename": d.filename,
+            "size_bytes": d.size_bytes,
+            "sha256_hash": d.sha256_hash,
+            "uploaded_by": d.uploaded_by,
+            "created_at": d.created_at,
+            "legal_hold": d.legal_hold,
+        }
+        for d in chain
+    ]
+
+
+@router.post("/{doc_id}/new-version", response_model=DocumentResponse, status_code=201)
+async def upload_new_version(
+    doc_id: str,
+    file: UploadFile = File(...),
+    description: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    """
+    Upload a new version of an existing document.
+    Creates a new Document row with previous_version_id pointing to the current version.
+    The old version is retained (never deleted).
+    """
+    import hashlib
+
+    existing = svc.get_document(db, doc_id)
+    if not existing:
+        raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, existing.industry_id)
+    if existing.legal_hold:
+        raise HTTPException(409, "Cannot version a document under legal hold.")
+
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(413, f"File exceeds {MAX_SIZE // (1024 * 1024)} MB limit")
+
+    mime = file.content_type or existing.mime_type or "application/octet-stream"
+    if mime not in ALLOWED_MIME:
+        raise HTTPException(415, f"Unsupported file type: {mime}")
+    if not _verify_magic(content, mime):
+        raise HTTPException(415, "File content does not match declared content type")
+
+    sha256_hash = hashlib.sha256(content).hexdigest()
+
+    new_doc = svc.create_document(
+        db,
+        filename=file.filename or existing.filename,
+        content=content,
+        mime_type=mime,
+        uploaded_by=current_user.id,
+        industry_id=existing.industry_id,
+        category=existing.category,
+        description=description or existing.description,
+        entity_type=existing.entity_type,
+        entity_id=existing.entity_id,
+        sha256_hash=sha256_hash,
+        retention_category=existing.retention_category,
+        previous_version_id=existing.id,
+        version=existing.version + 1,
+    )
+    return new_doc

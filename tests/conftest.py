@@ -20,6 +20,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.database import Base, get_db
 from app.main import app
+from app.models.organisation import IndustryType, Organisation
 from app.models.user import User, UserRole, UserStatus
 from app.services.auth_service import create_access_token
 import app.services.auth_service as _auth_svc
@@ -88,14 +89,27 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-def _make_user(db, role: UserRole, industry_id: str = "IND-TEST-001") -> User:
+def _make_org(db) -> Organisation:
+    org = Organisation(
+        name=f"Test Org {uuid.uuid4().hex[:6]}",
+        industry_type=IndustryType.remittance,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
+
+
+def _make_user(db, role: UserRole, industry_id: str = None) -> User:
+    if industry_id is None:
+        industry_id = _make_org(db).id
     user = User(
-        user_id=f"USR-{uuid.uuid4().hex[:10].upper()}",
         email=f"{role.value}-{uuid.uuid4().hex[:6]}@test.com",
         full_name=f"Test {role.value.title()}",
         hashed_password=hash_password("TestPassword123!"),
         role=role,
         status=UserStatus.active,
+        org_id=industry_id,
         industry_id=industry_id,
     )
     db.add(user)
@@ -105,7 +119,7 @@ def _make_user(db, role: UserRole, industry_id: str = "IND-TEST-001") -> User:
 
 
 def _token(user: User) -> str:
-    return create_access_token({"sub": user.user_id, "role": user.role})
+    return create_access_token({"sub": user.id, "role": user.role})
 
 
 def _auth(user: User) -> dict:
@@ -114,7 +128,7 @@ def _auth(user: User) -> dict:
 
 @pytest.fixture
 def admin_user(db):
-    return _make_user(db, UserRole.admin, industry_id=None)
+    return _make_user(db, UserRole.admin)
 
 
 @pytest.fixture

@@ -9,25 +9,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.config import settings
 from app.db.database import Base
 
-# Import every model so Alembic can detect schema changes
-import app.models.customer        # noqa
-import app.models.kyc             # noqa
-import app.models.transaction     # noqa
-import app.models.report          # noqa
-import app.models.onboarding      # noqa
-import app.models.audit           # noqa
-import app.models.tenant          # noqa
-import app.models.user            # noqa
-import app.models.notification    # noqa
-import app.models.api_key         # noqa
-import app.models.document        # noqa
-import app.models.billing         # noqa
-import app.models.security_event  # noqa
-import app.models.connector       # noqa
-import app.models.retention       # noqa
-import app.models.ifti            # noqa
-import app.models.organisation    # noqa
-import app.models.aml_program     # noqa
+# Import all domain models so Alembic can detect schema changes
+import app.models  # noqa — __init__.py imports everything
 
 config = context.config
 if config.config_file_name is not None:

@@ -47,7 +47,7 @@ def get_my_branding(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.get_branding(db, current_user.industry_id)
+    return svc.get_branding(db, current_user.org_id)
 
 
 @router.put("", response_model=BrandingResponse)
@@ -58,10 +58,10 @@ def update_branding(
 ):
     if current_user.role != "admin":
         raise HTTPException(403, "Only admins can update branding")
-    if not current_user.industry_id:
+    if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id — cannot update branding")
     try:
-        return svc.update_branding(db, current_user.industry_id, data)
+        return svc.update_branding(db, current_user.org_id, data)
     except ValueError as e:
         raise HTTPException(404, str(e))
 
@@ -73,9 +73,9 @@ def reset_branding(
 ):
     if current_user.role != "admin":
         raise HTTPException(403, "Only admins can reset branding")
-    if not current_user.industry_id:
+    if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
     try:
-        svc.reset_branding(db, current_user.industry_id)
+        svc.reset_branding(db, current_user.org_id)
     except ValueError as e:
         raise HTTPException(404, str(e))

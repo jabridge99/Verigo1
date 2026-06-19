@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.aml_program import AMLProgram
+from app.models.aml_program import AMLProgramRecord
 from app.schemas.aml_program import VerificationResponse
 from app.services import aml_program_service
 
@@ -20,7 +20,11 @@ router = APIRouter(prefix="/verify", tags=["Verification"])
 
 
 def _verification_response(db: Session, version) -> VerificationResponse:
-    program = db.query(AMLProgram).filter(AMLProgram.id == version.program_id).first()
+    program = (
+        db.query(AMLProgramRecord)
+        .filter(AMLProgramRecord.id == version.program_id)
+        .first()
+    )
     return VerificationResponse(
         program_id=program.program_id if program else None,
         version=version.version,

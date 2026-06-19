@@ -17,7 +17,8 @@ from app.db.database import get_db
 from app.models.billing import BillingPlan
 from app.models.user import User, UserRole
 from app.schemas.storage import StorageConfigInput, StorageConfigResponse
-from app.services import billing_service, storage_config_service as svc
+from app.services import billing_service
+from app.services import storage_config_service as svc
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 
@@ -31,7 +32,9 @@ def _require_custom_storage_plan(db: Session, current_user: User) -> None:
     if not current_user.industry_id:
         raise HTTPException(400, "User has no industry_id")
     sub = billing_service.get_subscription(
-        db, current_user.industry_id, getattr(current_user, "primary_organisation_id", None)
+        db,
+        current_user.industry_id,
+        getattr(current_user, "primary_organisation_id", None),
     )
     if not sub or sub.plan not in _CUSTOM_STORAGE_PLANS:
         raise HTTPException(
@@ -50,7 +53,9 @@ def my_storage_config(
 ):
     if not current_user.industry_id:
         raise HTTPException(400, "User has no industry_id")
-    return StorageConfigResponse.from_config(svc.get_config(db, current_user.industry_id))
+    return StorageConfigResponse.from_config(
+        svc.get_config(db, current_user.industry_id)
+    )
 
 
 @router.put("/config", response_model=StorageConfigResponse)

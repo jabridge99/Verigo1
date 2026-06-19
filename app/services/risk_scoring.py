@@ -27,7 +27,14 @@ HIGH_RISK_COUNTRIES = {
     "ZW",
 }
 
-HIGH_RISK_INDUSTRIES = {"vasp", "remittance", "real_estate", "financial_services", "casinos", "bookmakers_betting"}
+HIGH_RISK_INDUSTRIES = {
+    "vasp",
+    "remittance",
+    "real_estate",
+    "financial_services",
+    "casinos",
+    "bookmakers_betting",
+}
 
 CTR_THRESHOLD = 10_000
 STRUCTURING_WINDOW = 5

@@ -16,6 +16,7 @@ POST /billing/admin/{industry_id}/activate   — admin: turn a plan on (e.g. Ent
 POST /billing/admin/{industry_id}/terminate  — admin: terminate a plan immediately
 """
 
+from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -23,9 +24,10 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
-from app.models.billing import BillingPlan
+from app.models.billing import AddonKey, BillingPlan
 from app.models.user import User, UserRole
 from app.schemas.billing import (
+    AddonResponse,
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     CustomerPortalResponse,
@@ -36,6 +38,7 @@ from app.schemas.billing import (
     SubscriptionResponse,
 )
 from app.services import billing_service as svc
+from app.services import usage_billing_service as usage_billing_svc
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -46,7 +49,9 @@ _ADMIN = _require_roles(UserRole.admin)
 
 
 @router.get("/plans")
-def list_plans(discount_pct: float = Query(20.0, ge=0, le=100), db: Session = Depends(get_db)):
+def list_plans(
+    discount_pct: float = Query(20.0, ge=0, le=100), db: Session = Depends(get_db)
+):
     """Public — returns plan catalogue, with annual price recalculated for the given discount."""
     return svc.catalogue_with_custom(db, discount_pct=discount_pct)
 
@@ -60,13 +65,13 @@ def my_subscription(
     current_user: User = Depends(_current_user),
 ):
     org_id = getattr(current_user, "primary_organisation_id", None)
-    sub = svc.get_subscription(db, current_user.industry_id or "", org_id)
+    sub = svc.get_subscription(db, current_user.org_id or "")
     if not sub:
         # Auto-create a trial for new tenants
-        if current_user.industry_id:
+        if current_user.org_id:
             sub = svc.create_trial(
                 db,
-                current_user.industry_id,
+                current_user.org_id,
                 current_user.tenant_id if hasattr(current_user, "tenant_id") else None,
                 org_id,
             )
@@ -81,14 +86,10 @@ def create_checkout(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    if not current_user.industry_id:
+    if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
     result = svc.create_checkout_session(
-        db,
-        current_user.industry_id,
-        req,
-        current_user.email,
-        getattr(current_user, "primary_organisation_id", None),
+        db, current_user.org_id, req, current_user.email
     )
     return result
 
@@ -99,11 +100,11 @@ def customer_portal(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    if not current_user.industry_id:
+    if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
     url = svc.create_customer_portal(
         db,
-        current_user.industry_id,
+        current_user.org_id,
         return_url or f"{svc.APP_URL}/billing",
         getattr(current_user, "primary_organisation_id", None),
     )
@@ -116,8 +117,7 @@ def cancel_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    org_id = getattr(current_user, "primary_organisation_id", None)
-    sub = svc.cancel_subscription(db, current_user.industry_id or "", at_period_end, org_id)
+    sub = svc.cancel_subscription(db, current_user.org_id or "", at_period_end)
     if not sub:
         raise HTTPException(404, "Subscription not found")
     return sub
@@ -129,8 +129,62 @@ def list_invoices(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    org_id = getattr(current_user, "primary_organisation_id", None)
-    return svc.list_invoices(db, current_user.industry_id or "", limit, org_id)
+    return svc.list_invoices(db, current_user.org_id or "", limit)
+
+
+@router.get("/addons")
+def list_addon_catalogue():
+    """Public — Enterprise add-on catalogue. Add-ons unlock providers that are
+    partially built or sales-gated (e.g. Elliptic/TRM Labs crypto screening)."""
+    return svc.addon_catalogue()
+
+
+@router.get("/addons/mine", response_model=List[AddonResponse])
+def my_addons(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.get_org_addons(db, current_user.org_id or "")
+
+
+@router.post("/addons/{addon_key}/purchase", response_model=AddonResponse)
+def purchase_addon(
+    addon_key: AddonKey,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    if not current_user.org_id:
+        raise HTTPException(400, "User has no org_id")
+    try:
+        return svc.purchase_addon(db, current_user.org_id, addon_key)
+    except ValueError as e:
+        raise HTTPException(402, str(e))
+
+
+@router.post("/addons/{addon_key}/cancel", response_model=AddonResponse)
+def cancel_addon(
+    addon_key: AddonKey,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    addon = svc.cancel_addon(db, current_user.org_id or "", addon_key)
+    if not addon:
+        raise HTTPException(404, "Add-on not found")
+    return addon
+
+
+@router.get("/usage")
+def usage(
+    period_start: datetime,
+    period_end: datetime,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    """Metered third-party verification usage (e.g. Sumsub checks) and the
+    marked-up amount billed to this org for the given period."""
+    return usage_billing_svc.usage_summary(
+        db, current_user.org_id or "", period_start, period_end
+    )
 
 
 # ── Stripe Webhook (no auth — verified by signature) ──────────────────────────
@@ -163,7 +217,7 @@ def admin_list_all(
 def admin_update_subscription(
     industry_id: str,
     data: SubscriptionAdminUpdate,
-    organisation_id: int = Query(None),
+    organisation_id: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_ADMIN),
 ):
@@ -183,7 +237,7 @@ def admin_update_subscription(
 @router.post("/admin/{industry_id}/trial", response_model=SubscriptionResponse)
 def admin_create_trial(
     industry_id: str,
-    organisation_id: int = Query(None),
+    organisation_id: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_ADMIN),
 ):
@@ -196,7 +250,7 @@ def admin_create_trial(
 @router.post("/admin/{industry_id}/activate", response_model=SubscriptionResponse)
 def admin_activate_subscription(
     industry_id: str,
-    organisation_id: int = Query(None),
+    organisation_id: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_ADMIN),
 ):
@@ -211,7 +265,7 @@ def admin_activate_subscription(
 @router.post("/admin/{industry_id}/terminate", response_model=SubscriptionResponse)
 def admin_terminate_subscription(
     industry_id: str,
-    organisation_id: int = Query(None),
+    organisation_id: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_ADMIN),
 ):

@@ -8,12 +8,12 @@ from typing import Optional
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.models.audit import AuditLog
+from app.models.audit import LegacyAuditLog as AuditLog
 from app.models.customer import Customer, RiskLevel
-from app.models.kyc import KYCRecord, KYCStatus
-from app.models.report import ComplianceReport as Report
+from app.models.kyc import CustomerIdentityDocument, VerificationResult
+from app.models.report import FilingRegisterEntry as Report
 from app.models.report import ReportStatus, ReportType
-from app.models.transaction import Transaction
+from app.models.transaction import Transaction, TransactionStatus
 
 
 def _now():
@@ -24,16 +24,16 @@ def _days_ago(n: int):
     return _now() - timedelta(days=n)
 
 
-def _scope(q, model, industry_id: Optional[str], organisation_id: Optional[int]):
-    if organisation_id:
-        return q.filter(
-            or_(
-                model.organisation_id == organisation_id,
-                (model.organisation_id.is_(None)) & (model.industry_id == industry_id),
-            )
-        )
-    if industry_id:
-        return q.filter(model.industry_id == industry_id)
+def _scope(q, model, industry_id: Optional[str], organisation_id: Optional[str] = None):
+    org_id = organisation_id or industry_id
+    if not org_id:
+        return q
+    if hasattr(model, "org_id"):
+        return q.filter(model.org_id == org_id)
+    if hasattr(model, "organisation_id"):
+        return q.filter(model.organisation_id == org_id)
+    if hasattr(model, "industry_id"):
+        return q.filter(model.industry_id == org_id)
     return q
 
 
@@ -41,7 +41,9 @@ def _scope(q, model, industry_id: Optional[str], organisation_id: Optional[int])
 
 
 def customer_risk_breakdown(
-    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ):
     q = _scope(db.query(Customer), Customer, industry_id, organisation_id)
     total = q.count()
@@ -55,7 +57,7 @@ def customer_onboarding_trend(
     db: Session,
     days: int = 30,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ):
     since = _days_ago(days)
     q = db.query(
@@ -74,7 +76,7 @@ def transaction_volume_trend(
     db: Session,
     days: int = 30,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ):
     since = _days_ago(days)
     q = db.query(
@@ -90,11 +92,15 @@ def transaction_volume_trend(
 
 
 def flagged_transaction_stats(
-    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ):
     q = _scope(db.query(Transaction), Transaction, industry_id, organisation_id)
     total = q.count()
-    suspicious = q.filter(Transaction.is_suspicious == 1).count()
+    # `is_suspicious` boolean no longer exists; TransactionStatus.flagged is the current
+    # equivalent ("monitoring flag; not blocked").
+    suspicious = q.filter(Transaction.status == TransactionStatus.flagged).count()
     return {
         "total": total,
         "flagged": suspicious,
@@ -106,15 +112,33 @@ def flagged_transaction_stats(
 
 
 def kyc_status_breakdown(
-    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ):
-    q = db.query(KYCRecord)
-    if industry_id or organisation_id:
-        q = q.join(Customer, KYCRecord.customer_id == Customer.id)
-        q = _scope(q, Customer, industry_id, organisation_id)
+    # AMBIGUOUS: the old single `KYCRecord`/`KYCStatus` model was split into several
+    # per-verification-type tables (CustomerIdentityDocument, CustomerSelfieVerification,
+    # CustomerAddressVerification, CustomerPhoneVerification, CustomerEmailVerification),
+    # each carrying its own `verification_result` (VerificationResult: pass/fail/refer/
+    # not_performed) rather than a single aggregate KYC status (which previously included
+    # values like "pending_review"). There is no clear current equivalent for an overall
+    # "KYC status" breakdown across a customer. CustomerIdentityDocument was chosen here as
+    # the representative/primary verification record since identity document verification is
+    # the core KYC step, but CustomerSelfieVerification or a combination of all five tables
+    # are equally plausible candidates. The "pending_review" status used downstream in
+    # dashboard_summary() does not exist in VerificationResult; it is approximated to
+    # VerificationResult.refer (manual review required) below.
+    q = _scope(
+        db.query(CustomerIdentityDocument),
+        CustomerIdentityDocument,
+        industry_id,
+        organisation_id,
+    )
     breakdown = {}
-    for status in KYCStatus:
-        breakdown[status.value] = q.filter(KYCRecord.status == status).count()
+    for status in VerificationResult:
+        breakdown[status.value] = q.filter(
+            CustomerIdentityDocument.verification_result == status
+        ).count()
     return {"total": q.count(), "by_status": breakdown}
 
 
@@ -122,13 +146,22 @@ def kyc_status_breakdown(
 
 
 def report_stats(
-    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ):
+    # AMBIGUOUS: the old single `ComplianceReport` model no longer exists — reports are now
+    # split across IFTIReport/TTRReport/SMRReport, with FilingRegisterEntry as the immutable,
+    # cross-type submission register (org_id, report_type, status, created_at all present).
+    # FilingRegisterEntry was chosen as the closest aggregate replacement, but note its
+    # `status` column is a plain String with only "submitted|acknowledged|rejected" values
+    # (no "draft"/"under_review"/"approved" — those only exist on the individual report
+    # tables before they reach the register).
     q = _scope(db.query(Report), Report, industry_id, organisation_id)
     total = q.count()
     by_status = {}
     for s in ReportStatus:
-        by_status[s.value] = q.filter(Report.status == s).count()
+        by_status[s.value] = q.filter(Report.status == s.value).count()
     by_type = {}
     for t in ReportType:
         by_type[t.value] = q.filter(Report.report_type == t).count()
@@ -139,7 +172,7 @@ def report_submission_trend(
     db: Session,
     days: int = 90,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ):
     since = _days_ago(days)
     q = db.query(
@@ -158,7 +191,7 @@ def audit_activity_trend(
     db: Session,
     days: int = 30,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ):
     since = _days_ago(days)
     q = db.query(
@@ -174,15 +207,20 @@ def audit_activity_trend(
 
 
 def dashboard_summary(
-    db: Session, industry_id: Optional[str] = None, organisation_id: Optional[int] = None
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
 ):
     customers = customer_risk_breakdown(db, industry_id, organisation_id)
     txn = flagged_transaction_stats(db, industry_id, organisation_id)
     kyc = kyc_status_breakdown(db, industry_id, organisation_id)
     rpt = report_stats(db, industry_id, organisation_id)
 
-    pending_kyc = kyc["by_status"].get("pending_review", 0)
-    overdue_reports = rpt["by_status"].get("draft", 0)
+    # "pending_review" no longer exists on VerificationResult; VerificationResult.refer
+    # ("manual review required") is the closest current equivalent — see ambiguity note
+    # in kyc_status_breakdown().
+    pending_kyc = kyc["by_status"].get(VerificationResult.refer.value, 0)
+    overdue_reports = rpt["by_status"].get(ReportStatus.draft.value, 0)
 
     return {
         "customers": customers,
@@ -192,7 +230,8 @@ def dashboard_summary(
         "alerts": {
             "pending_kyc_reviews": pending_kyc,
             "overdue_reports": overdue_reports,
+            # RiskLevel no longer has "very_high" — "critical" is the closest current tier.
             "high_risk_customers": customers["by_risk"].get("high", 0)
-            + customers["by_risk"].get("very_high", 0),
+            + customers["by_risk"].get("critical", 0),
         },
     }

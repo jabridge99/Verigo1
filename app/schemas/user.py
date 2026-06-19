@@ -11,16 +11,18 @@ class UserCreate(BaseModel):
     full_name: str
     password: str
     role: UserRole = UserRole.analyst
+    org_id: Optional[str] = None
     industry_id: Optional[str] = None
     tenant_id: Optional[str] = None
-    organisation_name: Optional[str] = None  # if set, creates a new Organisation with this user as owner
+    organisation_name: Optional[str] = (
+        None  # if set, creates a new Organisation with this user as owner
+    )
 
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     status: Optional[UserStatus] = None
-    industry_id: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -43,6 +45,7 @@ class TokenResponse(BaseModel):
     email: str
     full_name: str
     role: str
+    org_id: Optional[str] = None
     industry_id: Optional[str] = None
     mfa_required: bool = False
     dev_verify_email_token: Optional[str] = None
@@ -50,14 +53,12 @@ class TokenResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: int
-    user_id: str
+    id: str
     email: str
     full_name: str
     role: UserRole
     status: UserStatus
-    industry_id: Optional[str] = None
-    tenant_id: Optional[str] = None
+    org_id: Optional[str] = None
     mfa_enabled: bool
     email_verified: bool
     oauth_provider: Optional[str] = None

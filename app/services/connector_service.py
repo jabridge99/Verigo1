@@ -25,7 +25,7 @@ from app.models.connector import ConnectorCredential, ConnectorProvider, Connect
 log = logging.getLogger("tvg.connectors")
 
 
-def _scope(q, industry_id: Optional[str], organisation_id: Optional[int] = None):
+def _scope(q, industry_id: Optional[str], organisation_id: Optional[str] = None):
     if organisation_id:
         return q.filter(
             or_(
@@ -73,7 +73,7 @@ def create_credential(
     credentials: dict,
     label: Optional[str] = None,
     created_by: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> ConnectorCredential:
     # Derive a display hint from the first meaningful key value
     hint = ""
@@ -103,7 +103,7 @@ def get_credentials(
     db: Session,
     industry_id: str,
     provider: Optional[ConnectorProvider] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> list[ConnectorCredential]:
     q = _scope(db.query(ConnectorCredential), industry_id, organisation_id)
     if provider:
@@ -140,7 +140,7 @@ def update_credential(
     credentials: Optional[dict] = None,
     label: Optional[str] = None,
     is_default: Optional[bool] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> ConnectorCredential:
     cred = (
         _scope(db.query(ConnectorCredential), industry_id, organisation_id)
@@ -174,7 +174,7 @@ def delete_credential(
     db: Session,
     credential_id: str,
     industry_id: str,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> None:
     cred = (
         _scope(db.query(ConnectorCredential), industry_id, organisation_id)
@@ -193,7 +193,7 @@ def test_credential(
     db: Session,
     credential_id: str,
     industry_id: str,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> dict:
     """
     Test connectivity for a stored credential.

@@ -24,9 +24,12 @@ from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
 from app.models.billing import (
+    ADDON_CATALOGUE,
     DEFAULT_PLAN_FEATURES,
     FEATURE_DEFINITIONS,
     PLAN_CATALOGUE,
+    AddonKey,
+    AddonStatus,
     BillingInterval,
     BillingPlan,
     Feature,
@@ -34,6 +37,7 @@ from app.models.billing import (
     InvoiceStatus,
     PlanFeatureToggle,
     Subscription,
+    SubscriptionAddon,
     SubscriptionStatus,
 )
 from app.schemas.billing import CheckoutSessionRequest, SubscriptionAdminUpdate
@@ -82,6 +86,10 @@ def _sub_id():
 
 def _inv_id():
     return f"INV-{uuid.uuid4().hex[:12].upper()}"
+
+
+def _addon_id():
+    return f"ADDON-{uuid.uuid4().hex[:12].upper()}"
 
 
 # ── Feature catalogue & per-plan toggles ───────────────────────────────────────
@@ -147,7 +155,9 @@ def set_plan_feature(
         .first()
     )
     if not toggle:
-        toggle = PlanFeatureToggle(plan=plan, feature_code=feature_code, enabled=enabled)
+        toggle = PlanFeatureToggle(
+            plan=plan, feature_code=feature_code, enabled=enabled
+        )
         db.add(toggle)
     else:
         toggle.enabled = enabled
@@ -163,20 +173,29 @@ def enabled_features_for_plan(db: Session, plan: BillingPlan) -> List[str]:
         .filter(PlanFeatureToggle.plan == plan, PlanFeatureToggle.enabled.is_(True))
         .all()
     )
-    return [FEATURE_DEFINITIONS[t.feature_code][0] for t in toggles if t.feature_code in FEATURE_DEFINITIONS]
+    return [
+        FEATURE_DEFINITIONS[t.feature_code][0]
+        for t in toggles
+        if t.feature_code in FEATURE_DEFINITIONS
+    ]
 
 
 def is_feature_enabled(db: Session, plan: BillingPlan, feature_code: str) -> bool:
     seed_feature_catalog(db)
     toggle = (
         db.query(PlanFeatureToggle)
-        .filter(PlanFeatureToggle.plan == plan, PlanFeatureToggle.feature_code == feature_code)
+        .filter(
+            PlanFeatureToggle.plan == plan,
+            PlanFeatureToggle.feature_code == feature_code,
+        )
         .first()
     )
     return bool(toggle and toggle.enabled)
 
 
-def current_plan(db: Session, industry_id: str, organisation_id: Optional[int] = None) -> BillingPlan:
+def current_plan(
+    db: Session, industry_id: str, organisation_id: Optional[str] = None
+) -> BillingPlan:
     """Best-effort plan lookup for feature gating. No subscription yet ==
     treat as free_trial (most restrictive) rather than granting full access."""
     sub = get_subscription(db, industry_id, organisation_id)
@@ -191,7 +210,9 @@ _INACTIVE_STATUSES = {
 }
 
 
-def is_active_subscriber(db: Session, industry_id: str, organisation_id: Optional[int] = None) -> bool:
+def is_active_subscriber(
+    db: Session, industry_id: str, organisation_id: Optional[str] = None
+) -> bool:
     """Whether the org currently has a live (non-canceled) subscription.
     Used to gate retention features like full version history — once a
     subscription lapses, access narrows to the latest version only."""
@@ -249,7 +270,7 @@ def catalogue_with_custom(
 
 
 def get_subscription(
-    db: Session, industry_id: str, organisation_id: Optional[int] = None
+    db: Session, industry_id: str, organisation_id: Optional[str] = None
 ) -> Optional[Subscription]:
     q = db.query(Subscription)
     if organisation_id:
@@ -278,7 +299,7 @@ def create_trial(
     db: Session,
     industry_id: str,
     tenant_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> Subscription:
     sub = Subscription(
         subscription_id=_sub_id(),
@@ -301,7 +322,7 @@ def admin_update(
     db: Session,
     industry_id: str,
     data: SubscriptionAdminUpdate,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> Optional[Subscription]:
     sub = get_subscription(db, industry_id, organisation_id)
     if not sub:
@@ -318,7 +339,7 @@ def admin_update(
 def activate_subscription(
     db: Session,
     industry_id: str,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> Optional[Subscription]:
     """Admin-driven, immediate activation — primarily for Enterprise/VVIP deals
     that are turned on manually rather than through Stripe checkout."""
@@ -337,7 +358,7 @@ def activate_subscription(
 def terminate_subscription(
     db: Session,
     industry_id: str,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> Optional[Subscription]:
     """Admin-driven, immediate termination — bypasses Stripe's cancel-at-period-end
     flow so an Enterprise/VVIP deal can be shut off on the spot."""
@@ -362,7 +383,7 @@ def cancel_subscription(
     db: Session,
     industry_id: str,
     at_period_end: bool = True,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> Optional[Subscription]:
     sub = get_subscription(db, industry_id, organisation_id)
     if not sub:
@@ -393,7 +414,7 @@ def create_checkout_session(
     industry_id: str,
     req: CheckoutSessionRequest,
     customer_email: str,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> dict:
     stripe = _stripe()
     price_id = _PRICE_IDS.get((req.plan, req.interval), "")
@@ -439,7 +460,10 @@ def create_checkout_session(
 
 
 def create_customer_portal(
-    db: Session, industry_id: str, return_url: str, organisation_id: Optional[int] = None
+    db: Session,
+    industry_id: str,
+    return_url: str,
+    organisation_id: Optional[str] = None,
 ) -> str:
     stripe = _stripe()
     sub = get_subscription(db, industry_id, organisation_id)
@@ -611,16 +635,119 @@ def _handle_invoice_event(db: Session, inv_obj: dict, etype: str):
 
 
 def list_invoices(
-    db: Session, industry_id: str, limit: int = 20, organisation_id: Optional[int] = None
+    db: Session,
+    industry_id: str,
+    limit: int = 20,
+    organisation_id: Optional[str] = None,
 ) -> List[Invoice]:
     q = db.query(Invoice)
     if organisation_id:
         q = q.filter(
             or_(
                 Invoice.organisation_id == organisation_id,
-                (Invoice.organisation_id.is_(None)) & (Invoice.industry_id == industry_id),
+                (Invoice.organisation_id.is_(None))
+                & (Invoice.industry_id == industry_id),
             )
         )
     else:
         q = q.filter(Invoice.industry_id == industry_id)
     return q.order_by(desc(Invoice.created_at)).limit(limit).all()
+
+
+# ── Enterprise add-ons ───────────────────────────────────────────────────────
+# In-app purchase that unlocks providers which are partially built (unverified
+# response schema) or sales-gated (no self-serve API access) — e.g. Elliptic
+# and TRM Labs crypto wallet screening. Sold separately from the base plan.
+
+
+def addon_catalogue() -> List[dict]:
+    return [
+        {
+            "addon_key": key.value,
+            "name": info["name"],
+            "monthly_aud": info["monthly_aud"],
+            "description": info["description"],
+            "unlocks_providers": info["unlocks_providers"],
+            "requires_plan": [p.value for p in info["requires_plan"]],
+        }
+        for key, info in ADDON_CATALOGUE.items()
+    ]
+
+
+def get_org_addons(db: Session, org_id: str) -> List[SubscriptionAddon]:
+    return (
+        db.query(SubscriptionAddon)
+        .filter(SubscriptionAddon.org_id == org_id)
+        .order_by(desc(SubscriptionAddon.created_at))
+        .all()
+    )
+
+
+def has_addon(db: Session, org_id: str, addon_key: AddonKey) -> bool:
+    return (
+        db.query(SubscriptionAddon)
+        .filter(
+            SubscriptionAddon.org_id == org_id,
+            SubscriptionAddon.addon_key == addon_key,
+            SubscriptionAddon.status == AddonStatus.active,
+        )
+        .first()
+        is not None
+    )
+
+
+def addon_for_provider(provider_name: str) -> Optional[AddonKey]:
+    """Return the add-on key that gates `provider_name`, or None if it's
+    included in the base plan (e.g. the free-tier crypto providers)."""
+    for key, info in ADDON_CATALOGUE.items():
+        if provider_name in info["unlocks_providers"]:
+            return key
+    return None
+
+
+def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> SubscriptionAddon:
+    info = ADDON_CATALOGUE.get(addon_key)
+    if not info:
+        raise ValueError(f"Unknown add-on: {addon_key}")
+
+    sub = get_subscription(db, org_id)
+    if not sub or sub.plan not in info["requires_plan"]:
+        required = " or ".join(p.value for p in info["requires_plan"])
+        raise ValueError(f"{info['name']} requires an active {required} plan")
+
+    existing = (
+        db.query(SubscriptionAddon)
+        .filter(
+            SubscriptionAddon.org_id == org_id, SubscriptionAddon.addon_key == addon_key
+        )
+        .first()
+    )
+    addon = existing or SubscriptionAddon(
+        addon_id=_addon_id(), org_id=org_id, addon_key=addon_key
+    )
+    addon.status = AddonStatus.active
+    addon.price_aud = info["monthly_aud"]
+    addon.canceled_at = None
+    db.add(addon)
+    db.commit()
+    db.refresh(addon)
+    return addon
+
+
+def cancel_addon(
+    db: Session, org_id: str, addon_key: AddonKey
+) -> Optional[SubscriptionAddon]:
+    addon = (
+        db.query(SubscriptionAddon)
+        .filter(
+            SubscriptionAddon.org_id == org_id, SubscriptionAddon.addon_key == addon_key
+        )
+        .first()
+    )
+    if not addon:
+        return None
+    addon.status = AddonStatus.canceled
+    addon.canceled_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(addon)
+    return addon

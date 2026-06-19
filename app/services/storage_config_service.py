@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 from app.models.tenant import IndustryTenant
 from app.schemas.storage import StorageConfigInput
 from app.services.crypto import encrypt_secret
-from app.services.storage.factory import build_provider_from_config, invalidate_tenant_cache
+from app.services.storage.factory import (
+    build_provider_from_config,
+    invalidate_tenant_cache,
+)
 
 REQUIRED_FIELDS = {
     "s3": ["bucket", "access_key", "secret_key"],
@@ -43,7 +46,9 @@ async def set_config(db: Session, industry_id: str, data: StorageConfigInput) ->
         f for f in REQUIRED_FIELDS.get(backend, []) if not getattr(data, f, None)
     ]
     if missing:
-        raise ValueError(f"Missing required field(s) for {backend}: {', '.join(missing)}")
+        raise ValueError(
+            f"Missing required field(s) for {backend}: {', '.join(missing)}"
+        )
 
     cfg = data.model_dump(exclude_none=True)
     cfg["backend"] = backend
@@ -65,7 +70,9 @@ async def set_config(db: Session, industry_id: str, data: StorageConfigInput) ->
     tenant.storage_config = encrypted_cfg
     db.commit()
     invalidate_tenant_cache(industry_id)
-    return cfg  # return plaintext form for the immediate response (never persisted as-is)
+    return (
+        cfg  # return plaintext form for the immediate response (never persisted as-is)
+    )
 
 
 def clear_config(db: Session, industry_id: str) -> bool:

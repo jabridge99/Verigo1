@@ -39,11 +39,41 @@ BASE_FACTORS: list[dict] = [
 
 # Extra inherent risk factors layered on by industry category.
 INDUSTRY_FACTORS: dict[str, list[dict]] = {
-    "banking": [{"factor": "ifti_risk", "label": "Cross-Border Transfer Risk", "description": "Exposure from IFTI/correspondent banking flows."}],
-    "fintech": [{"factor": "velocity_risk", "label": "Transaction Velocity Risk", "description": "High-volume, automated, digital-first transaction flows."}],
-    "cryptocurrency": [{"factor": "vasp_risk", "label": "Virtual Asset Risk", "description": "Pseudo-anonymity and cross-border virtual asset transfers."}],
-    "remittance": [{"factor": "corridor_risk", "label": "Remittance Corridor Risk", "description": "Exposure from specific high-risk remittance corridors."}],
-    "real_estate": [{"factor": "settlement_risk", "label": "Settlement Risk", "description": "Large, one-off transactions with complex source-of-funds."}],
+    "banking": [
+        {
+            "factor": "ifti_risk",
+            "label": "Cross-Border Transfer Risk",
+            "description": "Exposure from IFTI/correspondent banking flows.",
+        }
+    ],
+    "fintech": [
+        {
+            "factor": "velocity_risk",
+            "label": "Transaction Velocity Risk",
+            "description": "High-volume, automated, digital-first transaction flows.",
+        }
+    ],
+    "cryptocurrency": [
+        {
+            "factor": "vasp_risk",
+            "label": "Virtual Asset Risk",
+            "description": "Pseudo-anonymity and cross-border virtual asset transfers.",
+        }
+    ],
+    "remittance": [
+        {
+            "factor": "corridor_risk",
+            "label": "Remittance Corridor Risk",
+            "description": "Exposure from specific high-risk remittance corridors.",
+        }
+    ],
+    "real_estate": [
+        {
+            "factor": "settlement_risk",
+            "label": "Settlement Risk",
+            "description": "Large, one-off transactions with complex source-of-funds.",
+        }
+    ],
 }
 
 _RATING_BY_PROFILE = {
@@ -54,7 +84,9 @@ _RATING_BY_PROFILE = {
 
 
 def build_risk_factors(industry_id: str, risk_profile: RiskProfile) -> list[dict]:
-    factors = list(BASE_FACTORS) + INDUSTRY_FACTORS.get(_industry_category(industry_id), [])
+    factors = list(BASE_FACTORS) + INDUSTRY_FACTORS.get(
+        _industry_category(industry_id), []
+    )
     rating = _RATING_BY_PROFILE.get(risk_profile, "medium")
     return [{**f, "rating": rating} for f in factors]
 

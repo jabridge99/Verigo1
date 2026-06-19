@@ -89,8 +89,8 @@ def list_retention_policies(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    scoped = scope_fields(current_user)
-    return list_policies(db, scoped.get("industry_id"), scoped.get("organisation_id"))
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    return list_policies(db, industry_id)
 
 
 @router.put("/policies", response_model=PolicyResponse)
@@ -109,7 +109,7 @@ def set_retention_policy(
             organisation_id=scoped.get("organisation_id"),
             legal_hold=payload.legal_hold,
             notes=payload.notes,
-            created_by=current_user.user_id,
+            created_by=current_user.id,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -123,10 +123,8 @@ def get_retention_policy(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    scoped = scope_fields(current_user)
-    return get_policy(
-        db, entity_scope, scoped.get("industry_id"), scoped.get("organisation_id")
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    return get_policy(db, entity_scope, industry_id)
 
 
 # ── Legal hold endpoints ──────────────────────────────────────────────────────
@@ -144,9 +142,10 @@ def create_legal_hold(
         entity_scope=payload.entity_scope,
         entity_id=payload.entity_id,
         reason=payload.reason,
-        held_by=current_user.user_id,
-        industry_id=scoped.get("industry_id"),
-        organisation_id=scoped.get("organisation_id"),
+        held_by=current_user.id,
+        industry_id=current_user.org_id
+        if current_user.role != UserRole.admin
+        else None,
     )
 
 
@@ -161,9 +160,10 @@ def release_hold(
         return release_legal_hold(
             db,
             hold_id,
-            released_by=current_user.user_id,
-            industry_id=scoped.get("industry_id"),
-            organisation_id=scoped.get("organisation_id"),
+            released_by=current_user.id,
+            industry_id=current_user.org_id
+            if current_user.role != UserRole.admin
+            else None,
         )
     except (ValueError, PermissionError) as e:
         raise HTTPException(400 if isinstance(e, ValueError) else 403, str(e))
@@ -178,7 +178,9 @@ def list_legal_holds(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    q = scope_query(db.query(LegalHold), LegalHold, current_user)
+    q = db.query(LegalHold)
+    if current_user.role != UserRole.admin:
+        q = q.filter(LegalHold.industry_id == current_user.org_id)
     if entity_scope:
         q = q.filter(LegalHold.entity_scope == entity_scope)
     if active_only:
@@ -216,7 +218,5 @@ def purge_report(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     """Dry-run purge report — identifies eligible records without deleting them."""
-    scoped = scope_fields(current_user)
-    return generate_purge_report(
-        db, scoped.get("industry_id"), scoped.get("organisation_id")
-    )
+    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    return generate_purge_report(db, industry_id)

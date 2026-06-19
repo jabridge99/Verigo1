@@ -45,7 +45,7 @@ def get_policy(
     db: Session,
     entity_scope: EntityScope,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> RetentionPolicy:
     """Return the most-specific policy: org > tenant > global > AUSTRAC default (synthetic)."""
     if organisation_id:
@@ -98,7 +98,7 @@ def upsert_policy(
     entity_scope: EntityScope,
     retention_years: int,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
     legal_hold: bool = False,
     notes: Optional[str] = None,
     created_by: Optional[str] = None,
@@ -141,7 +141,7 @@ def upsert_policy(
 def list_policies(
     db: Session,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> list[RetentionPolicy]:
     if organisation_id:
         q = db.query(RetentionPolicy).filter(
@@ -172,7 +172,7 @@ def place_legal_hold(
     reason: str,
     held_by: str,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> LegalHold:
     hold = LegalHold(
         hold_id=f"HOLD-{uuid.uuid4().hex[:10].upper()}",
@@ -202,7 +202,7 @@ def release_legal_hold(
     hold_id: str,
     released_by: str,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> LegalHold:
     hold = db.query(LegalHold).filter(LegalHold.hold_id == hold_id).first()
     if not hold:
@@ -242,7 +242,7 @@ def is_deletion_eligible(
     entity_id: str,
     created_at: datetime,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
     pep_or_high_risk: bool = False,
 ) -> dict:
     """
@@ -297,7 +297,7 @@ def is_deletion_eligible(
 def generate_purge_report(
     db: Session,
     industry_id: Optional[str] = None,
-    organisation_id: Optional[int] = None,
+    organisation_id: Optional[str] = None,
 ) -> dict:
     """
     Identify records past their retention window.

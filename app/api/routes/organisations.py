@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user
 from app.db.database import get_db
-from app.models.organisation import MembershipStatus, Organisation, OrganisationUser, Permission, Role
+from app.models.organisation import (
+    MembershipStatus,
+    Organisation,
+    OrganisationUser,
+    Permission,
+    Role,
+)
 from app.models.user import User
 from app.schemas.aml_program import (
     AMLProgramResponse,
@@ -56,7 +62,7 @@ router = APIRouter(prefix="/organisations", tags=["Organisations"])
 
 
 def _get_org_or_404(db: Session, org_id: str) -> Organisation:
-    org = db.query(Organisation).filter(Organisation.org_id == org_id).first()
+    org = db.query(Organisation).filter(Organisation.id == org_id).first()
     if not org:
         raise HTTPException(404, "Organisation not found")
     return org
@@ -91,19 +97,27 @@ def create(
     current_user: User = Depends(_current_user),
     db: Session = Depends(get_db),
 ):
-    org = create_organisation(db, payload.name, current_user, industry_id=payload.industry_id)
+    org = create_organisation(
+        db, payload.name, current_user, industry_id=payload.industry_id
+    )
     return org
 
 
 @router.get("", response_model=list[OrganisationResponse])
-def list_mine(current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def list_mine(
+    current_user: User = Depends(_current_user), db: Session = Depends(get_db)
+):
     if current_user.is_super_admin:
         return db.query(Organisation).all()
     return get_user_organisations(db, current_user)
 
 
 @router.get("/{org_id}", response_model=OrganisationResponse)
-def get_one(org_id: str, current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def get_one(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
     org = _get_org_or_404(db, org_id)
     _require_member(db, org, current_user)
     return org
@@ -129,7 +143,7 @@ def update(
             db,
             action="policy_updated",
             entity_type="organisation",
-            entity_id=org.org_id,
+            entity_id=org.id,
             actor=current_user.email,
             actor_role=current_user.role.value if current_user.role else None,
             industry_id=org.industry_id,
@@ -145,7 +159,9 @@ def update(
 
 def _program_response(db: Session, program) -> AMLProgramResponse:
     items = aml_program_service.get_program_items(db, program)
-    plan = billing_service.current_plan(db, program.industry_id, program.organisation_id)
+    plan = billing_service.current_plan(
+        db, program.industry_id, program.organisation_id
+    )
     full_enabled = billing_service.is_feature_enabled(db, plan, "full_aml_program")
     if full_enabled:
         return AMLProgramResponse(
@@ -170,7 +186,9 @@ def _program_response(db: Session, program) -> AMLProgramResponse:
     )
 
 
-@router.post("/{org_id}/aml-program/generate", response_model=AMLProgramResponse, status_code=201)
+@router.post(
+    "/{org_id}/aml-program/generate", response_model=AMLProgramResponse, status_code=201
+)
 def generate_aml_program(
     org_id: str,
     current_user: User = Depends(_current_user),
@@ -202,7 +220,9 @@ def get_aml_program(
 # ── Retention — version history, export, verification, health ──────────────
 
 
-@router.get("/{org_id}/aml-program/versions", response_model=AMLProgramVersionListResponse)
+@router.get(
+    "/{org_id}/aml-program/versions", response_model=AMLProgramVersionListResponse
+)
 def list_aml_program_versions(
     org_id: str,
     current_user: User = Depends(_current_user),
@@ -237,7 +257,10 @@ def list_aml_program_versions(
     )
 
 
-@router.get("/{org_id}/aml-program/versions/{version}", response_model=AMLProgramVersionDetailResponse)
+@router.get(
+    "/{org_id}/aml-program/versions/{version}",
+    response_model=AMLProgramVersionDetailResponse,
+)
 def get_aml_program_version(
     org_id: str,
     version: int,
@@ -335,21 +358,32 @@ def get_aml_program_health(
 # ── Risk Assessment (Phase I onboarding) ────────────────────────────────────
 
 
-def _risk_assessment_response(db: Session, org, assessment: dict) -> RiskAssessmentResponse:
+def _risk_assessment_response(
+    db: Session, org, assessment: dict
+) -> RiskAssessmentResponse:
     plan = billing_service.current_plan(db, org.industry_id, org.id)
     full_enabled = billing_service.is_feature_enabled(db, plan, "full_risk_assessment")
     if full_enabled:
-        return RiskAssessmentResponse(**assessment, generated_at=org.risk_assessment_generated_at)
+        return RiskAssessmentResponse(
+            **assessment, generated_at=org.risk_assessment_generated_at
+        )
     factors = assessment["factors"]
     return RiskAssessmentResponse(
-        **{**assessment, "factors": risk_assessment_service.to_preview_factors(factors)},
+        **{
+            **assessment,
+            "factors": risk_assessment_service.to_preview_factors(factors),
+        },
         generated_at=org.risk_assessment_generated_at,
         is_preview=True,
         total_factors=len(factors),
     )
 
 
-@router.post("/{org_id}/risk-assessment/generate", response_model=RiskAssessmentResponse, status_code=201)
+@router.post(
+    "/{org_id}/risk-assessment/generate",
+    response_model=RiskAssessmentResponse,
+    status_code=201,
+)
 def generate_risk_assessment(
     org_id: str,
     current_user: User = Depends(_current_user),
@@ -381,7 +415,9 @@ def get_risk_assessment(
 RETENTION_TERMS_VERSION = "2026-06-18"
 
 
-@router.post("/{org_id}/aml-accountability/ack", response_model=AccountabilityAckResponse)
+@router.post(
+    "/{org_id}/aml-accountability/ack", response_model=AccountabilityAckResponse
+)
 def acknowledge_aml_accountability(
     org_id: str,
     payload: AccountabilityAckRequest,
@@ -409,9 +445,13 @@ def acknowledge_aml_accountability(
     org.aml_accountability_ack_at = datetime.now(timezone.utc)
     org.aml_accountability_ack_by = current_user.email
     org.retention_terms_accepted = retention_accepted
-    org.retention_terms_accepted_at = datetime.now(timezone.utc) if retention_accepted else None
+    org.retention_terms_accepted_at = (
+        datetime.now(timezone.utc) if retention_accepted else None
+    )
     org.retention_terms_accepted_by = current_user.email if retention_accepted else None
-    org.retention_terms_version = RETENTION_TERMS_VERSION if retention_accepted else None
+    org.retention_terms_version = (
+        RETENTION_TERMS_VERSION if retention_accepted else None
+    )
     db.commit()
     db.refresh(org)
 
@@ -419,7 +459,7 @@ def acknowledge_aml_accountability(
         db,
         action="aml_accountability_acknowledged",
         entity_type="organisation",
-        entity_id=org.org_id,
+        entity_id=org.id,
         actor=current_user.email,
         actor_role=current_user.role.value if current_user.role else None,
         industry_id=org.industry_id,
@@ -447,7 +487,7 @@ def _member_response(db: Session, m: OrganisationUser) -> MemberResponse:
     user = db.query(User).filter(User.id == m.user_id).first()
     role = db.query(Role).filter(Role.id == m.role_id).first()
     return MemberResponse(
-        user_id=user.user_id,
+        user_id=user.id,
         email=user.email,
         full_name=user.full_name,
         role_key=_role_key_for(role),
@@ -458,10 +498,18 @@ def _member_response(db: Session, m: OrganisationUser) -> MemberResponse:
 
 
 @router.get("/{org_id}/members", response_model=list[MemberResponse])
-def list_members(org_id: str, current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def list_members(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
     org = _get_org_or_404(db, org_id)
     _require_member(db, org, current_user)
-    members = db.query(OrganisationUser).filter(OrganisationUser.organisation_id == org.id).all()
+    members = (
+        db.query(OrganisationUser)
+        .filter(OrganisationUser.organisation_id == org.id)
+        .all()
+    )
     return [_member_response(db, m) for m in members]
 
 
@@ -493,7 +541,7 @@ def update_member(
 ):
     org = _get_org_or_404(db, org_id)
     _require_permission(db, org, current_user, "org:manage")
-    target = db.query(User).filter(User.user_id == user_id).first()
+    target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(404, "User not found")
     membership = get_membership(db, org.id, target.id)
@@ -521,7 +569,7 @@ def remove_member(
 ):
     org = _get_org_or_404(db, org_id)
     _require_permission(db, org, current_user, "org:manage")
-    target = db.query(User).filter(User.user_id == user_id).first()
+    target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(404, "User not found")
     membership = get_membership(db, org.id, target.id)
@@ -535,10 +583,18 @@ def remove_member(
 
 
 @router.get("/{org_id}/roles", response_model=list[RoleResponse])
-def list_roles(org_id: str, current_user: User = Depends(_current_user), db: Session = Depends(get_db)):
+def list_roles(
+    org_id: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
     org = _get_org_or_404(db, org_id)
     _require_member(db, org, current_user)
-    roles = db.query(Role).filter((Role.organisation_id.is_(None)) | (Role.organisation_id == org.id)).all()
+    roles = (
+        db.query(Role)
+        .filter((Role.organisation_id.is_(None)) | (Role.organisation_id == org.id))
+        .all()
+    )
     return [
         RoleResponse(
             role_id=_role_key_for(r),

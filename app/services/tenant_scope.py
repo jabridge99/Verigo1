@@ -29,7 +29,9 @@ def is_unscoped(user: User) -> bool:
     return user.role == UserRole.admin or bool(getattr(user, "is_super_admin", False))
 
 
-def assert_tenant(user: User, record_organisation_id: Optional[int], record_industry_id: Optional[str]) -> None:
+def assert_tenant(
+    user: User, record_organisation_id: Optional[str], record_industry_id: Optional[str]
+) -> None:
     from fastapi import HTTPException
 
     if is_unscoped(user):
@@ -54,7 +56,8 @@ def scope_query(query: Query, model, user: User) -> Query:
         return query.filter(
             or_(
                 model.organisation_id == user_org_id,
-                (model.organisation_id.is_(None)) & (model.industry_id == user.industry_id),
+                (model.organisation_id.is_(None))
+                & (model.industry_id == user.industry_id),
             )
         )
     return query.filter(model.industry_id == user.industry_id)

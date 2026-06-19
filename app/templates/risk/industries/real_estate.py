@@ -1,0 +1,127 @@
+from app.templates.risk.base import LibraryFactor, RiskLibrary
+
+
+def get_library() -> RiskLibrary:
+    return RiskLibrary(
+        industry="real_estate",
+        description="Real estate agent / conveyancer — Tranche 2 (commenced 31 March 2026). No IFTI/TTR/Travel Rule.",
+        category_weights={
+            "customer": 0.30,
+            "product": 0.15,
+            "service": 0.10,
+            "geographic": 0.15,
+            "channel": 0.05,
+            "transaction": 0.20,
+            "regulatory": 0.05,
+        },
+        factors=[
+            LibraryFactor(
+                ref="CUST-001",
+                category_type="customer",
+                name="Anonymous or third-party purchasers",
+                description="Purchases made via third parties, nominees, or shell entities where beneficial owner is unclear.",
+                suggested_likelihood=3,
+                suggested_consequence=5,
+                rationale="Real estate is the most common integration-stage ML method globally; anonymised purchases are a key red flag.",
+                mitigation_examples=[
+                    "Mandatory beneficial ownership declaration for all purchasers",
+                    "Verify ultimate beneficial owner before contract exchange",
+                    "Refuse to act without identified UBO",
+                ],
+            ),
+            LibraryFactor(
+                ref="CUST-002",
+                category_type="customer",
+                name="Politically Exposed Persons (PEPs)",
+                description="Foreign or domestic PEPs or associates purchasing real property.",
+                suggested_likelihood=2,
+                suggested_consequence=5,
+                rationale="PEPs may use real estate to integrate corrupt proceeds; a known ML typology.",
+                mitigation_examples=[
+                    "PEP screening at onboarding",
+                    "Source-of-funds and source-of-wealth documentation",
+                    "Senior manager sign-off for PEP transactions",
+                ],
+            ),
+            LibraryFactor(
+                ref="CUST-003",
+                category_type="customer",
+                name="Foreign buyers / offshore funds",
+                description="Purchasers remitting funds from overseas or through foreign entities.",
+                suggested_likelihood=3,
+                suggested_consequence=4,
+                rationale="Cross-border funds flows obscure origin of funds and are a known ML corridor.",
+                mitigation_examples=[
+                    "Source of funds declaration for all overseas remittances",
+                    "FIRB compliance check for foreign purchasers",
+                ],
+            ),
+            LibraryFactor(
+                ref="PROD-001",
+                category_type="product",
+                name="Off-the-plan / development purchases",
+                description="Purchases of unbuilt properties where settlement occurs years in the future.",
+                suggested_likelihood=3,
+                suggested_consequence=3,
+                rationale="Long settlement periods and multiple ownership transfers create opacity.",
+                mitigation_examples=[
+                    "Re-verify identity and ownership at settlement",
+                    "Monitor for on-selling of contracts",
+                ],
+            ),
+            LibraryFactor(
+                ref="GEO-001",
+                category_type="geographic",
+                name="High-value properties in known ML hotspots",
+                description="Properties in metropolitan areas or precincts known for foreign investment ML activity.",
+                suggested_likelihood=3,
+                suggested_consequence=4,
+                rationale="AUSTRAC has identified specific postcodes as ML risk areas for real estate.",
+                mitigation_examples=[
+                    "Enhanced CDD for transactions in identified high-risk precincts",
+                    "Refer to AUSTRAC typology reports",
+                ],
+            ),
+            LibraryFactor(
+                ref="TXN-001",
+                category_type="transaction",
+                name="Large cash deposits or settlement funds",
+                description="Deposits or settlement payments made by cash or cash equivalents.",
+                suggested_likelihood=3,
+                suggested_consequence=5,
+                rationale="Cash purchases bypass the banking system's AML controls entirely.",
+                mitigation_examples=[
+                    "Require all funds via traceable bank transfer",
+                    "Decline cash transactions above de minimis",
+                    "Report suspicious cash offers via SMR",
+                ],
+            ),
+            LibraryFactor(
+                ref="TXN-002",
+                category_type="transaction",
+                name="Rapid resale / flipping",
+                description="Property purchased and resold quickly at inflated or deflated prices.",
+                suggested_likelihood=2,
+                suggested_consequence=4,
+                rationale="Rapid resale at artificial prices is a classic real-estate based ML technique.",
+                mitigation_examples=[
+                    "Alert on resale within 6 months of purchase",
+                    "Request business rationale for quick resales",
+                ],
+            ),
+            LibraryFactor(
+                ref="REG-001",
+                category_type="regulatory",
+                name="Tranche 2 obligations — new compliance framework",
+                description="Risk of non-compliance with new AML/CTF obligations applicable from 31 March 2026.",
+                suggested_likelihood=3,
+                suggested_consequence=4,
+                rationale="Real estate agents are newly regulated; unfamiliarity with obligations is an acute risk.",
+                mitigation_examples=[
+                    "Staff training on new AML/CTF obligations",
+                    "Engage specialist AML compliance consultant",
+                    "AUSTRAC enrolment before providing designated services",
+                ],
+            ),
+        ],
+    )
