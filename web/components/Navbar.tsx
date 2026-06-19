@@ -284,7 +284,7 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className={`lg:hidden border-t ${isPublicPage ? 'bg-white border-slate-200' : 'bg-navy-800 border-white/10'} px-4 py-5 space-y-1`}>
+        <div className={`lg:hidden border-t ${isPublicPage ? 'bg-white border-slate-200' : 'bg-navy-800 border-white/10'} px-4 py-5 space-y-1 max-h-[calc(100vh-4rem)] overflow-y-auto`}>
           <Link href="/" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Home</Link>
 
           <div>
