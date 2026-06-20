@@ -155,7 +155,18 @@ async def lifespan(app: FastAPI):
     )
 
     print("lifespan: about to create_all", flush=True)
-    Base.metadata.create_all(bind=engine)
+    # With --workers N, each worker process runs this lifespan independently
+    # and would otherwise race to create_all() against the same DB at once —
+    # concurrent CREATE TYPE/CREATE TABLE statements on the same objects can
+    # lock-timeout and crash a worker's startup. A Postgres advisory lock
+    # serializes them: only one worker does the DDL, the rest wait then see
+    # checkfirst=True skip everything (already exists).
+    with engine.connect() as lock_conn:
+        lock_conn.exec_driver_sql("SELECT pg_advisory_lock(727384910)")
+        try:
+            Base.metadata.create_all(bind=engine)
+        finally:
+            lock_conn.exec_driver_sql("SELECT pg_advisory_unlock(727384910)")
     print("lifespan: create_all done", flush=True)
     log.info("Database tables verified")
 
