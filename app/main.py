@@ -1,7 +1,5 @@
 from contextlib import asynccontextmanager
 
-print("main.py: import started", flush=True)
-
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
