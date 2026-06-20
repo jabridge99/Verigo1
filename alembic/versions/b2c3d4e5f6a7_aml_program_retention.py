@@ -25,8 +25,8 @@ def upgrade() -> None:
     op.create_table(
         "aml_program_versions",
         sa.Column("id", sa.Integer(), primary_key=True, index=True),
-        sa.Column("program_id", sa.Integer(), sa.ForeignKey("aml_programs.id"), index=True, nullable=False),
-        sa.Column("organisation_id", sa.Integer(), sa.ForeignKey("organisations.id"), index=True, nullable=False),
+        sa.Column("program_id", sa.String(), sa.ForeignKey("aml_programs.id"), index=True, nullable=False),
+        sa.Column("organisation_id", sa.String(), sa.ForeignKey("organisations.id"), index=True, nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("industry_id", sa.String(100), nullable=False),
         sa.Column("risk_profile", sa.String(20), nullable=False),
@@ -40,7 +40,7 @@ def upgrade() -> None:
     op.create_table(
         "version_retrieval_requests",
         sa.Column("id", sa.Integer(), primary_key=True, index=True),
-        sa.Column("organisation_id", sa.Integer(), sa.ForeignKey("organisations.id"), index=True, nullable=False),
+        sa.Column("organisation_id", sa.String(), sa.ForeignKey("organisations.id"), index=True, nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("requested_by", sa.String(200), nullable=False),
         sa.Column("requested_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
