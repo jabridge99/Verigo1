@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     # Production: postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres
     database_url: str = "sqlite:///./tvg.db"
 
+    # Alembic migrations need a direct (non-pooled) connection — PgBouncer's
+    # transaction-mode pooling (used by database_url above, port 6543) doesn't
+    # reliably support Alembic's long multi-statement DDL transactions and can
+    # hang indefinitely. Point this at the direct connection (port 5432), e.g.
+    # postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
+    # Falls back to database_url if unset (e.g. local sqlite/dev Postgres).
+    migration_database_url: str = ""
+
     # ── Supabase ──────────────────────────────────────────────────────────────
     supabase_url: str = ""  # https://[ref].supabase.co
     supabase_anon_key: str = ""  # public anon key (frontend)
