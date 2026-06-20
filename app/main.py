@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 
+print("main.py: import started", flush=True)
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -122,7 +124,11 @@ from app.middleware import (
 )
 from app.scheduler import start_scheduler, stop_scheduler
 
+print("main.py: imports complete", flush=True)
+
 setup_logging()
+
+print("main.py: logging configured", flush=True)
 
 if settings.sentry_dsn:
     import sentry_sdk
@@ -133,10 +139,14 @@ if settings.sentry_dsn:
         traces_sample_rate=0.1 if settings.is_production else 0.0,
     )
 
+print("main.py: sentry init done (or skipped)", flush=True)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import logging
+
+    print("lifespan: entered", flush=True)
 
     log = logging.getLogger("tvg.startup")
     log.info(
@@ -146,7 +156,9 @@ async def lifespan(app: FastAPI):
         settings.environment,
     )
 
+    print("lifespan: about to create_all", flush=True)
     Base.metadata.create_all(bind=engine)
+    print("lifespan: create_all done", flush=True)
     log.info("Database tables verified")
 
     try:
@@ -162,6 +174,7 @@ async def lifespan(app: FastAPI):
     except ImportError:
         log.debug("pack_engine not available — skipping pack seeding")
 
+    print("lifespan: about to seed permissions/roles", flush=True)
     from app.services.auth_service import seed_master_admin
     from app.services.org_service import seed_permission_catalog_and_roles
 
@@ -169,14 +182,18 @@ async def lifespan(app: FastAPI):
     try:
         seed_permission_catalog_and_roles(db)
         log.info("Permission catalog and system roles seeded")
+        print("lifespan: permission catalog seeded", flush=True)
         admin = seed_master_admin(db)
         if admin:
             log.info("Master admin ensured: %s", admin.email)
+        print("lifespan: master admin seeded", flush=True)
     finally:
         db.close()
 
+    print("lifespan: about to start scheduler", flush=True)
     start_scheduler()
     log.info("Background scheduler started")
+    print("lifespan: scheduler started, about to yield", flush=True)
 
     yield
 
