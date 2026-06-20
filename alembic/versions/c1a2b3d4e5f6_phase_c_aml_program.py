@@ -17,11 +17,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    risk_profile_enum = sa.Enum("low", "standard", "high", name="riskprofile")
+    risk_profile_enum.create(op.get_bind(), checkfirst=True)
     op.add_column(
         "organisations",
         sa.Column(
             "risk_profile",
-            sa.Enum("low", "standard", "high", name="riskprofile"),
+            risk_profile_enum,
             nullable=True,
         ),
     )
@@ -38,3 +40,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("organisations", "risk_profile")
+    sa.Enum(name="riskprofile").drop(op.get_bind(), checkfirst=True)
