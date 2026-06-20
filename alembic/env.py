@@ -23,6 +23,15 @@ if config.config_file_name is not None:
 # see migration_database_url in app/config.py for why.
 _migration_url = settings.migration_database_url or settings.database_url
 config.set_main_option("sqlalchemy.url", _migration_url.replace("%", "%%"))
+
+from urllib.parse import urlsplit  # noqa: E402
+
+_parsed = urlsplit(_migration_url)
+print(
+    f"alembic: connecting to {_parsed.hostname}:{_parsed.port} "
+    f"(using {'MIGRATION_DATABASE_URL' if settings.migration_database_url else 'DATABASE_URL'})",
+    flush=True,
+)
 target_metadata = Base.metadata
 
 
