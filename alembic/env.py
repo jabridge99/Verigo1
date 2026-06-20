@@ -62,6 +62,11 @@ def run_migrations_online() -> None:
         # Alembic's own migration logic runs.
         connection.exec_driver_sql("SELECT 1")
         print("alembic: SELECT 1 succeeded — connection is live", flush=True)
+        # exec_driver_sql() autobegins a transaction on the connection; without
+        # ending it here, context.begin_transaction() below sees a transaction
+        # already in progress, assumes an external caller owns it, and never
+        # commits — migrations silently appear to succeed but nothing persists.
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
