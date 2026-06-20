@@ -19,7 +19,10 @@ if config.config_file_name is not None:
 # Override sqlalchemy.url from app settings (respects .env / env vars)
 # configparser treats % as interpolation syntax, so escape literal % chars
 # (e.g. from a URL-encoded password like %40) before handing off the URL.
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+# Use the direct (non-pooled) connection for migrations when configured —
+# see migration_database_url in app/config.py for why.
+_migration_url = settings.migration_database_url or settings.database_url
+config.set_main_option("sqlalchemy.url", _migration_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
