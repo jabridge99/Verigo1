@@ -154,21 +154,21 @@ async def lifespan(app: FastAPI):
         settings.environment,
     )
 
-    print("lifespan: about to create_all", flush=True)
-    # With --workers N, each worker process runs this lifespan independently
-    # and would otherwise race to create_all() against the same DB at once —
-    # concurrent CREATE TYPE/CREATE TABLE statements on the same objects can
-    # lock-timeout and crash a worker's startup. A Postgres advisory lock
-    # serializes them: only one worker does the DDL, the rest wait then see
-    # checkfirst=True skip everything (already exists).
-    with engine.connect() as lock_conn:
-        lock_conn.exec_driver_sql("SELECT pg_advisory_lock(727384910)")
-        try:
-            Base.metadata.create_all(bind=engine)
-        finally:
-            lock_conn.exec_driver_sql("SELECT pg_advisory_unlock(727384910)")
-    print("lifespan: create_all done", flush=True)
-    log.info("Database tables verified")
+    if settings.is_production:
+        # Production schema is owned by Alembic (`alembic upgrade head` runs as a
+        # Railway pre-deploy step, once, before any worker starts). Running
+        # create_all() here too is redundant and slow: with --workers N, each
+        # worker's checkfirst=True scan does a catalog round-trip per table for
+        # ~130 tables, and a previous advisory-lock fix to stop them racing on
+        # DDL meant later workers waited out earlier workers' full scan before
+        # running their own — over 90s of workers not yet serving requests,
+        # during which Railway's proxy returned 502s for routed traffic.
+        print("lifespan: production — skipping create_all (Alembic owns schema)", flush=True)
+    else:
+        print("lifespan: about to create_all", flush=True)
+        Base.metadata.create_all(bind=engine)
+        print("lifespan: create_all done", flush=True)
+        log.info("Database tables verified")
 
     try:
         from app.services.pack_engine import seed_all_packs
