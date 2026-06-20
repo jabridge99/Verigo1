@@ -57,6 +57,11 @@ def run_migrations_online() -> None:
         connect_args={"connect_timeout": 10},
     )
     with connectable.connect() as connection:
+        # Diagnostic: confirm the connection itself is alive (vs. PgBouncer
+        # accepting a socket but never handing off a real backend) before
+        # Alembic's own migration logic runs.
+        connection.exec_driver_sql("SELECT 1")
+        print("alembic: SELECT 1 succeeded — connection is live", flush=True)
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
