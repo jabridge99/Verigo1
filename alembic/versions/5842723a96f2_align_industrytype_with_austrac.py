@@ -65,6 +65,23 @@ def _rebuild_enum(values: tuple[str, ...], mapping: dict[str, str]) -> None:
         """
     )
 
+    # organisations.industry_type also uses the "industrytype" Postgres enum
+    # (created by later migrations such as 06699922bb99), so it still
+    # references the renamed industrytype_old type and must be converted
+    # too before that type can be dropped.
+    op.execute(
+        f"""
+        ALTER TABLE organisations
+        ALTER COLUMN industry_type TYPE industrytype
+        USING (
+            CASE industry_type::text
+                {case_clauses}
+                ELSE 'other'
+            END
+        )::industrytype
+        """
+    )
+
     op.execute('DROP TYPE industrytype_old')
 
 
