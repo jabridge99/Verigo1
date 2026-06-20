@@ -14,11 +14,13 @@ if _is_sqlite:
 elif _is_supabase:
     # Supabase uses PgBouncer (transaction mode) — needs pool config
     _connect_args["options"] = "-c statement_timeout=30000"
+    _connect_args["connect_timeout"] = 10
     _engine_kwargs["pool_pre_ping"] = True
     _engine_kwargs["pool_size"] = 10
     _engine_kwargs["max_overflow"] = 20
 else:
     # Generic Postgres
+    _connect_args["connect_timeout"] = 10
     _engine_kwargs["pool_pre_ping"] = True
 
 engine = create_engine(
