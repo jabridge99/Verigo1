@@ -163,7 +163,10 @@ async def lifespan(app: FastAPI):
         # DDL meant later workers waited out earlier workers' full scan before
         # running their own — over 90s of workers not yet serving requests,
         # during which Railway's proxy returned 502s for routed traffic.
-        print("lifespan: production — skipping create_all (Alembic owns schema)", flush=True)
+        print(
+            "lifespan: production — skipping create_all (Alembic owns schema)",
+            flush=True,
+        )
     else:
         print("lifespan: about to create_all", flush=True)
         Base.metadata.create_all(bind=engine)
