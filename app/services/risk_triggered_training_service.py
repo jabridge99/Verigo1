@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.governance_training import (
@@ -514,7 +515,12 @@ def seed_default_trigger_rules(
         db.add(rule)
         seeded += 1
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another concurrent request won the race to insert these rules first.
+        db.rollback()
+        return 0
     return seeded
 
 

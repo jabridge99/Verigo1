@@ -42,7 +42,7 @@ class SupabaseStorageProvider(StorageProvider):
         metadata: Optional[dict] = None,
     ) -> StoredObject:
         headers = {**self._headers, "Content-Type": content_type}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
                 self._object_url(key), content=data, headers=headers
             )
@@ -50,13 +50,13 @@ class SupabaseStorageProvider(StorageProvider):
         return StoredObject(key=key, size=len(data), content_type=content_type)
 
     async def download(self, key: str) -> bytes:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(self._object_url(key), headers=self._headers)
             resp.raise_for_status()
             return resp.content
 
     async def stream(self, key: str, chunk_size: int = 65_536) -> AsyncIterator[bytes]:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             async with client.stream(
                 "GET", self._object_url(key), headers=self._headers
             ) as resp:
@@ -65,17 +65,17 @@ class SupabaseStorageProvider(StorageProvider):
                     yield chunk
 
     async def delete(self, key: str) -> None:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.delete(self._object_url(key), headers=self._headers)
             resp.raise_for_status()
 
     async def exists(self, key: str) -> bool:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.head(self._object_url(key), headers=self._headers)
             return resp.status_code == 200
 
     async def get_url(self, key: str, expires_in: int = 3600) -> str:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
                 self._signed_url_endpoint(key),
                 json={"expiresIn": expires_in},
@@ -86,7 +86,7 @@ class SupabaseStorageProvider(StorageProvider):
 
     async def list_objects(self, prefix: str = "") -> list[StoredObject]:
         url = f"{self._base}/object/list/{self.bucket}"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
                 url,
                 json={"prefix": prefix, "limit": 1000, "offset": 0},

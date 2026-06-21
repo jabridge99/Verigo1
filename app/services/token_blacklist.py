@@ -20,7 +20,12 @@ class _RedisBlacklist:
     def __init__(self, url: str):
         import redis
 
-        self._client = redis.from_url(url, decode_responses=True)
+        self._client = redis.from_url(
+            url,
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
         self._client.ping()
 
     def add(self, key: str, ttl_seconds: int = 60 * 60 * 24) -> None:
