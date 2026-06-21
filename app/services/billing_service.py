@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from sqlalchemy import desc, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.billing import (
@@ -101,7 +102,11 @@ def seed_feature_catalog(db: Session) -> None:
     for code, (name, category) in FEATURE_DEFINITIONS.items():
         if code not in existing_codes:
             db.add(Feature(code=code, name=name, category=category))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another worker won the race to insert these features first.
+        db.rollback()
 
     existing_toggles = {
         (t.plan, t.feature_code) for t in db.query(PlanFeatureToggle).all()
@@ -118,7 +123,11 @@ def seed_feature_catalog(db: Session) -> None:
                     enabled=code in codes,
                 )
             )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another worker won the race to insert these toggles first.
+        db.rollback()
 
 
 def feature_matrix(db: Session) -> List[dict]:

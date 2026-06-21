@@ -4,6 +4,7 @@ Phase B — Organisation / membership / role / permission service layer.
 
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.organisation import (
@@ -113,7 +114,11 @@ def seed_permission_catalog_and_roles(db: Session) -> None:
     for code, desc in PERMISSION_CATALOG.items():
         if code not in existing_codes:
             db.add(Permission(code=code, description=desc))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another worker won the race to insert these permissions first.
+        db.rollback()
 
     all_permissions = {p.code: p for p in db.query(Permission).all()}
     existing_roles = {
@@ -134,7 +139,11 @@ def seed_permission_catalog_and_roles(db: Session) -> None:
         )
         role.permissions = [all_permissions[c] for c in codes if c in all_permissions]
         db.add(role)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another worker won the race to insert these system roles first.
+        db.rollback()
 
 
 def get_system_role(db: Session, role_key: str) -> Optional[Role]:
