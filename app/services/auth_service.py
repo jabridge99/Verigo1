@@ -19,6 +19,7 @@ from typing import Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -128,7 +129,13 @@ def seed_master_admin(db: Session) -> Optional[User]:
         is_super_admin=True,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another worker process won the race to insert this row first
+        # (multiple uvicorn workers run lifespan/seeding concurrently).
+        db.rollback()
+        return get_user_by_email(db, email)
     db.refresh(user)
     return user
 
