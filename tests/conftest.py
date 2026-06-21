@@ -132,6 +132,20 @@ def admin_user(db):
 
 
 @pytest.fixture
+def super_admin_user(db):
+    user = _make_user(db, UserRole.admin)
+    user.is_super_admin = True
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def super_admin_headers(super_admin_user):
+    return _auth(super_admin_user)
+
+
+@pytest.fixture
 def mlro_user(db):
     return _make_user(db, UserRole.mlro)
 
