@@ -512,6 +512,21 @@ def verify_token(current_user: User = Depends(_current_user)):
 
 
 # ── Admin: User management ─────────────────────────────────────────────────────
+#
+# Org-scoped admins (role=admin, is_super_admin=False) must only ever see or
+# modify users in their own org_id — only is_super_admin (the global,
+# non-tenant-scoped account, see app/models/user.py) bypasses that. This
+# mirrors the _require_member pattern in app/api/routes/organisations.py and
+# the _require_super_admin gate in app/api/routes/tenants.py.
+
+
+def _get_org_scoped_user(db: Session, current_user: User, user_id: str) -> User:
+    target = get_user_by_id(db, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    if not current_user.is_super_admin and target.org_id != current_user.org_id:
+        raise HTTPException(404, "User not found")
+    return target
 
 
 @router.get("/users", response_model=List[UserResponse])
@@ -520,7 +535,7 @@ def list_users(
     db: Session = Depends(get_db),
 ):
     q = db.query(User)
-    if current_user.role != UserRole.admin:
+    if not current_user.is_super_admin:
         q = q.filter(User.org_id == current_user.org_id)
     return q.all()
 
@@ -534,6 +549,9 @@ def create_user_admin(
 ):
     if get_user_by_email(db, payload.email):
         raise HTTPException(409, "Email already registered")
+    if payload.org_id and not current_user.is_super_admin:
+        if payload.org_id != current_user.org_id:
+            raise HTTPException(403, "Cannot create a user in another organisation")
     user = create_user(
         db,
         email=payload.email,
@@ -560,9 +578,7 @@ def update_user_admin(
     current_user: User = Depends(_require_roles(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    target = get_user_by_id(db, user_id)
-    if not target:
-        raise HTTPException(404, "User not found")
+    target = _get_org_scoped_user(db, current_user, user_id)
     old_role = target.role
     for field, val in payload.model_dump(exclude_unset=True).items():
         setattr(target, field, val)
@@ -586,9 +602,7 @@ def suspend_user(
     current_user: User = Depends(_require_roles(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    target = get_user_by_id(db, user_id)
-    if not target:
-        raise HTTPException(404, "User not found")
+    target = _get_org_scoped_user(db, current_user, user_id)
     if target.id == current_user.id:
         raise HTTPException(400, "Cannot suspend yourself")
     target.status = UserStatus.suspended
@@ -610,9 +624,7 @@ def activate_user(
     current_user: User = Depends(_require_roles(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    target = get_user_by_id(db, user_id)
-    if not target:
-        raise HTTPException(404, "User not found")
+    target = _get_org_scoped_user(db, current_user, user_id)
     target.status = UserStatus.active
     db.commit()
     record_security_event(
