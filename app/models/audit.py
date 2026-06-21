@@ -19,7 +19,7 @@ class LegacyAuditLog(Base):
     actor = Column(String(200))
     actor_role = Column(String(50))
     industry_id = Column(String(100))
-    organisation_id = Column(String, ForeignKey("organisations.id"), index=True)
+    organisation_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True)
     before_state = Column(JSON)
     after_state = Column(JSON)
     notes = Column(Text)

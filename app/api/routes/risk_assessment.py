@@ -968,7 +968,10 @@ def get_score_history(
     _get_run(run_id, org_id_for(current_user), db)
     history = (
         db.query(RiskScoreHistory)
-        .filter(RiskScoreHistory.factor_score_id == factor_score_id)
+        .filter(
+            RiskScoreHistory.factor_score_id == factor_score_id,
+            RiskScoreHistory.org_id == org_id_for(current_user),
+        )
         .order_by(RiskScoreHistory.changed_at.asc())
         .all()
     )

@@ -165,7 +165,7 @@ class TrainingCourse(Base):
     # ── Regulatory references ─────────────────────────────────────────────────
     regulatory_references = Column(JSON, default=list)
 
-    created_by = Column(String, ForeignKey("users.id"))
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -215,7 +215,7 @@ class GovernanceTrainingRecord(Base):
 
     # ── Assignment ────────────────────────────────────────────────────────────
     assignment_id = Column(String, ForeignKey("training_assignments.id"), nullable=True)
-    assigned_by = Column(String, ForeignKey("users.id"))
+    assigned_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     assigned_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=False)
     trigger = Column(Enum(AssignmentTrigger), default=AssignmentTrigger.manual)
@@ -247,7 +247,7 @@ class GovernanceTrainingRecord(Base):
     # ── Exemption ─────────────────────────────────────────────────────────────
     is_exempt = Column(Boolean, default=False)
     exemption_reason = Column(Text)
-    exemption_approved_by = Column(String, ForeignKey("users.id"))
+    exemption_approved_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
 
     # ── Reminder tracking ─────────────────────────────────────────────────────
     reminders_sent = Column(JSON, default=list)

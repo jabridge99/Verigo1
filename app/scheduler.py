@@ -34,16 +34,23 @@ _scheduler: BackgroundScheduler | None = None
     },
 )
 def _job_deadline_check():
-    try:
-        from app.db.database import SessionLocal
-        from app.services.notification_scheduler import run_all_deadline_checks
+    from app.services.distributed_lock import job_lock
 
-        db = SessionLocal()
-        try:
-            result = run_all_deadline_checks(db)
-            log.info("Deadline check complete: %s", result)
-        finally:
-            db.close()
+    try:
+        with job_lock("deadline_check", ttl_seconds=1800) as acquired:
+            if not acquired:
+                log.info("deadline_check skipped — lock held by another worker")
+                return
+
+            from app.db.database import SessionLocal
+            from app.services.notification_scheduler import run_all_deadline_checks
+
+            db = SessionLocal()
+            try:
+                result = run_all_deadline_checks(db)
+                log.info("Deadline check complete: %s", result)
+            finally:
+                db.close()
     except Exception:
         log.exception("deadline_check job failed")
 
@@ -59,17 +66,24 @@ def _job_deadline_check():
     },
 )
 def _job_capture_snapshots():
-    try:
-        from app.db.database import SessionLocal
-        from app.models.benchmark import SnapshotPeriod
-        from app.services import benchmark_service as svc
+    from app.services.distributed_lock import job_lock
 
-        db = SessionLocal()
-        try:
-            result = svc.capture_all_org_snapshots(db, SnapshotPeriod.weekly)
-            log.info("Snapshot capture complete: %s", result)
-        finally:
-            db.close()
+    try:
+        with job_lock("snapshot_capture", ttl_seconds=1800) as acquired:
+            if not acquired:
+                log.info("snapshot_capture skipped — lock held by another worker")
+                return
+
+            from app.db.database import SessionLocal
+            from app.models.benchmark import SnapshotPeriod
+            from app.services import benchmark_service as svc
+
+            db = SessionLocal()
+            try:
+                result = svc.capture_all_org_snapshots(db, SnapshotPeriod.weekly)
+                log.info("Snapshot capture complete: %s", result)
+            finally:
+                db.close()
     except Exception:
         log.exception("capture_snapshots job failed")
 
@@ -85,16 +99,23 @@ def _job_capture_snapshots():
     },
 )
 def _job_compute_benchmarks():
-    try:
-        from app.db.database import SessionLocal
-        from app.services import benchmark_service as svc
+    from app.services.distributed_lock import job_lock
 
-        db = SessionLocal()
-        try:
-            result = svc.compute_industry_benchmarks(db)
-            log.info("Benchmark compute complete: %s", result)
-        finally:
-            db.close()
+    try:
+        with job_lock("benchmark_compute", ttl_seconds=1800) as acquired:
+            if not acquired:
+                log.info("benchmark_compute skipped — lock held by another worker")
+                return
+
+            from app.db.database import SessionLocal
+            from app.services import benchmark_service as svc
+
+            db = SessionLocal()
+            try:
+                result = svc.compute_industry_benchmarks(db)
+                log.info("Benchmark compute complete: %s", result)
+            finally:
+                db.close()
     except Exception:
         log.exception("compute_benchmarks job failed")
 

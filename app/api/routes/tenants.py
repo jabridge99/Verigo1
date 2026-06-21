@@ -3,7 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import _current_user
 from app.db.database import get_db
+from app.models.user import User
 from app.schemas.tenant import TenantCreate, TenantResponse, TenantSummary, TenantUpdate
 from app.services.tenant_service import (
     CustomPackageRequiredError,
@@ -20,8 +22,24 @@ from app.services.tenant_service import (
 router = APIRouter(prefix="/tenants", tags=["Industry Tenants"])
 
 
+def _require_super_admin(current_user: User = Depends(_current_user)) -> User:
+    """
+    Tenants are platform-wide industry records, not scoped to any single
+    organisation — managing them (create/suspend/activate/list-all/stats)
+    is a platform-operator action, gated the same way as the cross-org
+    views in organisations.py: User.is_super_admin, not a per-org role.
+    """
+    if not current_user.is_super_admin:
+        raise HTTPException(403, "Super admin privileges required")
+    return current_user
+
+
 @router.post("/", response_model=TenantResponse, status_code=201)
-def create(payload: TenantCreate, db: Session = Depends(get_db)):
+def create(
+    payload: TenantCreate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(_require_super_admin),
+):
     existing = get_tenant_by_industry(db, payload.industry_id)
     if existing:
         raise HTTPException(
@@ -39,17 +57,24 @@ def list_all(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
+    _admin: User = Depends(_require_super_admin),
 ):
     return list_tenants(db, status=status, skip=skip, limit=limit)
 
 
 @router.get("/stats")
-def stats(db: Session = Depends(get_db)):
+def stats(
+    db: Session = Depends(get_db), _admin: User = Depends(_require_super_admin)
+):
     return tenant_stats(db)
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)
-def get_one(tenant_id: str, db: Session = Depends(get_db)):
+def get_one(
+    tenant_id: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(_require_super_admin),
+):
     t = get_tenant(db, tenant_id)
     if not t:
         raise HTTPException(404, "Tenant not found")
@@ -57,7 +82,12 @@ def get_one(tenant_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/{tenant_id}", response_model=TenantResponse)
-def update_one(tenant_id: str, payload: TenantUpdate, db: Session = Depends(get_db)):
+def update_one(
+    tenant_id: str,
+    payload: TenantUpdate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(_require_super_admin),
+):
     t = update_tenant(db, tenant_id, payload)
     if not t:
         raise HTTPException(404, "Tenant not found")
@@ -65,7 +95,11 @@ def update_one(tenant_id: str, payload: TenantUpdate, db: Session = Depends(get_
 
 
 @router.post("/{tenant_id}/suspend", response_model=TenantResponse)
-def suspend(tenant_id: str, db: Session = Depends(get_db)):
+def suspend(
+    tenant_id: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(_require_super_admin),
+):
     t = suspend_tenant(db, tenant_id)
     if not t:
         raise HTTPException(404, "Tenant not found")
@@ -73,7 +107,11 @@ def suspend(tenant_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{tenant_id}/activate", response_model=TenantResponse)
-def activate(tenant_id: str, db: Session = Depends(get_db)):
+def activate(
+    tenant_id: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(_require_super_admin),
+):
     t = activate_tenant(db, tenant_id)
     if not t:
         raise HTTPException(404, "Tenant not found")
@@ -81,7 +119,11 @@ def activate(tenant_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/by-industry/{industry_id}", response_model=TenantResponse)
-def get_by_industry(industry_id: str, db: Session = Depends(get_db)):
+def get_by_industry(
+    industry_id: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(_require_super_admin),
+):
     t = get_tenant_by_industry(db, industry_id)
     if not t:
         raise HTTPException(404, "No tenant found for this industry")

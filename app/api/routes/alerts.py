@@ -36,6 +36,7 @@ from app.models.monitoring import (
     TransactionAlert,
 )
 from app.models.user import User
+from app.services import audit_service
 from app.schemas.monitoring import (
     AlertAssignRequest,
     AlertEscalateRequest,
@@ -165,6 +166,16 @@ def assign_alert(
     alert.status = AlertStatus.assigned
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_assigned",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={"assigned_to": payload.assign_to, "status": alert.status.value},
+    )
     return alert
 
 
@@ -214,6 +225,21 @@ def review_alert(
 
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_reviewed",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={
+            "resolution": alert.resolution,
+            "status": alert.status.value,
+            "is_false_positive": alert.is_false_positive,
+        },
+        notes=payload.review_notes,
+    )
     return alert
 
 
@@ -235,6 +261,17 @@ def escalate_alert(
     alert.status = AlertStatus.escalated
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_escalated",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={"escalated_to": payload.escalate_to, "status": alert.status.value},
+        notes=payload.escalation_reason,
+    )
     return alert
 
 
@@ -256,6 +293,16 @@ def flag_smr_candidate(
     alert.status = AlertStatus.smr_candidate
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_flagged_smr_candidate",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={"is_smr_candidate": True, "status": alert.status.value},
+    )
     return alert
 
 
@@ -314,6 +361,17 @@ def record_result(
 
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_result_recorded",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={"result": alert.result.value if alert.result else None, "status": alert.status.value},
+        notes=payload.result_notes,
+    )
     return alert
 
 

@@ -291,20 +291,36 @@ def consume_email_action_token(
 # ── Session cookie helpers ───────────────────────────────────────────────────
 
 
+# In production the frontend (Vercel) and API (Railway) are on different
+# domains, so this is a cross-site request from the browser's point of view.
+# SameSite=Lax cookies are withheld by the browser on cross-site fetch/XHR —
+# only top-level navigations get them — so the session cookie would never
+# reach the API after login, silently logging every user back out on their
+# very next request. SameSite=None (paired with Secure, required by spec)
+# is needed whenever frontend and API are on different origins.
+def _session_cookie_samesite() -> str:
+    return "none" if settings.is_production else "lax"
+
+
 def set_session_cookie(response, token: str) -> None:
     response.set_cookie(
         key=settings.session_cookie_name,
         value=token,
         httponly=True,
         secure=settings.is_production,
-        samesite="lax",
+        samesite=_session_cookie_samesite(),
         max_age=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
         path="/",
     )
 
 
 def clear_session_cookie(response) -> None:
-    response.delete_cookie(key=settings.session_cookie_name, path="/")
+    response.delete_cookie(
+        key=settings.session_cookie_name,
+        path="/",
+        secure=settings.is_production,
+        samesite=_session_cookie_samesite(),
+    )
 
 
 # ── Security event logging ────────────────────────────────────────────────────

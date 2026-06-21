@@ -282,7 +282,12 @@ def register_submission(
     notes: Optional[str] = None,
 ) -> FilingRegisterEntry:
     """
-    Create an immutable FilingRegisterEntry after successful AUSTRAC submission.
+    Create an immutable FilingRegisterEntry recording that this org marked a
+    report as submitted in its local compliance register. This does NOT
+    transmit anything to AUSTRAC — no real AUSTRAC provider is wired into the
+    submit endpoints (see app/integrations/austrac/, currently unused beyond
+    a stub). Callers must treat austrac_submission_ref as self-reported, not
+    as confirmation of receipt by AUSTRAC.
     """
     entry = FilingRegisterEntry(
         org_id=org_id,

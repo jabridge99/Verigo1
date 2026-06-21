@@ -74,7 +74,7 @@ class ComplianceCalendarItem(Base):
     __tablename__ = "compliance_calendar"
 
     id = Column(String, primary_key=True, default=lambda: f"cal_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     item_type = Column(Enum(CalendarItemType), nullable=False, index=True)
     status = Column(
@@ -133,7 +133,7 @@ class ComplianceReminder(Base):
     __tablename__ = "compliance_reminders"
 
     id = Column(String, primary_key=True, default=lambda: f"rem_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     calendar_item_id = Column(
         String,
         ForeignKey("compliance_calendar.id", ondelete="CASCADE"),

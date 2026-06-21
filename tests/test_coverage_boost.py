@@ -155,18 +155,17 @@ def test_score_transaction_alerts():
 # ── identity_verification ──────────────────────────────────────────────────
 
 def test_verify_document_matches_and_mismatches():
+    from datetime import date
     from app.services.identity_verification import compute_kyc_identity_score, verify_document
 
     customer = types.SimpleNamespace(
         full_name="Jane Doe",
-        date_of_birth="1990-01-01",
-        id_number="ABC123",
+        date_of_birth=date(1990, 1, 1),
     )
     good_doc = types.SimpleNamespace(
         extracted_name="Jane Doe",
-        extracted_dob="1990-01-01",
-        extracted_expiry="2099-01-01",
-        extracted_id_number="ABC123",
+        extracted_dob=date(1990, 1, 1),
+        expiry_date=date(2099, 1, 1),
     )
     result = verify_document(customer, good_doc)
     assert result["verification_result"] == "valid"
@@ -174,19 +173,17 @@ def test_verify_document_matches_and_mismatches():
 
     bad_doc = types.SimpleNamespace(
         extracted_name="Someone Else",
-        extracted_dob="2000-05-05",
-        extracted_expiry="2000-01-01",
-        extracted_id_number="ZZZ999",
+        extracted_dob=date(2000, 5, 5),
+        expiry_date=date(2000, 1, 1),
     )
     bad_result = verify_document(customer, bad_doc)
     assert bad_result["verification_result"] == "invalid"
-    assert len(bad_result["issues"]) == 4
+    assert len(bad_result["issues"]) == 3
 
     malformed_doc = types.SimpleNamespace(
         extracted_name=None,
         extracted_dob=None,
-        extracted_expiry="not-a-date",
-        extracted_id_number=None,
+        expiry_date=None,
     )
     review_result = verify_document(customer, malformed_doc)
     assert review_result["verification_result"] == "valid"

@@ -119,6 +119,22 @@ _PRIVILEGED_FIELDS = {
     "pep_type",
 }
 
+# Maps a screening type to the checklist flag it satisfies once the result is clear.
+_SCREENING_CHECKLIST_FLAG = {
+    ScreeningType.pep: "pep_screened",
+    ScreeningType.sanctions: "sanctions_screened",
+    ScreeningType.adverse_media: "adverse_media_screened",
+    ScreeningType.ubo_pep: "ubo_screened",
+    ScreeningType.ubo_sanctions: "ubo_screened",
+}
+
+# ScreeningRecord statuses that represent an unresolved hit — must block activation.
+_SCREENING_BLOCKING_STATUSES = {
+    ScreeningStatus.potential_match,
+    ScreeningStatus.confirmed_match,
+    ScreeningStatus.requires_edd,
+}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -180,6 +196,10 @@ def _check_checklist_complete(
     if is_complete and not chk.is_complete:
         chk.is_complete = True
         chk.completed_at = datetime.now(timezone.utc)
+    elif not is_complete and chk.is_complete:
+        # A previously-clear flag (e.g. screening) was reset — re-block activation.
+        chk.is_complete = False
+        chk.completed_at = None
 
 
 def _record_risk_history(
@@ -367,14 +387,17 @@ def update_customer_status(
 ):
     customer = _get_customer(customer_id, org_id_for(current_user), db)
 
-    # Enforce screening gate before activating
+    # Enforce screening gate before activating. Fails closed: a missing checklist
+    # row is treated as incomplete, not as "nothing to check" (a prior bug here let
+    # activation through unconditionally if no checklist row existed for the
+    # customer).
     if payload.status == CustomerStatus.active:
         chk = (
             db.query(CustomerOnboardingChecklist)
             .filter(CustomerOnboardingChecklist.customer_id == customer_id)
             .first()
         )
-        if chk and not (
+        if not chk or not (
             chk.pep_screened
             and chk.sanctions_screened
             and chk.identity_document_verified
@@ -384,7 +407,23 @@ def update_customer_status(
                 "Cannot activate: PEP screening, sanctions screening, and identity verification must be complete",
             )
 
-    # EDD gate: enhanced CDD requires senior approval
+        # Defense in depth: block activation if any screening record is sitting in
+        # an unresolved hit state, independent of the checklist flags above.
+        unresolved = (
+            db.query(ScreeningRecord)
+            .filter(
+                ScreeningRecord.customer_id == customer_id,
+                ScreeningRecord.status.in_(_SCREENING_BLOCKING_STATUSES),
+            )
+            .first()
+        )
+        if unresolved:
+            raise HTTPException(
+                422,
+                "Cannot activate: customer has an unresolved screening match",
+            )
+
+    # EDD gate: enhanced CDD requires senior approval. Same fail-closed rule.
     if (
         customer.cdd_level == CDDLevel.enhanced
         and payload.status == CustomerStatus.active
@@ -394,7 +433,7 @@ def update_customer_status(
             .filter(CustomerOnboardingChecklist.customer_id == customer_id)
             .first()
         )
-        if chk and not chk.edd_senior_approval_obtained:
+        if not chk or not chk.edd_senior_approval_obtained:
             raise HTTPException(
                 422, "EDD customers require senior approval before activation"
             )
@@ -955,18 +994,12 @@ def trigger_screening(
 
     db.flush()
 
-    # Update checklist flags for submitted screening types
-    flag_map = {
-        ScreeningType.pep: "pep_screened",
-        ScreeningType.sanctions: "sanctions_screened",
-        ScreeningType.adverse_media: "adverse_media_screened",
-        ScreeningType.ubo_pep: "ubo_screened",
-        ScreeningType.ubo_sanctions: "ubo_screened",
-    }
-    for stype in payload.screening_types:
-        flag = flag_map.get(stype)
-        if flag:
-            _update_checklist_flag(customer, flag, True, db)
+    # NOTE: checklist "screened" flags are intentionally NOT set here. Triggering
+    # a screening only means a check was *requested* (status=pending) — it is not
+    # evidence the customer is clear. Flags are only flipped to True once a result
+    # comes back clear, in review_screening_result below. Setting them here let
+    # customers pass the activation gate in update_customer_status while their
+    # sanctions/PEP screening was still pending or had come back a confirmed match.
 
     db.add(
         AuditLog(
@@ -1029,6 +1062,19 @@ def review_screening_result(
     rec.is_false_positive = payload.is_false_positive
     rec.reviewed_by = current_user.id
     rec.reviewed_at = datetime.now(timezone.utc)
+
+    flag = _SCREENING_CHECKLIST_FLAG.get(rec.screening_type)
+    if flag:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        is_clear = payload.status in (
+            ScreeningStatus.clear,
+            ScreeningStatus.false_positive,
+        )
+        # Flips the flag back True on a cleared/false-positive result, and back to
+        # False (re-blocking activation) if a result that was previously clear is
+        # later reclassified as a match.
+        _update_checklist_flag(customer, flag, is_clear, db)
+
     db.commit()
     db.refresh(rec)
     return rec

@@ -124,20 +124,13 @@ from app.scheduler import start_scheduler, stop_scheduler
 
 print("main.py: imports complete", flush=True)
 
+# setup_logging() also initialises Sentry (with FastApiIntegration,
+# SqlalchemyIntegration, release tagging, and send_default_pii=False) when
+# SENTRY_DSN is set — do not call sentry_sdk.init() again here, a second
+# call replaces that client and silently drops all of that configuration.
 setup_logging()
 
-print("main.py: logging configured", flush=True)
-
-if settings.sentry_dsn:
-    import sentry_sdk
-
-    sentry_sdk.init(
-        dsn=settings.sentry_dsn,
-        environment=settings.environment,
-        traces_sample_rate=0.1 if settings.is_production else 0.0,
-    )
-
-print("main.py: sentry init done (or skipped)", flush=True)
+print("main.py: logging configured (Sentry init, if any, handled there)", flush=True)
 
 
 @asynccontextmanager

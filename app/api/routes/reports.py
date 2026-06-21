@@ -45,6 +45,7 @@ from app.models.report import (
 )
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services import audit_service
 from app.services.reporting_service import (
     generate_ifti_from_transaction,
     generate_smr_from_case,
@@ -317,11 +318,22 @@ def submit_ifti(
         austrac_submission_ref=submission_reference,
         amount_aud=r.amount_aud,
     )
+    audit_service.log_action(
+        db,
+        action="ifti_submitted",
+        entity_type="ifti_report",
+        entity_id=r.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={"status": r.status.value, "submission_reference": submission_reference},
+    )
 
     return {
         "report_id": report_id,
         "status": r.status.value,
         "submitted_at": r.submitted_at,
+        "disclaimer": "This record confirms submission was initiated. Confirm receipt with AUSTRAC.",
     }
 
 
@@ -642,7 +654,21 @@ def submit_ttr(
         austrac_submission_ref=submission_reference,
         amount_aud=r.total_amount,
     )
-    return {"report_id": report_id, "status": r.status.value}
+    audit_service.log_action(
+        db,
+        action="ttr_submitted",
+        entity_type="ttr_report",
+        entity_id=r.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=r.org_id,
+        after_state={"status": r.status.value, "submission_reference": submission_reference},
+    )
+    return {
+        "report_id": report_id,
+        "status": r.status.value,
+        "disclaimer": "This record confirms submission was initiated. Confirm receipt with AUSTRAC.",
+    }
 
 
 @router.post("/ttr/{report_id}/acknowledge")
@@ -876,6 +902,16 @@ def submit_smr(
         submitted_by=current_user.id,
         austrac_submission_ref=submission_reference,
         amount_aud=r.total_amount,
+    )
+    audit_service.log_action(
+        db,
+        action="smr_submitted",
+        entity_type="smr_report",
+        entity_id=r.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=r.org_id,
+        after_state={"status": r.status.value, "submission_reference": submission_reference},
     )
     return {
         "report_id": report_id,
