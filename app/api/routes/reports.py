@@ -333,6 +333,7 @@ def submit_ifti(
         "report_id": report_id,
         "status": r.status.value,
         "submitted_at": r.submitted_at,
+        "disclaimer": "This record confirms submission was initiated. Confirm receipt with AUSTRAC.",
     }
 
 
@@ -663,7 +664,11 @@ def submit_ttr(
         organisation_id=r.org_id,
         after_state={"status": r.status.value, "submission_reference": submission_reference},
     )
-    return {"report_id": report_id, "status": r.status.value}
+    return {
+        "report_id": report_id,
+        "status": r.status.value,
+        "disclaimer": "This record confirms submission was initiated. Confirm receipt with AUSTRAC.",
+    }
 
 
 @router.post("/ttr/{report_id}/acknowledge")
