@@ -72,10 +72,12 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 # ── Auth dependency ────────────────────────────────────────────────────────────
 
 
-def _current_user(
+def _decode_current_user(
     request: Request,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
+    authorization: Optional[str],
+    db: Session,
+    *,
+    allow_mfa_pending: bool,
 ) -> User:
     raw: Optional[str] = None
     if authorization and authorization.startswith("Bearer "):
@@ -94,10 +96,38 @@ def _current_user(
     if not payload:
         raise HTTPException(401, "Invalid or expired token")
 
+    if payload.get("mfa_pending") and not allow_mfa_pending:
+        raise HTTPException(401, "MFA challenge incomplete")
+
     user = get_user_by_id(db, payload.get("sub", ""))
     if not user or user.status != UserStatus.active:
         raise HTTPException(401, "User not found or inactive")
     return user
+
+
+def _current_user(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+) -> User:
+    return _decode_current_user(
+        request, authorization, db, allow_mfa_pending=False
+    )
+
+
+def _current_user_mfa_pending(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+) -> User:
+    """Like _current_user but also accepts a token still awaiting MFA completion.
+
+    Only use this for the endpoint that resolves the MFA challenge itself
+    (/mfa/challenge) — every other route must reject mfa_pending tokens.
+    """
+    return _decode_current_user(
+        request, authorization, db, allow_mfa_pending=True
+    )
 
 
 def _require_roles(*roles: UserRole):
@@ -281,7 +311,7 @@ def mfa_challenge(
     code: str,
     request: Request,
     response: Response,
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_current_user_mfa_pending),
     db: Session = Depends(get_db),
 ):
     from app.services.mfa_service import verify_totp
