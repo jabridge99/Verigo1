@@ -119,7 +119,6 @@ def seed_master_admin(db: Session) -> Optional[User]:
         return user
 
     user = User(
-        user_id=f"USR-{uuid.uuid4().hex[:10].upper()}",
         email=email,
         full_name="Master Admin",
         hashed_password=hash_password(settings.master_admin_password),
