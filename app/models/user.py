@@ -35,10 +35,12 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=lambda: f"usr_{uuid4().hex[:12]}")
+    # Nullable: global super-admins (is_super_admin=True) are not
+    # tenant-scoped and have no org.
     org_id = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     email = Column(String(255), unique=True, nullable=False, index=True)
