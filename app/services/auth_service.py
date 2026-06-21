@@ -102,9 +102,11 @@ def seed_master_admin(db: Session) -> Optional[User]:
     """
     Idempotently ensure a global super-admin account exists, from
     settings.master_admin_email / master_admin_password. No-op if either
-    is unset, or if a user with that email already exists (in which case
-    it's promoted to super-admin if it isn't already, but its password is
-    left untouched).
+    is unset. If a user with that email already exists, it's promoted to
+    super-admin if it isn't already, and its password is resynced to
+    master_admin_password if it doesn't already match (the env var is the
+    source of truth for this account, not whatever hash was set at
+    creation time).
     """
     email = settings.master_admin_email.strip().lower()
     if not email or not settings.master_admin_password:
@@ -112,9 +114,18 @@ def seed_master_admin(db: Session) -> Optional[User]:
 
     user = get_user_by_email(db, email)
     if user:
+        changed = False
         if not user.is_super_admin or user.role != "admin":
             user.is_super_admin = True
             user.role = "admin"
+            changed = True
+        # Resync password to MASTER_ADMIN_PASSWORD on every boot — this is an
+        # env-var-controlled admin account, so the env var is the source of
+        # truth, not whatever hash happened to be set on first creation.
+        if not verify_password(settings.master_admin_password, user.hashed_password):
+            user.hashed_password = hash_password(settings.master_admin_password)
+            changed = True
+        if changed:
             db.commit()
             db.refresh(user)
         return user
