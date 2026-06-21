@@ -115,14 +115,23 @@ async def upload_document(
     if not safe_name or safe_name.startswith("."):
         raise HTTPException(400, "Invalid filename")
 
+    def _parse_date(value: str):
+        if not value:
+            return None
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(400, f"Invalid date format: {value!r}, expected YYYY-MM-DD")
+
     doc = CustomerIdentityDocument(
         customer_id=customer.id,
         org_id=customer.org_id,
         document_type=document_type,
         document_ref_front=safe_name,
         extracted_name=extracted_name,
-        extracted_dob=extracted_dob,
+        extracted_dob=_parse_date(extracted_dob),
         extracted_mrz=extracted_id_number,
+        expiry_date=_parse_date(extracted_expiry),
         uploaded_by=current_user.id,
     )
     db.add(doc)
