@@ -23,7 +23,16 @@ _scheduler: BackgroundScheduler | None = None
 # ── Job implementations ───────────────────────────────────────────────────────
 
 
-@sentry_sdk.crons.monitor(monitor_slug="deadline-check")
+@sentry_sdk.crons.monitor(
+    monitor_slug="deadline-check",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": "0 2 * * *"},
+        "timezone": "Australia/Sydney",
+        "checkin_margin": 10,
+        "max_runtime": 30,
+        "failure_issue_threshold": 1,
+    },
+)
 def _job_deadline_check():
     try:
         from app.db.database import SessionLocal
@@ -39,7 +48,16 @@ def _job_deadline_check():
         log.exception("deadline_check job failed")
 
 
-@sentry_sdk.crons.monitor(monitor_slug="snapshot-capture")
+@sentry_sdk.crons.monitor(
+    monitor_slug="snapshot-capture",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": "0 1 * * 0"},
+        "timezone": "Australia/Sydney",
+        "checkin_margin": 10,
+        "max_runtime": 30,
+        "failure_issue_threshold": 1,
+    },
+)
 def _job_capture_snapshots():
     try:
         from app.db.database import SessionLocal
@@ -56,7 +74,16 @@ def _job_capture_snapshots():
         log.exception("capture_snapshots job failed")
 
 
-@sentry_sdk.crons.monitor(monitor_slug="benchmark-compute")
+@sentry_sdk.crons.monitor(
+    monitor_slug="benchmark-compute",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": "30 1 * * 0"},
+        "timezone": "Australia/Sydney",
+        "checkin_margin": 10,
+        "max_runtime": 30,
+        "failure_issue_threshold": 1,
+    },
+)
 def _job_compute_benchmarks():
     try:
         from app.db.database import SessionLocal
