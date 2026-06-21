@@ -169,7 +169,7 @@ class Role(Base):
     id = Column(Integer, primary_key=True, index=True)
     role_id = Column(String(60), unique=True, index=True, nullable=False)
     # NULL organisation_id = system role, usable by every organisation
-    organisation_id = Column(String, ForeignKey("organisations.id"), index=True)
+    organisation_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True)
     name = Column(String(100), nullable=False)
     description = Column(String(300))
     is_system = Column(Boolean, default=False)
@@ -188,7 +188,7 @@ class OrganisationUser(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     organisation_id = Column(
-        String, ForeignKey("organisations.id"), nullable=False, index=True
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)

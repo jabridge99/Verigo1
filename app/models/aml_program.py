@@ -39,7 +39,7 @@ class AMLProgramRecord(Base):
     id = Column(Integer, primary_key=True, index=True)
     program_id = Column(String(60), unique=True, index=True, nullable=False)
     organisation_id = Column(
-        String, ForeignKey("organisations.id"), unique=True, index=True, nullable=False
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), unique=True, index=True, nullable=False
     )
     industry_id = Column(String(100), nullable=False)
     risk_profile = Column(String(20), nullable=False)
@@ -81,7 +81,7 @@ class AMLProgramVersion(Base):
         Integer, ForeignKey("aml_program_records.id"), index=True, nullable=False
     )
     organisation_id = Column(
-        String, ForeignKey("organisations.id"), index=True, nullable=False
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True, nullable=False
     )
     version = Column(Integer, nullable=False)
     industry_id = Column(String(100), nullable=False)
@@ -104,7 +104,7 @@ class VersionRetrievalRequest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     organisation_id = Column(
-        String, ForeignKey("organisations.id"), index=True, nullable=False
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True, nullable=False
     )
     version = Column(Integer, nullable=False)
     requested_by = Column(String(200), nullable=False)

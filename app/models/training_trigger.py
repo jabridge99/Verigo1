@@ -231,7 +231,7 @@ class TrainingTriggerLog(Base):
         String, ForeignKey("training_trigger_rules.id"), nullable=True, index=True
     )
     # null if fired by regulatory_update (not a rule-based trigger)
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # ── Trigger context ───────────────────────────────────────────────────────
     event_type = Column(Enum(TriggerEventType), nullable=False, index=True)
@@ -365,7 +365,7 @@ class AssessmentOutcomeFlag(Base):
     __tablename__ = "assessment_outcome_flags"
 
     id = Column(String, primary_key=True, default=lambda: f"aof_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     training_record_id = Column(
         String, ForeignKey("governance_training_records.id"), nullable=False
@@ -397,7 +397,7 @@ class AssessmentOutcomeFlag(Base):
         nullable=False,
         index=True,
     )
-    reviewed_by = Column(String, ForeignKey("users.id"), nullable=True)
+    reviewed_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime(timezone=True))
     review_notes = Column(Text)
     cleared_at = Column(DateTime(timezone=True))

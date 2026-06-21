@@ -521,7 +521,7 @@ class FilingRegisterEntry(Base):
     __tablename__ = "filing_register"
 
     id = Column(String, primary_key=True, default=lambda: f"fil_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     report_type = Column(Enum(ReportType), nullable=False, index=True)
     report_id = Column(String, nullable=False)  # id of IFTIReport/TTRReport/SMRReport

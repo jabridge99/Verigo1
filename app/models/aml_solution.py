@@ -187,7 +187,9 @@ class AMLProgram(Base):
     )  # specific services the org provides (items from AML/CTF Act)
     compliance_officer_name = Column(String(255))
     compliance_officer_role = Column(String(255))
-    compliance_officer_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    compliance_officer_user_id = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     # ── Section 2: ML/TF/PF Risk Assessment ─────────────────────────────────
     # (Enterprise-Wide Risk Assessment — reviewed at least annually)

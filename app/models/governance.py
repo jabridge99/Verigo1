@@ -236,11 +236,11 @@ class Policy(Base):
     # ── Ownership & approval ──────────────────────────────────────────────────
     document_owner = Column(String, ForeignKey("users.id"), nullable=False)
     # 1L — author, usually from the business unit
-    internal_reviewer = Column(String, ForeignKey("users.id"))
+    internal_reviewer = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     # 1L review (senior manager / team lead)
-    compliance_reviewer = Column(String, ForeignKey("users.id"))
+    compliance_reviewer = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     # 2L review (MLRO / compliance officer)
-    approver = Column(String, ForeignKey("users.id"))
+    approver = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     # 3L approval (Board / CEO / Risk Committee)
 
     # ── Content ───────────────────────────────────────────────────────────────
@@ -330,7 +330,7 @@ class PolicyVersion(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # ── Version identity ──────────────────────────────────────────────────────
     version_major = Column(Integer, nullable=False)
@@ -397,7 +397,7 @@ class PolicyWorkflowEvent(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
 
     # ── Transition ────────────────────────────────────────────────────────────
     from_status = Column(Enum(PolicyLifecycleStatus), nullable=False)
@@ -456,7 +456,7 @@ class PolicyAttestation(Base):
     )
     policy_version_id = Column(String, ForeignKey("policy_versions.id"), nullable=True)
     # links to the specific version that was attested to
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
 
     # ── Who attested ──────────────────────────────────────────────────────────
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
@@ -520,7 +520,7 @@ class PolicyReviewReminder(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
 
     # ── Reminder config ───────────────────────────────────────────────────────
     reminder_type = Column(Enum(ReminderType), nullable=False)

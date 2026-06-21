@@ -55,7 +55,12 @@ class User(Base):
     )  # global master account, not tenant-scoped
     # Cached default org for single-org login flows. Source of truth for
     # membership/role is OrganisationUser (a user may belong to >1 org).
-    primary_organisation_id = Column(String, ForeignKey("organisations.id"))
+    # SET NULL (not CASCADE): deleting an org should clear this cached
+    # pointer, not delete the user — OrganisationUser remains the source of
+    # truth for membership and is cascade-deleted with the org separately.
+    primary_organisation_id = Column(
+        String, ForeignKey("organisations.id", ondelete="SET NULL")
+    )
     mfa_enabled = Column(Boolean, default=False)
     mfa_secret = Column(String(64))
     mfa_verified = Column(Boolean, default=False)

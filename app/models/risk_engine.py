@@ -219,7 +219,7 @@ class RiskCategory(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     category_type = Column(Enum(RiskCategoryType), nullable=False)
     name = Column(String(255), nullable=False)  # user can rename
@@ -254,7 +254,7 @@ class RiskFactor(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     library_factor_id = Column(
         String, ForeignKey("risk_library_factors.id"), nullable=True
     )
@@ -301,7 +301,7 @@ class RiskControl(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
 
     control_ref = Column(String(20))
     name = Column(String(255), nullable=False)
@@ -330,7 +330,7 @@ class RiskAssessmentRun(Base):
     framework_id = Column(
         String, ForeignKey("risk_frameworks.id"), nullable=False, index=True
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Linkage to AMLSolution RiskAssessment record (high-level summary)
     aml_risk_assessment_id = Column(
@@ -415,7 +415,7 @@ class RiskFactorScore(Base):
     factor_id = Column(
         String, ForeignKey("risk_factors.id"), nullable=False, index=True
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
 
     # ── User-entered values (1-5 scales) ──────────────────────────────────────
     likelihood = Column(Integer)  # 1-5 (Rare → Almost Certain)
@@ -466,7 +466,7 @@ class RiskMitigation(Base):
         index=True,
     )
     factor_score_id = Column(String, ForeignKey("risk_factor_scores.id"), nullable=True)
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
 
     risk_description = Column(Text, nullable=False)
     mitigation_action = Column(Text, nullable=False)
