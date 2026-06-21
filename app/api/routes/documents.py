@@ -258,6 +258,7 @@ async def delete_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
     if doc.legal_hold:
         raise HTTPException(409, "Document is under legal hold and cannot be deleted.")
     if not await svc.delete_document(db, doc_id, _industry_scope(current_user)):
