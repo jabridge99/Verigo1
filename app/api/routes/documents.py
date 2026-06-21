@@ -191,7 +191,7 @@ def get_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    _assert_tenant(current_user, doc)
+    _assert_tenant(current_user, doc.industry_id)
     return doc
 
 
