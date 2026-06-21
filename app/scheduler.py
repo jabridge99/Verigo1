@@ -11,6 +11,7 @@ Scheduler is started in the FastAPI lifespan and shut down cleanly on exit.
 
 import logging
 
+import sentry_sdk
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -22,6 +23,7 @@ _scheduler: BackgroundScheduler | None = None
 # ── Job implementations ───────────────────────────────────────────────────────
 
 
+@sentry_sdk.crons.monitor(monitor_slug="deadline-check")
 def _job_deadline_check():
     try:
         from app.db.database import SessionLocal
@@ -37,6 +39,7 @@ def _job_deadline_check():
         log.exception("deadline_check job failed")
 
 
+@sentry_sdk.crons.monitor(monitor_slug="snapshot-capture")
 def _job_capture_snapshots():
     try:
         from app.db.database import SessionLocal
@@ -53,6 +56,7 @@ def _job_capture_snapshots():
         log.exception("capture_snapshots job failed")
 
 
+@sentry_sdk.crons.monitor(monitor_slug="benchmark-compute")
 def _job_compute_benchmarks():
     try:
         from app.db.database import SessionLocal
