@@ -335,7 +335,9 @@ class ControlTest(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     # ── Test execution ────────────────────────────────────────────────────────
     test_date = Column(Date, nullable=False)
@@ -432,7 +434,9 @@ class ControlTestFinding(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     # ── Finding detail ────────────────────────────────────────────────────────
     finding_ref = Column(String(20))  # e.g. F-001, F-002
@@ -500,7 +504,9 @@ class ControlRemediationAction(Base):
         index=True,
     )
     finding_id = Column(String, ForeignKey("control_test_findings.id"), nullable=True)
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     # ── Action detail ─────────────────────────────────────────────────────────
     action_ref = Column(String(20))  # e.g. REM-001
@@ -571,7 +577,9 @@ class ControlEvidenceItem(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     title = Column(String(255), nullable=False)
     description = Column(Text)

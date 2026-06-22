@@ -63,9 +63,7 @@ def list_all(
 
 
 @router.get("/stats")
-def stats(
-    db: Session = Depends(get_db), _admin: User = Depends(_require_super_admin)
-):
+def stats(db: Session = Depends(get_db), _admin: User = Depends(_require_super_admin)):
     return tenant_stats(db)
 
 

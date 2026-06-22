@@ -110,9 +110,7 @@ def _current_user(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ) -> User:
-    return _decode_current_user(
-        request, authorization, db, allow_mfa_pending=False
-    )
+    return _decode_current_user(request, authorization, db, allow_mfa_pending=False)
 
 
 def _current_user_mfa_pending(
@@ -125,9 +123,7 @@ def _current_user_mfa_pending(
     Only use this for the endpoint that resolves the MFA challenge itself
     (/mfa/challenge) — every other route must reject mfa_pending tokens.
     """
-    return _decode_current_user(
-        request, authorization, db, allow_mfa_pending=True
-    )
+    return _decode_current_user(request, authorization, db, allow_mfa_pending=True)
 
 
 def _require_roles(*roles: UserRole):

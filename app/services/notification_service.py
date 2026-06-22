@@ -37,9 +37,7 @@ def create_notification(
     """
     if dedupe_key:
         existing = (
-            db.query(Notification)
-            .filter(Notification.dedupe_key == dedupe_key)
-            .first()
+            db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
         )
         if existing:
             return existing
@@ -63,9 +61,7 @@ def create_notification(
     except IntegrityError:
         db.rollback()
         existing = (
-            db.query(Notification)
-            .filter(Notification.dedupe_key == dedupe_key)
-            .first()
+            db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
         )
         if existing:
             return existing
