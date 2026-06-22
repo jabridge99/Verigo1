@@ -161,23 +161,26 @@ def register(
 ):
     if get_user_by_email(db, payload.email):
         raise HTTPException(409, "Email already registered")
-    org_id = payload.org_id
-    if not org_id:
-        # Self-serve signup with no existing org — create one for this user.
-        from app.models.organisation import IndustryType, Organisation
+    # Public, unauthenticated endpoint — payload.org_id / payload.role must
+    # never be trusted. Without an admin/invite check, honoring a caller-
+    # supplied org_id+role would let anyone register as "admin" inside an
+    # arbitrary existing organisation. Self-serve signup always creates a
+    # brand-new org and the lowest-privilege role; joining an existing org
+    # requires the authenticated admin-only POST /auth/users flow instead.
+    from app.models.organisation import IndustryType, Organisation
 
-        org = Organisation(
-            name=f"{payload.full_name}'s Organisation", industry_type=IndustryType.other
-        )
-        db.add(org)
-        db.flush()
-        org_id = org.id
+    org = Organisation(
+        name=f"{payload.full_name}'s Organisation", industry_type=IndustryType.other
+    )
+    db.add(org)
+    db.flush()
+    org_id = org.id
     user = create_user(
         db,
         email=payload.email,
         full_name=payload.full_name,
         password=payload.password,
-        role=(payload.role.value if payload.role else UserRole.analyst.value),
+        role=UserRole.analyst.value,
         org_id=org_id,
     )
     record_security_event(
