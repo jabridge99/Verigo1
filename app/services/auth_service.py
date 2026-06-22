@@ -307,7 +307,10 @@ def set_session_cookie(response, token: str) -> None:
         key=settings.session_cookie_name,
         value=token,
         httponly=True,
-        secure=settings.is_production,
+        # Secure for anything other than local dev — staging is a valid,
+        # often internet-exposed environment and must not ship session
+        # cookies over plain HTTP just because it isn't "production".
+        secure=settings.environment != "development",
         samesite=_session_cookie_samesite(),
         max_age=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
         path="/",
@@ -318,7 +321,7 @@ def clear_session_cookie(response) -> None:
     response.delete_cookie(
         key=settings.session_cookie_name,
         path="/",
-        secure=settings.is_production,
+        secure=settings.environment != "development",
         samesite=_session_cookie_samesite(),
     )
 

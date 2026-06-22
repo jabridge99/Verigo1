@@ -193,6 +193,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def check_production_secrets(self):
+        # CORSMiddleware is configured with allow_credentials=True regardless
+        # of environment, so wildcard CORS is exploitable (any origin gets its
+        # requests echoed back with credentials) in staging just as much as
+        # production — gate on "not local dev", not literally "production".
+        if self.environment in ("production", "staging"):
+            if self.cors_origins == "*":
+                raise ValueError(
+                    f"CORS_ORIGINS must be set to explicit origin(s) in "
+                    f"{self.environment} — wildcard '*' combined with "
+                    f"allow_credentials is unsafe"
+                )
         if self.environment == "production":
             if self.secret_key == "change-me-in-production":
                 raise ValueError("SECRET_KEY must be changed in production")
@@ -200,11 +211,6 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "SQLite is not supported in production — set DATABASE_URL to a "
                     "PostgreSQL connection string (data loss / no concurrency guarantees)"
-                )
-            if self.cors_origins == "*":
-                raise ValueError(
-                    "CORS_ORIGINS must be set to explicit origin(s) in production — "
-                    "wildcard '*' combined with allow_credentials is unsafe"
                 )
             if not self.redis_url:
                 import warnings
