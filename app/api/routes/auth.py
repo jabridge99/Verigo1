@@ -19,6 +19,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -171,14 +172,22 @@ def register(
     db.add(org)
     db.flush()
     org_id = org.id
-    user = create_user(
-        db,
-        email=payload.email,
-        full_name=payload.full_name,
-        password=payload.password,
-        role=UserRole.analyst.value,
-        org_id=org_id,
-    )
+    try:
+        user = create_user(
+            db,
+            email=payload.email,
+            full_name=payload.full_name,
+            password=payload.password,
+            role=UserRole.analyst.value,
+            org_id=org_id,
+        )
+    except IntegrityError:
+        # Two concurrent registrations for the same email can both pass the
+        # get_user_by_email check above before either commits — the unique
+        # constraint on User.email is the real guard. Without this, the
+        # loser of the race got an unhandled 500 instead of a clean 409.
+        db.rollback()
+        raise HTTPException(409, "Email already registered")
     record_security_event(
         db,
         "user_registered",
