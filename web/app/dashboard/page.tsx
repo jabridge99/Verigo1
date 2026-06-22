@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Shield, Users, AlertTriangle, FileText, BarChart3,
+  Shield, Users, FileText, BarChart3,
   Building2, Scale, BookOpen, ChevronRight, LogOut,
-  CheckCircle, Clock, TrendingUp
+  CheckCircle, Clock
 } from 'lucide-react'
 import clsx from 'clsx'
 import { getStoredUser, clearUser } from '@/lib/auth'
@@ -45,7 +45,6 @@ const MODULES: DashboardModule[] = [
   { title: 'AML/CTF Program', desc: 'Version history, QR verification, and export audit trail for your AML program.', href: '/aml-program', icon: <CheckCircle className="w-6 h-6" />, color: 'text-cyan-400 bg-cyan-900/20', roles: ['analyst', 'compliance', 'mlro', 'admin'] },
   { title: 'MLRO Dashboard', desc: 'Case management, obligation calendar, and compliance KPIs.', href: '/mlro', icon: <Scale className="w-6 h-6" />, color: 'text-purple-400 bg-purple-900/20', roles: ['compliance', 'mlro', 'admin'], badge: 'MLRO' },
   { title: 'Audit Trail', desc: 'Immutable compliance log — all actions, changes, and reviews.', href: '/audit', icon: <BookOpen className="w-6 h-6" />, color: 'text-slate-400 bg-slate-900/20', roles: ['analyst', 'compliance', 'mlro', 'admin'] },
-  { title: 'Rule Builder', desc: 'No-code compliance rules — IF/THEN logic for monitoring triggers.', href: '/rule-builder', icon: <AlertTriangle className="w-6 h-6" />, color: 'text-orange-400 bg-orange-900/20', roles: ['compliance', 'mlro', 'admin'] },
   { title: 'Industry Management', desc: 'Multi-tenant configuration, compliance pack assignment, tenant status.', href: '/industry', icon: <Building2 className="w-6 h-6" />, color: 'text-rose-400 bg-rose-900/20', roles: ['admin'] },
 ]
 
@@ -106,20 +105,21 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* KPI bar */}
+        {/* KPI bar — every widget drills down into its filtered list */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
           {[
-            { label: 'Open Alerts', value: stats.open_alerts, color: 'text-red-400', urgent: stats.open_alerts > 5 },
-            { label: 'Pending Reports', value: stats.pending_reports, color: 'text-amber-400', urgent: stats.pending_reports > 0 },
-            { label: 'Pending KYC', value: stats.pending_kyc, color: 'text-blue-400', urgent: false },
-            { label: 'Open Cases', value: stats.open_cases, color: 'text-purple-400', urgent: stats.open_cases > 3 },
-            { label: 'Customers', value: stats.customers_total, color: 'text-white', urgent: false },
-            { label: 'Compliance Score', value: `${stats.compliance_score}%`, color: 'text-emerald-400', urgent: false },
+            { label: 'Open Alerts', value: stats.open_alerts, color: 'text-red-400', urgent: stats.open_alerts > 5, href: '/monitoring?filter=open' },
+            { label: 'Pending Reports', value: stats.pending_reports, color: 'text-amber-400', urgent: stats.pending_reports > 0, href: '/reporting?status=draft' },
+            { label: 'Pending KYC', value: stats.pending_kyc, color: 'text-blue-400', urgent: false, href: '/onboarding?status=pending' },
+            { label: 'Open Cases', value: stats.open_cases, color: 'text-purple-400', urgent: stats.open_cases > 3, href: '/mlro?status=open' },
+            { label: 'Customers', value: stats.customers_total, color: 'text-white', urgent: false, href: '/customers' },
+            { label: 'Compliance Score', value: `${stats.compliance_score}%`, color: 'text-emerald-400', urgent: false, href: '/aml-program' },
           ].map(s => (
-            <div key={s.label} className={clsx('bg-navy-800 border rounded-xl p-4', s.urgent ? 'border-red-500/30' : 'border-white/5')}>
+            <Link key={s.label} href={s.href}
+              className={clsx('bg-navy-800 border rounded-xl p-4 hover:border-brand-500/40 transition-colors', s.urgent ? 'border-red-500/30' : 'border-white/5')}>
               <div className={clsx('text-2xl font-bold', s.color)}>{s.value}</div>
               <div className="text-xs text-white/40 mt-1 leading-tight">{s.label}</div>
-            </div>
+            </Link>
           ))}
         </div>
 

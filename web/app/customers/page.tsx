@@ -319,6 +319,26 @@ export default function CustomerRiskDashboard() {
             </div>
 
             <div className="rounded-xl border border-navy-700 bg-navy-800 p-4">
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Quick Actions</div>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "Start KYC",          href: `/onboarding?customer=${selected.customer_id}&action=kyc`,           icon: ShieldCheck },
+                  { label: "Start KYB",          href: `/onboarding?customer=${selected.customer_id}&action=kyb`,           icon: ShieldCheck },
+                  { label: "Run Screening",      href: `/onboarding?customer=${selected.customer_id}&action=screening`,     icon: Search },
+                  { label: "Create Transaction", href: `/monitoring?customer=${selected.customer_id}&action=new`,           icon: Activity },
+                  { label: "Create Case",        href: `/mlro?customer=${selected.customer_id}&action=new-case`,            icon: AlertTriangle },
+                  { label: "Request Documents",  href: `/documents?customer=${selected.customer_id}&action=request`,        icon: FileText },
+                ].map(({ label, href, icon: Icon }) => (
+                  <a key={label} href={href}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-navy-700 hover:border-brand-500/40 hover:bg-navy-700 transition-colors text-xs font-medium text-slate-300 hover:text-white">
+                    <Icon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                    <span className="truncate">{label}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-navy-700 bg-navy-800 p-4">
               <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Quick Links</div>
               <div className="space-y-1">
                 {[
