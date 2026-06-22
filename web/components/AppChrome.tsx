@@ -5,6 +5,7 @@ import { getStoredUser } from '@/lib/auth'
 import { isAppRoute } from '@/lib/navigation'
 import Sidebar from '@/components/Sidebar'
 import Breadcrumbs from '@/components/Breadcrumbs'
+import ComplianceJourney from '@/components/ComplianceJourney'
 
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -25,6 +26,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="lg:pl-64">
         <Breadcrumbs />
+        <ComplianceJourney />
         <main>{children}</main>
       </div>
     </div>
