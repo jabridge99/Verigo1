@@ -43,7 +43,7 @@ def verify_totp(secret: str, code: str, window: int = 1) -> bool:
     now = time.time()
     step = 30
     for offset in range(-window, window + 1):
-        if _totp(secret, now + offset * step) == code:
+        if hmac.compare_digest(_totp(secret, now + offset * step), code):
             return True
     return False
 

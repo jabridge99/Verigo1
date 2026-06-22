@@ -213,9 +213,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return self._redis
 
     def _real_ip(self, request: Request) -> str:
-        xff = request.headers.get("X-Forwarded-For", "")
-        if xff:
-            return xff.split(",")[0].strip()
+        from app.config import settings
+
+        if settings.trust_proxy_headers:
+            xff = request.headers.get("X-Forwarded-For", "")
+            if xff:
+                return xff.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -223,7 +226,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = self._real_ip(request)
 
         # Tiered rate limits
-        if path in ("/api/v1/auth/login", "/api/v1/auth/magic-link"):
+        if path in (
+            "/api/v1/auth/login",
+            "/api/v1/auth/magic-link",
+            "/api/v1/auth/mfa/challenge",
+        ):
             rpm, bucket_label = 10, "login"
         elif path.startswith("/api/v1/auth"):
             rpm, bucket_label = 20, "auth"

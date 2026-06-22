@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     rate_limit_default: str = "200/minute"
     rate_limit_auth: str = "20/minute"
     redis_url: str = ""  # e.g. redis://localhost:6379/0 — optional, enables Redis-backed rate limiting & cache
+    # X-Forwarded-For is attacker-controlled unless the app sits behind a
+    # proxy/load balancer that overwrites it. Only honor it for client-IP-based
+    # rate limiting when explicitly enabled (i.e. deployed behind such a proxy) —
+    # otherwise any client can set a fresh value per request to bypass per-IP
+    # limits entirely.
+    trust_proxy_headers: bool = False
 
     # ── Document storage ──────────────────────────────────────────────────────
     document_store_path: str = "./uploads"

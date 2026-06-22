@@ -42,7 +42,22 @@ from app.services import usage_billing_service as usage_billing_svc
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
-_ADMIN = _require_roles(UserRole.admin)
+_ROLE_GATE = _require_roles(UserRole.admin)
+
+
+def _require_super_admin(current_user: User = Depends(_ROLE_GATE)) -> User:
+    # UserRole.admin is a per-organisation role, not a platform operator tier
+    # (see app/api/routes/auth.py's _get_org_scoped_user / list_users for the
+    # established pattern). Billing admin routes can target any
+    # industry_id/organisation_id, so without this check any tenant's own
+    # admin user could activate, terminate, or apply custom pricing to
+    # another tenant's subscription. Only is_super_admin may proceed.
+    if not current_user.is_super_admin:
+        raise HTTPException(403, "Requires global super-admin access")
+    return current_user
+
+
+_ADMIN = _require_super_admin
 
 
 # ── Public ────────────────────────────────────────────────────────────────────

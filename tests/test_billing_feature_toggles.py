@@ -16,6 +16,8 @@ def test_plans_endpoint_reflects_feature_toggle_state(client, db):
 
 def test_admin_can_view_and_toggle_feature_matrix(client, db):
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     headers = _auth(admin)
 
     res = client.get("/api/v1/billing/admin/features", headers=headers)
@@ -56,6 +58,8 @@ def test_non_admin_cannot_toggle_features(client, db):
 
 def test_admin_activate_and_terminate_enterprise_subscription(client, db):
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     headers = _auth(admin)
 
     res = client.post(
