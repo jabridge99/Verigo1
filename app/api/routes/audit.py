@@ -122,7 +122,9 @@ def list_logs(
     # Admin can filter by any industry_id; non-admin query is already scoped
     if industry_id and current_user.role == UserRole.admin:
         q = q.filter(LegacyAuditLog.industry_id == industry_id)
-    legacy_entries = q.order_by(LegacyAuditLog.created_at.desc()).limit(skip + limit).all()
+    legacy_entries = (
+        q.order_by(LegacyAuditLog.created_at.desc()).limit(skip + limit).all()
+    )
 
     nq = _scoped_new_query(db, current_user)
     if entity_type:
@@ -140,7 +142,10 @@ def list_logs(
     merged = [_normalize_legacy(e) for e in legacy_entries] + [
         _normalize_new(e) for e in new_entries
     ]
-    merged.sort(key=lambda d: d["created_at"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    merged.sort(
+        key=lambda d: d["created_at"] or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
     return merged[skip : skip + limit]
 
 
@@ -169,7 +174,10 @@ def export_csv(
     merged = [_normalize_legacy(e) for e in legacy_entries] + [
         _normalize_new(e) for e in new_entries
     ]
-    merged.sort(key=lambda d: d["created_at"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    merged.sort(
+        key=lambda d: d["created_at"] or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
     merged = merged[:10_000]
 
     buf = io.StringIO()
@@ -225,6 +233,9 @@ def get_log(
         normalized = _normalize_new(new_entry)
 
     # Tenant isolation: non-admin cannot read another tenant's log entry
-    if current_user.role != UserRole.admin and normalized["industry_id"] != current_user.org_id:
+    if (
+        current_user.role != UserRole.admin
+        and normalized["industry_id"] != current_user.org_id
+    ):
         raise HTTPException(403, "Cross-tenant access denied")
     return normalized

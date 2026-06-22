@@ -579,9 +579,11 @@ def create_decision_panel(
     if transaction_id:
         from app.models.transaction import Transaction
 
-        txn = db.query(Transaction).filter(
-            Transaction.id == transaction_id, Transaction.org_id == org_id
-        ).first()
+        txn = (
+            db.query(Transaction)
+            .filter(Transaction.id == transaction_id, Transaction.org_id == org_id)
+            .first()
+        )
         if txn:
             amount_aud = txn.amount_aud or txn.amount or 0.0
             is_cross_border = getattr(txn, "is_cross_border", False)

@@ -241,7 +241,9 @@ class GovernanceCustomWorkflow(Base):
 
     # ── Approver routing ──────────────────────────────────────────────────────
     approver_role = Column(Enum(ApprovalRole), nullable=False)
-    specific_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    specific_user_id = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     # used when approver_role = specific_user
 
     # ── SLA ───────────────────────────────────────────────────────────────────

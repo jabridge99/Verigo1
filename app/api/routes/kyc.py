@@ -121,7 +121,9 @@ async def upload_document(
         try:
             return datetime.strptime(value, "%Y-%m-%d").date()
         except ValueError:
-            raise HTTPException(400, f"Invalid date format: {value!r}, expected YYYY-MM-DD")
+            raise HTTPException(
+                400, f"Invalid date format: {value!r}, expected YYYY-MM-DD"
+            )
 
     doc = CustomerIdentityDocument(
         customer_id=customer.id,

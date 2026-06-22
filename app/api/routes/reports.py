@@ -326,7 +326,10 @@ def submit_ifti(
         actor=current_user.email,
         actor_role=current_user.role.value if current_user.role else None,
         organisation_id=org_id,
-        after_state={"status": r.status.value, "submission_reference": submission_reference},
+        after_state={
+            "status": r.status.value,
+            "submission_reference": submission_reference,
+        },
     )
 
     return {
@@ -662,7 +665,10 @@ def submit_ttr(
         actor=current_user.email,
         actor_role=current_user.role.value if current_user.role else None,
         organisation_id=r.org_id,
-        after_state={"status": r.status.value, "submission_reference": submission_reference},
+        after_state={
+            "status": r.status.value,
+            "submission_reference": submission_reference,
+        },
     )
     return {
         "report_id": report_id,
@@ -911,7 +917,10 @@ def submit_smr(
         actor=current_user.email,
         actor_role=current_user.role.value if current_user.role else None,
         organisation_id=r.org_id,
-        after_state={"status": r.status.value, "submission_reference": submission_reference},
+        after_state={
+            "status": r.status.value,
+            "submission_reference": submission_reference,
+        },
     )
     return {
         "report_id": report_id,

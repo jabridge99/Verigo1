@@ -45,7 +45,9 @@ class IFTIRecord(Base):
     id = Column(Integer, primary_key=True, index=True)
     ifti_id = Column(String(60), unique=True, index=True, nullable=False)
     industry_id = Column(String(60), index=True)
-    organisation_id = Column(String(36), ForeignKey("organisations.id", ondelete="CASCADE"), index=True)
+    organisation_id = Column(
+        String(36), ForeignKey("organisations.id", ondelete="CASCADE"), index=True
+    )
     direction = Column(SAEnum(IFTIDirection), nullable=False, index=True)
     status = Column(SAEnum(IFTIStatus), default=IFTIStatus.draft)
 

@@ -44,7 +44,12 @@ class IFTIReceipt(Base):
     __tablename__ = "ifti_receipts"
 
     id = Column(String, primary_key=True, default=lambda: f"rcpt_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     ifti_report_id = Column(
         String, ForeignKey("ifti_reports.id"), nullable=True, index=True
     )
