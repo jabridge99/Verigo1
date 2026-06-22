@@ -533,12 +533,13 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
         "Cross-border transfer (IFTI)": "cross_border",
         "Large cash transaction": "unusual_pattern",
         "Virtual asset transfer": "unusual_pattern",
-      } as any;
+      };
+      const customerLabel = DEMO_CUSTOMERS.find(c => c.customer_id === form.customer_id)?.full_name || form.customer_id;
       alert = {
         id: Date.now(), alert_id: `ALT-TXN${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
         transaction_id: Date.now(), alert_type: typeMap[top.label] || "unusual_pattern",
         severity: band.label.toLowerCase(), status: "open",
-        description: `Manual transaction entry: AUD $${form.amount.toLocaleString()} (${form.delivery_method.replace(/_/g, " ")}) — ${top.label}.${form.reference ? ` Ref: ${form.reference}.` : ""}`,
+        description: `Manual transaction entry${customerLabel ? ` for ${customerLabel}` : ""}: AUD $${form.amount.toLocaleString()} (${form.delivery_method.replace(/_/g, " ")}) — ${top.label}.${form.reference ? ` Ref: ${form.reference}.` : ""}`,
         is_resolved: 0, created_at: now,
       };
     }
