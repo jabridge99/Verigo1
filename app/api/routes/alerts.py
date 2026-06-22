@@ -36,7 +36,6 @@ from app.models.monitoring import (
     TransactionAlert,
 )
 from app.models.user import User
-from app.services import audit_service
 from app.schemas.monitoring import (
     AlertAssignRequest,
     AlertEscalateRequest,
@@ -45,6 +44,7 @@ from app.schemas.monitoring import (
     AlertResultRequest,
     AlertReviewRequest,
 )
+from app.services import audit_service
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
