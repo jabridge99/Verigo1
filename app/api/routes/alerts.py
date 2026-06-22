@@ -119,7 +119,7 @@ def alert_dashboard(
             ]
         )
     ).count()
-    smr_candidates = q.filter(TransactionAlert.is_smr_candidate == True).count()
+    smr_candidates = q.filter(TransactionAlert.is_smr_candidate.is_(True)).count()
 
     by_severity = {}
     for sev in AlertSeverity:
@@ -369,7 +369,10 @@ def record_result(
         actor=current_user.email,
         actor_role=current_user.role.value if current_user.role else None,
         organisation_id=org_id_for(current_user),
-        after_state={"result": alert.result.value if alert.result else None, "status": alert.status.value},
+        after_state={
+            "result": alert.result.value if alert.result else None,
+            "status": alert.status.value,
+        },
         notes=payload.result_notes,
     )
     return alert
