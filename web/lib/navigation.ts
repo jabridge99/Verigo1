@@ -10,22 +10,22 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Organisation Setup',
     items: [
-      { label: 'Onboarding Setup', href: '/onboarding-setup' },
-      { label: 'Industry Pack', href: '/industry' },
-      { label: 'AML Program', href: '/aml-program' },
-      { label: 'Compliance Packs', href: '/packs' },
+      { label: 'Setup & Compliance Program', href: '/onboarding-setup' },
+      { label: 'Industry & Pack Configuration', href: '/industry' },
+      { label: 'AML Program & Risk Appetite', href: '/aml-program' },
     ],
   },
   {
-    label: 'Onboarding',
+    label: 'Customer Lifecycle',
     items: [
       { label: 'Customers', href: '/customers' },
       { label: 'KYC / KYB Pipeline', href: '/onboarding' },
       { label: 'Enhanced Due Diligence', href: '/ecdd' },
+      { label: 'Documents', href: '/documents' },
     ],
   },
   {
-    label: 'Monitoring',
+    label: 'Transaction Lifecycle',
     items: [
       { label: 'Transaction Monitoring', href: '/monitoring' },
       { label: 'Alerts', href: '/notifications' },
@@ -33,22 +33,23 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Reports',
+    label: 'Compliance Lifecycle',
     items: [
       { label: 'Reporting Queue', href: '/reporting' },
-      { label: 'IFTI', href: '/ifti' },
+      { label: 'Retention & Archival', href: '/retention' },
+      { label: 'Compliance Analytics', href: '/analytics' },
     ],
   },
   {
     label: 'Governance',
     items: [
       { label: 'Audit Logs', href: '/audit' },
-      { label: 'Documents', href: '/documents' },
-      { label: 'Analytics', href: '/analytics' },
+      { label: 'Data Connectors', href: '/connectors' },
+      { label: 'API Integrations', href: '/api-integrations' },
     ],
   },
   {
-    label: 'Settings',
+    label: 'Admin',
     items: [
       { label: 'Users', href: '/users' },
       { label: 'API & Webhooks', href: '/api-keys' },
@@ -84,6 +85,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   notifications: 'Notifications',
   analytics: 'Analytics',
   retention: 'Retention',
+  connectors: 'Data Connectors',
   kyc: 'KYC Review',
   kyb: 'KYB Review',
   screening: 'Screening',
