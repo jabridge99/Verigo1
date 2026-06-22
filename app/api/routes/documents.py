@@ -208,11 +208,21 @@ async def download_document(
     if not await svc.file_exists(doc):
         raise HTTPException(404, "File not found on storage")
     content = await svc.get_file_bytes(doc)
+    from urllib.parse import quote
+
+    # doc.filename is client-controlled at upload time. A raw quote or CRLF
+    # in it could break out of the quoted Content-Disposition value, so
+    # sanitize the fallback ASCII name and RFC 5987-encode the real one.
+    safe_ascii = (doc.filename or "download").replace('"', "").replace("\\", "")
+    safe_ascii = safe_ascii.encode("ascii", "ignore").decode("ascii") or "download"
+    encoded = quote(doc.filename or "download")
     return Response(
         content=content,
         media_type=doc.mime_type or "application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{doc.filename}"',
+            "Content-Disposition": (
+                f'attachment; filename="{safe_ascii}"; filename*=UTF-8\'\'{encoded}'
+            ),
             "X-Content-Type-Options": "nosniff",
         },
     )

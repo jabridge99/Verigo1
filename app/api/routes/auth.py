@@ -334,11 +334,21 @@ def mfa_challenge(
 @router.delete("/mfa/disable")
 def mfa_disable(
     password: str,
+    totp_code: str,
     current_user: User = Depends(_current_user),
     db: Session = Depends(get_db),
 ):
+    from app.services.mfa_service import verify_totp
+
     if not verify_password(password, current_user.hashed_password or ""):
         raise HTTPException(401, "Incorrect password")
+    # Require the current TOTP code too — a stolen password alone must not
+    # be enough to strip MFA off an account.
+    if not current_user.mfa_enabled or not current_user.mfa_secret:
+        raise HTTPException(400, "MFA not enabled")
+    if not verify_totp(current_user.mfa_secret, totp_code):
+        record_security_event(db, "mfa_failed", current_user.id)
+        raise HTTPException(401, "Invalid TOTP code")
     current_user.mfa_enabled = False
     current_user.mfa_secret = None
     db.commit()
