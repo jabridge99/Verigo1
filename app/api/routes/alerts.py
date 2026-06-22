@@ -201,6 +201,16 @@ def review_alert(
             status_code=400,
             detail=f"resolution must be one of: {', '.join(valid_resolutions)}",
         )
+    # Dismissing/clearing an AML alert without a recorded reason leaves no
+    # audit trail for why a potentially suspicious transaction was waved
+    # through — require a non-empty explanation for those resolutions.
+    if payload.resolution in ("dismissed", "cleared") and not (
+        payload.review_notes and payload.review_notes.strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="review_notes is required when dismissing or clearing an alert",
+        )
 
     alert.reviewed_by = current_user.id
     alert.reviewed_at = datetime.now(timezone.utc)
