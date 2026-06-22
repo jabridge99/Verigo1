@@ -14,6 +14,7 @@ The reporting entity is responsible for accuracy and completeness.
 """
 
 import csv
+import html as html_escape_module
 import io
 import logging
 from datetime import date, datetime, timezone
@@ -537,6 +538,21 @@ def export_html(
     report = _get_report(db, current_user.org_id, report_id)
     snap = report.snapshot_data or {}
 
+    # User-editable free-text fields must be escaped before interpolation
+    # into raw HTML — title/executive_summary/mlro_commentary are set via
+    # ReportCreate/ReportUpdate and rendered unescaped otherwise (stored XSS).
+    report_title = html_escape_module.escape(report.title or "")
+    executive_summary_safe = (
+        html_escape_module.escape(report.executive_summary)
+        if report.executive_summary
+        else "<em>No executive summary provided.</em>"
+    )
+    mlro_commentary_safe = (
+        html_escape_module.escape(report.mlro_commentary)
+        if report.mlro_commentary
+        else "<em>No MLRO commentary provided.</em>"
+    )
+
     def _pct_bar(pct: float) -> str:
         filled = int(pct / 5)
         return "█" * filled + "░" * (20 - filled)
@@ -758,7 +774,7 @@ def export_html(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{report.title}</title>
+<title>{report_title}</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1a1a2e; background: #fff; line-height: 1.5; }}
@@ -799,7 +815,7 @@ def export_html(
 <body>
 <div class="cover">
   <div class="confidential">CONFIDENTIAL</div>
-  <h1>{report.title}</h1>
+  <h1>{report_title}</h1>
   <div class="period">Reporting Period: {report.period_start} to {report.period_end}</div>
   <div class="meta">
     Generated: {report.generated_at.strftime("%d %B %Y %H:%M UTC") if report.generated_at else "—"} &nbsp;|&nbsp;
@@ -813,9 +829,9 @@ def export_html(
 
 {attention_html}
 
-{_section("Executive Summary", f'<div class="narrative">{report.executive_summary or "<em>No executive summary provided.</em>"}</div>')}
+{_section("Executive Summary", f'<div class="narrative">{executive_summary_safe}</div>')}
 
-{_section("MLRO Commentary", f'<div class="narrative">{report.mlro_commentary or "<em>No MLRO commentary provided.</em>"}</div>')}
+{_section("MLRO Commentary", f'<div class="narrative">{mlro_commentary_safe}</div>')}
 
 {highlights_html and _section("Annual Highlights", highlights_html) or ""}
 
