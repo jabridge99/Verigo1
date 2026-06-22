@@ -82,7 +82,21 @@ export default function OnboardingDashboard() {
     try {
       const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/remind`, { method: "POST", credentials: "include" });
       if (res.ok) { showToast("success", "Reminder sent"); fetchData(); }
+      else throw new Error();
     } catch { showToast("error", "Failed to send reminder"); }
+  };
+
+  const handleCancel = async (sessionId: string) => {
+    try {
+      const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/cancel`, { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error();
+      showToast("success", "Verification request cancelled");
+      setSessions(prev => prev.map(s => s.session_id === sessionId ? { ...s, status: "cancelled" } : s));
+      setSelectedSession(null);
+      fetchData();
+    } catch {
+      showToast("error", "Failed to cancel verification request");
+    }
   };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -199,6 +213,8 @@ export default function OnboardingDashboard() {
                 { label: "Session ID", value: selectedSession.session_id },
                 { label: "Status", value: selectedSession.status.replace(/_/g, " ") },
                 { label: "Progress", value: `${selectedSession.completion_pct}%` },
+                { label: "Documents submitted", value: `${selectedSession.documents_uploaded}` },
+                { label: "Reminders sent", value: `${selectedSession.reminders_sent}` },
                 { label: "Risk", value: selectedSession.risk_level || "—" },
                 { label: "Sanctions", value: selectedSession.sanctions_match ? "⚠ Match found" : "Clear" },
               ].map(({ label, value }) => (
@@ -208,6 +224,24 @@ export default function OnboardingDashboard() {
                 </div>
               ))}
             </div>
+
+            {!["completed", "rejected", "cancelled"].includes(selectedSession.status) && (
+              <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-navy-700">
+                <button onClick={() => handleRemind(selectedSession.session_id)} className="btn-secondary text-xs py-1.5 px-3">
+                  Resend Link
+                </button>
+                <button onClick={() => handleCancel(selectedSession.session_id)} className="text-xs py-1.5 px-3 rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-colors">
+                  Cancel Request
+                </button>
+              </div>
+            )}
+            {selectedSession.documents_uploaded > 0 && (
+              <div className="mt-3">
+                <a href={`/documents?session=${selectedSession.session_id}`} className="text-xs text-brand-400 hover:underline">
+                  View submitted documents →
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
