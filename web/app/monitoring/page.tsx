@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle, ShieldAlert, Activity, BarChart3,
-  RefreshCw, CheckCircle, XCircle, ArrowUpCircle, Search, Eye, FilePlus2,
+  RefreshCw, CheckCircle, XCircle, ArrowUpCircle, Search, Eye, FilePlus2, Scale, FileText,
 } from "lucide-react";
 import clsx from "clsx";
 import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
+import QuickActions from "@/components/QuickActions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -367,6 +368,13 @@ function MonitoringDashboard() {
                 <textarea className="field-input min-h-[70px] resize-none text-xs" placeholder="Add notes…" value={actionNote} onChange={e => setActionNote(e.target.value)} />
               </div>
             )}
+            <div className="border-t border-navy-700 pt-4 space-y-2">
+              <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+              <QuickActions actions={[
+                { label: "Create Case", href: `/mlro?customer=${selected.customer_id ?? ""}&action=new-case&alert=${selected.alert_id}`, icon: Scale },
+                { label: "File Report", href: `/reporting?customer=${selected.customer_id ?? ""}&action=new&alert=${selected.alert_id}`, icon: FileText },
+              ]} />
+            </div>
           </div>
         </div>
       )}

@@ -7,6 +7,7 @@ import {
   Shield, BarChart2, Calendar, Send, XCircle, ArrowUpRight,
 } from "lucide-react";
 import clsx from "clsx";
+import QuickActions from "@/components/QuickActions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -396,20 +397,13 @@ export default function MLRODashboard() {
                     </div>
                   </div>
 
-                  <div className="border-t border-navy-700 pt-4">
-                    <div className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-2">Related</div>
-                    <div className="space-y-1">
-                      {[
-                        { label: "View alerts",      href: "/monitoring", icon: AlertTriangle },
-                        { label: "File report",       href: "/reporting",  icon: FileText },
-                        { label: "Customer profile", href: "/customers",  icon: User },
-                      ].map(({ label, href, icon: Icon }) => (
-                        <a key={label} href={href} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-navy-700 transition-colors text-sm text-slate-300 hover:text-white">
-                          <div className="flex items-center gap-2"><Icon className="w-4 h-4 text-slate-500" />{label}</div>
-                          <ChevronRight className="w-4 h-4 text-slate-600" />
-                        </a>
-                      ))}
-                    </div>
+                  <div className="border-t border-navy-700 pt-4 space-y-2">
+                    <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+                    <QuickActions actions={[
+                      { label: "View alerts", href: selected.alert_ids?.length ? `/monitoring?customer=${selected.customer_id}` : "/monitoring", icon: AlertTriangle },
+                      { label: "File report", href: `/reporting?customer=${selected.customer_id}&action=new&case=${selected.case_id}`, icon: FileText },
+                      { label: "Customer profile", href: `/customers/${selected.customer_id}`, icon: User },
+                    ]} />
                   </div>
                 </div>
               </div>

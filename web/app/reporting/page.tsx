@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   FileText, AlertTriangle, Clock, CheckCircle, Send,
-  RefreshCw, Search, Plus, Eye, ChevronRight, Zap, Download,
+  RefreshCw, Search, Plus, Eye, ChevronRight, Zap, Download, User,
 } from "lucide-react";
 import clsx from "clsx";
+import QuickActions from "@/components/QuickActions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -471,6 +472,15 @@ export default function ReportingDashboard() {
                 )}
               </div>
             </div>
+
+            {selected.customer_id && (
+              <div className="border-t border-navy-700 pt-4 space-y-2">
+                <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+                <QuickActions actions={[
+                  { label: "View Customer", href: `/customers/${selected.customer_id}`, icon: User },
+                ]} />
+              </div>
+            )}
           </div>
         </div>
       )}

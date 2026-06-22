@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { DEMO_CUSTOMERS, getCustomerProfile } from "@/lib/demoCustomers";
+import QuickActions from "@/components/QuickActions";
 
 const RISK_COLOR: Record<string, string> = {
   low:      "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
@@ -88,21 +89,15 @@ export default function CustomerDetailPage() {
 
       {/* Quick Actions */}
       <div className="border-b border-navy-800 bg-navy-800/40 px-6 py-3">
-        <div className="max-w-6xl mx-auto flex gap-2 overflow-x-auto">
-          {[
+        <div className="max-w-6xl mx-auto">
+          <QuickActions actions={[
             { label: "Start KYC", href: `/onboarding?customer=${customer.customer_id}&action=kyc`, icon: ShieldCheck },
             { label: "Start KYB", href: `/onboarding?customer=${customer.customer_id}&action=kyb`, icon: ShieldCheck },
             { label: "Run Screening", href: `/onboarding?customer=${customer.customer_id}&action=screening`, icon: Search },
             { label: "Create Transaction", href: `/monitoring?customer=${customer.customer_id}&action=new`, icon: Activity },
             { label: "Create Case", href: `/mlro?customer=${customer.customer_id}&action=new-case`, icon: AlertTriangle },
             { label: "Request Documents", href: `/documents?customer=${customer.customer_id}&action=request`, icon: FileText },
-          ].map(({ label, href, icon: Icon }) => (
-            <Link key={label} href={href}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-navy-700 hover:border-brand-500/40 hover:bg-navy-700 transition-colors text-xs font-medium text-slate-300 hover:text-white whitespace-nowrap">
-              <Icon className="w-3.5 h-3.5 text-slate-500" />
-              {label}
-            </Link>
-          ))}
+          ]} />
         </div>
       </div>
 

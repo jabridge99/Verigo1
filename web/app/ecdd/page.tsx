@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   ShieldCheck, AlertTriangle, CheckCircle, XCircle,
-  Clock, RefreshCw, Plus, Eye, User, Search, ChevronLeft, ChevronRight, Download,
+  Clock, RefreshCw, Plus, Eye, User, Search, ChevronLeft, ChevronRight, Download, Scale,
 } from "lucide-react";
 import clsx from "clsx";
+import QuickActions from "@/components/QuickActions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -384,15 +385,20 @@ export default function ECDDDashboard() {
               ))}
             </div>
 
-            {selected.status === "pending" && (
-              <div className="border-t border-navy-700 pt-4">
+            <div className="border-t border-navy-700 pt-4 space-y-3">
+              <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+              <QuickActions actions={[
+                { label: "Escalate to MLRO", href: `/mlro?customer=${selected.customer_id}&action=new-case&ecdd=${selected.ecdd_id}`, icon: Scale },
+                { label: "View Customer", href: `/customers/${selected.customer_id}`, icon: User },
+              ]} />
+              {selected.status === "pending" && (
                 <button
                   onClick={() => completeECDD(selected.ecdd_id)}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-500/15 border border-teal-500/25 text-teal-300 text-sm font-medium hover:bg-teal-500/25 transition-colors w-full justify-center">
                   <CheckCircle className="w-4 h-4" /> Mark Assessment Complete
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
