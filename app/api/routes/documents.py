@@ -210,6 +210,24 @@ async def download_document(
     if not await svc.file_exists(doc):
         raise HTTPException(404, "File not found on storage")
     content = await svc.get_file_bytes(doc)
+
+    # KYC/AML documents are sensitive; downloads need an access trail just
+    # like other compliance-relevant actions in this codebase.
+    from app.services.audit_service import log_action
+
+    log_action(
+        db,
+        action="document.download",
+        entity_type="Document",
+        entity_id=doc.doc_id,
+        actor=current_user.id,
+        actor_role=current_user.role.value
+        if hasattr(current_user.role, "value")
+        else str(current_user.role),
+        industry_id=doc.industry_id,
+        organisation_id=doc.organisation_id,
+    )
+
     from urllib.parse import quote
 
     # doc.filename is client-controlled at upload time. A raw quote or CRLF
