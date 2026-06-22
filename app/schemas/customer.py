@@ -552,8 +552,8 @@ class CustomerReviewCreate(BaseModel):
     next_review_date: Optional[date] = None
     outcome: Optional[ReviewOutcome] = None
     outcome_notes: Optional[str] = None
-    risk_score_before: Optional[float] = None
-    risk_score_after: Optional[float] = None
+    risk_score_before: Optional[float] = Field(None, ge=0, le=100)
+    risk_score_after: Optional[float] = Field(None, ge=0, le=100)
     cdd_level_before: Optional[CDDLevel] = None
     cdd_level_after: Optional[CDDLevel] = None
 

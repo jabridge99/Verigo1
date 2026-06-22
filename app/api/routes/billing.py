@@ -99,7 +99,7 @@ def my_subscription(
 def create_checkout(
     req: CheckoutSessionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
@@ -113,7 +113,7 @@ def create_checkout(
 def customer_portal(
     return_url: str = Query(default=""),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
@@ -130,7 +130,7 @@ def customer_portal(
 def cancel_subscription(
     at_period_end: bool = Query(True),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     sub = svc.cancel_subscription(db, current_user.org_id or "", at_period_end)
     if not sub:
@@ -166,7 +166,7 @@ def my_addons(
 def purchase_addon(
     addon_key: AddonKey,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     if not current_user.org_id:
         raise HTTPException(400, "User has no org_id")
@@ -180,7 +180,7 @@ def purchase_addon(
 def cancel_addon(
     addon_key: AddonKey,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     addon = svc.cancel_addon(db, current_user.org_id or "", addon_key)
     if not addon:

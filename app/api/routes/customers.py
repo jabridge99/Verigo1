@@ -110,15 +110,6 @@ DISCLAIMER = (
     "remain the responsibility of the reporting entity."
 )
 
-_PRIVILEGED_FIELDS = {
-    "status",
-    "risk_score",
-    "risk_level",
-    "cdd_level",
-    "is_pep",
-    "pep_type",
-}
-
 # Maps a screening type to the checklist flag it satisfies once the result is clear.
 _SCREENING_CHECKLIST_FLAG = {
     ScreeningType.pep: "pep_screened",

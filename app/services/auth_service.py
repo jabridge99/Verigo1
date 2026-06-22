@@ -115,17 +115,35 @@ def seed_master_admin(db: Session) -> Optional[User]:
     user = get_user_by_email(db, email)
     if user:
         changed = False
+        changes: list[str] = []
         if not user.is_super_admin or user.role != "admin":
             user.is_super_admin = True
             user.role = "admin"
             changed = True
+            changes.append("role/super_admin")
         # Resync password to MASTER_ADMIN_PASSWORD on every boot — this is an
         # env-var-controlled admin account, so the env var is the source of
         # truth, not whatever hash happened to be set on first creation.
         if not verify_password(settings.master_admin_password, user.hashed_password):
             user.hashed_password = hash_password(settings.master_admin_password)
             changed = True
+            changes.append("password")
         if changed:
+            # A boot-time resync that silently overwrites an admin account's
+            # credentials/role is exactly the kind of privileged change that
+            # must leave a trail — without this, an investigator has no
+            # record of why/when this account's password or role flipped.
+            from app.services.audit_service import log_action
+
+            log_action(
+                db,
+                action="master_admin.resync",
+                entity_type="User",
+                entity_id=user.id,
+                actor="system",
+                actor_role="system",
+                notes=f"Boot-time master admin resync: {', '.join(changes)}",
+            )
             db.commit()
             db.refresh(user)
         return user
