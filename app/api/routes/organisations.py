@@ -510,7 +510,31 @@ def list_members(
         .filter(OrganisationUser.organisation_id == org.id)
         .all()
     )
-    return [_member_response(db, m) for m in members]
+    if not members:
+        return []
+
+    # Batch-load users/roles instead of two queries per member (N+1).
+    user_ids = {m.user_id for m in members}
+    role_ids = {m.role_id for m in members}
+    users_by_id = {
+        u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()
+    }
+    roles_by_id = {
+        r.id: r for r in db.query(Role).filter(Role.id.in_(role_ids)).all()
+    }
+
+    return [
+        MemberResponse(
+            user_id=users_by_id[m.user_id].id,
+            email=users_by_id[m.user_id].email,
+            full_name=users_by_id[m.user_id].full_name,
+            role_key=_role_key_for(roles_by_id[m.role_id]),
+            role_name=roles_by_id[m.role_id].name,
+            status=m.status,
+            created_at=m.created_at,
+        )
+        for m in members
+    ]
 
 
 @router.post("/{org_id}/members", response_model=MemberResponse, status_code=201)
