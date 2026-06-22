@@ -223,9 +223,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return self._redis
 
     def _real_ip(self, request: Request) -> str:
-        xff = request.headers.get("X-Forwarded-For", "")
-        if xff:
-            return xff.split(",")[0].strip()
+        from app.config import settings
+
+        if settings.trust_proxy_headers:
+            xff = request.headers.get("X-Forwarded-For", "")
+            if xff:
+                return xff.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

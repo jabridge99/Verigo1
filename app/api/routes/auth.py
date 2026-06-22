@@ -12,7 +12,6 @@ Fixes vs original:
  - User enumeration prevented on magic-link endpoint
 """
 
-import hashlib
 import logging
 import secrets
 from datetime import datetime, timezone
@@ -87,14 +86,15 @@ def _decode_current_user(
     if not raw:
         raise HTTPException(401, "Not authenticated")
 
-    # Check revocation blacklist
-    jti_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
-    if jti_hash in TOKEN_BLACKLIST:
-        raise HTTPException(401, "Token has been revoked")
-
     payload = decode_token(raw)
     if not payload:
         raise HTTPException(401, "Invalid or expired token")
+
+    # Check revocation blacklist by jti — must match the claim
+    # app.api.deps.get_current_user checks, since logout blacklists by jti.
+    jti = payload.get("jti")
+    if jti and jti in TOKEN_BLACKLIST:
+        raise HTTPException(401, "Token has been revoked")
 
     if payload.get("mfa_pending") and not allow_mfa_pending:
         raise HTTPException(401, "MFA challenge incomplete")
@@ -142,12 +142,11 @@ def _require_roles(*roles: UserRole):
 
 
 def _client_ip(request: Request) -> str:
-    xff = request.headers.get("X-Forwarded-For", "")
-    return (
-        xff.split(",")[0].strip()
-        if xff
-        else (request.client.host if request.client else "unknown")
-    )
+    if settings.trust_proxy_headers:
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 # ── Register ──────────────────────────────────────────────────────────────────
@@ -261,12 +260,20 @@ def logout(
     raw = None
     if authorization and authorization.startswith("Bearer "):
         raw = authorization.removeprefix("Bearer ").strip()
+    elif settings.session_cookie_name in request.cookies:
+        raw = request.cookies[settings.session_cookie_name]
+
+    if raw:
         from app.services.auth_service import ACCESS_TOKEN_EXPIRY_MINUTES
 
-        TOKEN_BLACKLIST.add(
-            hashlib.sha256(raw.encode()).hexdigest()[:16],
-            ttl_seconds=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
-        )
+        payload = decode_token(raw)
+        # Blacklist by jti — the same claim app.api.deps.get_current_user
+        # (used by nearly every other router) checks. The sha256(raw token)
+        # key used here previously was never checked by deps.py, so logout
+        # never actually revoked a token for any non-auth.py-guarded route.
+        jti = payload.get("jti") if payload else None
+        if jti:
+            TOKEN_BLACKLIST.add(jti, ttl_seconds=ACCESS_TOKEN_EXPIRY_MINUTES * 60)
     return {"detail": "Logged out successfully"}
 
 
