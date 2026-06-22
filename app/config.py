@@ -1,4 +1,3 @@
-import secrets
 from typing import List
 
 from pydantic import model_validator
@@ -30,7 +29,13 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""  # secret service role key (backend only)
 
     # ── Auth ─────────────────────────────────────────────────────────────────
-    secret_key: str = secrets.token_urlsafe(32)
+    # A random per-process default (secrets.token_urlsafe(32)) would differ
+    # across worker processes, making JWTs signed by one worker fail to
+    # validate on another, and would never equal the literal string the
+    # production guard below checks for — silently defeating that guard.
+    # Use a fixed, obviously-insecure placeholder instead so the guard works
+    # and dev/test workers agree on a secret.
+    secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480  # 8 hours
 
