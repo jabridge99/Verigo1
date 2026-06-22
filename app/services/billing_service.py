@@ -533,6 +533,17 @@ def _handle_checkout_completed(db: Session, session: dict):
             annual_discount_pct=20.0,
         )
         db.add(sub)
+        try:
+            db.flush()
+        except IntegrityError:
+            # Two checkout.session.completed deliveries racing for the
+            # same org both passed the get_subscription() check above
+            # before either committed — the unique constraint is the
+            # real guard. The other writer won; load its row instead.
+            db.rollback()
+            sub = get_subscription(db, industry_id, organisation_id)
+            if not sub:
+                raise
 
     sub.plan = BillingPlan(plan_str)
     sub.interval = BillingInterval(interval_str)
