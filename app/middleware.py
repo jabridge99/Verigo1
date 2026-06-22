@@ -134,13 +134,19 @@ _in_process_limiter = _InProcessRateLimiter()
 
 
 async def _redis_allow(
-    redis_client, key: str, limit: int, window_seconds: int = 60
+    redis_client, key: str, limit: int, window_seconds: int = 60, fail_open: bool = True
 ) -> bool:
     """
     Redis sliding-window rate check using a sorted set.
     Key format expected: rl:{bucket}:{client_ip}
     TTL on the sorted set is window_seconds + 5 s for safety.
     Returns True if the request is within the limit.
+
+    fail_open controls behaviour when Redis itself is unreachable:
+    - True (default, general API traffic): allow the request — availability
+      over strict throttling.
+    - False (login/magic-link): deny the request — a Redis outage must not
+      silently disable brute-force protection on auth endpoints.
     """
     now = time.time()
     window_start = now - window_seconds
@@ -156,9 +162,12 @@ async def _redis_allow(
         return count <= limit
     except Exception as exc:
         logger.warning(
-            "Redis rate-limit error for key %s: %s — allowing request", key, exc
+            "Redis rate-limit error for key %s: %s — %s",
+            key,
+            exc,
+            "allowing request" if fail_open else "denying request (fail-closed)",
         )
-        return True  # Fail open
+        return fail_open
 
 
 # ── Unified RateLimitMiddleware ────────────────────────────────────────────────
@@ -235,7 +244,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if redis_client is not None:
             key = f"rl:{bucket_label}:{client_ip}"
-            allowed = await _redis_allow(redis_client, key, rpm)
+            allowed = await _redis_allow(
+                redis_client, key, rpm, fail_open=(bucket_label != "login")
+            )
         else:
             key = f"{client_ip}:{bucket_label}"
             allowed = _in_process_limiter.allow(key, rpm)
