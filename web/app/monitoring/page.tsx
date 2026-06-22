@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle, ShieldAlert, Activity, BarChart3,
-  RefreshCw, CheckCircle, XCircle, ArrowUpCircle, Search, Eye,
+  RefreshCw, CheckCircle, XCircle, ArrowUpCircle, Search, Eye, FilePlus2,
 } from "lucide-react";
 import clsx from "clsx";
+import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -69,10 +71,20 @@ const DEMO_STATS: Stats = {
   total_transactions: 124, flagged_transactions: 8,
 };
 
-type Tab = "queue" | "stats" | "simulate";
+type Tab = "queue" | "stats" | "create" | "simulate";
 
-export default function MonitoringDashboard() {
-  const [tab, setTab] = useState<Tab>("queue");
+export default function MonitoringDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <MonitoringDashboard />
+    </Suspense>
+  );
+}
+
+function MonitoringDashboard() {
+  const searchParams = useSearchParams();
+  const customerParam = searchParams.get("customer") || "";
+  const [tab, setTab] = useState<Tab>(searchParams.get("action") === "new" ? "create" : "queue");
   const [alerts, setAlerts] = useState<Alert[]>(DEMO_ALERTS);
   const [stats, setStats] = useState<Stats>(DEMO_STATS);
   const [search, setSearch] = useState("");
@@ -123,6 +135,7 @@ export default function MonitoringDashboard() {
   const TABS = [
     { id: "queue" as Tab, label: "Alert Queue", icon: AlertTriangle },
     { id: "stats" as Tab, label: "Analytics", icon: BarChart3 },
+    { id: "create" as Tab, label: "Create Transaction", icon: FilePlus2 },
     { id: "simulate" as Tab, label: "Test Monitor", icon: Activity },
   ];
 
@@ -311,6 +324,17 @@ export default function MonitoringDashboard() {
           </div>
         )}
 
+        {tab === "create" && (
+          <TransactionEntryPanel
+            defaultCustomerId={customerParam}
+            onCreate={(a) => {
+              if (a) { setAlerts(prev => [a, ...prev]); showToast("success", `Transaction created — alert generated: ${a.alert_type}`); }
+              else showToast("success", "Transaction created — no alerts triggered");
+              setTab("queue");
+            }}
+          />
+        )}
+
         {tab === "simulate" && <SimulatePanel onAlert={(a) => { setAlerts(prev => [a, ...prev]); showToast("success", `Alert generated: ${a.alert_type}`); setTab("queue"); }} />}
       </div>
 
@@ -412,6 +436,230 @@ function SimulatePanel({ onAlert }: { onAlert: (a: Alert) => void }) {
             <span className="text-slate-500">{label}</span><span className="text-slate-300">{value}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+const HIGH_RISK_COUNTRIES = ["IR", "KP", "RU", "SY", "AF", "BY", "MM"];
+const DELIVERY_METHODS = ["bank_transfer", "cash", "crypto", "cheque", "card", "other"];
+const PURPOSES = ["personal", "business", "investment", "property", "gift", "remittance", "trade", "other"];
+
+interface TxnRisk {
+  score: number;
+  rules: { label: string; severity: string }[];
+  reports: { label: string; reason: string }[];
+  actions: string[];
+}
+
+function assessTransaction(form: {
+  amount: number; currency: string; country: string; delivery_method: string; purpose: string; is_cross_border: boolean;
+}): TxnRisk {
+  const rules: TxnRisk["rules"] = [];
+  const reports: TxnRisk["reports"] = [];
+  let score = 5;
+
+  if (form.amount >= 10000) {
+    rules.push({ label: "CTR threshold (≥ $10,000)", severity: "high" });
+    reports.push({ label: "TTR (Threshold Transaction Report)", reason: "Transaction meets or exceeds the AUD $10,000 CTR threshold." });
+    score += 35;
+  } else if (form.amount >= 7000) {
+    rules.push({ label: "Near-threshold amount ($7k–$10k)", severity: "medium" });
+    score += 15;
+  }
+
+  const highRisk = HIGH_RISK_COUNTRIES.includes(form.country.toUpperCase());
+  if (form.is_cross_border) {
+    rules.push({ label: highRisk ? "High-risk jurisdiction (cross-border)" : "Cross-border transfer (IFTI)", severity: highRisk ? "high" : "medium" });
+    reports.push({ label: "IFTI (International Funds Transfer Instruction)", reason: `Funds transfer to/from ${form.country || "overseas jurisdiction"}.` });
+    score += highRisk ? 35 : 15;
+  }
+
+  if (form.delivery_method === "cash" && form.amount >= 5000) {
+    rules.push({ label: "Large cash transaction", severity: "medium" });
+    score += 10;
+  }
+
+  if (form.delivery_method === "crypto") {
+    rules.push({ label: "Virtual asset transfer", severity: "medium" });
+    score += 10;
+  }
+
+  score = Math.min(100, score);
+
+  if (score >= 70) {
+    reports.push({ label: "SMR (Suspicious Matter Report)", reason: "Aggregate risk score indicates potential suspicious activity requiring MLRO review." });
+  }
+
+  const actions: string[] = [];
+  if (score >= 70) actions.push("Escalate to MLRO for review before processing");
+  if (reports.some(r => r.label.startsWith("TTR"))) actions.push("File TTR with AUSTRAC within 10 business days");
+  if (reports.some(r => r.label.startsWith("IFTI"))) actions.push("File IFTI with AUSTRAC within 10 business days");
+  if (reports.some(r => r.label.startsWith("SMR"))) actions.push("Consider SMR filing — do not disclose to customer (tipping-off offence)");
+  if (highRisk) actions.push("Apply Enhanced Customer Due Diligence (ECDD)");
+  if (actions.length === 0) actions.push("No further action required — process as normal");
+
+  return { score, rules, reports, actions };
+}
+
+const RISK_BAND = (score: number) =>
+  score >= 70 ? { label: "Critical", color: "text-red-400", bar: "bg-red-500" }
+  : score >= 45 ? { label: "High", color: "text-orange-400", bar: "bg-orange-500" }
+  : score >= 20 ? { label: "Medium", color: "text-amber-400", bar: "bg-amber-500" }
+  : { label: "Low", color: "text-emerald-400", bar: "bg-emerald-500" };
+
+function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustomerId: string; onCreate: (a: Alert | null) => void }) {
+  const [form, setForm] = useState({
+    amount: 5000, currency: "AUD", country: "AU", delivery_method: "bank_transfer", purpose: "business",
+    customer_id: defaultCustomerId, reference: "", notes: "", is_cross_border: false,
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  const risk = assessTransaction(form);
+  const band = RISK_BAND(risk.score);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    await new Promise(r => setTimeout(r, 600));
+    const now = new Date().toISOString();
+    let alert: Alert | null = null;
+    if (risk.rules.length > 0) {
+      const top = risk.rules[0];
+      const typeMap: Record<string, Alert["alert_type"]> = {
+        "CTR threshold (≥ $10,000)": "large_transaction",
+        "Near-threshold amount ($7k–$10k)": "structuring",
+        "High-risk jurisdiction (cross-border)": "high_risk_country",
+        "Cross-border transfer (IFTI)": "cross_border",
+        "Large cash transaction": "unusual_pattern",
+        "Virtual asset transfer": "unusual_pattern",
+      };
+      const customerLabel = DEMO_CUSTOMERS.find(c => c.customer_id === form.customer_id)?.full_name || form.customer_id;
+      alert = {
+        id: Date.now(), alert_id: `ALT-TXN${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        transaction_id: Date.now(), alert_type: typeMap[top.label] || "unusual_pattern",
+        severity: band.label.toLowerCase(), status: "open",
+        description: `Manual transaction entry${customerLabel ? ` for ${customerLabel}` : ""}: AUD $${form.amount.toLocaleString()} (${form.delivery_method.replace(/_/g, " ")}) — ${top.label}.${form.reference ? ` Ref: ${form.reference}.` : ""}`,
+        is_resolved: 0, created_at: now,
+      };
+    }
+    setSubmitting(false);
+    onCreate(alert);
+  };
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-6 max-w-5xl">
+      <form onSubmit={submit} className="card space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-100 mb-1">Create Transaction</h2>
+          <p className="text-slate-500 text-sm">Manually record a transaction for testing, training, or demo purposes.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Amount *</label>
+            <input required type="number" min={0} className="field-input" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Currency</label>
+            <select className="field-input" value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
+              {["AUD", "USD", "EUR", "GBP", "NZD", "SGD"].map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Counterparty country (ISO-2)</label>
+            <input className="field-input" placeholder="e.g. AU, IR, RU" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value.toUpperCase() }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Delivery method</label>
+            <select className="field-input" value={form.delivery_method} onChange={e => setForm(f => ({ ...f, delivery_method: e.target.value }))}>
+              {DELIVERY_METHODS.map(m => <option key={m} value={m}>{m.replace(/_/g, " ")}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Purpose</label>
+            <select className="field-input" value={form.purpose} onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}>
+              {PURPOSES.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Customer</label>
+            <select className="field-input" value={form.customer_id} onChange={e => setForm(f => ({ ...f, customer_id: e.target.value }))}>
+              <option value="">Select customer…</option>
+              {DEMO_CUSTOMERS.map(c => <option key={c.customer_id} value={c.customer_id}>{c.full_name} ({c.customer_id})</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Reference</label>
+            <input className="field-input" placeholder="Optional" value={form.reference} onChange={e => setForm(f => ({ ...f, reference: e.target.value }))} />
+          </div>
+          <div className="space-y-1 flex flex-col justify-end">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" className="accent-brand-500" checked={form.is_cross_border} onChange={e => setForm(f => ({ ...f, is_cross_border: e.target.checked }))} />
+              <span className="text-sm text-slate-300">Cross-border transfer</span>
+            </label>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-slate-400">Notes</label>
+          <textarea className="field-input min-h-[70px] resize-none" placeholder="Optional notes…" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+        </div>
+        <button type="submit" disabled={submitting} className="btn-primary w-full justify-center">
+          {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><FilePlus2 className="w-4 h-4" />Create Transaction &amp; Run Compliance Check</>}
+        </button>
+      </form>
+
+      <div className="space-y-4">
+        <div className="card">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Live Risk Score</div>
+          <div className="flex items-center gap-4">
+            <div className={`text-4xl font-bold ${band.color}`}>{risk.score}</div>
+            <div className="flex-1">
+              <div className={clsx("text-sm font-semibold mb-1", band.color)}>{band.label} risk</div>
+              <div className="h-2 rounded-full bg-navy-700 overflow-hidden">
+                <div className={`h-full rounded-full ${band.bar}`} style={{ width: `${risk.score}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Triggered Rules</div>
+          {risk.rules.length === 0 ? (
+            <div className="text-sm text-slate-500">No rules triggered.</div>
+          ) : (
+            <div className="space-y-2">
+              {risk.rules.map(r => (
+                <div key={r.label} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-300">{r.label}</span>
+                  <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLORS[r.severity])}>{r.severity}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Potential Reports</div>
+          {risk.reports.length === 0 ? (
+            <div className="text-sm text-slate-500">No reportable obligations identified.</div>
+          ) : (
+            <div className="space-y-3">
+              {risk.reports.map(r => (
+                <div key={r.label} className="text-sm">
+                  <div className="font-medium text-amber-300">{r.label}</div>
+                  <div className="text-xs text-slate-500">{r.reason}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Recommended Actions</div>
+          <ul className="space-y-1.5 text-sm text-slate-300 list-disc list-inside">
+            {risk.actions.map(a => <li key={a}>{a}</li>)}
+          </ul>
+        </div>
       </div>
     </div>
   );

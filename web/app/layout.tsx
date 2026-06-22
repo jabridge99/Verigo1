@@ -3,6 +3,7 @@ import './globals.css'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import MobileNav from '@/components/MobileNav'
+import AppChrome from '@/components/AppChrome'
 import PWAProvider from '@/components/PWAProvider'
 import AnalyticsProvider from '@/components/AnalyticsProvider'
 import CookieNotice from '@/components/CookieNotice'
@@ -42,7 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <Navbar />
-        <main className="pt-16">{children}</main>
+        <AppChrome>{children}</AppChrome>
         <Footer />
         <MobileNav />
         <PWAProvider />

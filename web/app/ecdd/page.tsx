@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   ShieldCheck, AlertTriangle, CheckCircle, XCircle,
-  Clock, RefreshCw, Plus, Eye, User, Search,
+  Clock, RefreshCw, Plus, Eye, User, Search, ChevronLeft, ChevronRight, Download,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -21,6 +21,12 @@ interface ECDDRecord {
   enhanced_risk_score: number;
   recommendation?: string;
   analyst_notes?: string;
+  source_of_funds?: string;
+  source_of_wealth_notes?: string;
+  purpose_of_transaction?: string;
+  tax_risk_notes?: string;
+  high_tax_risk?: number;
+  investment_legitimacy_notes?: string;
   status: string;
   created_at?: string;
 }
@@ -75,6 +81,37 @@ export default function ECDDDashboard() {
     setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? { ...r, status: "completed" } : r));
     setSelected(prev => prev?.ecdd_id === ecddId ? { ...prev, status: "completed" } : prev);
     showToast("success", "ECDD marked as completed");
+  };
+
+  const exportEcdd = (r: ECDDRecord) => {
+    const lines = [
+      `ENHANCED CUSTOMER DUE DILIGENCE ASSESSMENT`,
+      `ECDD ID: ${r.ecdd_id}`,
+      `Customer ID: ${r.customer_id}`,
+      `Status: ${r.status}`,
+      `Recommendation: ${r.recommendation || "—"}`,
+      `Enhanced risk score: ${r.enhanced_risk_score}/100`,
+      "",
+      `Trigger reason:\n${r.trigger_reason}`,
+      "",
+      `PEP status: ${r.pep_status ? "Yes" : "No"}`,
+      `Adverse media found: ${r.adverse_media_found ? "Yes" : "No"}`,
+      `Beneficial owner verified: ${r.beneficial_owner_verified ? "Yes" : "No"}`,
+      `Source of wealth verified: ${r.source_of_wealth_verified ? "Yes" : "No"}`,
+      r.source_of_funds ? `\nSource of funds:\n${r.source_of_funds}` : "",
+      r.purpose_of_transaction ? `\nPurpose of transaction:\n${r.purpose_of_transaction}` : "",
+      r.tax_risk_notes ? `\nTax risk indicators:\n${r.tax_risk_notes}` : "",
+      r.investment_legitimacy_notes ? `\nInvestment legitimacy:\n${r.investment_legitimacy_notes}` : "",
+      r.analyst_notes ? `\nAnalyst notes:\n${r.analyst_notes}` : "",
+      "",
+      `Created: ${r.created_at ? new Date(r.created_at).toLocaleString("en-AU") : "—"}`,
+    ].filter(Boolean).join("\n");
+    const blob = new Blob([lines], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${r.ecdd_id}.txt`; a.click();
+    URL.revokeObjectURL(url);
+    showToast("success", `${r.ecdd_id} exported`);
   };
 
   const filtered = records.filter(r => {
@@ -271,7 +308,12 @@ export default function ECDDDashboard() {
                   </span>
                 </div>
               </div>
-              <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => exportEcdd(selected)} title="Export assessment" className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 hover:text-brand-400 transition-colors">
+                  <Download className="w-4 h-4" />
+                </button>
+                <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
+              </div>
             </div>
 
             {/* Risk score dial */}
@@ -307,12 +349,18 @@ export default function ECDDDashboard() {
               ))}
             </div>
 
-            {selected.analyst_notes && (
-              <div>
-                <div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Analyst notes</div>
-                <div className="text-sm text-slate-300 leading-relaxed bg-navy-900 rounded-lg p-3 border border-navy-700">{selected.analyst_notes}</div>
+            {[
+              { label: "Source of funds", value: selected.source_of_funds },
+              { label: "Purpose of transaction", value: selected.purpose_of_transaction },
+              { label: "Tax risk indicators", value: selected.tax_risk_notes },
+              { label: "Investment legitimacy", value: selected.investment_legitimacy_notes },
+              { label: "Analyst notes", value: selected.analyst_notes },
+            ].filter(f => f.value).map(f => (
+              <div key={f.label}>
+                <div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">{f.label}</div>
+                <div className="text-sm text-slate-300 leading-relaxed bg-navy-900 rounded-lg p-3 border border-navy-700">{f.value}</div>
               </div>
-            )}
+            ))}
 
             <div className="text-xs text-slate-500">
               Created: {selected.created_at ? new Date(selected.created_at).toLocaleString("en-AU") : "—"}
@@ -360,7 +408,18 @@ export default function ECDDDashboard() {
   );
 }
 
+const WIZARD_STEPS = [
+  { key: "trigger", label: "Trigger" },
+  { key: "pep_media", label: "PEP & Adverse Media" },
+  { key: "beneficial_ownership", label: "Beneficial Ownership" },
+  { key: "funds_wealth", label: "Source of Funds & Wealth" },
+  { key: "purpose_tax", label: "Purpose & Tax Risk" },
+  { key: "investment", label: "Investment Legitimacy" },
+  { key: "review", label: "Review" },
+] as const;
+
 function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
+  const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     customer_id: 1,
     trigger_reason: "",
@@ -370,26 +429,49 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
     beneficial_owner_verified: 0,
     beneficial_owner_details: "",
     source_of_wealth_verified: 0,
-    source_of_wealth_details: "",
+    source_of_funds: "",
+    source_of_wealth_notes: "",
+    purpose_of_transaction: "",
+    high_tax_risk: 0,
+    tax_risk_notes: "",
+    investment_legitimacy_notes: "",
     analyst_notes: "",
   });
   const [submitting, setSubmitting] = useState(false);
-  const [preview, setPreview] = useState<{ score: number; recommendation: string } | null>(null);
 
-  const computePreview = () => {
+  const toggle = (field: string) =>
+    setForm(f => ({ ...f, [field]: (f as any)[field] ? 0 : 1 }));
+
+  const computeScore = () => {
     let score = 0;
     if (form.pep_status) score += 30;
     if (form.adverse_media_found) score += 35;
     if (!form.beneficial_owner_verified) score += 20;
     if (!form.source_of_wealth_verified) score += 15;
+    if (form.high_tax_risk) score += 10;
     score = Math.min(score, 100);
     const recommendation = form.adverse_media_found || score >= 80 ? "reject"
       : form.pep_status || score >= 50 ? "monitor" : "approve";
-    setPreview({ score, recommendation });
+    return { score, recommendation };
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const { score, recommendation } = computeScore();
+
+  const buildRecord = (): ECDDRecord => ({
+    id: Date.now(), ecdd_id: `ECDD-${Math.random().toString(36).slice(2, 12).toUpperCase()}`,
+    customer_id: form.customer_id, trigger_reason: form.trigger_reason,
+    pep_status: form.pep_status, adverse_media_found: form.adverse_media_found,
+    beneficial_owner_verified: form.beneficial_owner_verified,
+    source_of_wealth_verified: form.source_of_wealth_verified,
+    source_of_funds: form.source_of_funds, source_of_wealth_notes: form.source_of_wealth_notes,
+    purpose_of_transaction: form.purpose_of_transaction,
+    high_tax_risk: form.high_tax_risk, tax_risk_notes: form.tax_risk_notes,
+    investment_legitimacy_notes: form.investment_legitimacy_notes,
+    enhanced_risk_score: score, recommendation, analyst_notes: form.analyst_notes,
+    status: "pending", created_at: new Date().toISOString(),
+  });
+
+  const handleSubmit = async () => {
     setSubmitting(true);
     try {
       const res = await fetch(`${API}/api/v1/reports/ecdd/`, {
@@ -399,56 +481,53 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
       if (!res.ok) throw new Error(await res.text());
       onCreated(await res.json());
     } catch {
-      let score = 0;
-      if (form.pep_status) score += 30;
-      if (form.adverse_media_found) score += 35;
-      if (!form.beneficial_owner_verified) score += 20;
-      if (!form.source_of_wealth_verified) score += 15;
-      score = Math.min(score, 100);
-      const recommendation = form.adverse_media_found || score >= 80 ? "reject"
-        : form.pep_status || score >= 50 ? "monitor" : "approve";
-      onCreated({
-        id: Date.now(), ecdd_id: `ECDD-${Math.random().toString(36).slice(2,12).toUpperCase()}`,
-        customer_id: form.customer_id, trigger_reason: form.trigger_reason,
-        pep_status: form.pep_status, adverse_media_found: form.adverse_media_found,
-        beneficial_owner_verified: form.beneficial_owner_verified,
-        source_of_wealth_verified: form.source_of_wealth_verified,
-        enhanced_risk_score: score, recommendation, analyst_notes: form.analyst_notes,
-        status: "pending", created_at: new Date().toISOString(),
-      });
+      onCreated(buildRecord());
     } finally { setSubmitting(false); }
   };
 
-  const toggle = (field: string) =>
-    setForm(f => ({ ...f, [field]: (f as any)[field] ? 0 : 1 }));
+  const canAdvance = step !== 0 || form.trigger_reason.trim().length > 0;
+  const isLast = step === WIZARD_STEPS.length - 1;
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-lg font-semibold text-slate-100 mb-6">New ECDD Assessment</h2>
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="card space-y-5">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Customer ID *</label>
-            <input type="number" required className="field-input" value={form.customer_id}
-              onChange={e => setForm(f => ({ ...f, customer_id: Number(e.target.value) }))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Trigger reason *</label>
-            <textarea required className="field-input min-h-[80px] resize-none"
-              placeholder="e.g. PEP identified during onboarding review…"
-              value={form.trigger_reason} onChange={e => setForm(f => ({ ...f, trigger_reason: e.target.value }))} />
-          </div>
-        </div>
+      <h2 className="text-lg font-semibold text-slate-100 mb-1">New ECDD Assessment</h2>
+      <p className="text-slate-500 text-sm mb-6">Guided enhanced due diligence questionnaire — answer each section to build the compliance file.</p>
 
-        <div className="card space-y-4">
-          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">Risk Factors</div>
+      {/* Progress */}
+      <div className="flex items-center gap-1.5 mb-6">
+        {WIZARD_STEPS.map((s, i) => (
+          <div key={s.key} className={clsx("h-1.5 flex-1 rounded-full transition-colors", i <= step ? "bg-brand-500" : "bg-navy-700")} title={s.label} />
+        ))}
+      </div>
+      <div className="text-xs font-medium text-brand-400 uppercase tracking-wide mb-4">
+        Step {step + 1} of {WIZARD_STEPS.length} — {WIZARD_STEPS[step].label}
+      </div>
 
-          {[
-            { field: "pep_status", label: "PEP identified", desc: "Customer is a politically exposed person", points: 30, warn: true },
-            { field: "adverse_media_found", label: "Adverse media found", desc: "Negative news or adverse media coverage identified", points: 35, warn: true },
-          ].map(({ field, label, desc, points }) => (
-            <div key={field}>
-              <div className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+      <div className="card space-y-4 min-h-[260px]">
+        {step === 0 && (
+          <>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-400">Customer ID *</label>
+              <input type="number" className="field-input" value={form.customer_id}
+                onChange={e => setForm(f => ({ ...f, customer_id: Number(e.target.value) }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-400">Trigger reason *</label>
+              <textarea className="field-input min-h-[100px] resize-none"
+                placeholder="e.g. PEP identified during onboarding review…"
+                value={form.trigger_reason} onChange={e => setForm(f => ({ ...f, trigger_reason: e.target.value }))} />
+            </div>
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            <p className="text-sm text-slate-400">Is the customer a politically exposed person, or has adverse media been identified?</p>
+            {[
+              { field: "pep_status", label: "PEP identified", desc: "Customer is a politically exposed person", points: 30 },
+              { field: "adverse_media_found", label: "Adverse media found", desc: "Negative news or adverse media coverage identified", points: 35 },
+            ].map(({ field, label, desc, points }) => (
+              <div key={field} className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
                 (form as any)[field] ? "bg-red-500/10 border-red-500/30" : "bg-navy-900 border-navy-700 hover:border-navy-600"
               }`} onClick={() => toggle(field)}>
                 <div>
@@ -457,65 +536,148 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">+{points} pts</span>
-                  <div className={`w-10 h-5 rounded-full transition-colors relative ${ (form as any)[field] ? "bg-red-500" : "bg-navy-600"}`}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ (form as any)[field] ? "left-5" : "left-0.5"}`} />
+                  <div className={`w-10 h-5 rounded-full transition-colors relative ${(form as any)[field] ? "bg-red-500" : "bg-navy-600"}`}>
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${(form as any)[field] ? "left-5" : "left-0.5"}`} />
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+            <textarea className="field-input min-h-[70px] resize-none" placeholder="Adverse media / PEP details (sources, dates)…"
+              value={form.adverse_media_details} onChange={e => setForm(f => ({ ...f, adverse_media_details: e.target.value }))} />
+          </>
+        )}
 
-          {[
-            { field: "beneficial_owner_verified", label: "Beneficial owner verified", desc: "UBO chain identified and documented", points: 20 },
-            { field: "source_of_wealth_verified", label: "Source of wealth verified", desc: "Customer's source of wealth confirmed with evidence", points: 15 },
-          ].map(({ field, label, desc, points }) => (
-            <div key={field} className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-              (form as any)[field] ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/5 border-red-500/20 hover:border-red-500/30"
-            }`} onClick={() => toggle(field)}>
+        {step === 2 && (
+          <>
+            <p className="text-sm text-slate-400">Has the beneficial ownership / UBO chain been identified and verified?</p>
+            <div className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+              form.beneficial_owner_verified ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/5 border-red-500/20 hover:border-red-500/30"
+            }`} onClick={() => toggle("beneficial_owner_verified")}>
               <div>
-                <div className="text-sm font-medium text-slate-200">{label}</div>
-                <div className="text-xs text-slate-500 mt-0.5">{desc}</div>
+                <div className="text-sm font-medium text-slate-200">Beneficial owner verified</div>
+                <div className="text-xs text-slate-500 mt-0.5">UBO chain identified and documented</div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">−{points} risk pts if verified</span>
-                <div className={`w-10 h-5 rounded-full transition-colors relative ${ (form as any)[field] ? "bg-emerald-500" : "bg-navy-600"}`}>
-                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ (form as any)[field] ? "left-5" : "left-0.5"}`} />
+                <span className="text-xs text-slate-500">−20 risk pts if verified</span>
+                <div className={`w-10 h-5 rounded-full transition-colors relative ${form.beneficial_owner_verified ? "bg-emerald-500" : "bg-navy-600"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${form.beneficial_owner_verified ? "left-5" : "left-0.5"}`} />
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+            <textarea className="field-input min-h-[80px] resize-none" placeholder="UBO names, ownership percentages, verification evidence…"
+              value={form.beneficial_owner_details} onChange={e => setForm(f => ({ ...f, beneficial_owner_details: e.target.value }))} />
+          </>
+        )}
 
-        <div className="card space-y-1">
-          <label className="text-xs font-medium text-slate-400">Analyst notes</label>
-          <textarea className="field-input min-h-[80px] resize-none" placeholder="Internal notes for compliance file…"
-            value={form.analyst_notes} onChange={e => setForm(f => ({ ...f, analyst_notes: e.target.value }))} />
-        </div>
-
-        <button type="button" onClick={computePreview}
-          className="w-full py-2 rounded-lg border border-navy-600 text-slate-400 text-sm hover:border-brand-500 hover:text-brand-400 transition-colors">
-          Preview score
-        </button>
-
-        {preview && (
-          <div className={`rounded-lg border p-4 text-center ${
-            preview.recommendation === "reject" ? "bg-red-500/10 border-red-500/30" :
-            preview.recommendation === "monitor" ? "bg-amber-500/10 border-amber-500/30" :
-            "bg-emerald-500/10 border-emerald-500/30"
-          }`}>
-            <div className={`text-3xl font-bold ${SCORE_COLOR(preview.score)}`}>{preview.score}/100</div>
-            <div className="text-sm font-medium mt-1 capitalize" style={{ color: preview.recommendation === "reject" ? "#f87171" : preview.recommendation === "monitor" ? "#fbbf24" : "#34d399" }}>
-              Recommendation: {preview.recommendation}
+        {step === 3 && (
+          <>
+            <p className="text-sm text-slate-400">Describe the customer's source of funds and source of wealth, and confirm verification.</p>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-400">Source of funds</label>
+              <textarea className="field-input min-h-[70px] resize-none" placeholder="e.g. Salary income, business revenue, sale of asset…"
+                value={form.source_of_funds} onChange={e => setForm(f => ({ ...f, source_of_funds: e.target.value }))} />
             </div>
+            <div className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+              form.source_of_wealth_verified ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/5 border-red-500/20 hover:border-red-500/30"
+            }`} onClick={() => toggle("source_of_wealth_verified")}>
+              <div>
+                <div className="text-sm font-medium text-slate-200">Source of wealth verified</div>
+                <div className="text-xs text-slate-500 mt-0.5">Customer's overall wealth origin confirmed with evidence</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">−15 risk pts if verified</span>
+                <div className={`w-10 h-5 rounded-full transition-colors relative ${form.source_of_wealth_verified ? "bg-emerald-500" : "bg-navy-600"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${form.source_of_wealth_verified ? "left-5" : "left-0.5"}`} />
+                </div>
+              </div>
+            </div>
+            <textarea className="field-input min-h-[70px] resize-none" placeholder="Source of wealth evidence — bank statements, tax returns, business financials…"
+              value={form.source_of_wealth_notes} onChange={e => setForm(f => ({ ...f, source_of_wealth_notes: e.target.value }))} />
+          </>
+        )}
+
+        {step === 4 && (
+          <>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-400">Purpose of transaction / relationship</label>
+              <textarea className="field-input min-h-[80px] resize-none" placeholder="e.g. Property purchase, business investment, family remittance…"
+                value={form.purpose_of_transaction} onChange={e => setForm(f => ({ ...f, purpose_of_transaction: e.target.value }))} />
+            </div>
+            <div className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+              form.high_tax_risk ? "bg-red-500/10 border-red-500/30" : "bg-navy-900 border-navy-700 hover:border-navy-600"
+            }`} onClick={() => toggle("high_tax_risk")}>
+              <div>
+                <div className="text-sm font-medium text-slate-200">High tax-risk indicators present</div>
+                <div className="text-xs text-slate-500 mt-0.5">Tax haven jurisdiction, complex structuring, or evasion red flags</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">+10 pts</span>
+                <div className={`w-10 h-5 rounded-full transition-colors relative ${form.high_tax_risk ? "bg-red-500" : "bg-navy-600"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${form.high_tax_risk ? "left-5" : "left-0.5"}`} />
+                </div>
+              </div>
+            </div>
+            <textarea className="field-input min-h-[70px] resize-none" placeholder="Tax risk indicator details…"
+              value={form.tax_risk_notes} onChange={e => setForm(f => ({ ...f, tax_risk_notes: e.target.value }))} />
+          </>
+        )}
+
+        {step === 5 && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Investment legitimacy assessment</label>
+            <textarea className="field-input min-h-[110px] resize-none" placeholder="Assessment of whether the investment activity is consistent with the customer's profile, declared occupation, and economic rationale…"
+              value={form.investment_legitimacy_notes} onChange={e => setForm(f => ({ ...f, investment_legitimacy_notes: e.target.value }))} />
+            <label className="text-xs font-medium text-slate-400 block pt-3">Analyst notes</label>
+            <textarea className="field-input min-h-[70px] resize-none" placeholder="Internal notes for the compliance file…"
+              value={form.analyst_notes} onChange={e => setForm(f => ({ ...f, analyst_notes: e.target.value }))} />
           </div>
         )}
 
-        <button type="submit" disabled={submitting} className="btn-primary w-full justify-center">
-          {submitting
-            ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            : <><ShieldCheck className="w-4 h-4" />Create ECDD Assessment</>}
+        {step === 6 && (
+          <div className="space-y-4">
+            <div className={`rounded-lg border p-4 text-center ${
+              recommendation === "reject" ? "bg-red-500/10 border-red-500/30" :
+              recommendation === "monitor" ? "bg-amber-500/10 border-amber-500/30" :
+              "bg-emerald-500/10 border-emerald-500/30"
+            }`}>
+              <div className={`text-3xl font-bold ${SCORE_COLOR(score)}`}>{score}/100</div>
+              <div className="text-sm font-medium mt-1 capitalize" style={{ color: recommendation === "reject" ? "#f87171" : recommendation === "monitor" ? "#fbbf24" : "#34d399" }}>
+                Recommendation: {recommendation}
+              </div>
+            </div>
+            <div className="space-y-2 text-xs">
+              {[
+                { label: "Trigger reason", value: form.trigger_reason },
+                { label: "Source of funds", value: form.source_of_funds },
+                { label: "Purpose of transaction", value: form.purpose_of_transaction },
+                { label: "Investment legitimacy", value: form.investment_legitimacy_notes },
+              ].filter(f => f.value).map(f => (
+                <div key={f.label} className="border-b border-navy-700 pb-2 last:border-0">
+                  <div className="text-slate-500 mb-0.5">{f.label}</div>
+                  <div className="text-slate-300">{f.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mt-5">
+        <button type="button" disabled={step === 0} onClick={() => setStep(s => Math.max(0, s - 1))}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-navy-600 text-slate-400 text-sm hover:border-brand-500 hover:text-brand-400 transition-colors disabled:opacity-30 disabled:hover:border-navy-600 disabled:hover:text-slate-400">
+          <ChevronLeft className="w-4 h-4" /> Back
         </button>
-      </form>
+        {isLast ? (
+          <button type="button" disabled={submitting} onClick={handleSubmit} className="btn-primary">
+            {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><ShieldCheck className="w-4 h-4" />Create ECDD Assessment</>}
+          </button>
+        ) : (
+          <button type="button" disabled={!canAdvance} onClick={() => setStep(s => Math.min(WIZARD_STEPS.length - 1, s + 1))}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors disabled:opacity-40">
+            Next <ChevronRight className="w-4 h-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

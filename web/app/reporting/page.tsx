@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   FileText, AlertTriangle, Clock, CheckCircle, Send,
-  RefreshCw, Search, Plus, Eye, ChevronRight, Zap,
+  RefreshCw, Search, Plus, Eye, ChevronRight, Zap, Download,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -160,6 +160,43 @@ export default function ReportingDashboard() {
     fetchData();
   };
 
+  const downloadBlob = (filename: string, content: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCsv = () => {
+    const rows = ["report_id,type,status,title,amount_flagged,transaction_count,due_date,submitted_at",
+      ...filtered.map(r => `${r.report_id},${r.austrac_report_type || r.report_type},${r.status},"${r.title.replace(/"/g,'""')}",${r.total_amount_flagged},${r.transaction_count},${r.due_date || ""},${r.submitted_at || ""}`)];
+    downloadBlob("reports-export.csv", rows.join("\n"), "text/csv");
+    showToast("success", `Exported ${filtered.length} report(s) to CSV`);
+  };
+
+  const exportReportPdf = (r: Report) => {
+    const lines = [
+      `AUSTRAC REPORT — ${r.austrac_report_type || r.report_type.toUpperCase()}`,
+      `Report ID: ${r.report_id}`,
+      `Status: ${r.status}`,
+      `Title: ${r.title}`,
+      "",
+      "Summary:", r.summary,
+      r.narrative ? `\nMLRO Narrative:\n${r.narrative}` : "",
+      "",
+      `Amount flagged: AUD $${r.total_amount_flagged.toLocaleString()}`,
+      `Transaction count: ${r.transaction_count}`,
+      `Prepared by: ${r.prepared_by || "—"}`,
+      `Reviewed by: ${r.reviewed_by || "—"}`,
+      `Approved by: ${r.approved_by || "—"}`,
+      `MLRO sign-off: ${r.mlro_sign_off ? "Yes" : "Pending"}`,
+      r.submission_reference ? `AUSTRAC reference: ${r.submission_reference}` : "",
+    ].filter(Boolean).join("\n");
+    downloadBlob(`${r.report_id}.txt`, lines, "text/plain");
+    showToast("success", `${r.report_id} exported`);
+  };
+
   const filtered = reports.filter(r => {
     const q = search.toLowerCase();
     return (!search || r.title.toLowerCase().includes(q) || r.report_id.toLowerCase().includes(q))
@@ -195,6 +232,9 @@ export default function ReportingDashboard() {
             )}
             <button onClick={autoGenerate} className="btn-secondary text-sm py-2 px-4">
               <Zap className="w-4 h-4" /> Auto-Generate
+            </button>
+            <button onClick={exportCsv} className="btn-secondary text-sm py-2 px-4">
+              <Download className="w-4 h-4" /> Export CSV
             </button>
             <button onClick={fetchData} className="btn-secondary text-sm py-2 px-4">
               <RefreshCw className="w-4 h-4" />
@@ -342,7 +382,12 @@ export default function ReportingDashboard() {
                   </span>
                 )}
               </div>
-              <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => exportReportPdf(selected)} title="Export report" className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 hover:text-brand-400 transition-colors">
+                  <Download className="w-4 h-4" />
+                </button>
+                <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
+              </div>
             </div>
 
             <div>
