@@ -178,6 +178,10 @@ def export_csv(
         key=lambda d: d["created_at"] or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
+    # A regulator-facing export that silently drops rows past 10k with no
+    # indication is a compliance risk — surface truncation via a response
+    # header so the caller (and UI) can warn the user to narrow the filter.
+    truncated = len(merged) > 10_000
     merged = merged[:10_000]
 
     buf = io.StringIO()
@@ -213,7 +217,10 @@ def export_csv(
     return StreamingResponse(
         buf,
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=audit_log.csv"},
+        headers={
+            "Content-Disposition": "attachment; filename=audit_log.csv",
+            "X-Export-Truncated": "true" if truncated else "false",
+        },
     )
 
 
