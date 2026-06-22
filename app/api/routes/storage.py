@@ -22,7 +22,20 @@ from app.services import storage_config_service as svc
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 
-_ADMIN = _require_roles(UserRole.admin)
+_ROLE_GATE = _require_roles(UserRole.admin)
+
+
+def _require_super_admin(current_user: User = Depends(_ROLE_GATE)) -> User:
+    # UserRole.admin is a per-organisation role. These /storage/admin/{industry_id}
+    # routes accept an arbitrary tenant identifier, so without this check any
+    # tenant's own admin could view, overwrite, or clear another tenant's
+    # storage backend config — mirrors the billing.py/security_monitor.py fix.
+    if not current_user.is_super_admin:
+        raise HTTPException(403, "Requires global super-admin access")
+    return current_user
+
+
+_ADMIN = _require_super_admin
 
 # "Custom plan" = bring-your-own-storage is gated to these tiers.
 _CUSTOM_STORAGE_PLANS = {BillingPlan.enterprise, BillingPlan.vvip}
