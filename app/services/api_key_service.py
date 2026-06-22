@@ -189,7 +189,10 @@ def update_webhook(
     wh = get_webhook(db, webhook_id, user_id)
     if not wh:
         return None
-    for field, val in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+    if "url" in updates:
+        _validate_webhook_url(updates["url"])
+    for field, val in updates.items():
         setattr(wh, field, val)
     db.commit()
     db.refresh(wh)
