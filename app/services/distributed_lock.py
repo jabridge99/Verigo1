@@ -47,7 +47,11 @@ def job_lock(name: str, ttl_seconds: int = 1800):
     key = f"job_lock:{name}"
     acquired = False
     try:
-        acquired = bool(client.set(key, "1", nx=True, ex=ttl_seconds))
+        try:
+            acquired = bool(client.set(key, "1", nx=True, ex=ttl_seconds))
+        except Exception as exc:
+            log.warning("Redis connection failed — distributed lock disabled: %s", exc)
+            acquired = True
         yield acquired
     finally:
         if acquired:
