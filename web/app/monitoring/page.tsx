@@ -377,9 +377,12 @@ function MonitoringDashboard() {
         {tab === "create" && (
           <TransactionEntryPanel
             defaultCustomerId={customerParam}
-            onCreate={(a) => {
-              if (a) { setAlerts(prev => [a, ...prev]); showToast("success", `Transaction created — alert generated: ${a.alert_type}`); }
-              else showToast("success", "Transaction created — no alerts triggered");
+            onCreate={(result) => {
+              if (result.error) { showToast("error", result.error); return; }
+              fetchData();
+              showToast("success", result.alertsGenerated
+                ? `Transaction created — ${result.alertsGenerated} alert(s) generated`
+                : "Transaction created — no alerts triggered");
               setTab("queue");
             }}
           />
@@ -565,43 +568,71 @@ const RISK_BAND = (score: number) =>
   : score >= 20 ? { label: "Medium", color: "text-amber-400", bar: "bg-amber-500" }
   : { label: "Low", color: "text-emerald-400", bar: "bg-emerald-500" };
 
-function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustomerId: string; onCreate: (a: Alert | null) => void }) {
+const PAYMENT_METHOD_MAP: Record<string, string> = {
+  bank_transfer: "bank_transfer", cash: "cash", crypto: "crypto",
+  cheque: "cheque", card: "card", other: "third_party_payment",
+};
+
+function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustomerId: string; onCreate: (result: { error?: string; alertsGenerated?: number }) => void }) {
   const [form, setForm] = useState({
     amount: 5000, currency: "AUD", country: "AU", delivery_method: "bank_transfer", purpose: "business",
     customer_id: defaultCustomerId, reference: "", notes: "", is_cross_border: false,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [customers, setCustomers] = useState<{ id: string; full_name: string }[]>(
+    DEMO_CUSTOMERS.map(c => ({ id: c.customer_id, full_name: c.full_name }))
+  );
+
+  useEffect(() => {
+    fetch(`${API}/api/v1/customers/?limit=200`, { credentials: "include" })
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(d => { if (d.length) setCustomers(d.map((c: any) => ({ id: c.id, full_name: c.full_name }))); })
+      .catch(() => {});
+  }, []);
 
   const risk = assessTransaction(form);
   const band = RISK_BAND(risk.score);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.customer_id) { onCreate({ error: "Select a customer before creating a transaction." }); return; }
     setSubmitting(true);
-    await new Promise(r => setTimeout(r, 600));
-    const now = new Date().toISOString();
-    let alert: Alert | null = null;
-    if (risk.rules.length > 0) {
-      const top = risk.rules[0];
-      const typeMap: Record<string, Alert["alert_type"]> = {
-        "CTR threshold (≥ $10,000)": "large_transaction",
-        "Near-threshold amount ($7k–$10k)": "structuring",
-        "High-risk jurisdiction (cross-border)": "high_risk_country",
-        "Cross-border transfer (IFTI)": "cross_border",
-        "Large cash transaction": "unusual_pattern",
-        "Virtual asset transfer": "unusual_pattern",
-      };
-      const customerLabel = DEMO_CUSTOMERS.find(c => c.customer_id === form.customer_id)?.full_name || form.customer_id;
-      alert = {
-        id: String(Date.now()), alert_id: `ALT-TXN${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-        transaction_id: String(Date.now()), alert_type: typeMap[top.label] || "unusual_pattern",
-        severity: band.label.toLowerCase(), status: "open",
-        description: `Manual transaction entry${customerLabel ? ` for ${customerLabel}` : ""}: AUD $${form.amount.toLocaleString()} (${form.delivery_method.replace(/_/g, " ")}) — ${top.label}.${form.reference ? ` Ref: ${form.reference}.` : ""}`,
-        is_resolved: 0, created_at: now,
-      };
+    try {
+      const res = await fetch(`${API}/api/v1/transactions`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transaction_ref: `TXN-${Date.now()}`,
+          customer_id: form.customer_id,
+          transaction_type: "transfer",
+          direction: "outgoing",
+          payment_method: PAYMENT_METHOD_MAP[form.delivery_method] || "bank_transfer",
+          currency: form.currency,
+          amount: form.amount,
+          is_cross_border: form.is_cross_border,
+          country_destination: form.is_cross_border ? form.country : undefined,
+          purpose: form.purpose,
+          reference: form.reference || undefined,
+          description: form.notes || undefined,
+          transaction_date: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || "Failed to create transaction.");
+      const txn = await res.json();
+
+      let alertsGenerated = 0;
+      try {
+        const monRes = await fetch(`${API}/api/v1/transactions/${txn.id}/run-monitoring`, {
+          method: "POST", credentials: "include",
+        });
+        if (monRes.ok) alertsGenerated = (await monRes.json()).alerts_generated ?? 0;
+      } catch {}
+
+      onCreate({ alertsGenerated });
+    } catch (err: any) {
+      onCreate({ error: err.message || "Failed to create transaction." });
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
-    onCreate(alert);
   };
 
   return (
@@ -642,7 +673,7 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
             <label className="text-xs font-medium text-slate-400">Customer</label>
             <select className="field-input" value={form.customer_id} onChange={e => setForm(f => ({ ...f, customer_id: e.target.value }))}>
               <option value="">Select customer…</option>
-              {DEMO_CUSTOMERS.map(c => <option key={c.customer_id} value={c.customer_id}>{c.full_name} ({c.customer_id})</option>)}
+              {customers.map(c => <option key={c.id} value={c.id}>{c.full_name} ({c.id})</option>)}
             </select>
           </div>
           <div className="space-y-1">
