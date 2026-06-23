@@ -96,7 +96,7 @@ export default function DashboardPage() {
 
     // Try to fetch live stats
     Promise.allSettled([
-      fetch(`${API}/api/v1/transactions/alerts`, { credentials: 'include' }),
+      fetch(`${API}/api/v1/alerts`, { credentials: 'include' }),
     ]).catch(() => {})
   }, [router])
 
