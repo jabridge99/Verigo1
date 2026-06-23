@@ -53,6 +53,12 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Automation',
+    items: [
+      { label: 'Rule Builder', href: '/rule-builder' },
+    ],
+  },
+  {
     label: 'Admin',
     items: [
       { label: 'Users', href: '/users' },
@@ -107,6 +113,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   tasks: 'Tasks',
   timeline: 'Timeline',
   new: 'New',
+  'rule-builder': 'Rule Builder',
 }
 
 // Paths that should never render the app chrome (sidebar/breadcrumbs) — marketing/public/auth pages.
