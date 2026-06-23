@@ -237,30 +237,30 @@ def check_training_overdue(db: Session) -> int:
 
 
 def check_control_test_overdue(db: Session) -> int:
+    """
+    A control's *next* test is scheduled on GovernanceControl.next_test_date —
+    ControlTest rows only record tests already performed (test_date), so there
+    is no "scheduled_date" to query there.
+    """
     try:
-        from app.models.governance_controls import (
-            ControlTest,
-            GovernanceControl,
-        )
+        from app.models.governance_controls import ControlStatus, GovernanceControl
 
         today = date.today()
         total = 0
 
-        overdue_tests = (
-            db.query(ControlTest)
+        overdue_controls = (
+            db.query(GovernanceControl)
             .filter(
-                ControlTest.scheduled_date < today,
-                ControlTest.result.is_(None),
+                GovernanceControl.next_test_date.isnot(None),
+                GovernanceControl.next_test_date < today,
+                GovernanceControl.status == ControlStatus.active,
             )
             .all()
         )
 
-        for test in overdue_tests:
-            days_overdue = (today - test.scheduled_date).days
+        for control in overdue_controls:
+            days_overdue = (today - control.next_test_date).days
             if days_overdue not in (1, 7, 14, 30):
-                continue
-            control = db.query(GovernanceControl).filter_by(id=test.control_id).first()
-            if not control:
                 continue
             notifier.notify_control_test_overdue(
                 db,
@@ -295,10 +295,10 @@ def check_policy_review_due(db: Session) -> int:
                 Policy.review_due_date.isnot(None),
                 Policy.review_due_date <= in_30_days,
                 Policy.review_due_date >= today,
-                Policy.lifecycle_status.in_(
+                Policy.status.in_(
                     [
-                        PolicyLifecycleStatus.approved,
                         PolicyLifecycleStatus.published,
+                        PolicyLifecycleStatus.periodic_review,
                     ]
                 ),
             )
