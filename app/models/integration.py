@@ -134,6 +134,22 @@ PROVIDER_CATALOG: list[dict] = [
         "description": "PEP and sanctions screening with adverse media",
     },
     {
+        "slug": "sumsub",
+        "name": "Sumsub",
+        "category": "kyc",
+        "type": "premium_api",
+        "auth": "api_key",
+        "description": "Global identity verification, KYB, and transaction monitoring platform",
+    },
+    {
+        "slug": "frankieone",
+        "name": "FrankieOne",
+        "category": "kyc",
+        "type": "premium_api",
+        "auth": "api_key",
+        "description": "Orchestration layer for identity verification and fraud/AML checks (ANZ-focused)",
+    },
+    {
         "slug": "complyadvantage",
         "name": "ComplyAdvantage",
         "category": "screening",
@@ -411,6 +427,14 @@ PROVIDER_CATALOG: list[dict] = [
         "auth": "api_key",
         "description": "WhatsApp Business for compliance communications",
     },
+    {
+        "slug": "resend",
+        "name": "Resend",
+        "category": "communications",
+        "type": "free_api",
+        "auth": "api_key",
+        "description": "Developer-friendly transactional email API",
+    },
 ]
 
 
@@ -479,10 +503,17 @@ class OrgIntegration(Base):
 
     is_enabled = Column(Boolean, default=False, nullable=False, index=True)
 
-    # Encrypted credentials (AES-256 at application layer)
+    # Encrypted credentials (Fernet/AES at application layer, see app/services/crypto.py)
     # NEVER returned in API responses
     credentials_encrypted = Column(JSON)  # {"api_key": "<encrypted>"}
     config = Column(JSON, default=dict)  # non-sensitive config {"base_url": "..."}
+    credential_expires_at = Column(DateTime(timezone=True))  # vendor-stated API key expiry, if any
+
+    # OAuth2 token state (set via /oauth/authorize + /oauth/callback)
+    oauth_state = Column(String(100))  # transient CSRF token during the authorize round-trip
+    oauth_access_token_encrypted = Column(Text)
+    oauth_refresh_token_encrypted = Column(Text)
+    oauth_expires_at = Column(DateTime(timezone=True))
 
     # Connection health
     last_tested_at = Column(DateTime(timezone=True))

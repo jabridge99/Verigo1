@@ -116,6 +116,17 @@ function AddModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
   );
 }
 
+function DeprecationBanner() {
+  return (
+    <div className="mb-6 rounded-xl border border-amber-700/40 bg-amber-900/20 px-4 py-3 text-sm text-amber-200">
+      This legacy connector store is being superseded by the{" "}
+      <a href="/api-integrations" className="font-semibold underline">Integrations Hub</a>
+      , which adds OAuth, health/usage monitoring, credential-expiry alerting, and an audit
+      trail. Existing credentials here keep working; configure new providers in the Hub.
+    </div>
+  );
+}
+
 export default function ConnectorsPage() {
   const [creds, setCreds] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
@@ -157,6 +168,7 @@ export default function ConnectorsPage() {
   return (
     <div className="min-h-screen bg-[#060d1a] text-white p-6">
       <div className="max-w-6xl mx-auto">
+        <DeprecationBanner />
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">Connector Marketplace</h1>
