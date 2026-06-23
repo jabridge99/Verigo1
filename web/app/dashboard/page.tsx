@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   Shield, Users, FileText, BarChart3,
   Building2, Scale, BookOpen, ChevronRight, LogOut,
-  CheckCircle, Clock, ArrowUp, ArrowDown
+  CheckCircle, Clock
 } from 'lucide-react'
 import clsx from 'clsx'
 import { getStoredUser, clearUser } from '@/lib/auth'
@@ -57,21 +57,11 @@ const DEMO_STATS = {
   compliance_score: 94,
 }
 
-// Week-over-week deltas shown as trend indicators on each KPI card.
-const DEMO_TRENDS: Record<string, number> = {
-  open_alerts: 2, pending_reports: -1, pending_kyc: 4, open_cases: 0, customers_total: 18, compliance_score: 1,
-}
-
-// 7-day alert volume, used for the sparkline next to "Open Alerts".
+// Fallback weekly alert volume, used until /dashboard/trends/alerts responds.
 const DEMO_ALERT_TREND = [3, 5, 4, 6, 5, 8, 7]
 
-// Risk heat map: customer count by industry x risk level.
-const DEMO_HEATMAP: { industry: string; low: number; medium: number; high: number; critical: number }[] = [
-  { industry: 'VASP / Crypto', low: 12, medium: 18, high: 9, critical: 4 },
-  { industry: 'Remittance', low: 28, medium: 14, high: 5, critical: 1 },
-  { industry: 'Real Estate', low: 9, medium: 11, high: 7, critical: 2 },
-  { industry: 'Legal / Accounting', low: 22, medium: 6, high: 2, critical: 0 },
-]
+// Fallback risk breakdown, used until /dashboard/global responds.
+const DEMO_RISK_BREAKDOWN: Record<string, number> = { low: 0, medium: 0, high: 0, critical: 0 }
 
 const HEAT_COLOR = (count: number) => {
   if (count === 0) return 'bg-navy-800 text-white/20'
@@ -85,6 +75,9 @@ export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [stats, setStats] = useState(DEMO_STATS)
+  const [alertTrend, setAlertTrend] = useState<number[]>(DEMO_ALERT_TREND)
+  const [trendWeeks, setTrendWeeks] = useState<number>(7)
+  const [riskBreakdown, setRiskBreakdown] = useState<Record<string, number>>(DEMO_RISK_BREAKDOWN)
 
   useEffect(() => {
     const stored = getStoredUser()
@@ -94,10 +87,39 @@ export default function DashboardPage() {
     }
     setUser(stored)
 
-    // Try to fetch live stats
-    Promise.allSettled([
-      fetch(`${API}/api/v1/alerts`, { credentials: 'include' }),
-    ]).catch(() => {})
+    fetch(`${API}/api/v1/dashboard/global`, { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(d => {
+        setStats(prev => ({
+          ...prev,
+          open_alerts: d.alerts?.open ?? prev.open_alerts,
+          pending_reports: d.reports?.total_pending ?? prev.pending_reports,
+          pending_kyc: (d.customers?.pending_review ?? 0) + (d.customers?.edd_required ?? 0),
+          open_cases: d.cases?.open ?? prev.open_cases,
+          customers_total: d.customers?.total ?? prev.customers_total,
+        }))
+        if (d.customers?.by_risk_level) setRiskBreakdown(d.customers.by_risk_level)
+      })
+      .catch(() => {})
+
+    fetch(`${API}/api/v1/dashboard/compliance-score`, { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(d => {
+        if (typeof d.compliance_score === 'number') {
+          setStats(prev => ({ ...prev, compliance_score: Math.round(d.compliance_score) }))
+        }
+      })
+      .catch(() => {})
+
+    fetch(`${API}/api/v1/dashboard/trends/alerts`, { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(d => {
+        if (Array.isArray(d.data) && d.data.length) {
+          setAlertTrend(d.data.map((p: any) => p.alerts ?? 0))
+          setTrendWeeks(d.data.length)
+        }
+      })
+      .catch(() => {})
   }, [router])
 
   function logout() {
@@ -129,78 +151,51 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* KPI bar — every widget drills down into its filtered list, with week-over-week trend */}
+        {/* KPI bar — every widget drills down into its filtered list */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           {[
-            { key: 'open_alerts', label: 'Open Alerts', value: stats.open_alerts, color: 'text-red-400', urgent: stats.open_alerts > 5, href: '/monitoring?filter=open', goodDirection: 'down' as const },
-            { key: 'pending_reports', label: 'Pending Reports', value: stats.pending_reports, color: 'text-amber-400', urgent: stats.pending_reports > 0, href: '/reporting?status=draft', goodDirection: 'down' as const },
-            { key: 'pending_kyc', label: 'Pending KYC', value: stats.pending_kyc, color: 'text-blue-400', urgent: false, href: '/onboarding?status=pending', goodDirection: 'down' as const },
-            { key: 'open_cases', label: 'Open Cases', value: stats.open_cases, color: 'text-purple-400', urgent: stats.open_cases > 3, href: '/mlro?status=open', goodDirection: 'down' as const },
-            { key: 'customers_total', label: 'Customers', value: stats.customers_total, color: 'text-white', urgent: false, href: '/customers', goodDirection: 'up' as const },
-            { key: 'compliance_score', label: 'Compliance Score', value: `${stats.compliance_score}%`, color: 'text-emerald-400', urgent: false, href: '/aml-program', goodDirection: 'up' as const },
-          ].map(s => {
-            const delta = DEMO_TRENDS[s.key] ?? 0
-            const isGood = delta === 0 ? null : (s.goodDirection === 'up' ? delta > 0 : delta < 0)
-            return (
-              <Link key={s.label} href={s.href}
-                className={clsx('bg-navy-800 border rounded-xl p-4 hover:border-brand-500/40 transition-colors', s.urgent ? 'border-red-500/30' : 'border-white/5')}>
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className={clsx('text-2xl font-bold', s.color)}>{s.value}</div>
-                  {delta !== 0 && (
-                    <span className={clsx('flex items-center gap-0.5 text-[11px] font-semibold', isGood ? 'text-emerald-400' : 'text-red-400')}>
-                      {delta > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                      {Math.abs(delta)}
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-white/40 mt-1 leading-tight">{s.label}</div>
-              </Link>
-            )
-          })}
+            { key: 'open_alerts', label: 'Open Alerts', value: stats.open_alerts, color: 'text-red-400', urgent: stats.open_alerts > 5, href: '/monitoring?filter=open' },
+            { key: 'pending_reports', label: 'Pending Reports', value: stats.pending_reports, color: 'text-amber-400', urgent: stats.pending_reports > 0, href: '/reporting?status=draft' },
+            { key: 'pending_kyc', label: 'Pending KYC', value: stats.pending_kyc, color: 'text-blue-400', urgent: false, href: '/onboarding?status=pending' },
+            { key: 'open_cases', label: 'Open Cases', value: stats.open_cases, color: 'text-purple-400', urgent: stats.open_cases > 3, href: '/mlro?status=open' },
+            { key: 'customers_total', label: 'Customers', value: stats.customers_total, color: 'text-white', urgent: false, href: '/customers' },
+            { key: 'compliance_score', label: 'Compliance Score', value: `${stats.compliance_score}%`, color: 'text-emerald-400', urgent: false, href: '/aml-program' },
+          ].map(s => (
+            <Link key={s.label} href={s.href}
+              className={clsx('bg-navy-800 border rounded-xl p-4 hover:border-brand-500/40 transition-colors', s.urgent ? 'border-red-500/30' : 'border-white/5')}>
+              <div className={clsx('text-2xl font-bold', s.color)}>{s.value}</div>
+              <div className="text-xs text-white/40 mt-1 leading-tight">{s.label}</div>
+            </Link>
+          ))}
         </div>
 
-        {/* Trend + risk heat map */}
+        {/* Trend + risk breakdown */}
         <div className="grid lg:grid-cols-3 gap-4 mb-10">
           <Link href="/monitoring?filter=open" className="lg:col-span-1 bg-navy-800 border border-white/5 hover:border-brand-500/40 rounded-xl p-4 transition-colors">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Alert volume · 7 days</h3>
-              <span className="text-xs text-red-400 font-semibold">+{DEMO_ALERT_TREND[DEMO_ALERT_TREND.length - 1] - DEMO_ALERT_TREND[0]} this week</span>
+              <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Alert volume · {trendWeeks} weeks</h3>
+              <span className="text-xs text-red-400 font-semibold">
+                {alertTrend[alertTrend.length - 1] - alertTrend[0] >= 0 ? '+' : ''}
+                {alertTrend[alertTrend.length - 1] - alertTrend[0]} vs first week
+              </span>
             </div>
             <div className="flex items-end gap-1.5 h-16">
-              {DEMO_ALERT_TREND.map((v, i) => (
-                <div key={i} className="flex-1 bg-red-500/30 rounded-t" style={{ height: `${(v / Math.max(...DEMO_ALERT_TREND)) * 100}%` }} />
+              {alertTrend.map((v, i) => (
+                <div key={i} className="flex-1 bg-red-500/30 rounded-t" style={{ height: `${(v / Math.max(1, ...alertTrend)) * 100}%` }} />
               ))}
             </div>
           </Link>
 
           <div className="lg:col-span-2 bg-navy-800 border border-white/5 rounded-xl p-4">
-            <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Risk heat map — customers by industry</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-white/40">
-                    <th className="text-left font-medium pb-2 pr-2">Industry</th>
-                    <th className="font-medium pb-2 px-2">Low</th>
-                    <th className="font-medium pb-2 px-2">Medium</th>
-                    <th className="font-medium pb-2 px-2">High</th>
-                    <th className="font-medium pb-2 px-2">Critical</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {DEMO_HEATMAP.map(row => (
-                    <tr key={row.industry}>
-                      <td className="py-1 pr-2 text-white/70 whitespace-nowrap">{row.industry}</td>
-                      {(['low', 'medium', 'high', 'critical'] as const).map(level => (
-                        <td key={level} className="py-1 px-2">
-                          <Link href={`/customers?risk=${level}`} className={clsx('block text-center rounded py-1.5 font-semibold hover:opacity-80 transition-opacity', HEAT_COLOR(row[level]))}>
-                            {row[level]}
-                          </Link>
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Customers by risk level</h3>
+            <div className="grid grid-cols-4 gap-2">
+              {(['low', 'medium', 'high', 'critical'] as const).map(level => (
+                <Link key={level} href={`/customers?risk=${level}`}
+                  className={clsx('rounded-lg py-4 text-center hover:opacity-80 transition-opacity', HEAT_COLOR(riskBreakdown[level] ?? 0))}>
+                  <div className="text-xl font-bold">{riskBreakdown[level] ?? 0}</div>
+                  <div className="text-[11px] uppercase tracking-wide mt-1 opacity-80">{level}</div>
+                </Link>
+              ))}
             </div>
           </div>
         </div>
