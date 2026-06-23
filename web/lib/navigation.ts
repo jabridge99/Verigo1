@@ -49,7 +49,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Controls', href: '/governance/controls' },
       { label: 'Training Suite', href: '/governance/training' },
       { label: 'Audit Logs', href: '/audit' },
-      { label: 'Data Connectors', href: '/connectors' },
       { label: 'API Integrations', href: '/api-integrations' },
     ],
   },

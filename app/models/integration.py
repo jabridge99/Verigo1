@@ -150,6 +150,22 @@ PROVIDER_CATALOG: list[dict] = [
         "description": "Orchestration layer for identity verification and fraud/AML checks (ANZ-focused)",
     },
     {
+        "slug": "greenid",
+        "name": "GreenID (Equifax)",
+        "category": "kyc",
+        "type": "premium_api",
+        "auth": "api_key",
+        "description": "Australian electronic identity verification",
+    },
+    {
+        "slug": "trulioo",
+        "name": "Trulioo",
+        "category": "kyc",
+        "type": "premium_api",
+        "auth": "api_key",
+        "description": "Global identity verification across 100+ countries",
+    },
+    {
         "slug": "complyadvantage",
         "name": "ComplyAdvantage",
         "category": "screening",
@@ -188,6 +204,14 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Blockchain intelligence and crypto compliance",
+    },
+    {
+        "slug": "lexisnexis",
+        "name": "LexisNexis Risk Solutions",
+        "category": "screening",
+        "type": "enterprise_api",
+        "auth": "api_key",
+        "description": "PEP, sanctions, and adverse media screening with global watchlists",
     },
     # Corporate Registries
     {
@@ -271,6 +295,14 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Global business credit reports",
+    },
+    {
+        "slug": "creditorwatch",
+        "name": "CreditorWatch",
+        "category": "credit_financial",
+        "type": "premium_api",
+        "auth": "api_key",
+        "description": "Australian business credit reports and payment default monitoring",
     },
     # CRM
     {
@@ -436,6 +468,17 @@ PROVIDER_CATALOG: list[dict] = [
         "description": "Developer-friendly transactional email API",
     },
 ]
+
+
+# Maps the legacy ConnectorProvider enum (app/models/connector.py) to the
+# equivalent slug in PROVIDER_CATALOG, for migrating ConnectorCredential rows
+# into OrgIntegration. Identical names are not listed (slug == value).
+LEGACY_CONNECTOR_SLUG_ALIASES: dict[str, str] = {
+    "dowjones": "dow_jones",
+    "worldcheck": "refinitiv",
+    "google_maps": "google_places",
+    "twilio": "twilio_sms",
+}
 
 
 class IntegrationProvider(Base):

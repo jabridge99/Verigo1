@@ -40,7 +40,7 @@ from app.models.integration import (
 )
 from app.models.user import User
 from app.services.crypto import decrypt_secret, encrypt_credentials, encrypt_secret
-from app.services.integration_monitor import run_expiry_check
+from app.services.integration_monitor import migrate_legacy_connectors, run_expiry_check
 
 router = APIRouter(prefix="/integrations", tags=["Integration Hub"])
 
@@ -721,6 +721,27 @@ def trigger_expiry_check(
     """
     org_id = org_id_for(current_user)
     result = run_expiry_check(db, org_id)
+    return result
+
+
+@router.post("/migrate-legacy-connectors")
+def migrate_legacy_connectors_route(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Consolidation: copy this org's legacy ConnectorCredential rows
+    (the old /connectors marketplace) into OrgIntegration. Safe to re-run;
+    already-configured providers are skipped. Source rows are left as-is.
+    """
+    org_id = org_id_for(current_user)
+    result = migrate_legacy_connectors(db, org_id)
+    _audit(
+        org_id, None, "*", "legacy_migration", True,
+        f"Migrated {len(result['migrated'])} legacy connector(s) by {current_user.id}",
+        current_user.id, db,
+    )
+    db.commit()
     return result
 
 

@@ -52,69 +52,6 @@ const PROVIDER_FIELD_HINTS: Record<string, string[]> = {
   twilio: ["account_sid", "auth_token"],
 };
 
-function AddModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [provider, setProvider] = useState("sumsub");
-  const [label, setLabel] = useState("");
-  const [fields, setFields] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  const hints = PROVIDER_FIELD_HINTS[provider] || ["api_key"];
-
-  const save = async () => {
-    if (Object.values(fields).some((v) => !v.trim())) { setErr("Fill in all credential fields"); return; }
-    setSaving(true);
-    try {
-      await apiFetch("/api/v1/connectors/", {
-        method: "POST",
-        body: JSON.stringify({ provider, label: label || provider, credentials: fields }),
-      });
-      onSaved();
-      onClose();
-    } catch (e: unknown) { setErr(String(e)); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#0d1b2e] border border-[#1e3a5f] rounded-xl w-full max-w-lg p-6">
-        <h3 className="text-lg font-bold mb-4">Add Provider Credential</h3>
-        {err && <p className="text-red-400 text-sm mb-3">{err}</p>}
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Provider</label>
-            <select value={provider} onChange={(e) => { setProvider(e.target.value); setFields({}); }}
-              className="w-full bg-[#152440] border border-[#1e3a5f] rounded px-3 py-2 text-sm">
-              {Object.entries(PROVIDER_CATEGORIES).map(([, cat]) =>
-                cat.providers.map((p) => <option key={p} value={p}>{p}</option>)
-              )}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Label (optional)</label>
-            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={`My ${provider} key`}
-              className="w-full bg-[#152440] border border-[#1e3a5f] rounded px-3 py-2 text-sm" />
-          </div>
-          {hints.map((h) => (
-            <div key={h}>
-              <label className="text-xs text-gray-400 mb-1 block font-mono">{h}</label>
-              <input type="password" value={fields[h] || ""} onChange={(e) => setFields({ ...fields, [h]: e.target.value })}
-                placeholder={`Enter ${h}`}
-                className="w-full bg-[#152440] border border-[#1e3a5f] rounded px-3 py-2 text-sm font-mono" />
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-3 mt-5">
-          <button onClick={onClose} className="flex-1 py-2 bg-gray-700 rounded text-sm">Cancel</button>
-          <button onClick={save} disabled={saving}
-            className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold disabled:opacity-50">
-            {saving ? "Saving…" : "Save Credential"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function DeprecationBanner() {
   return (
@@ -130,8 +67,9 @@ function DeprecationBanner() {
 export default function ConnectorsPage() {
   const [creds, setCreds] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<{ migrated: unknown[]; skipped: unknown[] } | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
   const [error, setError] = useState("");
 
@@ -161,6 +99,18 @@ export default function ConnectorsPage() {
     load();
   };
 
+  const migrate = async () => {
+    setMigrating(true);
+    try {
+      const r = await apiFetch("/api/v1/integrations/migrate-legacy-connectors", { method: "POST" });
+      setMigrateResult(r);
+    } catch (e: unknown) {
+      setError(String(e));
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   const allProviders = new Set(Object.values(PROVIDER_CATEGORIES).flatMap((c) => c.providers));
   const configuredProviders = new Set(creds.map((c) => c.provider));
   const unconfigured = [...allProviders].filter((p) => !configuredProviders.has(p));
@@ -176,12 +126,17 @@ export default function ConnectorsPage() {
               Bring-your-own-credentials for identity, AML & business verification providers
             </p>
           </div>
-          <button onClick={() => setShowAdd(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold">
-            + Add Provider
+          <button onClick={migrate} disabled={migrating || creds.length === 0}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold disabled:opacity-50">
+            {migrating ? "Migrating…" : "Migrate to Integrations Hub"}
           </button>
         </div>
 
+        {migrateResult && (
+          <p className="text-sm text-green-400 mb-4">
+            Migrated {migrateResult.migrated.length}, skipped {migrateResult.skipped.length} (already in Hub or unmapped).
+          </p>
+        )}
         {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 
         {/* Configured Credentials */}
@@ -250,10 +205,9 @@ export default function ConnectorsPage() {
                         {configured ? (
                           <span className="text-green-400 text-xs">✓ Set up</span>
                         ) : (
-                          <button onClick={() => setShowAdd(true)}
-                            className="text-xs text-blue-400 hover:text-blue-300">
-                            Add →
-                          </button>
+                          <a href="/api-integrations" className="text-xs text-blue-400 hover:text-blue-300">
+                            Connect in Hub →
+                          </a>
                         )}
                       </div>
                     );
@@ -265,7 +219,6 @@ export default function ConnectorsPage() {
         </div>
 
         {loading && <p className="text-gray-500 text-sm mt-6">Loading…</p>}
-        {showAdd && <AddModal onClose={() => setShowAdd(false)} onSaved={load} />}
       </div>
     </div>
   );

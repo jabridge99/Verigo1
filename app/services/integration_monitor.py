@@ -16,8 +16,16 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.models.compliance_calendar import CalendarItemStatus, CalendarItemType, ComplianceCalendarItem
-from app.models.integration import IntegrationProvider, OrgIntegration
+from app.models.connector import ConnectorCredential
+from app.models.integration import (
+    LEGACY_CONNECTOR_SLUG_ALIASES,
+    IntegrationHealthStatus,
+    IntegrationProvider,
+    OrgIntegration,
+)
 from app.models.notification import Notification, NotificationPriority, NotificationType
+from app.services.connector_service import _decrypt
+from app.services.crypto import encrypt_credentials
 
 EXPIRY_HORIZON_DAYS = 30
 
@@ -103,3 +111,63 @@ def run_expiry_check(db: Session, org_id: str) -> dict:
 
     db.commit()
     return {"checked": len(integrations), "flagged": flagged}
+
+
+def migrate_legacy_connectors(db: Session, org_id: str) -> dict:
+    """
+    One-time consolidation: copy each org's ConnectorCredential rows
+    (app/models/connector.py — the legacy bring-your-own-credentials store)
+    into OrgIntegration so the Integrations Hub becomes the single source
+    of truth. Source rows are left untouched (read-only thereafter); this
+    is additive and safe to re-run.
+    """
+    legacy_rows = (
+        db.query(ConnectorCredential)
+        .filter(ConnectorCredential.organisation_id == org_id)
+        .all()
+    )
+
+    migrated, skipped = [], []
+    for row in legacy_rows:
+        slug = LEGACY_CONNECTOR_SLUG_ALIASES.get(row.provider.value, row.provider.value)
+        provider = (
+            db.query(IntegrationProvider).filter(IntegrationProvider.slug == slug).first()
+        )
+        if not provider:
+            skipped.append({"credential_id": row.credential_id, "reason": f"no catalog match for '{slug}'"})
+            continue
+
+        existing = (
+            db.query(OrgIntegration)
+            .filter(OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id)
+            .first()
+        )
+        if existing and existing.credentials_encrypted:
+            skipped.append({"credential_id": row.credential_id, "reason": "already configured in Hub"})
+            continue
+
+        try:
+            decrypted = _decrypt(row.encrypted_credentials)
+        except Exception:
+            skipped.append({"credential_id": row.credential_id, "reason": "could not decrypt legacy credential"})
+            continue
+
+        if existing:
+            existing.credentials_encrypted = encrypt_credentials(decrypted)
+            existing.is_enabled = row.status.value == "active"
+            target = existing
+        else:
+            target = OrgIntegration(
+                org_id=org_id,
+                provider_id=provider.id,
+                provider_slug=slug,
+                is_enabled=row.status.value == "active",
+                credentials_encrypted=encrypt_credentials(decrypted),
+                health_status=IntegrationHealthStatus.unknown,
+                enabled_by=row.created_by,
+            )
+            db.add(target)
+        migrated.append({"credential_id": row.credential_id, "provider_slug": slug})
+
+    db.commit()
+    return {"migrated": migrated, "skipped": skipped}
