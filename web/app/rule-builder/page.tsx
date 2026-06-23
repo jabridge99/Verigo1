@@ -82,6 +82,24 @@ function emptyAction(actionType: string): Action {
   return { action_type: actionType, params: {}, delay_minutes: 0, description: "" };
 }
 
+const LIST_VALUE_OPERATORS = new Set(["in", "not_in", "between"]);
+
+// The condition value editor stores list-valued operators (in/not_in/between)
+// as a comma-separated string for simple text input; convert to an array
+// before sending to the backend, which expects a real list (e.g. [min, max]
+// for "between").
+function normaliseGroupValues(group: ConditionGroup): ConditionGroup {
+  return {
+    ...group,
+    conditions: group.conditions.map((c) =>
+      LIST_VALUE_OPERATORS.has(c.operator) && typeof c.value === "string"
+        ? { ...c, value: c.value.split(",").map((v) => v.trim()).filter(Boolean) }
+        : c
+    ),
+    groups: group.groups.map(normaliseGroupValues),
+  };
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 type DetailTab = "edit" | "test" | "executions" | "versions";
@@ -365,7 +383,7 @@ function RuleDrawer({
         description,
         event_type: eventType,
         priority,
-        condition_groups: groups,
+        condition_groups: groups.map(normaliseGroupValues),
         actions,
         ...(isNew ? {} : { status }),
       };

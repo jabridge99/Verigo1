@@ -186,6 +186,7 @@ def check_training_overdue(db: Session) -> int:
 
         today = date.today()
         total = 0
+        notified_records = []
 
         overdue_records = (
             db.query(GovernanceTrainingRecord)
@@ -209,6 +210,7 @@ def check_training_overdue(db: Session) -> int:
             )
             # Mark as overdue
             record.status = TrainingStatus.overdue
+            notified_records.append(record)
             total += 1
 
         db.commit()
@@ -216,7 +218,7 @@ def check_training_overdue(db: Session) -> int:
         from app.models.automation_rule import RuleEventType
         from app.services.automation_engine import evaluate_automation_rules
 
-        for record in overdue_records:
+        for record in notified_records:
             evaluate_automation_rules(
                 db, RuleEventType.training_expiring, record.org_id, "training_record",
                 record.id, {"training": {"status": record.status.value, "user_id": record.user_id}},
@@ -356,6 +358,11 @@ def check_customer_review_due(db: Session) -> int:
         )
 
         for customer in due_customers:
+            days_overdue = (today - customer.next_review_date).days
+            # Only fire at specific intervals to avoid re-triggering the rule
+            # engine every day for the same overdue customer.
+            if days_overdue not in (0, 1, 7, 14, 30):
+                continue
             evaluate_automation_rules(
                 db, RuleEventType.customer_review_due, customer.org_id, "customer",
                 customer.id, customer_context(customer), triggered_by="system",

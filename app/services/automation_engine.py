@@ -197,7 +197,7 @@ def _action_create_alert(db, params, org_id, entity_type, entity_id, actor_id) -
         transaction_id=entity_id,
         customer_id=txn.customer_id,
         alert_type=AlertType(params["alert_type"]) if params.get("alert_type") else AlertType.rule_triggered,
-        category=AlertCategory(params["category"]) if params.get("category") else AlertCategory.other,
+        category=AlertCategory(params["category"]) if params.get("category") else AlertCategory.custom,
         severity=AlertSeverity(params.get("severity", "medium")),
         status=AlertStatus.generated,
         alert_score=float(params.get("alert_score", 50)),
