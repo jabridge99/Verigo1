@@ -44,6 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Governance',
     items: [
       { label: 'Compliance Calendar', href: '/governance/calendar' },
+      { label: 'Policies', href: '/governance/policies' },
       { label: 'Audit Logs', href: '/audit' },
       { label: 'Data Connectors', href: '/connectors' },
       { label: 'API Integrations', href: '/api-integrations' },
@@ -89,6 +90,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   connectors: 'Data Connectors',
   governance: 'Governance',
   calendar: 'Compliance Calendar',
+  policies: 'Policies',
   kyc: 'KYC Review',
   kyb: 'KYB Review',
   screening: 'Screening',
