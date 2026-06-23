@@ -13,16 +13,42 @@ import QuickActions from "@/components/QuickActions";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface Alert {
-  id: number; alert_id: string; transaction_id: number; customer_id?: number;
+  id: string; alert_id: string; transaction_id?: string; customer_id?: string;
   industry_id?: string; alert_type: string; severity: string; status: string;
   description: string; rule_name?: string; action_taken?: string; notes?: string;
   assigned_to?: string; is_resolved: number; created_at?: string; resolved_at?: string;
 }
 
 interface Stats {
-  total_alerts: number; open_alerts: number; by_severity: Record<string, number>;
+  total_alerts: number; open_alerts: number; smr_candidates: number;
+  by_severity: Record<string, number>;
   by_type: Record<string, number>; by_status: Record<string, number>;
-  total_transactions: number; flagged_transactions: number;
+}
+
+// Backend statuses (AlertStatus) collapsed to the simpler set this page displays.
+const STATUS_DISPLAY: Record<string, string> = {
+  generated: "open", assigned: "open", under_review: "under_review",
+  escalated: "escalated", dismissed: "dismissed", resolved: "resolved",
+  smr_candidate: "reported",
+};
+
+function mapAlert(raw: any): Alert {
+  const status = STATUS_DISPLAY[raw.status] || raw.status;
+  return {
+    id: raw.id,
+    alert_id: raw.alert_ref ?? raw.alert_id,
+    transaction_id: raw.transaction_id,
+    customer_id: raw.customer_id,
+    alert_type: raw.category ?? raw.alert_type,
+    severity: raw.severity,
+    status,
+    description: raw.description ?? raw.title ?? "",
+    rule_name: raw.rule_name,
+    assigned_to: raw.assigned_to,
+    is_resolved: status === "resolved" || status === "dismissed" ? 1 : 0,
+    created_at: raw.trigger_date ?? raw.created_at,
+    resolved_at: raw.resolved_at,
+  };
 }
 
 const SEV_COLORS: Record<string, string> = {
@@ -54,22 +80,21 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const DEMO_ALERTS: Alert[] = [
-  { id: 1, alert_id: "ALT-DEMO0001", transaction_id: 1, customer_id: 1, alert_type: "sanctions_match", severity: "critical", status: "open", description: "Counterparty 'Petrov Trading LLC' matched on OFAC SDN sanctions watchlist.", is_resolved: 0, created_at: new Date(Date.now() - 300000).toISOString() },
-  { id: 2, alert_id: "ALT-DEMO0002", transaction_id: 2, customer_id: 2, alert_type: "large_transaction", severity: "high", status: "under_review", description: "Transaction AUD $45,000.00 meets or exceeds the CTR threshold of $10,000. AUSTRAC reporting may be required.", is_resolved: 0, assigned_to: "compliance@firm.com.au", created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 3, alert_id: "ALT-DEMO0003", transaction_id: 3, customer_id: 3, alert_type: "structuring", severity: "high", status: "open", description: "4 transactions totalling AUD $38,200 detected near the CTR threshold within 24 hours — possible structuring.", is_resolved: 0, created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: 4, alert_id: "ALT-DEMO0004", transaction_id: 4, customer_id: 1, alert_type: "cross_border", severity: "high", status: "open", description: "International funds transfer instruction (IFTI) detected to/from IR. AUSTRAC IFTI report may be required.", is_resolved: 0, created_at: new Date(Date.now() - 10800000).toISOString() },
-  { id: 5, alert_id: "ALT-DEMO0005", transaction_id: 5, customer_id: 4, alert_type: "velocity_breach", severity: "medium", status: "open", description: "Velocity breach (24h): 18 transactions totalling AUD $72,400 exceed thresholds (15 txns / $50,000).", is_resolved: 0, created_at: new Date(Date.now() - 14400000).toISOString() },
-  { id: 6, alert_id: "ALT-DEMO0006", transaction_id: 6, customer_id: 5, alert_type: "pep_transaction", severity: "high", status: "escalated", description: "Transaction of AUD $25,000.00 by a Politically Exposed Person (PEP). Enhanced due diligence required.", is_resolved: 0, created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 7, alert_id: "ALT-DEMO0007", transaction_id: 7, customer_id: 2, alert_type: "high_risk_country", severity: "medium", status: "dismissed", description: "Counterparty country RU is on FATF/AUSTRAC high-risk jurisdiction list.", is_resolved: 1, created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: 8, alert_id: "ALT-DEMO0008", transaction_id: 8, customer_id: 3, alert_type: "rule_triggered", severity: "medium", status: "resolved", description: "Custom rule triggered: 'Crypto withdrawal > $5,000'. Action: flag.", rule_name: "Crypto withdrawal > $5,000", is_resolved: 1, created_at: new Date(Date.now() - 259200000).toISOString() },
+  { id: "1", alert_id: "ALT-DEMO0001", transaction_id: "1", customer_id: "1", alert_type: "sanctions_match", severity: "critical", status: "open", description: "Counterparty 'Petrov Trading LLC' matched on OFAC SDN sanctions watchlist.", is_resolved: 0, created_at: new Date(Date.now() - 300000).toISOString() },
+  { id: "2", alert_id: "ALT-DEMO0002", transaction_id: "2", customer_id: "2", alert_type: "large_transaction", severity: "high", status: "under_review", description: "Transaction AUD $45,000.00 meets or exceeds the CTR threshold of $10,000. AUSTRAC reporting may be required.", is_resolved: 0, assigned_to: "compliance@firm.com.au", created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: "3", alert_id: "ALT-DEMO0003", transaction_id: "3", customer_id: "3", alert_type: "structuring", severity: "high", status: "open", description: "4 transactions totalling AUD $38,200 detected near the CTR threshold within 24 hours — possible structuring.", is_resolved: 0, created_at: new Date(Date.now() - 7200000).toISOString() },
+  { id: "4", alert_id: "ALT-DEMO0004", transaction_id: "4", customer_id: "1", alert_type: "cross_border", severity: "high", status: "open", description: "International funds transfer instruction (IFTI) detected to/from IR. AUSTRAC IFTI report may be required.", is_resolved: 0, created_at: new Date(Date.now() - 10800000).toISOString() },
+  { id: "5", alert_id: "ALT-DEMO0005", transaction_id: "5", customer_id: "4", alert_type: "velocity_breach", severity: "medium", status: "open", description: "Velocity breach (24h): 18 transactions totalling AUD $72,400 exceed thresholds (15 txns / $50,000).", is_resolved: 0, created_at: new Date(Date.now() - 14400000).toISOString() },
+  { id: "6", alert_id: "ALT-DEMO0006", transaction_id: "6", customer_id: "5", alert_type: "pep_transaction", severity: "high", status: "escalated", description: "Transaction of AUD $25,000.00 by a Politically Exposed Person (PEP). Enhanced due diligence required.", is_resolved: 0, created_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: "7", alert_id: "ALT-DEMO0007", transaction_id: "7", customer_id: "2", alert_type: "high_risk_country", severity: "medium", status: "dismissed", description: "Counterparty country RU is on FATF/AUSTRAC high-risk jurisdiction list.", is_resolved: 1, created_at: new Date(Date.now() - 172800000).toISOString() },
+  { id: "8", alert_id: "ALT-DEMO0008", transaction_id: "8", customer_id: "3", alert_type: "rule_triggered", severity: "medium", status: "resolved", description: "Custom rule triggered: 'Crypto withdrawal > $5,000'. Action: flag.", rule_name: "Crypto withdrawal > $5,000", is_resolved: 1, created_at: new Date(Date.now() - 259200000).toISOString() },
 ];
 
 const DEMO_STATS: Stats = {
-  total_alerts: 8, open_alerts: 5,
+  total_alerts: 8, open_alerts: 5, smr_candidates: 1,
   by_severity: { critical: 1, high: 4, medium: 3, low: 0 },
   by_type: { large_transaction: 1, structuring: 1, cross_border: 1, sanctions_match: 1, velocity_breach: 1, pep_transaction: 1, high_risk_country: 1, rule_triggered: 1 },
   by_status: { open: 4, under_review: 1, escalated: 1, dismissed: 1, resolved: 1 },
-  total_transactions: 124, flagged_transactions: 8,
 };
 
 type Tab = "queue" | "stats" | "create" | "simulate";
@@ -103,11 +128,23 @@ function MonitoringDashboard() {
   const fetchData = useCallback(async () => {
     try {
       const [aRes, sRes] = await Promise.all([
-        fetch(`${API}/api/v1/transactions/alerts/queue?limit=200`, { credentials: "include" }),
-        fetch(`${API}/api/v1/transactions/alerts/stats`, { credentials: "include" }),
+        fetch(`${API}/api/v1/alerts?limit=200`, { credentials: "include" }),
+        fetch(`${API}/api/v1/alerts/dashboard`, { credentials: "include" }),
       ]);
-      if (aRes.ok) { const d = await aRes.json(); if (d.length) setAlerts(d); }
-      if (sRes.ok) { const d = await sRes.json(); if (d.total_alerts) setStats(d); }
+      if (aRes.ok) {
+        const d = await aRes.json();
+        if (d.length) {
+          const mapped = d.map(mapAlert);
+          setAlerts(mapped);
+          const byType: Record<string, number> = {};
+          for (const a of mapped) byType[a.alert_type] = (byType[a.alert_type] || 0) + 1;
+          setStats(prev => ({ ...prev, by_type: byType }));
+        }
+      }
+      if (sRes.ok) {
+        const d = await sRes.json();
+        if (d.total_alerts) setStats(prev => ({ ...prev, total_alerts: d.total_alerts, open_alerts: d.open_alerts, smr_candidates: d.smr_candidates, by_severity: d.by_severity, by_status: d.by_status }));
+      }
     } catch {}
   }, []);
 
@@ -116,12 +153,26 @@ function MonitoringDashboard() {
   const doAction = async (action: "resolve" | "dismiss" | "escalate", alertId: string) => {
     const statusMap: Record<string, string> = { resolve: "resolved", dismiss: "dismissed", escalate: "escalated" };
     try {
-      await fetch(`${API}/api/v1/transactions/alerts/${alertId}/${action}`, { method: "POST", credentials: "include" });
+      if (action === "escalate") {
+        await fetch(`${API}/api/v1/alerts/${alertId}/escalate`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." }),
+        });
+      } else {
+        await fetch(`${API}/api/v1/alerts/${alertId}/review`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resolution: action === "resolve" ? "cleared" : "dismissed",
+            review_notes: actionNote || (action === "resolve" ? "Reviewed and cleared." : "Dismissed — false positive."),
+          }),
+        });
+      }
     } catch {}
     setAlerts(prev => prev.map(a =>
-      a.alert_id === alertId ? { ...a, status: statusMap[action], is_resolved: action !== "escalate" ? 1 : 0 } : a
+      a.id === alertId ? { ...a, status: statusMap[action], is_resolved: action !== "escalate" ? 1 : 0 } : a
     ));
     setSelected(null);
+    setActionNote("");
     showToast("success", `Alert ${action}d`);
   };
 
@@ -167,8 +218,7 @@ function MonitoringDashboard() {
             { label: "High",     count: stats.by_severity.high,     color: "text-orange-400" },
             { label: "Medium",   count: stats.by_severity.medium,   color: "text-amber-400" },
             { label: "Open",     count: stats.open_alerts,          color: "text-slate-300" },
-            { label: "Txns",     count: stats.total_transactions,   color: "text-brand-400" },
-            { label: "Flagged",  count: stats.flagged_transactions,  color: "text-orange-400" },
+            { label: "SMR Candidates", count: stats.smr_candidates, color: "text-brand-400" },
           ].map(({ label, count, color }) => (
             <div key={label} className="flex items-center gap-2 whitespace-nowrap">
               <span className="text-slate-500 text-xs">{label}</span>
@@ -254,8 +304,7 @@ function MonitoringDashboard() {
               {[
                 { label: "Total Alerts",  value: stats.total_alerts,        color: "text-slate-200" },
                 { label: "Open Alerts",   value: stats.open_alerts,          color: "text-amber-400" },
-                { label: "Transactions",  value: stats.total_transactions,  color: "text-brand-400" },
-                { label: "Flagged Txns",  value: stats.flagged_transactions, color: "text-orange-400" },
+                { label: "SMR Candidates", value: stats.smr_candidates, color: "text-brand-400" },
               ].map(({ label, value, color }) => (
                 <div key={label} className="card p-5 text-center">
                   <div className={`text-3xl font-bold ${color}`}>{value}</div>
@@ -312,12 +361,12 @@ function MonitoringDashboard() {
                 </div>
               </div>
               <div className="card">
-                <h3 className="font-semibold text-slate-200 mb-4">Detection Rate</h3>
+                <h3 className="font-semibold text-slate-200 mb-4">SMR Candidate Rate</h3>
                 <div className="flex items-center justify-center h-32">
                   <div className="text-center">
-                    <div className="text-5xl font-bold text-brand-400">{stats.total_transactions > 0 ? `${Math.round((stats.flagged_transactions / stats.total_transactions) * 100)}%` : "0%"}</div>
-                    <div className="text-slate-500 text-sm mt-2">of transactions flagged</div>
-                    <div className="text-xs text-slate-600 mt-1">{stats.flagged_transactions} / {stats.total_transactions}</div>
+                    <div className="text-5xl font-bold text-brand-400">{stats.total_alerts > 0 ? `${Math.round((stats.smr_candidates / stats.total_alerts) * 100)}%` : "0%"}</div>
+                    <div className="text-slate-500 text-sm mt-2">of alerts flagged for SMR</div>
+                    <div className="text-xs text-slate-600 mt-1">{stats.smr_candidates} / {stats.total_alerts}</div>
                   </div>
                 </div>
               </div>
@@ -361,9 +410,9 @@ function MonitoringDashboard() {
               <div className="border-t border-navy-700 pt-4 space-y-3">
                 <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Actions</div>
                 <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => doAction("resolve", selected.alert_id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 text-xs font-medium hover:bg-emerald-500/25 transition-colors"><CheckCircle className="w-3.5 h-3.5" /> Resolve</button>
-                  <button onClick={() => doAction("escalate", selected.alert_id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/25 text-orange-300 text-xs font-medium hover:bg-orange-500/25 transition-colors"><ArrowUpCircle className="w-3.5 h-3.5" /> Escalate</button>
-                  <button onClick={() => doAction("dismiss", selected.alert_id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-500/15 border border-slate-500/25 text-slate-400 text-xs font-medium hover:bg-slate-500/25 transition-colors"><XCircle className="w-3.5 h-3.5" /> Dismiss</button>
+                  <button onClick={() => doAction("resolve", selected.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 text-xs font-medium hover:bg-emerald-500/25 transition-colors"><CheckCircle className="w-3.5 h-3.5" /> Resolve</button>
+                  <button onClick={() => doAction("escalate", selected.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/25 text-orange-300 text-xs font-medium hover:bg-orange-500/25 transition-colors"><ArrowUpCircle className="w-3.5 h-3.5" /> Escalate</button>
+                  <button onClick={() => doAction("dismiss", selected.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-500/15 border border-slate-500/25 text-slate-400 text-xs font-medium hover:bg-slate-500/25 transition-colors"><XCircle className="w-3.5 h-3.5" /> Dismiss</button>
                 </div>
                 <textarea className="field-input min-h-[70px] resize-none text-xs" placeholder="Add notes…" value={actionNote} onChange={e => setActionNote(e.target.value)} />
               </div>
@@ -401,11 +450,11 @@ function SimulatePanel({ onAlert }: { onAlert: (a: Alert) => void }) {
     const generatedAlerts: Alert[] = [];
     const now = new Date().toISOString();
     if (form.amount >= 10000) {
-      generatedAlerts.push({ id: Date.now(), alert_id: `ALT-SIM${Math.random().toString(36).slice(2,8).toUpperCase()}`, transaction_id: 999, alert_type: "large_transaction", severity: "high", status: "open", description: `Transaction AUD $${form.amount.toLocaleString()} meets or exceeds CTR threshold of $10,000. AUSTRAC reporting may be required.`, is_resolved: 0, created_at: now });
+      generatedAlerts.push({ id: String(Date.now()), alert_id: `ALT-SIM${Math.random().toString(36).slice(2,8).toUpperCase()}`, transaction_id: "999", alert_type: "large_transaction", severity: "high", status: "open", description: `Transaction AUD $${form.amount.toLocaleString()} meets or exceeds CTR threshold of $10,000. AUSTRAC reporting may be required.`, is_resolved: 0, created_at: now });
     }
     if (form.is_cross_border) {
       const highRisk = ["IR","KP","RU","SY","AF","BY","MM"].includes(form.counterparty_country.toUpperCase());
-      generatedAlerts.push({ id: Date.now()+1, alert_id: `ALT-SIM${Math.random().toString(36).slice(2,8).toUpperCase()}`, transaction_id: 999, alert_type: highRisk ? "high_risk_country" : "cross_border", severity: highRisk ? "high" : "medium", status: "open", description: `International funds transfer to ${form.counterparty_country}. ${highRisk ? "High-risk jurisdiction — FATF listed." : "AUSTRAC IFTI report may be required."}`, is_resolved: 0, created_at: now });
+      generatedAlerts.push({ id: String(Date.now()+1), alert_id: `ALT-SIM${Math.random().toString(36).slice(2,8).toUpperCase()}`, transaction_id: "999", alert_type: highRisk ? "high_risk_country" : "cross_border", severity: highRisk ? "high" : "medium", status: "open", description: `International funds transfer to ${form.counterparty_country}. ${highRisk ? "High-risk jurisdiction — FATF listed." : "AUSTRAC IFTI report may be required."}`, is_resolved: 0, created_at: now });
     }
     if (generatedAlerts.length === 0) { setResult("No alerts triggered — transaction appears normal."); }
     else { generatedAlerts.forEach(a => onAlert(a)); setResult(`${generatedAlerts.length} alert(s) triggered — see Alert Queue.`); }
@@ -544,8 +593,8 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
       };
       const customerLabel = DEMO_CUSTOMERS.find(c => c.customer_id === form.customer_id)?.full_name || form.customer_id;
       alert = {
-        id: Date.now(), alert_id: `ALT-TXN${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-        transaction_id: Date.now(), alert_type: typeMap[top.label] || "unusual_pattern",
+        id: String(Date.now()), alert_id: `ALT-TXN${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        transaction_id: String(Date.now()), alert_type: typeMap[top.label] || "unusual_pattern",
         severity: band.label.toLowerCase(), status: "open",
         description: `Manual transaction entry${customerLabel ? ` for ${customerLabel}` : ""}: AUD $${form.amount.toLocaleString()} (${form.delivery_method.replace(/_/g, " ")}) — ${top.label}.${form.reference ? ` Ref: ${form.reference}.` : ""}`,
         is_resolved: 0, created_at: now,
