@@ -37,7 +37,16 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Reporting Queue', href: '/reporting' },
       { label: 'Retention & Archival', href: '/retention' },
-      { label: 'Compliance Analytics', href: '/analytics' },
+    ],
+  },
+  {
+    label: 'Analytics & Benchmarking',
+    items: [
+      { label: 'Executive Dashboard', href: '/analytics/executive' },
+      { label: 'Compliance Dashboard', href: '/analytics/compliance' },
+      { label: 'MLRO Analytics', href: '/analytics/mlro' },
+      { label: 'Operations Dashboard', href: '/analytics/operations' },
+      { label: 'Industry Benchmarking', href: '/analytics/benchmarking' },
     ],
   },
   {
@@ -95,6 +104,10 @@ export const ROUTE_LABELS: Record<string, string> = {
   company: 'Organisation Profile',
   notifications: 'Notifications',
   analytics: 'Analytics',
+  executive: 'Executive Dashboard',
+  compliance: 'Compliance Dashboard',
+  operations: 'Operations Dashboard',
+  benchmarking: 'Industry Benchmarking',
   retention: 'Retention',
   connectors: 'Data Connectors',
   governance: 'Governance',
