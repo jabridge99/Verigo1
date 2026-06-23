@@ -1,6 +1,10 @@
 // Shared org-wide compliance counters, used by the Dashboard KPI bar and the
 // Compliance Journey tracker so both surfaces stay in sync with one source.
-// Demo data for now — swap for a live aggregated endpoint when one exists.
+// Backed by the existing GET /api/v1/dashboard/global aggregate endpoint.
+
+import { useEffect, useState } from "react"
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 export interface ComplianceStats {
   pending_kyc: number
@@ -17,5 +21,21 @@ export const DEMO_COMPLIANCE_STATS: ComplianceStats = {
 }
 
 export function useComplianceStats(): ComplianceStats {
-  return DEMO_COMPLIANCE_STATS
+  const [stats, setStats] = useState<ComplianceStats>(DEMO_COMPLIANCE_STATS)
+
+  useEffect(() => {
+    fetch(`${API}/api/v1/dashboard/global`, { credentials: "include" })
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(d => {
+        setStats({
+          pending_kyc: (d.customers?.pending_review ?? 0) + (d.customers?.edd_required ?? 0),
+          open_alerts: d.alerts?.open ?? 0,
+          pending_reports: d.reports?.total_pending ?? 0,
+          open_cases: d.cases?.open ?? 0,
+        })
+      })
+      .catch(() => {})
+  }, [])
+
+  return stats
 }
