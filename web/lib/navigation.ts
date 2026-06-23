@@ -44,6 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Governance',
     items: [
       { label: 'Compliance Calendar', href: '/governance/calendar' },
+      { label: 'Risk Matrix', href: '/governance/risk-matrix' },
       { label: 'Policies', href: '/governance/policies' },
       { label: 'Controls', href: '/governance/controls' },
       { label: 'Audit Logs', href: '/audit' },
@@ -93,6 +94,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   calendar: 'Compliance Calendar',
   policies: 'Policies',
   controls: 'Controls',
+  'risk-matrix': 'Risk Matrix',
   kyc: 'KYC Review',
   kyb: 'KYB Review',
   screening: 'Screening',
