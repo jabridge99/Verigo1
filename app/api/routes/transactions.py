@@ -129,6 +129,15 @@ def create_transaction(
 
     db.commit()
     db.refresh(txn)
+
+    from app.models.automation_rule import RuleEventType
+    from app.services.automation_engine import evaluate_automation_rules, transaction_context
+
+    evaluate_automation_rules(
+        db, RuleEventType.transaction_created, org_id, "transaction", txn.id,
+        transaction_context(txn), triggered_by=current_user.id,
+    )
+
     return txn
 
 

@@ -290,6 +290,15 @@ def create_customer(
     )
     db.commit()
     db.refresh(customer)
+
+    from app.models.automation_rule import RuleEventType
+    from app.services.automation_engine import customer_context, evaluate_automation_rules
+
+    evaluate_automation_rules(
+        db, RuleEventType.customer_created, oid, "customer", customer.id,
+        customer_context(customer), triggered_by=current_user.id,
+    )
+
     log.info("Customer created: %s org=%s", customer.customer_ref, oid)
     return customer
 
