@@ -508,6 +508,65 @@ class SMRReport(Base):
     case = relationship("Case")
 
 
+# ── Enhanced Customer Due Diligence ──────────────────────────────────────────────
+
+
+class ECDDStatus(str, enum.Enum):
+    pending = "pending"
+    completed = "completed"
+
+
+class ECDDRecord(Base):
+    """Enhanced due diligence assessment — PEP, adverse media, beneficial ownership,
+    source of wealth, tax-risk and investment-legitimacy review."""
+
+    __tablename__ = "ecdd_records"
+
+    id = Column(String, primary_key=True, default=lambda: f"ecdd_{uuid4().hex[:12]}")
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    ecdd_id = Column(String(40), unique=True, index=True)  # ECDD-XXXXXXXXXXXX
+    customer_id = Column(String, ForeignKey("customers.id"), nullable=False, index=True)
+
+    trigger_reason = Column(Text, nullable=False)
+
+    pep_status = Column(Boolean, default=False)
+    adverse_media_found = Column(Boolean, default=False)
+    adverse_media_details = Column(Text)
+
+    beneficial_owner_verified = Column(Boolean, default=False)
+    beneficial_owner_details = Column(Text)
+
+    source_of_wealth_verified = Column(Boolean, default=False)
+    source_of_funds = Column(Text)
+    source_of_wealth_notes = Column(Text)
+
+    purpose_of_transaction = Column(Text)
+    high_tax_risk = Column(Boolean, default=False)
+    tax_risk_notes = Column(Text)
+
+    investment_legitimacy_notes = Column(Text)
+    analyst_notes = Column(Text)
+
+    enhanced_risk_score = Column(Float, default=0.0)
+    recommendation = Column(String(20))  # approve | monitor | reject
+    status = Column(Enum(ECDDStatus), default=ECDDStatus.pending, nullable=False, index=True)
+
+    created_by = Column(String)
+    completed_by = Column(String)
+    completed_at = Column(DateTime(timezone=True))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organisation = relationship("Organisation")
+    customer = relationship("Customer")
+
+
 # ── Filing Register (immutable) ────────────────────────────────────────────────
 
 

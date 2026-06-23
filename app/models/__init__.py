@@ -266,6 +266,8 @@ from app.models.regulatory_recommendation import (
     RegulatoryRecommendation,
 )
 from app.models.report import (
+    ECDDRecord,
+    ECDDStatus,
     FilingRegisterEntry,
     IFTIDirection,
     IFTIReport,
