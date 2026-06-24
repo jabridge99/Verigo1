@@ -365,6 +365,7 @@ def create_customer(
 @router.get("", response_model=List[CustomerResponse])
 def list_customers(
     status: Optional[CustomerStatus] = Query(None),
+    search: Optional[str] = Query(None, description="Match against name or customer reference — bypasses the default draft/edd_required exclusion so pickers (e.g. ECDD) can find any applicant"),
     risk_level: Optional[RiskLevel] = Query(None),
     customer_type: Optional[str] = Query(None),
     cdd_level: Optional[CDDLevel] = Query(None),
@@ -378,12 +379,17 @@ def list_customers(
     q = db.query(Customer).filter(Customer.org_id == oid)
     if status:
         q = q.filter(Customer.status == status)
-    else:
+    elif not search:
         # Customers list = applicants who have passed KYC. Draft (not yet
         # screened) and edd_required (under enhanced review) stay out of the
         # default view until a reviewer clears them; pass an explicit
         # ?status= to see them.
         q = q.filter(Customer.status.notin_([CustomerStatus.draft, CustomerStatus.edd_required]))
+    if search:
+        like = f"%{search.strip()}%"
+        q = q.filter(
+            (Customer.full_name.ilike(like)) | (Customer.customer_ref.ilike(like))
+        )
     if risk_level:
         q = q.filter(Customer.risk_level == risk_level)
     if customer_type:

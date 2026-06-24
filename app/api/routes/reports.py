@@ -46,7 +46,7 @@ from app.models.report import (
     TTRIndustryType,
     TTRReport,
 )
-from app.schemas.report import ECDDCreate, ECDDResponse
+from app.schemas.report import ECDDCreate, ECDDDecisionRequest, ECDDResponse
 from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -1480,11 +1480,15 @@ def create_ecdd(
     if not customer:
         raise HTTPException(404, "Customer not found.")
 
+    if payload.trigger_reason.value == "other" and not (payload.trigger_reason_other or "").strip():
+        raise HTTPException(400, "trigger_reason_other is required when trigger_reason is 'other'.")
+
     record = ECDDRecord(
         ecdd_id=f"ECDD-{uuid4().hex[:12].upper()}",
         org_id=org_id,
         customer_id=customer.id,
         trigger_reason=payload.trigger_reason,
+        trigger_reason_other=payload.trigger_reason_other,
         pep_status=bool(payload.pep_status),
         adverse_media_found=bool(payload.adverse_media_found),
         adverse_media_details=payload.adverse_media_details,
@@ -1525,27 +1529,51 @@ def create_ecdd(
     return record
 
 
-@router.patch("/ecdd/{ecdd_id}/complete", response_model=ECDDResponse)
-def complete_ecdd(
+@router.patch("/ecdd/{ecdd_id}/decision", response_model=ECDDResponse)
+def decide_ecdd(
     ecdd_id: str,
+    payload: ECDDDecisionRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
+    """
+    Manually accept, reject, or revert an ECDD assessment. Reversible: a
+    completed/rejected record can be moved back to any other status (e.g.
+    to correct a mistaken decision) — every change is timestamped via
+    last_revised_at and logged to AuditLog with the supplied decision_notes
+    rationale, so the full revision history is auditable without a bespoke
+    history table.
+    """
     org_id = org_id_for(current_user)
     record = _get_ecdd_or_404(ecdd_id, org_id, db)
-    record.status = ECDDStatus.completed
-    record.completed_by = current_user.id
-    record.completed_at = datetime.now(timezone.utc)
+
+    try:
+        new_status = ECDDStatus(payload.status)
+    except ValueError:
+        raise HTTPException(400, f"status must be one of {[s.value for s in ECDDStatus]}")
+    if not payload.decision_notes.strip():
+        raise HTTPException(400, "decision_notes is required — record why this customer was accepted, rejected, or reverted.")
+
+    before_status = record.status.value
+    now = datetime.now(timezone.utc)
+    record.status = new_status
+    record.decision_notes = payload.decision_notes
+    record.decided_by = current_user.id
+    record.decided_at = now
+    record.last_revised_at = now
     db.commit()
     db.refresh(record)
 
     audit_service.log_action(
         db,
-        action="ecdd_completed",
+        action="ecdd_decision",
         entity_type="ecdd_record",
         entity_id=record.id,
         actor=current_user.email,
         actor_role=current_user.role.value if current_user.role else None,
         organisation_id=org_id,
+        before_state={"status": before_status},
+        after_state={"status": new_status.value},
+        notes=payload.decision_notes,
     )
     return record

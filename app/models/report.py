@@ -40,6 +40,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
+from app.models.customer_workflow import EDDTrigger
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -514,11 +515,19 @@ class SMRReport(Base):
 class ECDDStatus(str, enum.Enum):
     pending = "pending"
     completed = "completed"
+    rejected = "rejected"
 
 
 class ECDDRecord(Base):
     """Enhanced due diligence assessment — PEP, adverse media, beneficial ownership,
-    source of wealth, tax-risk and investment-legitimacy review."""
+    source of wealth, tax-risk and investment-legitimacy review, captured as a
+    single-page assessment rather than a multi-step wizard.
+
+    Status (pending/completed/rejected) is a manual decision and is reversible —
+    every change is timestamped via last_revised_at and recorded as an AuditLog
+    entry (see reports.py decide_ecdd) carrying the decision_notes rationale,
+    rather than a bespoke revision-history table.
+    """
 
     __tablename__ = "ecdd_records"
 
@@ -532,7 +541,10 @@ class ECDDRecord(Base):
     ecdd_id = Column(String(40), unique=True, index=True)  # ECDD-XXXXXXXXXXXX
     customer_id = Column(String, ForeignKey("customers.id"), nullable=False, index=True)
 
-    trigger_reason = Column(Text, nullable=False)
+    # AUSTRAC/FATF-aligned trigger categories (shared with the broader EDD
+    # workflow in customer_workflow.py) plus a free-text field for "Other".
+    trigger_reason = Column(Enum(EDDTrigger), nullable=False)
+    trigger_reason_other = Column(Text)
 
     pep_status = Column(Boolean, default=False)
     adverse_media_found = Column(Boolean, default=False)
@@ -556,9 +568,14 @@ class ECDDRecord(Base):
     recommendation = Column(String(20))  # approve | monitor | reject
     status = Column(Enum(ECDDStatus), default=ECDDStatus.pending, nullable=False, index=True)
 
+    # Manual accept/reject rationale — required whenever status is changed
+    # away from pending (and on any later reversal/re-decision).
+    decision_notes = Column(Text)
+    decided_by = Column(String)
+    decided_at = Column(DateTime(timezone=True))
+    last_revised_at = Column(DateTime(timezone=True))
+
     created_by = Column(String)
-    completed_by = Column(String)
-    completed_at = Column(DateTime(timezone=True))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
