@@ -147,7 +147,7 @@ function OnboardingDashboardInner() {
         body: JSON.stringify({ ...manualForm, industry_id: INDUSTRY_ID }),
       });
       if (!res.ok) throw new Error(await res.text());
-      showToast("success", `Invite sent to ${manualForm.applicant_email}`);
+      showToast("success", `${manualForm.applicant_name} saved`);
       setManualForm({ applicant_name: "", applicant_email: "", applicant_phone: "", applicant_company: "", customer_type: "individual" });
       setTab("applicants");
       fetchData();
@@ -230,7 +230,7 @@ function OnboardingDashboardInner() {
             {tab === "manual" && (
               <div className="max-w-xl">
                 <h2 className="text-lg font-semibold text-slate-100 mb-2">Manual Entry</h2>
-                <p className="text-slate-500 text-sm mb-6">Add a single applicant and send them an onboarding invite.</p>
+                <p className="text-slate-500 text-sm mb-6">Add a single applicant yourself — they'll appear immediately, ready for you to upload their ID documents in Step 2.</p>
                 <form onSubmit={handleManualSubmit} className="card space-y-4">
                   <div className="space-y-1 col-span-2">
                     <label className="text-xs font-medium text-slate-400">Full name *</label>
@@ -258,7 +258,7 @@ function OnboardingDashboardInner() {
                     <input className="field-input" placeholder="Optional" value={manualForm.applicant_company} onChange={e => setManualForm(f => ({ ...f, applicant_company: e.target.value }))} />
                   </div>
                   <button type="submit" disabled={submittingManual} className="btn-primary w-full justify-center">
-                    {submittingManual ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><UserPlus className="w-4 h-4" />Send Invite</>}
+                    {submittingManual ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><UserPlus className="w-4 h-4" />Save Applicant</>}
                   </button>
                 </form>
               </div>
@@ -307,16 +307,23 @@ function OnboardingDashboardInner() {
               ))}
             </div>
 
-            {!["completed", "rejected", "cancelled"].includes(selectedSession.status) && (
-              <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-navy-700">
-                <button onClick={() => handleRemind(selectedSession.session_id)} className="btn-secondary text-xs py-1.5 px-3">
-                  Resend Link
-                </button>
-                <button onClick={() => handleCancel(selectedSession.session_id)} className="text-xs py-1.5 px-3 rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-colors">
-                  Cancel Request
-                </button>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-navy-700">
+              {selectedSession.customer_id && (
+                <a href={`/customers/${selectedSession.customer_id}`} className="btn-primary text-xs py-1.5 px-3">
+                  View customer profile
+                </a>
+              )}
+              {!["completed", "rejected", "cancelled"].includes(selectedSession.status) && (
+                <>
+                  <button onClick={() => handleRemind(selectedSession.session_id)} className="btn-secondary text-xs py-1.5 px-3">
+                    Resend Link
+                  </button>
+                  <button onClick={() => handleCancel(selectedSession.session_id)} className="text-xs py-1.5 px-3 rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-colors">
+                    Cancel Request
+                  </button>
+                </>
+              )}
+            </div>
             {selectedSession.documents_uploaded > 0 && (
               <div className="mt-3">
                 <a href={`/documents?session=${selectedSession.session_id}`} className="text-xs text-brand-400 hover:underline">

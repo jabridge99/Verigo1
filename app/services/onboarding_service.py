@@ -115,6 +115,33 @@ def create_session(
         },
     )
     session.invite_sent_at = datetime.now(timezone.utc)
+
+    # Operator-entered applicants (manual/bulk) skip the self-serve portal
+    # entirely, so create the draft Customer record up front rather than
+    # waiting for submit_onboarding (which only fires off the applicant's
+    # own portal submission) — otherwise an ops-entered applicant would have
+    # nowhere to attach KYC documents to and would never appear in the app.
+    customer = Customer(
+        customer_ref=f"CUST-{uuid.uuid4().hex[:10].upper()}",
+        org_id=organisation_id,
+        customer_type=MasterCustomerType.company
+        if CustomerType(customer_type) == CustomerType.business
+        else MasterCustomerType.individual,
+        status=CustomerStatus.draft,
+        full_name=applicant_name,
+        email=applicant_email,
+        phone=applicant_phone or "",
+    )
+    db.add(customer)
+    db.flush()
+    session.customer_id = customer.id
+    _log(
+        db,
+        session,
+        "customer_created",
+        {"customer_id": customer.id, "source": source},
+        actor=created_by or "system",
+    )
     return session
 
 
