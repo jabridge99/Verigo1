@@ -11,6 +11,7 @@ interface Session {
   applicant_email: string;
   status: string;
   documents_uploaded: number;
+  customer_id?: string;
 }
 
 interface Props {
@@ -32,8 +33,11 @@ export default function DocumentUploadStep({ sessions, onUploaded }: Props) {
     const form = new FormData();
     form.append("file", file);
     form.append("category", "identity");
-    form.append("entity_type", "onboarding_session");
-    form.append("entity_id", selected.session_id);
+    // Tied to the customer record (not the onboarding session) so the
+    // document shows up on the customer's profile, where compliance does
+    // the actual KYC review.
+    form.append("entity_type", "customer");
+    form.append("entity_id", selected.customer_id || selected.session_id);
     try {
       const res = await fetch(`${API}/api/v1/documents`, { method: "POST", credentials: "include", body: form });
       if (!res.ok) throw new Error(await res.text());
