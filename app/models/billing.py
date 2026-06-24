@@ -81,8 +81,8 @@ ADDON_CATALOGUE = {
 PLAN_CATALOGUE = {
     BillingPlan.starter: {
         "name": "Starter",
-        "monthly_aud": 299.00,
-        "annual_aud": 2_870.40,  # 299 * 12 * 0.80 (20% off)
+        "monthly_aud": 59.00,
+        "annual_aud": 599.00,
         "features": [
             "Up to 500 customers",
             "AML transaction monitoring",
@@ -95,8 +95,8 @@ PLAN_CATALOGUE = {
     },
     BillingPlan.professional: {
         "name": "Professional",
-        "monthly_aud": 799.00,
-        "annual_aud": 7_670.40,
+        "monthly_aud": 79.00,
+        "annual_aud": 799.00,
         "features": [
             "Up to 5,000 customers",
             "Advanced rule builder",
@@ -111,8 +111,8 @@ PLAN_CATALOGUE = {
     },
     BillingPlan.enterprise: {
         "name": "Enterprise",
-        "monthly_aud": 1_999.00,
-        "annual_aud": 19_190.40,
+        "monthly_aud": 299.00,
+        "annual_aud": 2_999.00,
         "features": [
             "Unlimited customers",
             "White-label branding",
