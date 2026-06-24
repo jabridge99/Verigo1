@@ -554,7 +554,9 @@ class ECDDRecord(Base):
 
     enhanced_risk_score = Column(Float, default=0.0)
     recommendation = Column(String(20))  # approve | monitor | reject
-    status = Column(Enum(ECDDStatus), default=ECDDStatus.pending, nullable=False, index=True)
+    status = Column(
+        Enum(ECDDStatus), default=ECDDStatus.pending, nullable=False, index=True
+    )
 
     created_by = Column(String)
     completed_by = Column(String)

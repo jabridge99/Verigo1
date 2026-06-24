@@ -18,6 +18,7 @@ AUSTRAC requirements:
 import logging
 from datetime import date, datetime, timezone
 from typing import List, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
@@ -49,7 +50,6 @@ from app.models.customer import (
     RiskLevel,
 )
 from app.models.document import Document
-from app.models.transaction import Transaction
 from app.models.kyc import (
     CustomerAddressVerification,
     CustomerEmailVerification,
@@ -58,13 +58,7 @@ from app.models.kyc import (
     CustomerSelfieVerification,
     VerificationResult,
 )
-from app.models.screening import (
-    CryptoWalletScreening,
-    ScreeningAlert,
-    ScreeningRecord,
-    ScreeningStatus,
-    ScreeningType,
-)
+from app.models.marketplace import VerificationOrder
 from app.models.risk_matrix import (
     CustomerQuestionResponse,
     OrgApprovalQuestion,
@@ -72,7 +66,14 @@ from app.models.risk_matrix import (
     QuestionAnswer,
     QuestionContext,
 )
-from app.models.marketplace import VerificationOrder
+from app.models.screening import (
+    CryptoWalletScreening,
+    ScreeningAlert,
+    ScreeningRecord,
+    ScreeningStatus,
+    ScreeningType,
+)
+from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.customer import (
     AddressVerificationCreate,
@@ -119,7 +120,6 @@ from app.services.risk_matrix_service import (
     compute_final_approval_score,
     compute_question_score,
 )
-from uuid import uuid4
 
 log = logging.getLogger("verigo.api.customers")
 router = APIRouter(prefix="/customers", tags=["Customers"])
@@ -351,11 +351,19 @@ def create_customer(
     db.refresh(customer)
 
     from app.models.automation_rule import RuleEventType
-    from app.services.automation_engine import customer_context, evaluate_automation_rules
+    from app.services.automation_engine import (
+        customer_context,
+        evaluate_automation_rules,
+    )
 
     evaluate_automation_rules(
-        db, RuleEventType.customer_created, oid, "customer", customer.id,
-        customer_context(customer), triggered_by=current_user.id,
+        db,
+        RuleEventType.customer_created,
+        oid,
+        "customer",
+        customer.id,
+        customer_context(customer),
+        triggered_by=current_user.id,
     )
 
     log.info("Customer created: %s org=%s", customer.customer_ref, oid)
@@ -1342,7 +1350,9 @@ def rescore_customer(
         q_weight = getattr(config, "custom_question_weight", 0.20) if config else 0.20
         q_weight = max(0.0, min(q_weight, 0.40))
         max_reduction = 10.0  # hard cap regardless of weight
-        reduction = min(max_reduction, (question_score / 100.0) * max_reduction * q_weight / 0.40)
+        reduction = min(
+            max_reduction, (question_score / 100.0) * max_reduction * q_weight / 0.40
+        )
         score = max(0.0, score - reduction)
 
     level = _level_for(score)
@@ -1507,7 +1517,9 @@ def answer_customer_approval_questions(
     valid_ids = {q.id for q in valid_questions}
     invalid = [qid for qid in question_ids if qid not in valid_ids]
     if invalid:
-        raise HTTPException(400, f"Unknown or inactive customer question IDs: {invalid}")
+        raise HTTPException(
+            400, f"Unknown or inactive customer question IDs: {invalid}"
+        )
 
     now = datetime.now(timezone.utc)
     saved = []
@@ -1793,7 +1805,11 @@ def get_customer_workspace(
                 risk_history[0].control_effectiveness_score if risk_history else None
             ),
             "trend": [
-                {"scored_at": h.scored_at, "risk_score": h.risk_score, "risk_level": h.risk_level.value if h.risk_level else None}
+                {
+                    "scored_at": h.scored_at,
+                    "risk_score": h.risk_score,
+                    "risk_level": h.risk_level.value if h.risk_level else None,
+                }
                 for h in reversed(risk_history)
             ],
             "history": risk_history,
@@ -1810,12 +1826,17 @@ def get_customer_workspace(
                     "completed_at": o.completed_at,
                 }
                 for o in db.query(VerificationOrder)
-                .filter(VerificationOrder.entity_type == "customer", VerificationOrder.entity_id == customer_id)
+                .filter(
+                    VerificationOrder.entity_type == "customer",
+                    VerificationOrder.entity_id == customer_id,
+                )
                 .order_by(VerificationOrder.created_at.desc())
                 .all()
             ],
         },
-        "checklist_completion": _customer_checklist_summary(customer_id, customer.org_id, db),
+        "checklist_completion": _customer_checklist_summary(
+            customer_id, customer.org_id, db
+        ),
         "sof_sow": {
             "source_of_funds": customer.source_of_funds,
             "source_of_funds_verified": customer.source_of_funds_verified,
@@ -1831,8 +1852,18 @@ def get_customer_workspace(
         "reviews": reviews,
         "notes": notes,
         "cases": {
-            "open": [c for c in cases if c.status.value not in ("closed_no_action", "closed_smr_filed", "closed_no_smr")],
-            "closed": [c for c in cases if c.status.value in ("closed_no_action", "closed_smr_filed", "closed_no_smr")],
+            "open": [
+                c
+                for c in cases
+                if c.status.value
+                not in ("closed_no_action", "closed_smr_filed", "closed_no_smr")
+            ],
+            "closed": [
+                c
+                for c in cases
+                if c.status.value
+                in ("closed_no_action", "closed_smr_filed", "closed_no_smr")
+            ],
             "escalated": [c for c in cases if c.escalated_to],
             "smr_linked": [c for c in cases if c.smr_lodged or c.is_smr_candidate],
         },
@@ -2010,7 +2041,11 @@ def override_customer(
         )
 
     def _serialise(v):
-        return v.value if hasattr(v, "value") else (v.isoformat() if hasattr(v, "isoformat") else v)
+        return (
+            v.value
+            if hasattr(v, "value")
+            else (v.isoformat() if hasattr(v, "isoformat") else v)
+        )
 
     db.add(
         AuditLog(

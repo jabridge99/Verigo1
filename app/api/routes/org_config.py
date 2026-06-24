@@ -22,7 +22,11 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import org_id_for, require_compliance_or_above
 from app.db.database import get_db
-from app.models.risk_matrix import OrgApprovalQuestion, OrgMonitoringConfig, QuestionContext
+from app.models.risk_matrix import (
+    OrgApprovalQuestion,
+    OrgMonitoringConfig,
+    QuestionContext,
+)
 from app.models.user import User
 
 router = APIRouter(prefix="/org", tags=["Org Config"])

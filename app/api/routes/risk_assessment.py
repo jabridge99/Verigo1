@@ -35,6 +35,8 @@ from app.api.deps import (
 )
 from app.db.database import get_db
 from app.models.audit_log import AuditEventType, AuditLog
+from app.models.governance_controls import GovernanceControl
+from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.risk_engine import (
     AssessmentStatus,
     MitigationStatus,
@@ -47,8 +49,6 @@ from app.models.risk_engine import (
     RiskMitigation,
     RiskScoreHistory,
 )
-from app.models.governance_controls import GovernanceControl
-from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.user import User
 from app.services.control_effectiveness import governance_rating_to_score
 from app.services.risk_engine import (
@@ -579,7 +579,8 @@ def score_factor(
     consequence: Optional[int] = Query(None, ge=1, le=5),
     control_effectiveness: Optional[int] = Query(None, ge=1, le=5),
     source_control_id: Optional[str] = Query(
-        None, description="Link to a tested GovernanceControl; derives control_effectiveness from it"
+        None,
+        description="Link to a tested GovernanceControl; derives control_effectiveness from it",
     ),
     comments: Optional[str] = None,
     override_residual_score: Optional[float] = Query(None, ge=0, le=25),
@@ -1039,7 +1040,8 @@ def list_mitigation_library(
     """System-seeded items (org_id null) plus this org's custom additions."""
     org_id = org_id_for(current_user)
     q = db.query(MitigationLibraryItem).filter(
-        (MitigationLibraryItem.org_id.is_(None)) | (MitigationLibraryItem.org_id == org_id),
+        (MitigationLibraryItem.org_id.is_(None))
+        | (MitigationLibraryItem.org_id == org_id),
         MitigationLibraryItem.is_active.is_(True),
     )
     if category:
@@ -1047,7 +1049,9 @@ def list_mitigation_library(
     items = q.order_by(MitigationLibraryItem.name).all()
     if industry:
         items = [
-            i for i in items if not i.applicable_industries or industry in i.applicable_industries
+            i
+            for i in items
+            if not i.applicable_industries or industry in i.applicable_industries
         ]
     return items
 
@@ -1099,7 +1103,9 @@ def update_mitigation_library_item(
         .first()
     )
     if not item:
-        raise HTTPException(404, "Mitigation library item not found (system-seeded items are read-only)")
+        raise HTTPException(
+            404, "Mitigation library item not found (system-seeded items are read-only)"
+        )
     if name is not None:
         item.name = name
     if description is not None:

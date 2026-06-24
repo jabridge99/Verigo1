@@ -426,7 +426,9 @@ def export_policy_html(
     def esc(v) -> str:
         return html.escape(str(v)) if v else "—"
 
-    refs_html = "".join(f"<li>{esc(r)}</li>" for r in (policy.regulatory_references or []))
+    refs_html = "".join(
+        f"<li>{esc(r)}</li>" for r in (policy.regulatory_references or [])
+    )
     return HTMLResponse(
         content=f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>{esc(policy.title)}</title>

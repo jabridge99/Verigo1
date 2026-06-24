@@ -92,11 +92,7 @@ def _industry_scope(current_user: User) -> Optional[str]:
 
 
 def _org_scope(current_user: User) -> Optional[str]:
-    return (
-        None
-        if current_user.is_super_admin
-        else current_user.primary_organisation_id
-    )
+    return None if current_user.is_super_admin else current_user.primary_organisation_id
 
 
 @router.post("", response_model=DocumentResponse, status_code=201)
@@ -241,7 +237,7 @@ async def download_document(
         media_type=doc.mime_type or "application/octet-stream",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="{safe_ascii}"; filename*=UTF-8\'\'{encoded}'
+                f"attachment; filename=\"{safe_ascii}\"; filename*=UTF-8''{encoded}"
             ),
             "X-Content-Type-Options": "nosniff",
         },

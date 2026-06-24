@@ -241,11 +241,19 @@ def review_kyc(
 
     if customer.status == CustomerStatus.active:
         from app.models.automation_rule import RuleEventType
-        from app.services.automation_engine import customer_context, evaluate_automation_rules
+        from app.services.automation_engine import (
+            customer_context,
+            evaluate_automation_rules,
+        )
 
         evaluate_automation_rules(
-            db, RuleEventType.kyc_completed, customer.org_id, "customer", customer.id,
-            customer_context(customer), triggered_by=current_user.id,
+            db,
+            RuleEventType.kyc_completed,
+            customer.org_id,
+            "customer",
+            customer.id,
+            customer_context(customer),
+            triggered_by=current_user.id,
         )
 
     return {

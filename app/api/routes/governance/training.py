@@ -349,7 +349,8 @@ def seed_standard_courses(
 @router.post("/courses/seed-industry-pack", status_code=201)
 def seed_industry_pack(
     industry: Optional[str] = Query(
-        None, description="IndustryType value, e.g. 'remittance'. Omit to seed all packs."
+        None,
+        description="IndustryType value, e.g. 'remittance'. Omit to seed all packs.",
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_mlro_or_above),
@@ -1004,7 +1005,9 @@ def export_certificate_html(
     if current_user.role.value == "analyst" and record.user_id != current_user.id:
         raise HTTPException(403, "You can only export your own certificate.")
     if not record.completion_date or record.status != TrainingStatus.completed:
-        raise HTTPException(409, "Certificate is only available for completed training.")
+        raise HTTPException(
+            409, "Certificate is only available for completed training."
+        )
 
     course = (
         db.query(TrainingCourse).filter(TrainingCourse.id == record.course_id).first()

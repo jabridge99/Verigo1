@@ -220,8 +220,17 @@ def check_training_overdue(db: Session) -> int:
 
         for record in notified_records:
             evaluate_automation_rules(
-                db, RuleEventType.training_expiring, record.org_id, "training_record",
-                record.id, {"training": {"status": record.status.value, "user_id": record.user_id}},
+                db,
+                RuleEventType.training_expiring,
+                record.org_id,
+                "training_record",
+                record.id,
+                {
+                    "training": {
+                        "status": record.status.value,
+                        "user_id": record.user_id,
+                    }
+                },
                 triggered_by="system",
             )
 
@@ -318,7 +327,11 @@ def check_policy_review_due(db: Session) -> int:
             from app.services.automation_engine import evaluate_automation_rules
 
             evaluate_automation_rules(
-                db, RuleEventType.policy_expiring, policy.org_id, "policy", policy.id,
+                db,
+                RuleEventType.policy_expiring,
+                policy.org_id,
+                "policy",
+                policy.id,
                 {"policy": {"title": policy.title, "days_remaining": days_remaining}},
                 triggered_by="system",
             )
@@ -342,7 +355,10 @@ def check_customer_review_due(db: Session) -> int:
     try:
         from app.models.automation_rule import RuleEventType
         from app.models.customer import Customer, CustomerStatus
-        from app.services.automation_engine import customer_context, evaluate_automation_rules
+        from app.services.automation_engine import (
+            customer_context,
+            evaluate_automation_rules,
+        )
 
         today = date.today()
         total = 0
@@ -364,8 +380,13 @@ def check_customer_review_due(db: Session) -> int:
             if days_overdue not in (0, 1, 7, 14, 30):
                 continue
             evaluate_automation_rules(
-                db, RuleEventType.customer_review_due, customer.org_id, "customer",
-                customer.id, customer_context(customer), triggered_by="system",
+                db,
+                RuleEventType.customer_review_due,
+                customer.org_id,
+                "customer",
+                customer.id,
+                customer_context(customer),
+                triggered_by="system",
             )
             total += 1
 

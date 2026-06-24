@@ -558,11 +558,16 @@ def create_finding(
     from app.services.automation_engine import evaluate_automation_rules
 
     evaluate_automation_rules(
-        db, RuleEventType.independent_review_finding, current_user.org_id,
-        "review_finding", finding.id,
+        db,
+        RuleEventType.independent_review_finding,
+        current_user.org_id,
+        "review_finding",
+        finding.id,
         {
             "finding": {
-                "risk_rating": getattr(finding.risk_rating, "value", finding.risk_rating),
+                "risk_rating": getattr(
+                    finding.risk_rating, "value", finding.risk_rating
+                ),
                 "category": getattr(finding.category, "value", finding.category),
             }
         },

@@ -213,6 +213,14 @@ from app.models.kyc import (
     VerificationResult,
     VerificationSource,
 )
+from app.models.marketplace import (
+    VerificationCheckType,
+    VerificationIntegrationMode,
+    VerificationOrder,
+    VerificationOrderStatus,
+    VerificationProvider,
+)
+from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.monitoring import (
     AlertCategory,
     AlertEvidence,
@@ -227,14 +235,6 @@ from app.models.monitoring import (
     RuleExecution,
     RuleStatus,
     TransactionAlert,
-)
-from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
-from app.models.marketplace import (
-    VerificationCheckType,
-    VerificationIntegrationMode,
-    VerificationOrder,
-    VerificationOrderStatus,
-    VerificationProvider,
 )
 from app.models.organisation import (
     CUSTOM_PACKAGE_INDUSTRIES,
