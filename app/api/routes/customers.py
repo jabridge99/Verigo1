@@ -378,6 +378,12 @@ def list_customers(
     q = db.query(Customer).filter(Customer.org_id == oid)
     if status:
         q = q.filter(Customer.status == status)
+    else:
+        # Customers list = applicants who have passed KYC. Draft (not yet
+        # screened) and edd_required (under enhanced review) stay out of the
+        # default view until a reviewer clears them; pass an explicit
+        # ?status= to see them.
+        q = q.filter(Customer.status.notin_([CustomerStatus.draft, CustomerStatus.edd_required]))
     if risk_level:
         q = q.filter(Customer.risk_level == risk_level)
     if customer_type:

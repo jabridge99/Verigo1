@@ -38,7 +38,8 @@ from app.config import settings
 from app.db.database import get_db
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
 from app.integrations.crypto import get_provider as get_crypto_provider
-from app.models.customer import Customer
+from app.models.customer import Customer, CustomerStatus
+from app.models.onboarding import OnboardingSession, SessionStatus
 from app.models.screening import (
     AdverseMediaCategory,
     AdverseMediaResult,
@@ -1180,5 +1181,50 @@ def customer_identity_score(
     customer = _resolve_customer(customer_id, org_id, db)
 
     return compute_identity_score(
-        db, customer_id, is_business=getattr(customer, "customer_type", None) == "business"
+        db, customer_id, is_business=getattr(customer, "customer_type", None) == "company"
     )
+
+
+@router.post("/customers/{customer_id}/identity-score/decide")
+def decide_customer_identity_score(
+    customer_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Applies the composite identity-verification decision to the customer's
+    KYC status: pass -> active, ecdd_required -> edd_required, fail -> rejected.
+    This is the point at which a draft applicant becomes (or doesn't become)
+    a real customer for the purposes of the Customers list.
+    """
+    org_id = org_id_for(current_user)
+    customer = _resolve_customer(customer_id, org_id, db)
+
+    result = compute_identity_score(
+        db, customer_id, is_business=getattr(customer, "customer_type", None) == "company"
+    )
+
+    decision_to_status = {
+        "pass": CustomerStatus.active,
+        "ecdd_required": CustomerStatus.edd_required,
+        "fail": CustomerStatus.rejected,
+    }
+    customer.status = decision_to_status[result["decision"]]
+    db.add(customer)
+
+    session = (
+        db.query(OnboardingSession)
+        .filter(OnboardingSession.customer_id == customer_id)
+        .first()
+    )
+    if session:
+        session.status = {
+            "pass": SessionStatus.completed,
+            "ecdd_required": SessionStatus.verification_pending,
+            "fail": SessionStatus.rejected,
+        }[result["decision"]]
+        db.add(session)
+
+    db.commit()
+    result["customer_status"] = customer.status.value
+    return result

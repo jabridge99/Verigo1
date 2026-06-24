@@ -159,10 +159,10 @@ function OnboardingDashboardInner() {
   // The 3-step KYC pipeline: applicant self-entry, operator-assisted document
   // upload, then document screening with the composite identity score.
   const TABS = [
-    { id: "pipeline" as Tab,    label: "Pipeline",            icon: BarChart3 },
     { id: "applicants" as Tab,  label: "Step 1 · Applicant",  icon: Users },
     { id: "documents" as Tab,   label: "Step 2 · Document Upload", icon: FolderUp },
     { id: "screening" as Tab,   label: "Step 3 · Screening",  icon: ScanSearch },
+    { id: "pipeline" as Tab,    label: "Pipeline Overview",   icon: BarChart3 },
   ];
 
   const APPLICANT_SUBTABS: { id: ApplicantSubTab; label: string; icon: typeof Users }[] = [

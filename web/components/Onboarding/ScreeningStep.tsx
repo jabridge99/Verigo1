@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ShieldCheck, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import clsx from "clsx";
 
@@ -41,10 +41,12 @@ export default function ScreeningStep({ sessions }: { sessions: Session[] }) {
   const [score, setScore] = useState<IdentityScore | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState(false);
+  const [customerStatus, setCustomerStatus] = useState<string | null>(null);
 
   const screenable = sessions.filter(s => !!s.customer_id);
 
-  useEffect(() => {
+  const loadScore = useCallback(() => {
     if (!selected?.customer_id) { setScore(null); return; }
     setLoading(true);
     setError(null);
@@ -53,6 +55,31 @@ export default function ScreeningStep({ sessions }: { sessions: Session[] }) {
       .then(setScore)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+  }, [selected]);
+
+  useEffect(() => {
+    setCustomerStatus(null);
+    loadScore();
+  }, [loadScore]);
+
+  const applyDecision = useCallback(async () => {
+    if (!selected?.customer_id) return;
+    setDeciding(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/api/v1/screening/customers/${selected.customer_id}/identity-score/decide`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setScore(data);
+      setCustomerStatus(data.customer_status);
+    } catch (e: any) {
+      setError(e.message || "Failed to apply decision");
+    } finally {
+      setDeciding(false);
+    }
   }, [selected]);
 
   return (
@@ -100,6 +127,23 @@ export default function ScreeningStep({ sessions }: { sessions: Session[] }) {
                 </div>
               </div>
               <div className="text-3xl font-bold">{score.composite_score.toFixed(0)}%</div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-navy-700 bg-navy-800/50 p-4">
+              <div className="text-sm text-slate-400">
+                {customerStatus ? (
+                  <>Customer status: <span className="text-slate-200 font-medium">{customerStatus}</span></>
+                ) : (
+                  "Apply this decision to update the customer's KYC status."
+                )}
+              </div>
+              <button
+                onClick={applyDecision}
+                disabled={deciding}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white transition-colors"
+              >
+                {deciding ? "Applying…" : "Apply decision"}
+              </button>
             </div>
 
             <div className="space-y-3">

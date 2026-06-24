@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.models.customer import Customer, CustomerStatus
+from app.models.customer import CustomerType as MasterCustomerType
 from app.models.onboarding import (
     CustomerType,
     ImportBatch,
@@ -15,7 +16,13 @@ from app.models.onboarding import (
     OnboardingSession,
     SessionStatus,
 )
-from app.services.risk_scoring import score_customer, score_to_level
+from app.models.screening import (
+    ScreeningEntityType,
+    ScreeningProvider,
+    ScreeningRecord,
+    ScreeningStatus,
+    ScreeningType,
+)
 from app.services.sanctions_screening import screen_name
 
 INVITE_EXPIRY_DAYS = 7
@@ -193,20 +200,30 @@ def advance_step(db, session, step, step_data, ip_address=None):
     return session
 
 
+def _parse_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
 def submit_onboarding(db, session, ip_address=None):
-    if session.status == SessionStatus.completed:
+    """
+    Finishes the applicant's self-entry step (Step 1). This does NOT decide
+    KYC pass/fail — a Customer record is created in `draft` status as the
+    screenable subject, but only Step 3 (document screening / composite
+    identity score, see app.services.identity_verification_service) can
+    promote it to `active`. Applicants stay out of the Customers list
+    (see customers.py list_customers default filter) until that happens.
+    """
+    if session.customer_id:
         return {"status": "already_completed", "customer_id": session.customer_id}
     data = session.collected_data or {}
-    session.status = SessionStatus.verification_pending
-    _log(
-        db,
-        session,
-        "submitted",
-        {"documents_uploaded": session.documents_uploaded, "completion_pct": 100},
-        actor="applicant",
-        ip_address=ip_address,
-    )
+
     sanctions = screen_name(session.applicant_name)
+    session.sanctions_match = sanctions["match_found"]
     _log(
         db,
         session,
@@ -216,63 +233,64 @@ def submit_onboarding(db, session, ip_address=None):
             "lists_checked": sanctions["watchlists_checked"],
         },
     )
-    session.sanctions_match = sanctions["match_found"]
+
     customer = Customer(
-        customer_id=f"CUST-{uuid.uuid4().hex[:10].upper()}",
+        customer_ref=f"CUST-{uuid.uuid4().hex[:10].upper()}",
+        org_id=session.organisation_id,
+        customer_type=MasterCustomerType.company
+        if session.customer_type == CustomerType.business
+        else MasterCustomerType.individual,
+        status=CustomerStatus.draft,
         full_name=session.applicant_name,
-        date_of_birth=data.get("date_of_birth", ""),
-        nationality=data.get("nationality", ""),
-        country_of_residence=data.get("country_of_residence", "AU"),
-        id_number=data.get("id_number", ""),
-        id_type=data.get("id_type", "passport"),
-        address=data.get("address", ""),
+        date_of_birth=_parse_date(data.get("date_of_birth")),
+        nationality=(data.get("nationality") or "")[:2],
+        country_of_residence=(data.get("country_of_residence") or "AU")[:2],
         email=session.applicant_email,
         phone=session.applicant_phone or data.get("phone", ""),
-        industry=session.industry_id.replace("-", "_").split("_")[0],
         occupation=data.get("occupation"),
         source_of_funds=data.get("source_of_funds"),
-        status=CustomerStatus.suspended
-        if sanctions["match_found"]
-        else CustomerStatus.kyc_in_progress,
-        is_pep=1 if data.get("is_pep") else 0,
+        is_pep=bool(data.get("is_pep")),
+        is_sanctions_match=sanctions["match_found"],
     )
-    risk_score = score_customer(customer)
-    customer.risk_score = risk_score
-    customer.risk_level = score_to_level(risk_score)
     db.add(customer)
     db.flush()
-    # KYC verification is now tracked per-document via CustomerIdentityDocument /
-    # CustomerSelfieVerification etc. (see app.models.kyc) rather than a single
-    # KYCRecord — Customer.status above already reflects the kyc_in_progress /
-    # suspended outcome of this sanctions check.
-    session.status = (
-        SessionStatus.rejected if sanctions["match_found"] else SessionStatus.completed
+
+    # Fold the quick name-screen into the unified ScreeningRecord table so
+    # Step 3's composite identity score (which reads ScreeningRecord by type)
+    # picks it up as the sanctions category input, instead of being a
+    # one-off check that the rest of the pipeline never sees.
+    db.add(
+        ScreeningRecord(
+            org_id=customer.org_id,
+            customer_id=customer.id,
+            screening_type=ScreeningType.sanctions,
+            entity_type=ScreeningEntityType.customer,
+            entity_id=customer.id,
+            entity_name=customer.full_name,
+            provider=ScreeningProvider.internal,
+            status=ScreeningStatus.potential_match
+            if sanctions["match_found"]
+            else ScreeningStatus.clear,
+            match_count=1 if sanctions["match_found"] else 0,
+            match_score=80.0 if sanctions["match_found"] else 0.0,
+            lists_checked=sanctions["watchlists_checked"],
+            triggered_by="system",
+        )
     )
-    session.customer_id = customer.customer_id
-    session.kyc_id = f"KYC-{uuid.uuid4().hex[:10].upper()}"
-    session.risk_score = risk_score
-    session.risk_level = score_to_level(risk_score)
-    session.completion_pct = 100.0
-    session.completed_at = datetime.now(timezone.utc)
+
+    session.status = SessionStatus.documents_submitted
+    session.customer_id = customer.id
+    session.completion_pct = max(session.completion_pct or 0.0, 60.0)
     _log(
         db,
         session,
-        "completed" if not sanctions["match_found"] else "rejected",
-        {
-            "customer_id": customer.customer_id,
-            "kyc_id": session.kyc_id,
-            "risk_score": risk_score,
-            "risk_level": score_to_level(risk_score),
-            "sanctions_match": sanctions["match_found"],
-        },
+        "applicant_step_completed",
+        {"customer_id": customer.id, "sanctions_match": sanctions["match_found"]},
     )
     db.commit()
     return {
         "status": session.status,
-        "customer_id": customer.customer_id,
-        "kyc_id": session.kyc_id,
-        "risk_score": risk_score,
-        "risk_level": score_to_level(risk_score),
+        "customer_id": customer.id,
         "sanctions_match": sanctions["match_found"],
     }
 
