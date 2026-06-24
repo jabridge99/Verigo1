@@ -458,6 +458,93 @@ def test_admin_update_subscription(db):
     assert svc.admin_update(db, "org-missing", SubscriptionAdminUpdate()) is None
 
 
+def test_plan_pricing_override(db):
+    from app.models.billing import BillingPlan
+    from app.services import billing_service as svc
+
+    default = svc.get_plan_pricing(db, BillingPlan.starter)
+    assert default["monthly_aud"] == 299.00
+
+    updated = svc.update_plan_pricing(db, BillingPlan.starter, 349.00, None, "admin@test.com")
+    assert updated["monthly_aud"] == 349.00
+    assert updated["annual_aud"] == default["annual_aud"]
+
+    rows = svc.list_plan_pricing(db)
+    assert any(r["plan"] == "starter" and r["monthly_aud"] == 349.00 for r in rows)
+
+
+def test_stripe_price_mapping_override(db):
+    from app.models.billing import BillingInterval, BillingPlan
+    from app.services import billing_service as svc
+
+    mappings = svc.list_stripe_price_mappings(db)
+    assert any(m["source"] == "env" for m in mappings)
+
+    result = svc.set_stripe_price_id(
+        db, BillingPlan.starter, BillingInterval.monthly, "price_123", "admin@test.com"
+    )
+    assert result["stripe_price_id"] == "price_123"
+    assert svc.get_stripe_price_id(db, BillingPlan.starter, BillingInterval.monthly) == "price_123"
+
+
+def test_stripe_status_mock_mode():
+    from app.services import billing_service as svc
+
+    status = svc.stripe_status()
+    assert status["configured"] is False
+    assert status["mode"] is None
+
+
+def test_admin_pricing_endpoints(client, admin_headers, db):
+    resp = client.get("/api/v1/billing/admin/pricing", headers=admin_headers)
+    assert resp.status_code == 200
+    assert len(resp.json()) > 0
+
+    resp = client.patch(
+        "/api/v1/billing/admin/pricing/starter",
+        json={"monthly_aud": 399.0},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["monthly_aud"] == 399.0
+
+
+def test_admin_stripe_config_endpoints(client, admin_headers):
+    resp = client.get("/api/v1/billing/admin/stripe/status", headers=admin_headers)
+    assert resp.status_code == 200
+    assert resp.json()["configured"] is False
+
+    resp = client.get("/api/v1/billing/admin/stripe/prices", headers=admin_headers)
+    assert resp.status_code == 200
+    assert len(resp.json()) > 0
+
+    resp = client.put(
+        "/api/v1/billing/admin/stripe/prices/starter/monthly",
+        json={"stripe_price_id": "price_abc"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["stripe_price_id"] == "price_abc"
+    assert resp.json()["source"] == "admin"
+
+
+def test_checkout_mock_mode_uses_db_price_override(db, client, analyst_headers, analyst_user):
+    from app.services import billing_service as svc
+
+    resp = client.post(
+        "/api/v1/billing/checkout",
+        json={
+            "plan": "starter",
+            "interval": "monthly",
+            "success_url": "http://localhost/success",
+            "cancel_url": "http://localhost/cancel",
+        },
+        headers=analyst_headers,
+    )
+    assert resp.status_code == 200
+    assert "mock_checkout" in resp.json()["checkout_url"]
+
+
 def test_cancel_subscription_branches(db):
     from app.services import billing_service as svc
 
