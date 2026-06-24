@@ -59,6 +59,7 @@ from app.models.screening import (
 from app.models.user import User
 from app.services import billing_service as billing_svc
 from app.services.identity_verification_service import compute_identity_score
+from app.services.sanctions_screening import screen_name
 
 router = APIRouter(prefix="/screening", tags=["Screening Hub"])
 
@@ -84,6 +85,11 @@ class ScreeningRunRequest(BaseModel):
     entity_nationality: Optional[str] = None
     provider: ScreeningProvider = ScreeningProvider.internal
     notes: Optional[str] = None
+
+
+class QuickScreenRequest(BaseModel):
+    category: str = Field(..., description="One of: sanctions, pep, adverse_media, company, address")
+    query: str = Field(..., min_length=2, max_length=300)
 
 
 class BatchScreeningRequest(BaseModel):
@@ -212,6 +218,62 @@ def _severity_for_type(
     if screening_type == ScreeningType.adverse_media:
         return AlertSeverity.medium
     return AlertSeverity.medium
+
+
+_QUICK_SCREEN_CATEGORIES = {"sanctions", "pep", "adverse_media", "company", "address"}
+
+
+@router.post("/quick-screen")
+def quick_screen(
+    payload: QuickScreenRequest,
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Ad-hoc, not-yet-linked-to-a-customer lookup — a name (or address) typed
+    straight into the Screening Hub, before any customer record exists.
+    Not persisted; use POST /screening/run for a customer-linked, recorded
+    screen that feeds alerts and the identity-verification score.
+    """
+    category = payload.category.lower()
+    if category not in _QUICK_SCREEN_CATEGORIES:
+        raise HTTPException(400, f"category must be one of {sorted(_QUICK_SCREEN_CATEGORIES)}")
+
+    if category == "address":
+        return {
+            "category": "address",
+            "query": payload.query,
+            "valid": True,
+            "normalized": payload.query.strip(),
+            "note": "Simulation only — wire to Integration Hub for live address validation.",
+            "disclaimer": DISCLAIMER,
+        }
+
+    if category == "sanctions":
+        result = screen_name(payload.query)
+        return {
+            "category": "sanctions",
+            "query": payload.query,
+            "match_found": result["match_found"],
+            "matches": result["matches"],
+            "lists_checked": result["watchlists_checked"],
+            "disclaimer": DISCLAIMER,
+        }
+
+    type_map = {
+        "pep": ScreeningType.pep,
+        "adverse_media": ScreeningType.adverse_media,
+        "company": ScreeningType.regulatory,
+    }
+    result = _simulate_screening(type_map[category], payload.query, ScreeningProvider.internal)
+    return {
+        "category": category,
+        "query": payload.query,
+        "match_found": result["match_count"] > 0,
+        "match_count": result["match_count"],
+        "status": result["status"].value,
+        "provider_reference": result["provider_reference"],
+        "disclaimer": DISCLAIMER,
+    }
 
 
 # ── Screening Records ─────────────────────────────────────────────────────────
