@@ -3,6 +3,7 @@ Coverage-boost tests for pure-logic and template-seeding modules that had
 little or no test coverage. These exercise the public functions of each
 module directly (no API layer) to bring overall coverage above the CI gate.
 """
+
 import types
 
 import pytest
@@ -51,6 +52,7 @@ def test_seed_risk_framework_for_every_industry(db, industry):
 
 # ── ecdd_service ──────────────────────────────────────────────────────────
 
+
 def test_compute_ecdd_score_and_recommendation():
     from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
 
@@ -59,6 +61,7 @@ def test_compute_ecdd_score_and_recommendation():
         adverse_media_found=True,
         beneficial_owner_verified=False,
         source_of_wealth_verified=False,
+        high_tax_risk=True,
     )
     assert compute_ecdd_score(high_risk) == 100.0
     assert determine_recommendation(100.0, pep=True, adverse_media=True) == "reject"
@@ -68,6 +71,7 @@ def test_compute_ecdd_score_and_recommendation():
         adverse_media_found=False,
         beneficial_owner_verified=True,
         source_of_wealth_verified=True,
+        high_tax_risk=False,
     )
     assert compute_ecdd_score(clean) == 0.0
     assert determine_recommendation(0.0, pep=False, adverse_media=False) == "approve"
@@ -77,11 +81,18 @@ def test_compute_ecdd_score_and_recommendation():
         adverse_media_found=False,
         beneficial_owner_verified=True,
         source_of_wealth_verified=True,
+        high_tax_risk=False,
     )
-    assert determine_recommendation(compute_ecdd_score(pep_only), pep=True, adverse_media=False) == "monitor"
+    assert (
+        determine_recommendation(
+            compute_ecdd_score(pep_only), pep=True, adverse_media=False
+        )
+        == "monitor"
+    )
 
 
 # ── sanctions_screening ──────────────────────────────────────────────────────
+
 
 def test_screen_name_match_and_no_match():
     from app.services.sanctions_screening import screen_name, screen_transaction
@@ -98,6 +109,7 @@ def test_screen_name_match_and_no_match():
 
 
 # ── risk_scoring ──────────────────────────────────────────────────────────
+
 
 def test_score_customer_and_levels():
     from app.services.risk_scoring import score_customer, score_to_level
@@ -132,12 +144,14 @@ def test_score_transaction_alerts():
     from app.services.risk_scoring import score_transaction
 
     big_txn = types.SimpleNamespace(amount=15_000, counterparty_country="KP")
-    near_threshold_txns = [
-        types.SimpleNamespace(amount=7_500) for _ in range(3)
+    near_threshold_txns = [types.SimpleNamespace(amount=7_500) for _ in range(3)]
+    many_recent = near_threshold_txns + [
+        types.SimpleNamespace(amount=100) for _ in range(8)
     ]
-    many_recent = near_threshold_txns + [types.SimpleNamespace(amount=100) for _ in range(8)]
 
-    result = score_transaction(big_txn, customer_risk_score=50.0, recent_transactions=many_recent)
+    result = score_transaction(
+        big_txn, customer_risk_score=50.0, recent_transactions=many_recent
+    )
     assert result["is_suspicious"] == 1
     assert result["risk_score"] > 0
     alert_types = {a[0] for a in result["alerts"]}
@@ -147,16 +161,22 @@ def test_score_transaction_alerts():
     assert "velocity_breach" in alert_types
 
     small_txn = types.SimpleNamespace(amount=50, counterparty_country=None)
-    clean_result = score_transaction(small_txn, customer_risk_score=0.0, recent_transactions=[])
+    clean_result = score_transaction(
+        small_txn, customer_risk_score=0.0, recent_transactions=[]
+    )
     assert clean_result["is_suspicious"] == 0
     assert clean_result["alerts"] == []
 
 
 # ── identity_verification ──────────────────────────────────────────────────
 
+
 def test_verify_document_matches_and_mismatches():
     from datetime import date
-    from app.services.identity_verification import compute_kyc_identity_score, verify_document
+    from app.services.identity_verification import (
+        compute_kyc_identity_score,
+        verify_document,
+    )
 
     customer = types.SimpleNamespace(
         full_name="Jane Doe",
@@ -199,6 +219,7 @@ def test_verify_document_matches_and_mismatches():
 
 # ── audit_service ──────────────────────────────────────────────────────────
 
+
 def test_log_action_persists_audit_entry(db):
     from app.services.audit_service import log_action
 
@@ -222,6 +243,7 @@ def test_log_action_persists_audit_entry(db):
 
 # ── cache.py (Redis-backed, graceful no-redis degradation) ──────────────────
 
+
 @pytest.mark.asyncio
 async def test_cache_service_noops_without_redis(monkeypatch):
     from app import config as config_module
@@ -239,6 +261,7 @@ async def test_cache_service_noops_without_redis(monkeypatch):
 
 
 # ── customer_risk_engine (5-dimension assessment) ────────────────────────────
+
 
 def _customer(**overrides):
     base = dict(
@@ -264,8 +287,11 @@ def test_assess_customer_risk_low_and_high_profiles():
     result = assess_customer_risk(low_risk_customer, channel="branch")
     assert result.gateway_decision == "cdd"
     assert result.overall_level in ("low", "medium")
-    assert cdd_level_from_gateway(result.gateway_decision, result.overall_score).value in (
-        "simplified", "standard",
+    assert cdd_level_from_gateway(
+        result.gateway_decision, result.overall_score
+    ).value in (
+        "simplified",
+        "standard",
     )
     assert risk_level_from_score(result.overall_score).value in ("low", "medium")
 
@@ -293,13 +319,19 @@ def test_assess_customer_risk_low_and_high_profiles():
     )
     assert high_result.gateway_decision == "edd"
     assert high_result.overall_level in ("high", "critical")
-    assert cdd_level_from_gateway(high_result.gateway_decision, high_result.overall_score).value == "enhanced"
+    assert (
+        cdd_level_from_gateway(
+            high_result.gateway_decision, high_result.overall_score
+        ).value
+        == "enhanced"
+    )
     assert "pep_match" in high_result.edd_triggers
     assert "sanctions_match" in high_result.edd_triggers
     assert "crypto_exposure" in high_result.edd_triggers
 
 
 # ── risk_matrix_service (AUSTRAC/FATF 4-dimension matrix) ───────────────────
+
 
 def _txn(**overrides):
     from app.models.transaction import DeliveryChannel, PaymentMethod, TransactionType
@@ -379,21 +411,31 @@ def test_compute_question_score_and_final_approval_score():
         types.SimpleNamespace(answer=QuestionAnswer.not_applicable),
     ]
     assert compute_question_score(responses) == 50.0
-    assert compute_question_score([types.SimpleNamespace(answer=QuestionAnswer.not_applicable)]) is None
+    assert (
+        compute_question_score(
+            [types.SimpleNamespace(answer=QuestionAnswer.not_applicable)]
+        )
+        is None
+    )
 
     score, detail = compute_final_approval_score(alert_score=80.0, question_score=None)
     assert detail["questions_complete"] is False
     assert score == 80.0
 
-    score2, detail2 = compute_final_approval_score(alert_score=80.0, question_score=100.0)
+    score2, detail2 = compute_final_approval_score(
+        alert_score=80.0, question_score=100.0
+    )
     assert detail2["questions_complete"] is True
     assert score2 < 80.0
 
-    score3, _ = compute_final_approval_score(alert_score=20.0, question_score=0.0, custom_question_weight=0.9)
+    score3, _ = compute_final_approval_score(
+        alert_score=20.0, question_score=0.0, custom_question_weight=0.9
+    )
     assert score3 > 20.0
 
 
 # ── billing_service ─────────────────────────────────────────────────────────
+
 
 def test_effective_price_branches(db):
     from app.models.billing import BillingInterval, BillingPlan
@@ -462,7 +504,9 @@ def test_plan_pricing_override(db):
     default = svc.get_plan_pricing(db, BillingPlan.starter)
     assert default["monthly_aud"] == 299.00
 
-    updated = svc.update_plan_pricing(db, BillingPlan.starter, 349.00, None, "admin@test.com")
+    updated = svc.update_plan_pricing(
+        db, BillingPlan.starter, 349.00, None, "admin@test.com"
+    )
     assert updated["monthly_aud"] == 349.00
     assert updated["annual_aud"] == default["annual_aud"]
 
@@ -481,7 +525,10 @@ def test_stripe_price_mapping_override(db):
         db, BillingPlan.starter, BillingInterval.monthly, "price_123", "admin@test.com"
     )
     assert result["stripe_price_id"] == "price_123"
-    assert svc.get_stripe_price_id(db, BillingPlan.starter, BillingInterval.monthly) == "price_123"
+    assert (
+        svc.get_stripe_price_id(db, BillingPlan.starter, BillingInterval.monthly)
+        == "price_123"
+    )
 
 
 def test_stripe_status_mock_mode():
@@ -492,40 +539,46 @@ def test_stripe_status_mock_mode():
     assert status["mode"] is None
 
 
-def test_admin_pricing_endpoints(client, admin_headers, db):
-    resp = client.get("/api/v1/billing/admin/pricing", headers=admin_headers)
+def test_admin_pricing_endpoints(client, super_admin_headers, db):
+    resp = client.get("/api/v1/billing/admin/pricing", headers=super_admin_headers)
     assert resp.status_code == 200
     assert len(resp.json()) > 0
 
     resp = client.patch(
         "/api/v1/billing/admin/pricing/starter",
         json={"monthly_aud": 399.0},
-        headers=admin_headers,
+        headers=super_admin_headers,
     )
     assert resp.status_code == 200
     assert resp.json()["monthly_aud"] == 399.0
 
 
-def test_admin_stripe_config_endpoints(client, admin_headers):
-    resp = client.get("/api/v1/billing/admin/stripe/status", headers=admin_headers)
+def test_admin_stripe_config_endpoints(client, super_admin_headers):
+    resp = client.get(
+        "/api/v1/billing/admin/stripe/status", headers=super_admin_headers
+    )
     assert resp.status_code == 200
     assert resp.json()["configured"] is False
 
-    resp = client.get("/api/v1/billing/admin/stripe/prices", headers=admin_headers)
+    resp = client.get(
+        "/api/v1/billing/admin/stripe/prices", headers=super_admin_headers
+    )
     assert resp.status_code == 200
     assert len(resp.json()) > 0
 
     resp = client.put(
         "/api/v1/billing/admin/stripe/prices/starter/monthly",
         json={"stripe_price_id": "price_abc"},
-        headers=admin_headers,
+        headers=super_admin_headers,
     )
     assert resp.status_code == 200
     assert resp.json()["stripe_price_id"] == "price_abc"
     assert resp.json()["source"] == "admin"
 
 
-def test_checkout_mock_mode_uses_db_price_override(db, client, analyst_headers, analyst_user):
+def test_checkout_mock_mode_uses_db_price_override(
+    db, client, admin_headers, admin_user
+):
     from app.services import billing_service as svc
 
     resp = client.post(
@@ -536,7 +589,7 @@ def test_checkout_mock_mode_uses_db_price_override(db, client, analyst_headers, 
             "success_url": "http://localhost/success",
             "cancel_url": "http://localhost/cancel",
         },
-        headers=analyst_headers,
+        headers=admin_headers,
     )
     assert resp.status_code == 200
     assert "mock_checkout" in resp.json()["checkout_url"]
@@ -591,7 +644,11 @@ def test_handle_checkout_completed_creates_subscription(db):
     from app.services import billing_service as svc
 
     session = {
-        "metadata": {"industry_id": "org-webhook-1", "plan": "starter", "interval": "monthly"},
+        "metadata": {
+            "industry_id": "org-webhook-1",
+            "plan": "starter",
+            "interval": "monthly",
+        },
         "customer": "cus_123",
         "subscription": "sub_123",
     }
@@ -610,18 +667,23 @@ def test_handle_subscription_updated_and_deleted(db):
     sub.stripe_subscription_id = "sub_abc"
     db.commit()
 
-    svc._handle_subscription_updated(db, {
-        "id": "sub_abc",
-        "status": "past_due",
-        "cancel_at_period_end": True,
-        "current_period_start": 1700000000,
-        "current_period_end": 1700100000,
-    })
+    svc._handle_subscription_updated(
+        db,
+        {
+            "id": "sub_abc",
+            "status": "past_due",
+            "cancel_at_period_end": True,
+            "current_period_start": 1700000000,
+            "current_period_end": 1700100000,
+        },
+    )
     db.refresh(sub)
     assert sub.status.value == "past_due"
     assert sub.cancel_at_period_end is True
 
-    svc._handle_subscription_updated(db, {"id": "nonexistent", "status": "active"})  # no-op
+    svc._handle_subscription_updated(
+        db, {"id": "nonexistent", "status": "active"}
+    )  # no-op
 
     svc._handle_subscription_deleted(db, {"id": "sub_abc"})
     db.refresh(sub)
@@ -660,6 +722,7 @@ def test_handle_invoice_event_creates_and_updates(db):
 
 # ── questionnaire_seed_service ──────────────────────────────────────────────
 
+
 def test_seed_questionnaire_for_org_and_skip_logic(db):
     from app.services.questionnaire_seed_service import (
         get_available_templates,
@@ -670,7 +733,9 @@ def test_seed_questionnaire_for_org_and_skip_logic(db):
     assert result["seeded"] > 0
     assert "fatf_general_v1" in result["templates_applied"]
 
-    skip_result = seed_questionnaire_for_org(db, "org-q1", "remittance", created_by="user_1")
+    skip_result = seed_questionnaire_for_org(
+        db, "org-q1", "remittance", created_by="user_1"
+    )
     assert skip_result == {"seeded": 0, "skipped": 1, "templates_applied": []}
 
     no_skip = seed_questionnaire_for_org(
@@ -690,11 +755,14 @@ def test_seed_questionnaire_for_org_and_skip_logic(db):
 
 # ── tenant_service ───────────────────────────────────────────────────────────
 
+
 def test_tenant_crud_lifecycle(db):
     from app.schemas.tenant import TenantCreate, TenantUpdate
     from app.services import tenant_service as svc
 
-    tenant = svc.create_tenant(db, TenantCreate(industry_id="org-tenant-1", name="Acme Co"))
+    tenant = svc.create_tenant(
+        db, TenantCreate(industry_id="org-tenant-1", name="Acme Co")
+    )
     assert tenant.tenant_id.startswith("TENANT-")
 
     assert svc.get_tenant(db, tenant.tenant_id).id == tenant.id
@@ -720,6 +788,7 @@ def test_tenant_crud_lifecycle(db):
 
 # ── token_blacklist ──────────────────────────────────────────────────────────
 
+
 def test_in_process_token_blacklist():
     from app.services.token_blacklist import _InProcessBlacklist
 
@@ -731,13 +800,18 @@ def test_in_process_token_blacklist():
 
 # ── usage_billing_service ───────────────────────────────────────────────────
 
+
 def test_usage_billing_full_lifecycle(db):
     from app.models.usage import UsageEventType, UsageRecordStatus
     from app.services import usage_billing_service as svc
 
     record = svc.record_usage(
-        db, "org-usage-1", UsageEventType.identity_verification, "sumsub",
-        customer_id="cust_1", provider_reference="ref_1",
+        db,
+        "org-usage-1",
+        UsageEventType.identity_verification,
+        "sumsub",
+        customer_id="cust_1",
+        provider_reference="ref_1",
     )
     assert record.status == UsageRecordStatus.pending
     assert record.billed_amount_aud > 0
@@ -753,8 +827,11 @@ def test_usage_billing_full_lifecycle(db):
     assert len(unbilled) == 1
 
     from datetime import datetime, timedelta, timezone
+
     now = datetime.now(timezone.utc)
-    summary = svc.usage_summary(db, "org-usage-1", now - timedelta(days=1), now + timedelta(days=1))
+    summary = svc.usage_summary(
+        db, "org-usage-1", now - timedelta(days=1), now + timedelta(days=1)
+    )
     assert summary["check_count"] == 1
     assert summary["total_billed_aud"] > 0
     assert "identity_verification" in summary["by_event_type"]
@@ -763,13 +840,16 @@ def test_usage_billing_full_lifecycle(db):
     assert invoiced_count == 1
     assert svc.list_unbilled(db, "org-usage-1") == []
 
-    record2 = svc.record_usage(db, "org-usage-2", UsageEventType.identity_verification, "sumsub")
+    record2 = svc.record_usage(
+        db, "org-usage-2", UsageEventType.identity_verification, "sumsub"
+    )
     failed = svc.mark_failed(db, record2)
     assert failed.status == UsageRecordStatus.failed
     assert failed.billed_amount_aud == 0.0
 
 
 # ── risk_engine ──────────────────────────────────────────────────────────────
+
 
 def test_risk_engine_full_pipeline():
     from app.services.risk_engine import (
@@ -798,17 +878,37 @@ def test_risk_engine_full_pipeline():
     assert risk_rating(19) == "high"
     assert risk_rating(20) == "critical"
 
-    f1 = score_factor("f1", "REF-1", "Factor One", likelihood=5, consequence=5, ce_score=5)
+    f1 = score_factor(
+        "f1", "REF-1", "Factor One", likelihood=5, consequence=5, ce_score=5
+    )
     f2 = score_factor(
-        "f2", "REF-2", "Factor Two", likelihood=1, consequence=1, ce_score=1,
-        override_residual=10.0, override_justification="manual override",
+        "f2",
+        "REF-2",
+        "Factor Two",
+        likelihood=1,
+        consequence=1,
+        ce_score=1,
+        override_residual=10.0,
+        override_justification="manual override",
     )
     assert f1.residual_rating == "critical"
     assert f2.effective_residual == 10.0
     assert f2.effective_rating == "medium"
 
-    cat1 = CategoryResult(category_id="c1", category_type="customer", name="Customer Risk", weight=0.5, factors=[f1, f2])
-    cat_empty = CategoryResult(category_id="c2", category_type="product", name="Product Risk", weight=0.5, factors=[])
+    cat1 = CategoryResult(
+        category_id="c1",
+        category_type="customer",
+        name="Customer Risk",
+        weight=0.5,
+        factors=[f1, f2],
+    )
+    cat_empty = CategoryResult(
+        category_id="c2",
+        category_type="product",
+        name="Product Risk",
+        weight=0.5,
+        factors=[],
+    )
 
     assert cat1.avg_inherent_score > 0
     assert cat1.avg_residual_score > 0
@@ -847,6 +947,7 @@ def test_risk_engine_full_pipeline():
 
 
 # ── regulatory_decision_service ──────────────────────────────────────────────
+
 
 def _reg_txn(**overrides):
     base = dict(
@@ -906,17 +1007,25 @@ def test_evaluate_transaction_high_risk_full_indicators():
     customer = _reg_customer()
     org = _reg_org()
     crypto_detail = types.SimpleNamespace(
-        mixer_exposure_pct=10.0, darknet_exposure_pct=2.0,
-        sanctioned_exposure_pct=1.0, source_wallet_risk_score=80.0,
+        mixer_exposure_pct=10.0,
+        darknet_exposure_pct=2.0,
+        sanctioned_exposure_pct=1.0,
+        source_wallet_risk_score=80.0,
     )
     behaviour_profile = types.SimpleNamespace(
-        avg_txn_per_month=5, total_volume_30d_aud=100_000,
-        total_txn_count_30d=20, dormant_reactivated=False,
+        avg_txn_per_month=5,
+        total_volume_30d_aud=100_000,
+        total_txn_count_30d=20,
+        dormant_reactivated=False,
     )
 
     result = evaluate_transaction(
-        txn, customer, org, alert_score=90.0,
-        crypto_detail=crypto_detail, behaviour_profile=behaviour_profile,
+        txn,
+        customer,
+        org,
+        alert_score=90.0,
+        crypto_detail=crypto_detail,
+        behaviour_profile=behaviour_profile,
     )
     assert result.potential_ifti is True
     assert result.potential_smr is True
@@ -925,17 +1034,29 @@ def test_evaluate_transaction_high_risk_full_indicators():
     assert result.potential_customer_review is True
     assert len(result.compliance_actions) > 0
     assert result.risk_summary["fatf_black_list_exposure"] is True
-    assert any("Crypto" in g for g in result.industry_guidance) or len(result.industry_guidance) > 0
+    assert (
+        any("Crypto" in g for g in result.industry_guidance)
+        or len(result.industry_guidance) > 0
+    )
 
 
 def test_evaluate_transaction_low_risk_no_indicators():
     from app.services.regulatory_decision_service import evaluate_transaction
 
     txn = _reg_txn(
-        amount_aud=50.0, amount=50.0, is_cross_border=False,
-        payment_method="bank_transfer_domestic", source_country="AU", destination_country="AU",
+        amount_aud=50.0,
+        amount=50.0,
+        is_cross_border=False,
+        payment_method="bank_transfer_domestic",
+        source_country="AU",
+        destination_country="AU",
     )
-    customer = _reg_customer(is_pep=False, is_sanctions_match=False, risk_level="low", source_of_funds="salary")
+    customer = _reg_customer(
+        is_pep=False,
+        is_sanctions_match=False,
+        risk_level="low",
+        source_of_funds="salary",
+    )
     org = _reg_org(industry="other")
 
     result = evaluate_transaction(txn, customer, org, alert_score=0.0)
@@ -948,14 +1069,29 @@ def test_evaluate_transaction_low_risk_no_indicators():
 def test_evaluate_transaction_cash_ttr_and_dormant_reactivation():
     from app.services.regulatory_decision_service import evaluate_transaction
 
-    txn = _reg_txn(payment_method="cash", amount_aud=12_000.0, amount=12_000.0, is_cross_border=False)
-    customer = _reg_customer(is_pep=False, is_sanctions_match=False, risk_level="low", source_of_funds="salary")
+    txn = _reg_txn(
+        payment_method="cash",
+        amount_aud=12_000.0,
+        amount=12_000.0,
+        is_cross_border=False,
+    )
+    customer = _reg_customer(
+        is_pep=False,
+        is_sanctions_match=False,
+        risk_level="low",
+        source_of_funds="salary",
+    )
     org = _reg_org(industry="legal")
     behaviour_profile = types.SimpleNamespace(
-        avg_txn_per_month=0, total_volume_30d_aud=0, total_txn_count_30d=0, dormant_reactivated=True,
+        avg_txn_per_month=0,
+        total_volume_30d_aud=0,
+        total_txn_count_30d=0,
+        dormant_reactivated=True,
     )
 
-    result = evaluate_transaction(txn, customer, org, behaviour_profile=behaviour_profile)
+    result = evaluate_transaction(
+        txn, customer, org, behaviour_profile=behaviour_profile
+    )
     assert result.potential_ttr is True
     assert result.potential_customer_review is True
 
@@ -964,8 +1100,15 @@ def test_evaluate_transaction_industry_guidance_branches():
     from app.services.regulatory_decision_service import evaluate_transaction
 
     for industry in ("psp", "real_estate", "accounting", "gambling", "vasp"):
-        txn = _reg_txn(amount_aud=200_000.0, amount=200_000.0, payment_method="bank_transfer")
-        customer = _reg_customer(is_pep=False, is_sanctions_match=False, risk_level="low", source_of_funds="salary")
+        txn = _reg_txn(
+            amount_aud=200_000.0, amount=200_000.0, payment_method="bank_transfer"
+        )
+        customer = _reg_customer(
+            is_pep=False,
+            is_sanctions_match=False,
+            risk_level="low",
+            source_of_funds="salary",
+        )
         org = _reg_org(industry=industry)
         result = evaluate_transaction(txn, customer, org)
         assert isinstance(result.industry_guidance, list)
@@ -997,6 +1140,7 @@ def test_prefill_functions():
 
 
 # ── customer_risk_engine additional branch coverage ─────────────────────────
+
 
 def test_assess_customer_risk_greylist_and_extra_branches():
     from app.services.customer_risk_engine import assess_customer_risk
@@ -1036,7 +1180,9 @@ def test_assess_customer_risk_greylist_and_extra_branches():
     assert result2.overall_score >= 0
 
     branch_customer = _customer()
-    result3 = assess_customer_risk(branch_customer, channel="mobile", expected_frequency="monthly")
+    result3 = assess_customer_risk(
+        branch_customer, channel="mobile", expected_frequency="monthly"
+    )
     assert result3.overall_score >= 0
 
 
@@ -1049,7 +1195,9 @@ def test_customer_risk_engine_individual_dimension_branches():
         score_transaction_risk,
     )
 
-    high_risk_only_customer = _customer(nationality="CO")  # HIGH_RISK_COUNTRIES, not grey/blacklist
+    high_risk_only_customer = _customer(
+        nationality="CO"
+    )  # HIGH_RISK_COUNTRIES, not grey/blacklist
     result = score_customer_risk(high_risk_only_customer, is_pep=False, pep_type=None)
     assert result.factors.get("high_risk_nationality") == 15.0
 
@@ -1067,6 +1215,7 @@ def test_customer_risk_engine_individual_dimension_branches():
 
 # ── risk_matrix_service additional branch coverage ──────────────────────────
 
+
 def test_compute_risk_matrix_medium_branches():
     from app.models.transaction import DeliveryChannel, PaymentMethod, TransactionType
     from app.services.risk_matrix_service import compute_risk_matrix
@@ -1082,7 +1231,9 @@ def test_compute_risk_matrix_medium_branches():
 
     txn = _txn(
         transaction_type=TransactionType.withdrawal,
-        payment_method=PaymentMethod.wire_transfer if hasattr(PaymentMethod, "wire_transfer") else PaymentMethod.bank_transfer,
+        payment_method=PaymentMethod.wire_transfer
+        if hasattr(PaymentMethod, "wire_transfer")
+        else PaymentMethod.bank_transfer,
         delivery_channel=DeliveryChannel.online,
         amount_aud=20_000.0,
         amount=20_000.0,
@@ -1102,7 +1253,9 @@ def test_compute_risk_matrix_geographic_and_product_extra_branches():
         source_country="RU",  # sanctioned country
         destination_country="GB",
         is_cross_border=True,
-        transaction_type=TransactionType.cash_deposit if hasattr(TransactionType, "cash_deposit") else TransactionType.deposit,
+        transaction_type=TransactionType.cash_deposit
+        if hasattr(TransactionType, "cash_deposit")
+        else TransactionType.deposit,
         payment_method=PaymentMethod.bank_transfer,
         delivery_channel=DeliveryChannel.online,
         amount_aud=9_500.0,
@@ -1185,7 +1338,9 @@ def test_governance_metrics_full_pipeline():
         rec = types.SimpleNamespace(
             business_unit="Compliance" if i % 2 == 0 else "Sales",
             status=status,
-            expiry_date=(today + timedelta(days=exp_delta)) if exp_delta is not None else None,
+            expiry_date=(today + timedelta(days=exp_delta))
+            if exp_delta is not None
+            else None,
         )
         records.append(rec)
 
@@ -1205,7 +1360,9 @@ def test_governance_metrics_full_pipeline():
         policies.append(
             types.SimpleNamespace(
                 status=status,
-                review_due_date=(today - timedelta(days=1)) if overdue else (today + timedelta(days=30)),
+                review_due_date=(today - timedelta(days=1))
+                if overdue
+                else (today + timedelta(days=30)),
             )
         )
     pm = calculate_policy_metrics(policies, today=today)
@@ -1245,7 +1402,10 @@ def test_governance_metrics_full_pipeline():
 
     # dashboard assembly
     dash = build_governance_dashboard(
-        pm, ch, tm, today=today,
+        pm,
+        ch,
+        tm,
+        today=today,
         policies_due_for_review=2,
         policies_pending_approval=1,
         outstanding_attestations=3,
