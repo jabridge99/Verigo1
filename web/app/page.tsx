@@ -544,8 +544,8 @@ function PricingPreview() {
   const plans = [
     {
       name: 'Essential',
-      price: '$299',
-      period: '/year',
+      price: '$59',
+      period: '/month',
       badge: null,
       desc: 'For small reporting entities building their first AML/CTF programme.',
       features: ['Unlimited customers', 'KYC & KYB verification', 'AML/CTF Program template', 'IFTI, SMR & TTR reporting', 'Basic transaction monitoring', 'Essential integrations'],
@@ -555,8 +555,8 @@ function PricingPreview() {
     },
     {
       name: 'Professional',
-      price: '$799',
-      period: '/year',
+      price: '$79',
+      period: '/month',
       badge: 'Most Popular',
       desc: 'For growing compliance teams with full AUSTRAC reporting obligations.',
       features: ['Everything in Essential', 'Sanctions, PEP & adverse media', 'Advanced transaction monitoring', 'EDD workflows', 'Case management', 'Workflow automation', 'AML data connectors'],

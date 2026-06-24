@@ -3,7 +3,7 @@ import { CheckCircle, X, ArrowRight, Shield, Zap, Database, Minus, Info } from '
 
 export const metadata = {
   title: 'Pricing | Verigo',
-  description: 'Simple, transparent annual pricing for Australian regulated businesses. Start with a 7-day free trial.',
+  description: 'Simple, transparent monthly or annual pricing for Australian regulated businesses. Start with a 7-day free trial.',
 }
 
 const plans = [
@@ -33,9 +33,9 @@ const plans = [
   },
   {
     name: 'Essential',
-    price: '$299',
-    period: '/year',
-    billing: 'Billed annually',
+    price: '$59',
+    period: '/month',
+    billing: 'or $599/year (save 15%)',
     badge: null,
     description: 'For small reporting entities building their first AML/CTF programme.',
     highlight: false,
@@ -60,9 +60,9 @@ const plans = [
   },
   {
     name: 'Professional',
-    price: '$799',
-    period: '/year',
-    billing: 'Billed annually',
+    price: '$79',
+    period: '/month',
+    billing: 'or $799/year (save 16%)',
     badge: 'Most Popular',
     description: 'For growing compliance teams with full AUSTRAC reporting obligations.',
     highlight: true,
@@ -232,7 +232,7 @@ export default function PricingPage() {
             <span className="text-blue-600">Start free for 7 days.</span>
           </h1>
           <p className="text-xl text-slate-600 max-w-xl mx-auto mb-4">
-            Annual plans. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
+            Monthly or annual billing. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
           </p>
           <p className="text-sm text-slate-400">No credit card required for trial. Cancel anytime.</p>
         </div>
