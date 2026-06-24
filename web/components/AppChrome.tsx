@@ -6,6 +6,7 @@ import { isAppRoute } from '@/lib/navigation'
 import Sidebar from '@/components/Sidebar'
 import Breadcrumbs from '@/components/Breadcrumbs'
 import ComplianceJourney from '@/components/ComplianceJourney'
+import GlobalQuickActions from '@/components/GlobalQuickActions'
 
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -24,6 +25,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
   return (
     <div className="pt-16">
       <Sidebar />
+      <GlobalQuickActions />
       <div className="lg:pl-64">
         <Breadcrumbs />
         <ComplianceJourney />
