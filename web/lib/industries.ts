@@ -283,8 +283,8 @@ export const industries: Industry[] = [
       { title: 'TTR submitted or SMR filed', desc: 'TTR submitted to AUSTRAC within 10 days. Suspicious pattern? SMR prepared and filed within 3 days.' },
     ],
     pricingRec: {
-      plan: 'Essential',
-      reason: 'Bullion dealers primarily need TTR generation, KYC at point of sale, and structuring detection. The Essential plan covers these core obligations.',
+      plan: 'Starter',
+      reason: 'Bullion dealers primarily need TTR generation, KYC at point of sale, and structuring detection. The Starter plan covers these core obligations.',
     },
   },
 
@@ -361,8 +361,8 @@ export const industries: Industry[] = [
       { title: 'Transaction proceeds or is escalated', desc: 'Clean transactions proceed. Red flags escalate to SMR preparation. Full audit trail retained for 7 years.' },
     ],
     pricingRec: {
-      plan: 'Essential',
-      reason: 'Most real estate professionals need solid CDD, source of funds documentation, and SMR capability. The Essential plan covers these core obligations from day one. Scale to Professional if your volume or transaction complexity grows.',
+      plan: 'Starter',
+      reason: 'Most real estate professionals need solid CDD, source of funds documentation, and SMR capability. The Starter plan covers these core obligations from day one. Scale to Professional if your volume or transaction complexity grows.',
     },
   },
 
@@ -438,8 +438,8 @@ export const industries: Industry[] = [
       { title: 'Settlement or SMR', desc: 'Clean matters proceed to settlement. Red flags escalate — MLRO prepares SMR if required. Records retained for 7 years.' },
     ],
     pricingRec: {
-      plan: 'Essential',
-      reason: 'Conveyancers need solid CDD, source of funds workflows, and SMR capability. The Essential plan covers all Tranche 2 obligations for individual conveyancers or small practices.',
+      plan: 'Starter',
+      reason: 'Conveyancers need solid CDD, source of funds workflows, and SMR capability. The Starter plan covers all Tranche 2 obligations for individual conveyancers or small practices.',
     },
   },
 
@@ -669,8 +669,8 @@ export const industries: Industry[] = [
       { title: 'TTR submitted or SMR filed', desc: 'TTR submitted to AUSTRAC within 10 days. Suspicious pattern? SMR prepared and filed within 3 days.' },
     ],
     pricingRec: {
-      plan: 'Essential',
-      reason: 'Precious metal dealers primarily need TTR generation, KYC at point of sale, and structuring detection. The Essential plan covers these core obligations. Upgrade to Professional for higher-volume operations or multi-location dealers.',
+      plan: 'Starter',
+      reason: 'Precious metal dealers primarily need TTR generation, KYC at point of sale, and structuring detection. The Starter plan covers these core obligations. Upgrade to Professional for higher-volume operations or multi-location dealers.',
     },
   },
 
@@ -823,8 +823,8 @@ export const industries: Industry[] = [
       { title: 'TTR submitted or SMR filed', desc: 'TTR submitted within 10 days. Suspicious pattern identified? SMR prepared and filed within 3 days.' },
     ],
     pricingRec: {
-      plan: 'Essential',
-      reason: 'Most licensed venues need threshold-triggered KYC, TTR generation, and SMR capability. The Essential plan covers all core Tranche 2 obligations for pubs, clubs, and hotels.',
+      plan: 'Starter',
+      reason: 'Most licensed venues need threshold-triggered KYC, TTR generation, and SMR capability. The Starter plan covers all core Tranche 2 obligations for pubs, clubs, and hotels.',
     },
   },
 ]
