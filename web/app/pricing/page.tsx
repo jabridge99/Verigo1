@@ -1,12 +1,20 @@
 import Link from 'next/link'
 import { CheckCircle, X, ArrowRight, Shield, Zap, Database, Minus, Info } from 'lucide-react'
+import { fetchPlanPrices, formatAud, annualSavingsPct } from '@/lib/pricing'
 
 export const metadata = {
   title: 'Pricing | Verigo',
   description: 'Simple, transparent monthly or annual pricing for Australian regulated businesses. Start with a 7-day free trial.',
 }
 
-const plans = [
+async function getPlans() {
+  const prices = await fetchPlanPrices()
+  const starter = prices.starter
+  const professional = prices.professional
+  const starterSavings = annualSavingsPct(starter.monthly_aud, starter.annual_aud)
+  const proSavings = annualSavingsPct(professional.monthly_aud, professional.annual_aud)
+
+  return [
   {
     name: 'Free Trial',
     price: 'Free',
@@ -33,9 +41,11 @@ const plans = [
   },
   {
     name: 'Essential',
-    price: '$59',
-    period: '/month',
-    billing: 'or $599/year (save 15%)',
+    price: formatAud(starter.monthly_aud),
+    period: starter.monthly_aud != null ? '/month' : '',
+    billing: starter.annual_aud != null
+      ? `or ${formatAud(starter.annual_aud)}/year${starterSavings ? ` (save ${starterSavings}%)` : ''}`
+      : '',
     badge: null,
     description: 'For small reporting entities building their first AML/CTF programme.',
     highlight: false,
@@ -60,9 +70,11 @@ const plans = [
   },
   {
     name: 'Professional',
-    price: '$79',
-    period: '/month',
-    billing: 'or $799/year (save 16%)',
+    price: formatAud(professional.monthly_aud),
+    period: professional.monthly_aud != null ? '/month' : '',
+    billing: professional.annual_aud != null
+      ? `or ${formatAud(professional.annual_aud)}/year${proSavings ? ` (save ${proSavings}%)` : ''}`
+      : '',
     badge: 'Most Popular',
     description: 'For growing compliance teams with full AUSTRAC reporting obligations.',
     highlight: true,
@@ -109,7 +121,8 @@ const plans = [
     cta: 'Contact Sales',
     href: '/live-demo',
   },
-]
+  ]
+}
 
 type CellValue = true | false | string
 
@@ -220,7 +233,8 @@ function CellDisplay({ value, highlight }: { value: CellValue; highlight: boolea
   )
 }
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const plans = await getPlans()
   return (
     <div className="bg-white text-slate-900">
       {/* Hero */}
