@@ -550,10 +550,14 @@ class OrgIntegration(Base):
     # NEVER returned in API responses
     credentials_encrypted = Column(JSON)  # {"api_key": "<encrypted>"}
     config = Column(JSON, default=dict)  # non-sensitive config {"base_url": "..."}
-    credential_expires_at = Column(DateTime(timezone=True))  # vendor-stated API key expiry, if any
+    credential_expires_at = Column(
+        DateTime(timezone=True)
+    )  # vendor-stated API key expiry, if any
 
     # OAuth2 token state (set via /oauth/authorize + /oauth/callback)
-    oauth_state = Column(String(100))  # transient CSRF token during the authorize round-trip
+    oauth_state = Column(
+        String(100)
+    )  # transient CSRF token during the authorize round-trip
     oauth_access_token_encrypted = Column(Text)
     oauth_refresh_token_encrypted = Column(Text)
     oauth_expires_at = Column(DateTime(timezone=True))

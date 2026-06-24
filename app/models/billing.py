@@ -264,6 +264,11 @@ class PlanFeatureToggle(Base):
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "industry_id", "organisation_id", name="uq_subscription_industry_org"
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     subscription_id = Column(String(60), unique=True, index=True, nullable=False)
@@ -333,6 +338,40 @@ class Invoice(Base):
     stripe_hosted_url = Column(String(500))
     stripe_pdf_url = Column(String(500))
 
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PlanPricing(Base):
+    """Admin-editable base price per plan — overrides the PLAN_CATALOGUE
+    defaults without requiring a redeploy. Seeded from PLAN_CATALOGUE on
+    first read; absent rows fall back to the static catalogue values."""
+
+    __tablename__ = "plan_pricing"
+
+    plan = Column(Enum(BillingPlan), primary_key=True)
+    monthly_aud = Column(Float)
+    annual_aud = Column(Float)
+
+    updated_by = Column(String(60))
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class StripePriceMapping(Base):
+    """Admin-editable Stripe Price ID per (plan, interval) — overrides the
+    STRIPE_*_ID env vars without requiring a redeploy. Lets an admin paste
+    in Price IDs from the Stripe dashboard once a Stripe account is set up."""
+
+    __tablename__ = "stripe_price_mappings"
+    __table_args__ = (UniqueConstraint("plan", "interval", name="uq_plan_interval"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan = Column(Enum(BillingPlan), nullable=False, index=True)
+    interval = Column(Enum(BillingInterval), nullable=False, index=True)
+    stripe_price_id = Column(String(100), nullable=False)
+
+    updated_by = Column(String(60))
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

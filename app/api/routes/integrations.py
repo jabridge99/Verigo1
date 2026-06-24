@@ -575,7 +575,9 @@ def start_oauth(
     state = secrets.token_urlsafe(24)
     integration = (
         db.query(OrgIntegration)
-        .filter(OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id)
+        .filter(
+            OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id
+        )
         .first()
     )
     if not integration:
@@ -614,7 +616,9 @@ def complete_oauth(
 
     integration = (
         db.query(OrgIntegration)
-        .filter(OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id)
+        .filter(
+            OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id
+        )
         .first()
     )
     if not integration or not integration.oauth_state:
@@ -626,7 +630,9 @@ def complete_oauth(
     # Mocked here: derive a stand-in token pair from the authorization code.
     now = datetime.now(timezone.utc)
     integration.oauth_access_token_encrypted = encrypt_secret(f"access:{payload.code}")
-    integration.oauth_refresh_token_encrypted = encrypt_secret(f"refresh:{payload.code}")
+    integration.oauth_refresh_token_encrypted = encrypt_secret(
+        f"refresh:{payload.code}"
+    )
     integration.oauth_expires_at = now + timedelta(hours=1)
     integration.oauth_state = None
     integration.is_enabled = True
@@ -637,8 +643,14 @@ def complete_oauth(
     integration.last_test_message = "OAuth2 connection established."
 
     _audit(
-        org_id, integration.id, slug, "oauth_connected", True,
-        f"OAuth2 connected by {current_user.id}", current_user.id, db,
+        org_id,
+        integration.id,
+        slug,
+        "oauth_connected",
+        True,
+        f"OAuth2 connected by {current_user.id}",
+        current_user.id,
+        db,
     )
     db.commit()
     db.refresh(integration)
@@ -656,7 +668,9 @@ def monitoring_summary(
     expiring within 30 days.
     """
     org_id = org_id_for(current_user)
-    integrations = db.query(OrgIntegration).filter(OrgIntegration.org_id == org_id).all()
+    integrations = (
+        db.query(OrgIntegration).filter(OrgIntegration.org_id == org_id).all()
+    )
     providers = {
         p.id: p
         for p in db.query(IntegrationProvider)
@@ -678,13 +692,17 @@ def monitoring_summary(
                 "provider_name": p.name if p else i.provider_slug,
                 "category": p.category.value if p else None,
                 "is_enabled": i.is_enabled,
-                "health_status": i.health_status.value if i.health_status else "unknown",
+                "health_status": i.health_status.value
+                if i.health_status
+                else "unknown",
                 "consecutive_failures": i.consecutive_failures or 0,
                 "usage_count": i.usage_count or 0,
                 "last_used_at": i.last_used_at,
             }
         )
-        if (i.consecutive_failures or 0) > 0 or i.health_status == IntegrationHealthStatus.down:
+        if (
+            i.consecutive_failures or 0
+        ) > 0 or i.health_status == IntegrationHealthStatus.down:
             error_count += 1
         for label, exp in (
             ("api_key", i.credential_expires_at),
@@ -702,7 +720,11 @@ def monitoring_summary(
     return {
         "total_integrations": len(integrations),
         "enabled_count": sum(1 for i in integrations if i.is_enabled),
-        "healthy_count": sum(1 for i in integrations if i.health_status == IntegrationHealthStatus.healthy),
+        "healthy_count": sum(
+            1
+            for i in integrations
+            if i.health_status == IntegrationHealthStatus.healthy
+        ),
         "degraded_or_down_count": error_count,
         "expiring_within_30_days": expiring,
         "integrations": rows,
@@ -737,9 +759,14 @@ def migrate_legacy_connectors_route(
     org_id = org_id_for(current_user)
     result = migrate_legacy_connectors(db, org_id)
     _audit(
-        org_id, None, "*", "legacy_migration", True,
+        org_id,
+        None,
+        "*",
+        "legacy_migration",
+        True,
         f"Migrated {len(result['migrated'])} legacy connector(s) by {current_user.id}",
-        current_user.id, db,
+        current_user.id,
+        db,
     )
     db.commit()
     return result

@@ -12,6 +12,7 @@ Thresholds: score >= 80 -> pass, 50-79 -> ecdd_required, < 50 -> fail.
 A confirmed PEP or sanctions match forces at least ecdd_required regardless
 of the numeric score.
 """
+
 from typing import Optional
 
 from sqlalchemy import desc
@@ -30,7 +31,9 @@ _HARD_FAIL_STATUSES = {ScreeningStatus.confirmed_match}
 _HARD_ECDD_STATUSES = {ScreeningStatus.potential_match, ScreeningStatus.requires_edd}
 
 
-def _latest_screening(db: Session, customer_id: str, screening_type: ScreeningType) -> Optional[ScreeningRecord]:
+def _latest_screening(
+    db: Session, customer_id: str, screening_type: ScreeningType
+) -> Optional[ScreeningRecord]:
     return (
         db.query(ScreeningRecord)
         .filter(
@@ -59,7 +62,9 @@ def _score_from_record(record: Optional[ScreeningRecord]) -> tuple[float, str]:
     return 0.0, record.status.value
 
 
-def compute_identity_score(db: Session, customer_id: str, is_business: bool = False) -> dict:
+def compute_identity_score(
+    db: Session, customer_id: str, is_business: bool = False
+) -> dict:
     """Compute the composite identity-verification score for a customer.
 
     Returns a breakdown per category plus the overall score and decision,
@@ -74,28 +79,50 @@ def compute_identity_score(db: Session, customer_id: str, is_business: bool = Fa
         .order_by(desc(CustomerIdentityDocument.created_at))
         .first()
     )
-    ocr_score = doc.confidence_score if doc and doc.confidence_score is not None else 0.0
-    breakdown["ocr"] = {"score": ocr_score, "status": "verified" if doc else "pending", "label": "ID document OCR"}
+    ocr_score = (
+        doc.confidence_score if doc and doc.confidence_score is not None else 0.0
+    )
+    breakdown["ocr"] = {
+        "score": ocr_score,
+        "status": "verified" if doc else "pending",
+        "label": "ID document OCR",
+    }
 
     # Manual reviewer sign-off — most recent manual_review screening record.
     manual_record = _latest_screening(db, customer_id, ScreeningType.manual_review)
     manual_score, manual_status = _score_from_record(manual_record)
-    breakdown["manual"] = {"score": manual_score, "status": manual_status, "label": "Manual document review"}
+    breakdown["manual"] = {
+        "score": manual_score,
+        "status": manual_status,
+        "label": "Manual document review",
+    }
 
     # PEP
     pep_record = _latest_screening(db, customer_id, ScreeningType.pep)
     pep_score, pep_status = _score_from_record(pep_record)
-    breakdown["pep"] = {"score": pep_score, "status": pep_status, "label": "PEP screening"}
+    breakdown["pep"] = {
+        "score": pep_score,
+        "status": pep_status,
+        "label": "PEP screening",
+    }
 
     # Sanctions
     sanctions_record = _latest_screening(db, customer_id, ScreeningType.sanctions)
     sanctions_score, sanctions_status = _score_from_record(sanctions_record)
-    breakdown["sanctions"] = {"score": sanctions_score, "status": sanctions_status, "label": "Sanctions screening"}
+    breakdown["sanctions"] = {
+        "score": sanctions_score,
+        "status": sanctions_status,
+        "label": "Sanctions screening",
+    }
 
     # Adverse media
     media_record = _latest_screening(db, customer_id, ScreeningType.adverse_media)
     media_score, media_status = _score_from_record(media_record)
-    breakdown["adverse_media"] = {"score": media_score, "status": media_status, "label": "Adverse media screening"}
+    breakdown["adverse_media"] = {
+        "score": media_score,
+        "status": media_status,
+        "label": "Adverse media screening",
+    }
 
     # Company / business screening — only applicable to business customers.
     # Individuals get full marks for this category rather than a meaningless N/A weight gap.
@@ -104,7 +131,11 @@ def compute_identity_score(db: Session, customer_id: str, is_business: bool = Fa
         company_score, company_status = _score_from_record(company_record)
     else:
         company_score, company_status = 100.0, "not_applicable"
-    breakdown["company"] = {"score": company_score, "status": company_status, "label": "Company / UBO screening"}
+    breakdown["company"] = {
+        "score": company_score,
+        "status": company_status,
+        "label": "Company / UBO screening",
+    }
 
     composite = sum(breakdown[c]["score"] * WEIGHT for c in CATEGORIES)
 

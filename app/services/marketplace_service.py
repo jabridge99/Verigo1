@@ -11,7 +11,11 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.models.marketplace import VerificationOrder, VerificationOrderStatus, VerificationProvider
+from app.models.marketplace import (
+    VerificationOrder,
+    VerificationOrderStatus,
+    VerificationProvider,
+)
 from app.models.usage import UsageEventType, UsageRecord, UsageRecordStatus
 
 _CHECK_TO_USAGE_EVENT = {
@@ -41,7 +45,11 @@ def complete_order(
     Mark an order completed (or rejected) and, if the provider has a
     non-zero unit cost, create a billable UsageRecord for it.
     """
-    order.status = VerificationOrderStatus.completed if accepted else VerificationOrderStatus.rejected
+    order.status = (
+        VerificationOrderStatus.completed
+        if accepted
+        else VerificationOrderStatus.rejected
+    )
     order.reviewed_by = reviewed_by
     order.result_summary = result_summary
     if evidence_url:
@@ -56,7 +64,9 @@ def complete_order(
             id=f"usage_{uuid4().hex[:14]}",
             org_id=order.org_id,
             customer_id=order.entity_id if order.entity_type == "customer" else None,
-            event_type=_CHECK_TO_USAGE_EVENT.get(provider.check_type.value, UsageEventType.other),
+            event_type=_CHECK_TO_USAGE_EVENT.get(
+                provider.check_type.value, UsageEventType.other
+            ),
             provider=provider.vendor_key or provider.name,
             provider_reference=order.id,
             status=UsageRecordStatus.completed,

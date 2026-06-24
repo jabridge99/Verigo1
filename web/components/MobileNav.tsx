@@ -62,7 +62,7 @@ export default function MobileNav() {
   }, [pathname]);
 
   // Hide on public/marketing pages and when not authenticated
-  const hiddenRoutes = ["/", "/login", "/pricing", "/solutions", "/live-demo", "/start-trial", "/api-integrations", "/offline"];
+  const hiddenRoutes = ["/", "/login", "/pricing", "/solutions", "/start-trial", "/api-integrations", "/offline"];
   const isHidden = hiddenRoutes.some((r) => pathname === r || (r !== "/" && pathname.startsWith(r + "/")));
   if (isHidden || !authed) return null;
 

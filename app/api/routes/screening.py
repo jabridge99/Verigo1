@@ -88,7 +88,9 @@ class ScreeningRunRequest(BaseModel):
 
 
 class QuickScreenRequest(BaseModel):
-    category: str = Field(..., description="One of: sanctions, pep, adverse_media, company, address")
+    category: str = Field(
+        ..., description="One of: sanctions, pep, adverse_media, company, address"
+    )
     query: str = Field(..., min_length=2, max_length=300)
 
 
@@ -236,7 +238,9 @@ def quick_screen(
     """
     category = payload.category.lower()
     if category not in _QUICK_SCREEN_CATEGORIES:
-        raise HTTPException(400, f"category must be one of {sorted(_QUICK_SCREEN_CATEGORIES)}")
+        raise HTTPException(
+            400, f"category must be one of {sorted(_QUICK_SCREEN_CATEGORIES)}"
+        )
 
     if category == "address":
         return {
@@ -264,7 +268,9 @@ def quick_screen(
         "adverse_media": ScreeningType.adverse_media,
         "company": ScreeningType.regulatory,
     }
-    result = _simulate_screening(type_map[category], payload.query, ScreeningProvider.internal)
+    result = _simulate_screening(
+        type_map[category], payload.query, ScreeningProvider.internal
+    )
     return {
         "category": category,
         "query": payload.query,
@@ -375,7 +381,9 @@ def run_screening(
                         "screening_type": r.screening_type.value
                         if hasattr(r.screening_type, "value")
                         else r.screening_type,
-                        "status": r.status.value if hasattr(r.status, "value") else r.status,
+                        "status": r.status.value
+                        if hasattr(r.status, "value")
+                        else r.status,
                         "match_count": r.match_count,
                         "match_score": r.match_score,
                     }
@@ -1243,7 +1251,9 @@ def customer_identity_score(
     customer = _resolve_customer(customer_id, org_id, db)
 
     return compute_identity_score(
-        db, customer_id, is_business=getattr(customer, "customer_type", None) == "company"
+        db,
+        customer_id,
+        is_business=getattr(customer, "customer_type", None) == "company",
     )
 
 
@@ -1263,7 +1273,9 @@ def decide_customer_identity_score(
     customer = _resolve_customer(customer_id, org_id, db)
 
     result = compute_identity_score(
-        db, customer_id, is_business=getattr(customer, "customer_type", None) == "company"
+        db,
+        customer_id,
+        is_business=getattr(customer, "customer_type", None) == "company",
     )
 
     decision_to_status = {

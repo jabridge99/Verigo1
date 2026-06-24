@@ -80,14 +80,19 @@ class VerificationProvider(Base):
 
     id = Column(String, primary_key=True, default=lambda: f"vprov_{uuid4().hex[:10]}")
     org_id = Column(
-        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=True, index=True
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
 
     name = Column(String(150), nullable=False)
     description = Column(Text)
     check_type = Column(Enum(VerificationCheckType), nullable=False, index=True)
     integration_mode = Column(
-        Enum(VerificationIntegrationMode), nullable=False, default=VerificationIntegrationMode.manual
+        Enum(VerificationIntegrationMode),
+        nullable=False,
+        default=VerificationIntegrationMode.manual,
     )
 
     # Vendor identifier for api/hybrid modes (e.g. "sumsub", "refinitiv"); null for manual.
@@ -119,26 +124,38 @@ class VerificationOrder(Base):
 
     id = Column(String, primary_key=True, default=lambda: f"vord_{uuid4().hex[:10]}")
     org_id = Column(
-        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     provider_id = Column(
         String, ForeignKey("verification_providers.id"), nullable=False, index=True
     )
 
-    entity_type = Column(String(30), nullable=False, index=True)  # "customer" | "transaction"
+    entity_type = Column(
+        String(30), nullable=False, index=True
+    )  # "customer" | "transaction"
     entity_id = Column(String, nullable=False, index=True)
 
     status = Column(
-        Enum(VerificationOrderStatus), default=VerificationOrderStatus.pending, nullable=False, index=True
+        Enum(VerificationOrderStatus),
+        default=VerificationOrderStatus.pending,
+        nullable=False,
+        index=True,
     )
 
     # Optional link to the existing result record once produced (no duplicate
     # result schema — screening results stay in ScreeningRecord et al.).
-    screening_record_id = Column(String, ForeignKey("screening_records.id"), nullable=True)
+    screening_record_id = Column(
+        String, ForeignKey("screening_records.id"), nullable=True
+    )
 
     evidence_url = Column(String(500))  # uploaded manual-review evidence, if any
     result_summary = Column(JSON)  # small free-form outcome notes, not the full result
-    usage_record_id = Column(String, ForeignKey("usage_records.id"), nullable=True, index=True)
+    usage_record_id = Column(
+        String, ForeignKey("usage_records.id"), nullable=True, index=True
+    )
 
     requested_by = Column(String, nullable=False)
     reviewed_by = Column(String)  # set when a manual/hybrid reviewer signs off

@@ -566,7 +566,9 @@ class ECDDRecord(Base):
 
     enhanced_risk_score = Column(Float, default=0.0)
     recommendation = Column(String(20))  # approve | monitor | reject
-    status = Column(Enum(ECDDStatus), default=ECDDStatus.pending, nullable=False, index=True)
+    status = Column(
+        Enum(ECDDStatus), default=ECDDStatus.pending, nullable=False, index=True
+    )
 
     # Manual accept/reject rationale — required whenever status is changed
     # away from pending (and on any later reversal/re-decision).

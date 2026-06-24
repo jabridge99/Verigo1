@@ -921,8 +921,8 @@ export default async function PackPage({ params }: { params: Promise<{ industry:
                   </li>
                 ))}
               </ul>
-              <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-6 py-3 text-sm font-semibold text-white ring-1 ring-slate-600 hover:bg-slate-600 transition-colors">
-                Book Demo <ArrowRight className="w-4 h-4" />
+              <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-6 py-3 text-sm font-semibold text-white ring-1 ring-slate-600 hover:bg-slate-600 transition-colors">
+                Start Free Trial <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>

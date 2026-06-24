@@ -22,7 +22,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import org_id_for, require_analyst_or_above, require_compliance_or_above
+from app.api.deps import (
+    org_id_for,
+    require_analyst_or_above,
+    require_compliance_or_above,
+)
 from app.db.database import get_db
 from app.models.marketplace import (
     VerificationCheckType,
@@ -120,12 +124,19 @@ def list_providers(
     org_id = org_id_for(current_user)
     q = db.query(VerificationProvider).filter(
         VerificationProvider.is_active == True,
-        or_(VerificationProvider.org_id == org_id, VerificationProvider.org_id.is_(None)),
+        or_(
+            VerificationProvider.org_id == org_id, VerificationProvider.org_id.is_(None)
+        ),
     )
     if check_type is not None:
         q = q.filter(VerificationProvider.check_type == check_type)
-    providers = q.order_by(VerificationProvider.check_type, VerificationProvider.name).all()
-    return {"providers": [_provider_dict(p) for p in providers], "disclaimer": DISCLAIMER}
+    providers = q.order_by(
+        VerificationProvider.check_type, VerificationProvider.name
+    ).all()
+    return {
+        "providers": [_provider_dict(p) for p in providers],
+        "disclaimer": DISCLAIMER,
+    }
 
 
 @router.post("/providers", status_code=201)
@@ -159,11 +170,16 @@ def update_provider(
     org_id = org_id_for(current_user)
     p = (
         db.query(VerificationProvider)
-        .filter(VerificationProvider.id == provider_id, VerificationProvider.org_id == org_id)
+        .filter(
+            VerificationProvider.id == provider_id,
+            VerificationProvider.org_id == org_id,
+        )
         .first()
     )
     if not p:
-        raise HTTPException(404, "Provider not found, or is a system provider (read-only).")
+        raise HTTPException(
+            404, "Provider not found, or is a system provider (read-only)."
+        )
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(p, k, v)
     db.commit()
@@ -207,7 +223,10 @@ def create_order(
         .filter(
             VerificationProvider.id == payload.provider_id,
             VerificationProvider.is_active == True,
-            or_(VerificationProvider.org_id == org_id, VerificationProvider.org_id.is_(None)),
+            or_(
+                VerificationProvider.org_id == org_id,
+                VerificationProvider.org_id.is_(None),
+            ),
         )
         .first()
     )
@@ -249,10 +268,17 @@ def complete_verification_order(
     )
     if not order:
         raise HTTPException(404, "Order not found.")
-    if order.status in (VerificationOrderStatus.completed, VerificationOrderStatus.rejected):
+    if order.status in (
+        VerificationOrderStatus.completed,
+        VerificationOrderStatus.rejected,
+    ):
         raise HTTPException(409, "Order has already been completed.")
 
-    provider = db.query(VerificationProvider).filter(VerificationProvider.id == order.provider_id).first()
+    provider = (
+        db.query(VerificationProvider)
+        .filter(VerificationProvider.id == order.provider_id)
+        .first()
+    )
     if not provider:
         raise HTTPException(404, "Provider for this order no longer exists.")
 

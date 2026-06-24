@@ -51,7 +51,10 @@ class MitigationLibraryItem(Base):
 
     id = Column(String, primary_key=True, default=lambda: f"mli_{uuid4().hex[:12]}")
     org_id = Column(
-        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=True, index=True
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )  # null = system-seeded, read-only platform default
 
     name = Column(String(255), nullable=False)
@@ -66,7 +69,9 @@ class MitigationLibraryItem(Base):
     )
 
     applicable_industries = Column(JSON, default=list)  # [IndustryType.value, ...]
-    risk_categories = Column(JSON, default=list)  # [RiskCategoryType.value / ControlRiskArea.value, ...]
+    risk_categories = Column(
+        JSON, default=list
+    )  # [RiskCategoryType.value / ControlRiskArea.value, ...]
 
     is_system = Column(Boolean, default=False)  # platform-seeded; orgs may not delete
     is_active = Column(Boolean, default=True)

@@ -50,7 +50,9 @@ class NotificationType(str, enum.Enum):
     integration_credential_expiring = (
         "integration_credential_expiring"  # API key/OAuth token expiring soon
     )
-    integration_health_degraded = "integration_health_degraded"  # provider health check failing
+    integration_health_degraded = (
+        "integration_health_degraded"  # provider health check failing
+    )
 
 
 class NotificationPriority(str, enum.Enum):

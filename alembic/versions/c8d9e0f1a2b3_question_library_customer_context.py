@@ -22,6 +22,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'c8d9e0f1a2b3'
@@ -31,10 +32,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 question_context_enum = sa.Enum('transaction', 'customer', name='questioncontext')
+# `questionanswer` already exists in the DB (created earlier from
+# risk_matrix.py's QuestionAnswer model enum). create_type=False has no
+# effect on the generic sa.Enum — that flag only exists on the
+# postgres-dialect postgresql.ENUM class; passing it to sa.Enum is silently
+# absorbed as an unused kwarg, so op.create_table() still emits a fresh
+# CREATE TYPE and collides with the existing type. Use postgresql.ENUM
+# explicitly so create_type=False is actually honoured.
+question_answer_enum = postgresql.ENUM(
+    'yes', 'no', 'not_applicable', name='questionanswer', create_type=False
+)
 
 
 def upgrade() -> None:
     question_context_enum.create(op.get_bind(), checkfirst=True)
+    question_answer_enum.create(op.get_bind(), checkfirst=True)
 
     op.add_column(
         'org_approval_questions',
@@ -67,10 +79,7 @@ def upgrade() -> None:
         sa.Column('org_id', sa.String(), nullable=False),
         sa.Column(
             'answer',
-            sa.Enum(
-                'yes', 'no', 'not_applicable',
-                name='questionanswer', create_type=False,
-            ),
+            question_answer_enum,
             nullable=False,
         ),
         sa.Column('notes', sa.Text(), nullable=True),

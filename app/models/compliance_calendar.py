@@ -52,7 +52,9 @@ class CalendarItemType(str, enum.Enum):
     aml_program_review = "aml_program_review"  # annual AML/CTF program review
     risk_assessment_review = "risk_assessment_review"  # ML/TF risk assessment review
     independent_review = "independent_review"  # independent/external program review
-    high_risk_customer_review = "high_risk_customer_review"  # high-risk/PEP review cycle
+    high_risk_customer_review = (
+        "high_risk_customer_review"  # high-risk/PEP review cycle
+    )
     austrac_obligation = "austrac_obligation"  # general AUSTRAC regulatory obligation
     board_reporting = "board_reporting"  # scheduled board compliance report
     credential_expiry = "credential_expiry"  # integration API key/OAuth token expiry

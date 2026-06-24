@@ -26,7 +26,7 @@ const footerLinks = {
     { label: 'API & Integrations', href: '/api-integrations' },
     { label: 'Trust Centre', href: '/trust-centre' },
     { label: 'Contact Us', href: '/contact' },
-    { label: 'Book Demo', href: '/live-demo' },
+    { label: 'Start Free Trial', href: '/start-trial' },
     { label: 'Sign In', href: '/login' },
   ],
   Resources: [

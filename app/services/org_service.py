@@ -58,6 +58,7 @@ def _seed_default_approval_questions(db: Session, org_id: str) -> None:
                 )
             )
 
+
 # ── Permission catalog (seeded once, idempotent) ────────────────────────────
 
 PERMISSION_CATALOG: dict[str, str] = {

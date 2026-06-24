@@ -751,8 +751,8 @@ def export_risk_matrix_excel(
     """
     import io
 
-    from openpyxl import Workbook
     from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
 
     from app.models.customer import Customer
     from app.models.risk_engine import (
@@ -784,16 +784,28 @@ def export_risk_matrix_excel(
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "Risk Assessment Chain"
-    ws1.append([
-        "Risk Category", "Risk Event", "Likelihood (1-5)", "Consequence (1-5)",
-        "Inherent Risk", "Inherent Rating", "Mitigation", "Control Effectiveness (1-5)",
-        "Residual Risk", "Residual Rating",
-    ])
+    ws1.append(
+        [
+            "Risk Category",
+            "Risk Event",
+            "Likelihood (1-5)",
+            "Consequence (1-5)",
+            "Inherent Risk",
+            "Inherent Rating",
+            "Mitigation",
+            "Control Effectiveness (1-5)",
+            "Residual Risk",
+            "Residual Rating",
+        ]
+    )
 
     if run:
         categories = (
             db.query(RiskCategory)
-            .filter(RiskCategory.framework_id == run.framework_id, RiskCategory.is_active == True)
+            .filter(
+                RiskCategory.framework_id == run.framework_id,
+                RiskCategory.is_active == True,
+            )
             .order_by(RiskCategory.sort_order)
             .all()
         )
@@ -823,26 +835,47 @@ def export_risk_matrix_excel(
                     if score
                     else []
                 )
-                mitigation_text = "; ".join(m.mitigation_action for m in mitigations) or "—"
+                mitigation_text = (
+                    "; ".join(m.mitigation_action for m in mitigations) or "—"
+                )
                 residual_score = (
                     score.override_residual_score
                     if score and score.score_override
                     else (score.residual_risk_score if score else None)
                 )
-                ws1.append([
-                    cat.name,
-                    factor.name,
-                    score.likelihood if score else None,
-                    score.consequence if score else None,
-                    score.inherent_risk_score if score else None,
-                    score.inherent_rating.value if score and score.inherent_rating else None,
-                    mitigation_text,
-                    score.control_effectiveness if score else None,
-                    residual_score,
-                    score.residual_rating.value if score and score.residual_rating else None,
-                ])
+                ws1.append(
+                    [
+                        cat.name,
+                        factor.name,
+                        score.likelihood if score else None,
+                        score.consequence if score else None,
+                        score.inherent_risk_score if score else None,
+                        score.inherent_rating.value
+                        if score and score.inherent_rating
+                        else None,
+                        mitigation_text,
+                        score.control_effectiveness if score else None,
+                        residual_score,
+                        score.residual_rating.value
+                        if score and score.residual_rating
+                        else None,
+                    ]
+                )
     else:
-        ws1.append(["No assessment run found for this organisation.", "", "", "", "", "", "", "", "", ""])
+        ws1.append(
+            [
+                "No assessment run found for this organisation.",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
 
     ws2 = wb.create_sheet("Customer Risk Distribution")
     ws2.append(["Risk Level", "Customer Count"])

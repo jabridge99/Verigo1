@@ -22,6 +22,11 @@ const nextConfig = {
         destination: '/industry',
         permanent: false,
       },
+      {
+        source: '/live-demo',
+        destination: '/start-trial',
+        permanent: true,
+      },
     ]
   },
   async headers() {

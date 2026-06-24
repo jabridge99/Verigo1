@@ -140,7 +140,10 @@ class OrgApprovalQuestion(Base):
     # for backward compatibility with rows created before customer checklists
     # were added; "customer" questions are answered before customer approval.
     context = Column(
-        Enum(QuestionContext), default=QuestionContext.transaction, nullable=False, index=True
+        Enum(QuestionContext),
+        default=QuestionContext.transaction,
+        nullable=False,
+        index=True,
     )
 
     # A "yes" answer means compliant (lower risk); "no" means non-compliant (flag).

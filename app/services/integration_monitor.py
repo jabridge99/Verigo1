@@ -15,7 +15,11 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.models.compliance_calendar import CalendarItemStatus, CalendarItemType, ComplianceCalendarItem
+from app.models.compliance_calendar import (
+    CalendarItemStatus,
+    CalendarItemType,
+    ComplianceCalendarItem,
+)
 from app.models.connector import ConnectorCredential
 from app.models.integration import (
     LEGACY_CONNECTOR_SLUG_ALIASES,
@@ -59,7 +63,9 @@ def run_expiry_check(db: Session, org_id: str) -> dict:
             dedupe_key = f"integration_credential_expiring:{i.id}:{label}:{exp.date()}"
 
             existing = (
-                db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
+                db.query(Notification)
+                .filter(Notification.dedupe_key == dedupe_key)
+                .first()
             )
             if not existing:
                 db.add(
@@ -84,7 +90,8 @@ def run_expiry_check(db: Session, org_id: str) -> dict:
                 .filter(
                     ComplianceCalendarItem.org_id == org_id,
                     ComplianceCalendarItem.integration_id == i.id,
-                    ComplianceCalendarItem.item_type == CalendarItemType.credential_expiry,
+                    ComplianceCalendarItem.item_type
+                    == CalendarItemType.credential_expiry,
                     ComplianceCalendarItem.status.in_(
                         [CalendarItemStatus.scheduled, CalendarItemStatus.overdue]
                     ),
@@ -107,7 +114,13 @@ def run_expiry_check(db: Session, org_id: str) -> dict:
                     )
                 )
 
-            flagged.append({"provider_slug": i.provider_slug, "credential_type": label, "expires_at": exp})
+            flagged.append(
+                {
+                    "provider_slug": i.provider_slug,
+                    "credential_type": label,
+                    "expires_at": exp,
+                }
+            )
 
     db.commit()
     return {"checked": len(integrations), "flagged": flagged}
@@ -131,25 +144,45 @@ def migrate_legacy_connectors(db: Session, org_id: str) -> dict:
     for row in legacy_rows:
         slug = LEGACY_CONNECTOR_SLUG_ALIASES.get(row.provider.value, row.provider.value)
         provider = (
-            db.query(IntegrationProvider).filter(IntegrationProvider.slug == slug).first()
+            db.query(IntegrationProvider)
+            .filter(IntegrationProvider.slug == slug)
+            .first()
         )
         if not provider:
-            skipped.append({"credential_id": row.credential_id, "reason": f"no catalog match for '{slug}'"})
+            skipped.append(
+                {
+                    "credential_id": row.credential_id,
+                    "reason": f"no catalog match for '{slug}'",
+                }
+            )
             continue
 
         existing = (
             db.query(OrgIntegration)
-            .filter(OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id)
+            .filter(
+                OrgIntegration.org_id == org_id,
+                OrgIntegration.provider_id == provider.id,
+            )
             .first()
         )
         if existing and existing.credentials_encrypted:
-            skipped.append({"credential_id": row.credential_id, "reason": "already configured in Hub"})
+            skipped.append(
+                {
+                    "credential_id": row.credential_id,
+                    "reason": "already configured in Hub",
+                }
+            )
             continue
 
         try:
             decrypted = _decrypt(row.encrypted_credentials)
         except Exception:
-            skipped.append({"credential_id": row.credential_id, "reason": "could not decrypt legacy credential"})
+            skipped.append(
+                {
+                    "credential_id": row.credential_id,
+                    "reason": "could not decrypt legacy credential",
+                }
+            )
             continue
 
         if existing:

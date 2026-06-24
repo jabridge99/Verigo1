@@ -46,11 +46,11 @@ from app.models.report import (
     TTRIndustryType,
     TTRReport,
 )
-from app.schemas.report import ECDDCreate, ECDDDecisionRequest, ECDDResponse
-from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.schemas.report import ECDDCreate, ECDDDecisionRequest, ECDDResponse
 from app.services import audit_service
+from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
 from app.services.reporting_service import (
     generate_ifti_from_transaction,
     generate_smr_from_case,
@@ -1480,8 +1480,13 @@ def create_ecdd(
     if not customer:
         raise HTTPException(404, "Customer not found.")
 
-    if payload.trigger_reason.value == "other" and not (payload.trigger_reason_other or "").strip():
-        raise HTTPException(400, "trigger_reason_other is required when trigger_reason is 'other'.")
+    if (
+        payload.trigger_reason.value == "other"
+        and not (payload.trigger_reason_other or "").strip()
+    ):
+        raise HTTPException(
+            400, "trigger_reason_other is required when trigger_reason is 'other'."
+        )
 
     record = ECDDRecord(
         ecdd_id=f"ECDD-{uuid4().hex[:12].upper()}",
@@ -1496,7 +1501,8 @@ def create_ecdd(
         beneficial_owner_details=payload.beneficial_owner_details,
         source_of_wealth_verified=bool(payload.source_of_wealth_verified),
         source_of_funds=payload.source_of_funds,
-        source_of_wealth_notes=payload.source_of_wealth_notes or payload.source_of_wealth_details,
+        source_of_wealth_notes=payload.source_of_wealth_notes
+        or payload.source_of_wealth_details,
         purpose_of_transaction=payload.purpose_of_transaction,
         high_tax_risk=bool(payload.high_tax_risk),
         tax_risk_notes=payload.tax_risk_notes,
@@ -1550,9 +1556,14 @@ def decide_ecdd(
     try:
         new_status = ECDDStatus(payload.status)
     except ValueError:
-        raise HTTPException(400, f"status must be one of {[s.value for s in ECDDStatus]}")
+        raise HTTPException(
+            400, f"status must be one of {[s.value for s in ECDDStatus]}"
+        )
     if not payload.decision_notes.strip():
-        raise HTTPException(400, "decision_notes is required — record why this customer was accepted, rejected, or reverted.")
+        raise HTTPException(
+            400,
+            "decision_notes is required — record why this customer was accepted, rejected, or reverted.",
+        )
 
     before_status = record.status.value
     now = datetime.now(timezone.utc)
