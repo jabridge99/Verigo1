@@ -194,9 +194,82 @@ export default function Navbar() {
               <Link href="/pricing" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Pricing</Link>
             </div>
           ) : isPublicPage && user ? (
-            <div className="hidden lg:flex items-center gap-6">
-              <Link href="/" className={linkClass}>Home</Link>
-              <Link href="/pricing" className={linkClass}>Pricing</Link>
+            <div className="hidden lg:flex items-center gap-1">
+              <Link href="/" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Home</Link>
+
+              {/* Solutions dropdown */}
+              <div className="relative flex items-center">
+                <Link href="/solutions" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                  Solutions
+                </Link>
+                <button
+                  onClick={() => toggleDropdown('solutions')}
+                  aria-label="Toggle solutions menu"
+                  className="p-2 rounded-lg hover:bg-slate-50"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'solutions' ? 'rotate-180' : ''}`} />
+                </button>
+                {activeDropdown === 'solutions' && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[560px] max-h-[70vh] overflow-y-auto bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-5 grid grid-cols-2 gap-1 z-50">
+                    <div className="col-span-2 pb-2 mb-2 border-b border-slate-100">
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Platform Capabilities</p>
+                    </div>
+                    {solutionItems.map(item => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setActiveDropdown(null)}
+                        className="flex flex-col gap-0.5 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors"
+                      >
+                        <span className="text-sm font-semibold text-slate-900">{item.label}</span>
+                        <span className="text-xs text-slate-500">{item.desc}</span>
+                      </Link>
+                    ))}
+                    <div className="col-span-2 pt-2 mt-2 border-t border-slate-100">
+                      <Link href="/solutions" onClick={() => setActiveDropdown(null)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
+                        View all capabilities →
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Industries dropdown */}
+              <div className="relative flex items-center">
+                <Link href="/industries" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                  Industries
+                </Link>
+                <button
+                  onClick={() => toggleDropdown('industries')}
+                  aria-label="Toggle industries menu"
+                  className="p-2 rounded-lg hover:bg-slate-50"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'industries' ? 'rotate-180' : ''}`} />
+                </button>
+                {activeDropdown === 'industries' && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 max-h-[70vh] overflow-y-auto bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 pb-2 mb-1 border-b border-slate-100">Industries We Serve</p>
+                    {industryItems.map(item => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setActiveDropdown(null)}
+                        className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors"
+                      >
+                        <item.icon className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                        <span className="text-sm font-medium text-slate-900">{item.label}</span>
+                      </Link>
+                    ))}
+                    <div className="pt-2 mt-1 border-t border-slate-100">
+                      <Link href="/industries" onClick={() => setActiveDropdown(null)} className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-3">
+                        View all industries →
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Link href="/pricing" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Pricing</Link>
               <div className="relative">
                 <button
                   onClick={() => toggleDropdown('resources')}
