@@ -264,6 +264,11 @@ class PlanFeatureToggle(Base):
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "industry_id", "organisation_id", name="uq_subscription_industry_org"
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     subscription_id = Column(String(60), unique=True, index=True, nullable=False)
