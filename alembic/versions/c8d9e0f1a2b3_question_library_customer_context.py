@@ -22,6 +22,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'c8d9e0f1a2b3'
@@ -31,14 +32,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 question_context_enum = sa.Enum('transaction', 'customer', name='questioncontext')
-# `questionanswer` already exists in the DB (created by an earlier migration
-# for transaction_question_responses.answer). Passing create_type=False on an
-# inline sa.Enum() inside op.create_table() does NOT suppress Alembic's
-# emitted CREATE TYPE for that type — PostgresSQL's ENUM._on_table_create()
-# only skips creation if checkfirst is honoured, which create_type=False does
-# not request. Explicitly create with checkfirst=True instead, exactly like
-# question_context_enum below.
-question_answer_enum = sa.Enum(
+# `questionanswer` already exists in the DB (created earlier from
+# risk_matrix.py's QuestionAnswer model enum). create_type=False has no
+# effect on the generic sa.Enum — that flag only exists on the
+# postgres-dialect postgresql.ENUM class; passing it to sa.Enum is silently
+# absorbed as an unused kwarg, so op.create_table() still emits a fresh
+# CREATE TYPE and collides with the existing type. Use postgresql.ENUM
+# explicitly so create_type=False is actually honoured.
+question_answer_enum = postgresql.ENUM(
     'yes', 'no', 'not_applicable', name='questionanswer', create_type=False
 )
 
