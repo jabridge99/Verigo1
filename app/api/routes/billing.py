@@ -14,6 +14,11 @@ GET  /billing/admin/features    — admin: plan x feature toggle matrix
 PATCH /billing/admin/features/{plan}/{feature_code} — admin: toggle a feature for a plan
 POST /billing/admin/{industry_id}/activate   — admin: turn a plan on (e.g. Enterprise)
 POST /billing/admin/{industry_id}/terminate  — admin: terminate a plan immediately
+GET  /billing/admin/pricing                  — admin: editable base plan prices
+PATCH /billing/admin/pricing/{plan}          — admin: edit a plan's base price
+GET  /billing/admin/stripe/status            — admin: Stripe gateway config status
+GET  /billing/admin/stripe/prices            — admin: Stripe Price ID per plan/interval
+PUT  /billing/admin/stripe/prices/{plan}/{interval} — admin: set a Stripe Price ID
 """
 
 from datetime import datetime
@@ -24,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
-from app.models.billing import AddonKey, BillingPlan
+from app.models.billing import AddonKey, BillingInterval, BillingPlan
 from app.models.user import User, UserRole
 from app.schemas.billing import (
     AddonResponse,
@@ -34,6 +39,11 @@ from app.schemas.billing import (
     FeatureToggleRow,
     FeatureToggleUpdate,
     InvoiceResponse,
+    PlanPricingResponse,
+    PlanPricingUpdate,
+    StripePriceMappingResponse,
+    StripePriceMappingUpdate,
+    StripeStatusResponse,
     SubscriptionAdminUpdate,
     SubscriptionResponse,
 )
@@ -80,7 +90,7 @@ def my_subscription(
     current_user: User = Depends(_current_user),
 ):
     org_id = getattr(current_user, "primary_organisation_id", None)
-    sub = svc.get_subscription(db, current_user.org_id or "")
+    sub = svc.get_subscription(db, current_user.org_id or "", org_id)
     if not sub:
         # Auto-create a trial for new tenants
         if current_user.org_id:
@@ -104,7 +114,11 @@ def create_checkout(
     if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
     result = svc.create_checkout_session(
-        db, current_user.org_id, req, current_user.email
+        db,
+        current_user.org_id,
+        req,
+        current_user.email,
+        getattr(current_user, "primary_organisation_id", None),
     )
     return result
 
@@ -132,7 +146,12 @@ def cancel_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(_ROLE_GATE),
 ):
-    sub = svc.cancel_subscription(db, current_user.org_id or "", at_period_end)
+    sub = svc.cancel_subscription(
+        db,
+        current_user.org_id or "",
+        at_period_end,
+        getattr(current_user, "primary_organisation_id", None),
+    )
     if not sub:
         raise HTTPException(404, "Subscription not found")
     return sub
@@ -144,7 +163,12 @@ def list_invoices(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.list_invoices(db, current_user.org_id or "", limit)
+    return svc.list_invoices(
+        db,
+        current_user.org_id or "",
+        limit,
+        getattr(current_user, "primary_organisation_id", None),
+    )
 
 
 @router.get("/addons")
@@ -315,3 +339,65 @@ def admin_toggle_feature(
     svc.set_plan_feature(db, plan, feature_code, data.enabled)
     rows = svc.feature_matrix(db)
     return next(r for r in rows if r["code"] == feature_code)
+
+
+# ── Admin: editable plan pricing ───────────────────────────────────────────────
+
+
+@router.get("/admin/pricing", response_model=List[PlanPricingResponse])
+def admin_list_pricing(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    """Base plan prices — admin-edited rows override the static catalogue
+    defaults without a redeploy."""
+    return svc.list_plan_pricing(db)
+
+
+@router.patch("/admin/pricing/{plan}", response_model=PlanPricingResponse)
+def admin_update_pricing(
+    plan: BillingPlan,
+    data: PlanPricingUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    return svc.update_plan_pricing(
+        db, plan, data.monthly_aud, data.annual_aud, current_user.email
+    )
+
+
+# ── Admin: Stripe gateway configuration ────────────────────────────────────────
+
+
+@router.get("/admin/stripe/status", response_model=StripeStatusResponse)
+def admin_stripe_status(current_user: User = Depends(_ADMIN)):
+    """Whether STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET are set, and in
+    which mode (test/live). Never exposes the key values themselves."""
+    return svc.stripe_status()
+
+
+@router.get("/admin/stripe/prices", response_model=List[StripePriceMappingResponse])
+def admin_list_stripe_prices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    """Stripe Price ID per (plan, interval) — admin-edited rows override the
+    STRIPE_*_ID env vars, so Price IDs can be pasted in from the Stripe
+    dashboard without a redeploy."""
+    return svc.list_stripe_price_mappings(db)
+
+
+@router.put(
+    "/admin/stripe/prices/{plan}/{interval}",
+    response_model=StripePriceMappingResponse,
+)
+def admin_set_stripe_price(
+    plan: BillingPlan,
+    interval: BillingInterval,
+    data: StripePriceMappingUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    return svc.set_stripe_price_id(
+        db, plan, interval, data.stripe_price_id, current_user.email
+    )

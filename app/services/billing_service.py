@@ -37,6 +37,8 @@ from app.models.billing import (
     Invoice,
     InvoiceStatus,
     PlanFeatureToggle,
+    PlanPricing,
+    StripePriceMapping,
     Subscription,
     SubscriptionAddon,
     SubscriptionStatus,
@@ -47,8 +49,11 @@ STRIPE_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 APP_URL = os.getenv("APP_URL", "http://localhost:3000")
 
-# Stripe Price IDs (populated from env)
-_PRICE_IDS = {
+# Stripe Price IDs — env vars are the fallback/seed; admin-edited rows in
+# StripePriceMapping (see get_stripe_price_id/set_stripe_price_id below)
+# take precedence so Price IDs can be pasted in from the Stripe dashboard
+# without a redeploy.
+_ENV_PRICE_IDS = {
     (BillingPlan.starter, BillingInterval.monthly): os.getenv(
         "STRIPE_STARTER_MONTHLY_ID", ""
     ),
@@ -79,6 +84,125 @@ def _stripe():
 
     _stripe_lib.api_key = STRIPE_KEY
     return _stripe_lib
+
+
+def stripe_status() -> dict:
+    """Whether the Stripe gateway is configured, for an admin status panel.
+    Never returns the key itself — only whether one is present and its mode."""
+    return {
+        "configured": bool(STRIPE_KEY),
+        "mode": "live"
+        if STRIPE_KEY.startswith("sk_live_")
+        else ("test" if STRIPE_KEY else None),
+        "webhook_secret_configured": bool(WEBHOOK_SECRET),
+    }
+
+
+# ── Plan pricing (admin-editable) ──────────────────────────────────────────────
+
+
+def get_plan_pricing(db: Session, plan: BillingPlan) -> dict:
+    """Effective base price for a plan — DB override if present, else the
+    static PLAN_CATALOGUE default. Each field falls back independently, so
+    overriding only monthly_aud doesn't blank out annual_aud."""
+    row = db.query(PlanPricing).filter(PlanPricing.plan == plan).first()
+    cat = PLAN_CATALOGUE.get(plan, {})
+    return {
+        "plan": plan.value,
+        "monthly_aud": (row.monthly_aud if row else None) or cat.get("monthly_aud"),
+        "annual_aud": (row.annual_aud if row else None) or cat.get("annual_aud"),
+    }
+
+
+def list_plan_pricing(db: Session) -> List[dict]:
+    return [get_plan_pricing(db, plan) for plan in PLAN_CATALOGUE]
+
+
+def update_plan_pricing(
+    db: Session,
+    plan: BillingPlan,
+    monthly_aud: Optional[float],
+    annual_aud: Optional[float],
+    updated_by: Optional[str] = None,
+) -> dict:
+    row = db.query(PlanPricing).filter(PlanPricing.plan == plan).first()
+    if not row:
+        row = PlanPricing(plan=plan)
+        db.add(row)
+    if monthly_aud is not None:
+        row.monthly_aud = monthly_aud
+    if annual_aud is not None:
+        row.annual_aud = annual_aud
+    row.updated_by = updated_by
+    db.commit()
+    return get_plan_pricing(db, plan)
+
+
+# ── Stripe Price ID mapping (admin-editable) ───────────────────────────────────
+
+
+def get_stripe_price_id(
+    db: Session, plan: BillingPlan, interval: BillingInterval
+) -> str:
+    row = (
+        db.query(StripePriceMapping)
+        .filter(
+            StripePriceMapping.plan == plan, StripePriceMapping.interval == interval
+        )
+        .first()
+    )
+    if row and row.stripe_price_id:
+        return row.stripe_price_id
+    return _ENV_PRICE_IDS.get((plan, interval), "")
+
+
+def list_stripe_price_mappings(db: Session) -> List[dict]:
+    rows = {
+        (r.plan, r.interval): r.stripe_price_id for r in db.query(StripePriceMapping)
+    }
+    out = []
+    for plan in BillingPlan:
+        for interval in BillingInterval:
+            price_id = rows.get((plan, interval)) or _ENV_PRICE_IDS.get(
+                (plan, interval), ""
+            )
+            out.append(
+                {
+                    "plan": plan.value,
+                    "interval": interval.value,
+                    "stripe_price_id": price_id,
+                    "source": "admin" if (plan, interval) in rows else "env",
+                }
+            )
+    return out
+
+
+def set_stripe_price_id(
+    db: Session,
+    plan: BillingPlan,
+    interval: BillingInterval,
+    stripe_price_id: str,
+    updated_by: Optional[str] = None,
+) -> dict:
+    row = (
+        db.query(StripePriceMapping)
+        .filter(
+            StripePriceMapping.plan == plan, StripePriceMapping.interval == interval
+        )
+        .first()
+    )
+    if not row:
+        row = StripePriceMapping(plan=plan, interval=interval)
+        db.add(row)
+    row.stripe_price_id = stripe_price_id
+    row.updated_by = updated_by
+    db.commit()
+    return {
+        "plan": plan.value,
+        "interval": interval.value,
+        "stripe_price_id": stripe_price_id,
+        "source": "admin",
+    }
 
 
 def _sub_id():
@@ -232,21 +356,27 @@ def is_active_subscriber(
 # ── Price resolution ───────────────────────────────────────────────────────────
 
 
-def effective_price(sub: Subscription) -> float:
-    """Return the effective AUD price for the current interval."""
+def effective_price(sub: Subscription, db: Optional[Session] = None) -> float:
+    """Return the effective AUD price for the current interval. Admin-edited
+    PlanPricing rows (if a db session is given) take precedence over the
+    static PLAN_CATALOGUE defaults."""
+    pricing = (
+        get_plan_pricing(db, sub.plan)
+        if db is not None
+        else PLAN_CATALOGUE.get(sub.plan, {})
+    )
     if sub.interval == BillingInterval.annual:
         if sub.custom_annual_aud is not None:
             return sub.custom_annual_aud
-        cat = PLAN_CATALOGUE.get(sub.plan, {})
-        base = cat.get("annual_aud") or 0.0
+        base = pricing.get("annual_aud") or 0.0
         # Apply custom discount if different from catalogue
-        if sub.annual_discount_pct != 20.0 and cat.get("monthly_aud"):
-            base = cat["monthly_aud"] * 12 * (1 - sub.annual_discount_pct / 100)
+        if sub.annual_discount_pct != 20.0 and pricing.get("monthly_aud"):
+            base = pricing["monthly_aud"] * 12 * (1 - sub.annual_discount_pct / 100)
         return base
     else:
         if sub.custom_monthly_aud is not None:
             return sub.custom_monthly_aud
-        return PLAN_CATALOGUE.get(sub.plan, {}).get("monthly_aud") or 0.0
+        return pricing.get("monthly_aud") or 0.0
 
 
 def catalogue_with_custom(
@@ -254,23 +384,25 @@ def catalogue_with_custom(
     sub: Optional[Subscription] = None,
     discount_pct: float = 20.0,
 ) -> List[dict]:
-    """Return plan catalogue with annual price computed from current discount."""
+    """Return plan catalogue with annual price computed from current discount.
+    Base prices come from admin-edited PlanPricing rows where present."""
     plans = []
     for plan_key, info in PLAN_CATALOGUE.items():
+        pricing = get_plan_pricing(db, plan_key)
+        monthly_aud = pricing["monthly_aud"]
+        annual_aud = pricing["annual_aud"]
         features = enabled_features_for_plan(db, plan_key) or info["features"]
         entry = {
             "plan": plan_key.value,
             "name": info["name"],
-            "monthly_aud": info["monthly_aud"],
-            "annual_aud": info["annual_aud"],
+            "monthly_aud": monthly_aud,
+            "annual_aud": annual_aud,
             "annual_discount_pct": discount_pct,
             "features": features,
             "limits": info["limits"],
         }
-        if info["monthly_aud"] and discount_pct != 20.0:
-            entry["annual_aud"] = round(
-                info["monthly_aud"] * 12 * (1 - discount_pct / 100), 2
-            )
+        if monthly_aud and discount_pct != 20.0:
+            entry["annual_aud"] = round(monthly_aud * 12 * (1 - discount_pct / 100), 2)
         plans.append(entry)
     return plans
 
@@ -339,7 +471,7 @@ def admin_update(
     for field, val in data.model_dump(exclude_unset=True).items():
         setattr(sub, field, val)
     # Recompute base_price_aud after any change
-    sub.base_price_aud = effective_price(sub)
+    sub.base_price_aud = effective_price(sub, db)
     db.commit()
     db.refresh(sub)
     return sub
@@ -358,7 +490,7 @@ def activate_subscription(
     sub.status = SubscriptionStatus.active
     sub.cancel_at_period_end = False
     sub.canceled_at = None
-    sub.base_price_aud = effective_price(sub)
+    sub.base_price_aud = effective_price(sub, db)
     db.commit()
     db.refresh(sub)
     return sub
@@ -426,7 +558,7 @@ def create_checkout_session(
     organisation_id: Optional[str] = None,
 ) -> dict:
     stripe = _stripe()
-    price_id = _PRICE_IDS.get((req.plan, req.interval), "")
+    price_id = get_stripe_price_id(db, req.plan, req.interval)
 
     if not stripe or not price_id:
         # Mock mode — return placeholder
@@ -438,11 +570,18 @@ def create_checkout_session(
     sub = get_subscription(db, industry_id, organisation_id)
     stripe_customer_id = sub.stripe_customer_id if sub else None
 
+    metadata = {
+        "industry_id": industry_id,
+        "organisation_id": organisation_id or "",
+        "plan": req.plan.value,
+        "interval": req.interval.value,
+    }
+
     # Create or reuse Stripe customer
     if not stripe_customer_id:
         customer = stripe.Customer.create(
             email=customer_email,
-            metadata={"industry_id": industry_id, "organisation_id": organisation_id},
+            metadata=metadata,
         )
         stripe_customer_id = customer.id
         if sub:
@@ -456,12 +595,7 @@ def create_checkout_session(
         mode="subscription",
         success_url=req.success_url + "?session_id={CHECKOUT_SESSION_ID}",
         cancel_url=req.cancel_url,
-        metadata={
-            "industry_id": industry_id,
-            "organisation_id": organisation_id,
-            "plan": req.plan,
-            "interval": req.interval,
-        },
+        metadata=metadata,
         tax_id_collection={"enabled": True},
         automatic_tax={"enabled": True},
     )
@@ -517,8 +651,7 @@ def handle_stripe_webhook(db: Session, payload: bytes, sig_header: str) -> dict:
 def _handle_checkout_completed(db: Session, session: dict):
     metadata = session.get("metadata", {})
     industry_id = metadata.get("industry_id")
-    organisation_id = metadata.get("organisation_id")
-    organisation_id = int(organisation_id) if organisation_id else None
+    organisation_id = metadata.get("organisation_id") or None
     plan_str = metadata.get("plan", "starter")
     interval_str = metadata.get("interval", "monthly")
     if not industry_id:
@@ -550,7 +683,7 @@ def _handle_checkout_completed(db: Session, session: dict):
     sub.status = SubscriptionStatus.active
     sub.stripe_customer_id = session.get("customer")
     sub.stripe_subscription_id = session.get("subscription")
-    sub.base_price_aud = effective_price(sub)
+    sub.base_price_aud = effective_price(sub, db)
     db.commit()
 
 

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark, BookOpen, HelpCircle, Building2 } from 'lucide-react'
 import { getStoredUser, clearUser } from '@/lib/auth'
 import { useRouter, usePathname } from 'next/navigation'
+import ThemeToggle from '@/components/ThemeToggle'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -259,6 +260,7 @@ export default function Navbar() {
                     </span>
                   )}
                 </Link>
+                <ThemeToggle />
                 <Link href="/dashboard" className="pub-btn-primary text-sm py-2 px-4">Dashboard</Link>
                 <button onClick={handleSignOut} className="text-sm text-slate-500 hover:text-slate-700 transition-colors">Sign out</button>
               </>

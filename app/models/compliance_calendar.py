@@ -50,6 +50,14 @@ class CalendarItemType(str, enum.Enum):
     ifti_deadline = "ifti_deadline"  # statutory IFTI lodgement deadline
     smr_deadline = "smr_deadline"  # statutory SMR lodgement deadline
     aml_program_review = "aml_program_review"  # annual AML/CTF program review
+    risk_assessment_review = "risk_assessment_review"  # ML/TF risk assessment review
+    independent_review = "independent_review"  # independent/external program review
+    high_risk_customer_review = (
+        "high_risk_customer_review"  # high-risk/PEP review cycle
+    )
+    austrac_obligation = "austrac_obligation"  # general AUSTRAC regulatory obligation
+    board_reporting = "board_reporting"  # scheduled board compliance report
+    credential_expiry = "credential_expiry"  # integration API key/OAuth token expiry
     other = "other"
 
 
@@ -100,6 +108,7 @@ class ComplianceCalendarItem(Base):
     )  # ifti_incoming|ifti_outgoing|ttr|smr
     policy_id = Column(String, nullable=True)
     control_id = Column(String, nullable=True)
+    integration_id = Column(String, nullable=True)  # org_integrations.id
     assigned_to = Column(String, nullable=True)  # user_id
 
     due_date = Column(Date, nullable=False, index=True)

@@ -553,6 +553,27 @@ def create_finding(
         finding.finding_ref,
         finding.risk_rating,
     )
+
+    from app.models.automation_rule import RuleEventType
+    from app.services.automation_engine import evaluate_automation_rules
+
+    evaluate_automation_rules(
+        db,
+        RuleEventType.independent_review_finding,
+        current_user.org_id,
+        "review_finding",
+        finding.id,
+        {
+            "finding": {
+                "risk_rating": getattr(
+                    finding.risk_rating, "value", finding.risk_rating
+                ),
+                "category": getattr(finding.category, "value", finding.category),
+            }
+        },
+        triggered_by=current_user.id,
+    )
+
     return _finding_dict(finding)
 
 

@@ -44,6 +44,7 @@ def run_all_deadline_checks(db: Session) -> dict:
     results["control_test_overdue"] = check_control_test_overdue(db)
     results["policy_review_due"] = check_policy_review_due(db)
     results["ir_review_due"] = check_independent_review_due(db)
+    results["customer_review_due"] = check_customer_review_due(db)
     results["checked_at"] = datetime.now(timezone.utc).isoformat()
 
     total = sum(v for v in results.values() if isinstance(v, int))
@@ -185,6 +186,7 @@ def check_training_overdue(db: Session) -> int:
 
         today = date.today()
         total = 0
+        notified_records = []
 
         overdue_records = (
             db.query(GovernanceTrainingRecord)
@@ -208,9 +210,30 @@ def check_training_overdue(db: Session) -> int:
             )
             # Mark as overdue
             record.status = TrainingStatus.overdue
+            notified_records.append(record)
             total += 1
 
         db.commit()
+
+        from app.models.automation_rule import RuleEventType
+        from app.services.automation_engine import evaluate_automation_rules
+
+        for record in notified_records:
+            evaluate_automation_rules(
+                db,
+                RuleEventType.training_expiring,
+                record.org_id,
+                "training_record",
+                record.id,
+                {
+                    "training": {
+                        "status": record.status.value,
+                        "user_id": record.user_id,
+                    }
+                },
+                triggered_by="system",
+            )
+
         return total
     except Exception as exc:
         log.error("Training overdue check failed: %s", exc)
@@ -223,30 +246,30 @@ def check_training_overdue(db: Session) -> int:
 
 
 def check_control_test_overdue(db: Session) -> int:
+    """
+    A control's *next* test is scheduled on GovernanceControl.next_test_date —
+    ControlTest rows only record tests already performed (test_date), so there
+    is no "scheduled_date" to query there.
+    """
     try:
-        from app.models.governance_controls import (
-            ControlTest,
-            GovernanceControl,
-        )
+        from app.models.governance_controls import ControlStatus, GovernanceControl
 
         today = date.today()
         total = 0
 
-        overdue_tests = (
-            db.query(ControlTest)
+        overdue_controls = (
+            db.query(GovernanceControl)
             .filter(
-                ControlTest.scheduled_date < today,
-                ControlTest.result.is_(None),
+                GovernanceControl.next_test_date.isnot(None),
+                GovernanceControl.next_test_date < today,
+                GovernanceControl.status == ControlStatus.active,
             )
             .all()
         )
 
-        for test in overdue_tests:
-            days_overdue = (today - test.scheduled_date).days
+        for control in overdue_controls:
+            days_overdue = (today - control.next_test_date).days
             if days_overdue not in (1, 7, 14, 30):
-                continue
-            control = db.query(GovernanceControl).filter_by(id=test.control_id).first()
-            if not control:
                 continue
             notifier.notify_control_test_overdue(
                 db,
@@ -281,10 +304,10 @@ def check_policy_review_due(db: Session) -> int:
                 Policy.review_due_date.isnot(None),
                 Policy.review_due_date <= in_30_days,
                 Policy.review_due_date >= today,
-                Policy.lifecycle_status.in_(
+                Policy.status.in_(
                     [
-                        PolicyLifecycleStatus.approved,
                         PolicyLifecycleStatus.published,
+                        PolicyLifecycleStatus.periodic_review,
                     ]
                 ),
             )
@@ -299,9 +322,77 @@ def check_policy_review_due(db: Session) -> int:
                 db, policy.org_id, policy.id, policy.title, days_remaining
             )
             total += 1
+
+            from app.models.automation_rule import RuleEventType
+            from app.services.automation_engine import evaluate_automation_rules
+
+            evaluate_automation_rules(
+                db,
+                RuleEventType.policy_expiring,
+                policy.org_id,
+                "policy",
+                policy.id,
+                {"policy": {"title": policy.title, "days_remaining": days_remaining}},
+                triggered_by="system",
+            )
         return total
     except Exception as exc:
         log.error("Policy review check failed: %s", exc)
+        return 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CUSTOMER PERIODIC REVIEW
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def check_customer_review_due(db: Session) -> int:
+    """
+    Fires RuleEventType.customer_review_due for customers whose
+    Customer.next_review_date has arrived (<= today). No existing
+    notifier covers this — only the automation engine is invoked here.
+    """
+    try:
+        from app.models.automation_rule import RuleEventType
+        from app.models.customer import Customer, CustomerStatus
+        from app.services.automation_engine import (
+            customer_context,
+            evaluate_automation_rules,
+        )
+
+        today = date.today()
+        total = 0
+
+        due_customers = (
+            db.query(Customer)
+            .filter(
+                Customer.next_review_date.isnot(None),
+                Customer.next_review_date <= today,
+                Customer.status == CustomerStatus.active,
+            )
+            .all()
+        )
+
+        for customer in due_customers:
+            days_overdue = (today - customer.next_review_date).days
+            # Only fire at specific intervals to avoid re-triggering the rule
+            # engine every day for the same overdue customer.
+            if days_overdue not in (0, 1, 7, 14, 30):
+                continue
+            evaluate_automation_rules(
+                db,
+                RuleEventType.customer_review_due,
+                customer.org_id,
+                "customer",
+                customer.id,
+                customer_context(customer),
+                triggered_by="system",
+            )
+            total += 1
+
+        return total
+    except Exception as exc:
+        log.error("Customer review due check failed: %s", exc)
         return 0
 
 

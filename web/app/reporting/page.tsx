@@ -3,39 +3,39 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   FileText, AlertTriangle, Clock, CheckCircle, Send,
-  RefreshCw, Search, Plus, Eye, ChevronRight, Zap,
+  RefreshCw, Search, Eye, Download, User, Info,
 } from "lucide-react";
 import clsx from "clsx";
+import QuickActions from "@/components/QuickActions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+type ReportKind = "ifti" | "ttr" | "smr";
+
 interface Report {
-  id: number;
-  report_id: string;
-  industry_id?: string;
-  customer_id: number;
-  report_type: string;
+  id: string;
+  report_ref: string;
+  report_type: ReportKind;
+  direction?: string; // ifti only: incoming | outgoing
+  customer_id?: string;
+  case_id?: string;
   status: string;
   priority?: string;
   title: string;
   summary: string;
-  findings?: string;
   narrative?: string;
-  risk_level?: string;
   total_amount_flagged: number;
   transaction_count: number;
-  austrac_report_type?: string;
+  austrac_report_type: string;
   due_date?: string;
-  days_remaining?: number;
   prepared_by?: string;
   reviewed_by?: string;
   approved_by?: string;
-  mlro_sign_off?: boolean;
-  submitted_to?: string;
+  mlro_sign_off?: string;
   submission_reference?: string;
-  alert_ids?: string[];
   created_at?: string;
   submitted_at?: string;
+  acknowledged_at?: string;
 }
 
 interface Summary {
@@ -49,24 +49,20 @@ interface Summary {
   under_review: number;
 }
 
+const AUSTRAC_LABEL: Record<string, string> = {
+  ifti_incoming: "IFTI-I", ifti_outgoing: "IFTI-E", ttr: "TTR", smr: "SMR",
+};
+
 const TYPE_LABELS: Record<string, string> = {
-  ttr:      "TTR — Threshold Transaction",
-  ifti_in:  "IFTI-I — Inbound Transfer",
-  ifti_out: "IFTI-E — Outbound Transfer",
-  smr:      "SMR — Suspicious Matter",
-  ecdd:     "ECDD — Enhanced Due Diligence",
-  sar:      "SAR — Suspicious Activity",
-  ctr:      "CTR — Currency Transaction",
+  ttr: "TTR — Threshold Transaction",
+  ifti: "IFTI — International Funds Transfer",
+  smr: "SMR — Suspicious Matter",
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  ttr:      "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  ifti_in:  "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
-  ifti_out: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-  smr:      "bg-red-500/20 text-red-300 border-red-500/30",
-  ecdd:     "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  sar:      "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  ctr:      "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  ttr: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  ifti: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+  smr: "bg-red-500/20 text-red-300 border-red-500/30",
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -78,35 +74,109 @@ const STATUS_COLOR: Record<string, string> = {
   rejected:     "bg-red-500/20 text-red-300",
 };
 
-const PRIORITY_COLOR: Record<string, string> = {
-  urgent: "text-red-400",
-  high:   "text-orange-400",
-  medium: "text-amber-400",
-  low:    "text-slate-400",
+const STATUTORY_INFO: Record<string, { deadline: string; obligation: string; form: string }> = {
+  ttr:  { deadline: "10 business days", obligation: "AML/CTF Act 2006 s.43", form: "AUSTRAC Online — TTR" },
+  ifti: { deadline: "10 business days", obligation: "AML/CTF Act 2006 s.45", form: "AUSTRAC Online — IFTI" },
+  smr:  { deadline: "3 business days",  obligation: "AML/CTF Act 2006 s.41", form: "AUSTRAC Online — SMR" },
 };
 
-const STATUTORY_INFO: Record<string, { deadline: string; obligation: string; form: string }> = {
-  ttr:      { deadline: "10 business days", obligation: "AML/CTF Act 2006 s.43", form: "AUSTRAC Online — TTR" },
-  ifti_in:  { deadline: "10 business days", obligation: "AML/CTF Act 2006 s.45", form: "AUSTRAC Online — IFTI-I" },
-  ifti_out: { deadline: "10 business days", obligation: "AML/CTF Act 2006 s.45", form: "AUSTRAC Online — IFTI-E" },
-  smr:      { deadline: "3 business days",  obligation: "AML/CTF Act 2006 s.41", form: "AUSTRAC Online — SMR" },
-};
+function mapReport(raw: any, type: ReportKind): Report {
+  if (type === "smr") {
+    return {
+      id: raw.id,
+      report_ref: raw.report_ref,
+      report_type: "smr",
+      customer_id: raw.customer_id,
+      case_id: raw.case_id,
+      status: raw.status,
+      priority: raw.priority,
+      title: `SMR — ${raw.subject_name || raw.customer_id || "Unknown subject"}`,
+      summary: raw.suspicion_grounds || "Suspicious matter report.",
+      narrative: raw.narrative,
+      total_amount_flagged: raw.total_amount ?? raw.grand_total ?? 0,
+      transaction_count: Array.isArray(raw.transaction_ids) ? raw.transaction_ids.length : 0,
+      austrac_report_type: "SMR",
+      due_date: raw.due_date,
+      prepared_by: raw.prepared_by,
+      reviewed_by: raw.reviewed_by,
+      approved_by: raw.approved_by,
+      mlro_sign_off: raw.mlro_sign_off,
+      submission_reference: raw.submission_reference,
+      created_at: raw.created_at,
+      submitted_at: raw.submitted_at,
+      acknowledged_at: raw.acknowledged_at,
+    };
+  }
+  if (type === "ifti") {
+    const austracType = raw.direction === "incoming" ? "ifti_incoming" : "ifti_outgoing";
+    return {
+      id: raw.id,
+      report_ref: raw.report_ref,
+      report_type: "ifti",
+      direction: raw.direction,
+      customer_id: raw.customer_id,
+      status: raw.status,
+      priority: raw.priority,
+      title: `${AUSTRAC_LABEL[austracType]} — Customer ${raw.customer_id ?? "—"}`,
+      summary: `${raw.direction === "incoming" ? "Inbound" : "Outbound"} international funds transfer of ${raw.currency || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()}.`,
+      total_amount_flagged: raw.amount_aud ?? raw.total_amount ?? 0,
+      transaction_count: 1,
+      austrac_report_type: AUSTRAC_LABEL[austracType],
+      due_date: raw.due_date,
+      prepared_by: raw.prepared_by,
+      reviewed_by: raw.reviewed_by,
+      approved_by: raw.approved_by,
+      submission_reference: raw.submission_reference,
+      created_at: raw.created_at,
+      submitted_at: raw.submitted_at,
+      acknowledged_at: raw.acknowledged_at,
+    };
+  }
+  // ttr
+  return {
+    id: raw.id,
+    report_ref: raw.report_ref,
+    report_type: "ttr",
+    customer_id: raw.customer_id,
+    status: raw.status,
+    priority: raw.priority,
+    title: `TTR — Customer ${raw.customer_id ?? "—"} — ${raw.currency || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()}`,
+    summary: `Cash transaction of ${raw.currency || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()} meets the threshold reporting obligation under the AML/CTF Act 2006 s.43.`,
+    total_amount_flagged: raw.total_amount ?? 0,
+    transaction_count: 1,
+    austrac_report_type: "TTR",
+    due_date: raw.due_date,
+    prepared_by: raw.prepared_by,
+    reviewed_by: raw.reviewed_by,
+    approved_by: raw.approved_by,
+    submission_reference: raw.submission_reference,
+    created_at: raw.created_at,
+    submitted_at: raw.submitted_at,
+    acknowledged_at: raw.acknowledged_at,
+  };
+}
+
+function daysRemaining(dueDate?: string): number | undefined {
+  if (!dueDate) return undefined;
+  const ms = new Date(dueDate).getTime() - Date.now();
+  return Math.ceil(ms / 86400000);
+}
 
 const DEMO_REPORTS: Report[] = [
-  { id: 1, report_id: "RPT-DEMO00001", customer_id: 3, report_type: "smr", status: "draft", priority: "urgent", title: "SMR — Ivan Petrov — Sanctions Match", summary: "Suspicious matter identified involving Ivan Petrov. Alert type: sanctions match. Transaction amount: AUD $15,000.00.", austrac_report_type: "SMR", due_date: new Date(Date.now() + 86400000).toISOString(), days_remaining: 1, total_amount_flagged: 15000, transaction_count: 1, created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 2, report_id: "RPT-DEMO00002", customer_id: 2, report_type: "ttr", status: "under_review", priority: "high", title: "TTR — Acme Pty Ltd — AUD $45,000.00", summary: "Cash transaction of AUD $45,000.00 meets the threshold reporting obligation under the AML/CTF Act 2006 s.43.", austrac_report_type: "TTR", due_date: new Date(Date.now() + 432000000).toISOString(), days_remaining: 5, total_amount_flagged: 45000, transaction_count: 1, reviewed_by: "compliance@firm.com.au", created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: 3, report_id: "RPT-DEMO00003", customer_id: 1, report_type: "ifti_out", status: "approved", priority: "medium", title: "IFTI-E — Jane Smith — IR", summary: "Outbound international funds transfer of AUD $8,500.00 sent by Jane Smith to IR triggers IFTI reporting obligation.", austrac_report_type: "IFTI-E", due_date: new Date(Date.now() + 604800000).toISOString(), days_remaining: 7, total_amount_flagged: 8500, transaction_count: 1, approved_by: "mlro@firm.com.au", mlro_sign_off: true, created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 4, report_id: "RPT-DEMO00004", customer_id: 4, report_type: "smr", status: "submitted", priority: "high", title: "SMR — Li Wei — Velocity Breach", summary: "Suspicious matter: velocity breach over 24h period. 18 transactions totalling AUD $72,400.", austrac_report_type: "SMR", total_amount_flagged: 72400, transaction_count: 18, submitted_to: "AUSTRAC", submission_reference: "REF-7A3B9C2D", submitted_at: new Date(Date.now() - 86400000).toISOString(), created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: 5, report_id: "RPT-DEMO00005", customer_id: 5, report_type: "ttr", status: "acknowledged", priority: "medium", title: "TTR — Wei Zhang — AUD $12,000.00", summary: "Cash transaction of AUD $12,000.00 — threshold reporting obligation.", austrac_report_type: "TTR", total_amount_flagged: 12000, transaction_count: 1, submitted_to: "AUSTRAC", submission_reference: "REF-4D2E8F1A", created_at: new Date(Date.now() - 259200000).toISOString() },
+  mapReport({ id: "smr_demo001", report_ref: "SMR-DEMO00001", customer_id: "cust_demo01", status: "draft", priority: "urgent", suspicion_grounds: "Sanctions watchlist match on Ivan Petrov.", subject_name: "Ivan Petrov", total_amount: 15000, transaction_ids: ["txn_1"], due_date: new Date(Date.now() + 86400000).toISOString(), created_at: new Date(Date.now() - 3600000).toISOString() }, "smr"),
+  mapReport({ id: "ttr_demo001", report_ref: "TTR-DEMO00002", customer_id: "cust_demo02", status: "under_review", priority: "high", total_amount: 45000, currency: "AUD", due_date: new Date(Date.now() + 432000000).toISOString(), reviewed_by: "compliance@firm.com.au", created_at: new Date(Date.now() - 7200000).toISOString() }, "ttr"),
+  mapReport({ id: "ifti_demo001", report_ref: "IFTI-DEMO00003", customer_id: "cust_demo03", direction: "outgoing", status: "approved", priority: "medium", total_amount: 8500, amount_aud: 8500, currency: "AUD", due_date: new Date(Date.now() + 604800000).toISOString(), approved_by: "mlro@firm.com.au", created_at: new Date(Date.now() - 86400000).toISOString() }, "ifti"),
+  mapReport({ id: "smr_demo002", report_ref: "SMR-DEMO00004", customer_id: "cust_demo04", status: "submitted", priority: "high", suspicion_grounds: "Velocity breach over 24h period.", subject_name: "Li Wei", total_amount: 72400, transaction_ids: Array.from({ length: 18 }, (_, i) => `txn_${i}`), submission_reference: "REF-7A3B9C2D", submitted_at: new Date(Date.now() - 86400000).toISOString(), created_at: new Date(Date.now() - 172800000).toISOString() }, "smr"),
+  mapReport({ id: "ttr_demo002", report_ref: "TTR-DEMO00005", customer_id: "cust_demo05", status: "acknowledged", priority: "medium", total_amount: 12000, currency: "AUD", submission_reference: "REF-4D2E8F1A", created_at: new Date(Date.now() - 259200000).toISOString() }, "ttr"),
 ];
 
 const DEMO_SUMMARY: Summary = {
-  total: 5, by_type: { smr: 2, ttr: 2, ifti_out: 1 },
+  total: 5, by_type: { smr: 2, ttr: 2, ifti: 1 },
   by_status: { draft: 1, under_review: 1, approved: 1, submitted: 1, acknowledged: 1 },
   overdue: 0, due_soon: 1, submitted: 2, draft: 1, under_review: 1,
 };
 
-type Tab = "reports" | "create" | "obligations";
+type Tab = "reports" | "obligations";
 
 export default function ReportingDashboard() {
   const [tab, setTab] = useState<Tab>("reports");
@@ -124,53 +194,89 @@ export default function ReportingDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [rRes, sRes] = await Promise.all([
-        fetch(`${API}/api/v1/reports/?limit=100`, { credentials: "include" }),
+      const [iRes, tRes, sRes, sumRes] = await Promise.all([
+        fetch(`${API}/api/v1/reports/ifti?limit=100`, { credentials: "include" }),
+        fetch(`${API}/api/v1/reports/ttr?limit=100`, { credentials: "include" }),
+        fetch(`${API}/api/v1/reports/smr?limit=100`, { credentials: "include" }),
         fetch(`${API}/api/v1/reports/summary`, { credentials: "include" }),
       ]);
-      if (rRes.ok) { const d = await rRes.json(); if (d.length) setReports(d); }
-      if (sRes.ok) { const d = await sRes.json(); if (d.total) setSummary(d); }
+      const all: Report[] = [];
+      if (iRes.ok) (await iRes.json()).forEach((r: any) => all.push(mapReport(r, "ifti")));
+      if (tRes.ok) (await tRes.json()).forEach((r: any) => all.push(mapReport(r, "ttr")));
+      if (sRes.ok) (await sRes.json()).forEach((r: any) => all.push(mapReport(r, "smr")));
+      if (all.length) setReports(all);
+      if (sumRes.ok) { const d = await sumRes.json(); if (d.total !== undefined) setSummary(d); }
     } catch {}
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const advanceStatus = async (reportId: string, action: "review" | "approve" | "submit" | "acknowledge") => {
-    const endpoints: Record<string, string> = {
-      review: `${API}/api/v1/reports/${reportId}/review?reviewer=compliance%40firm.com.au`,
-      approve: `${API}/api/v1/reports/${reportId}/approve?approved_by=mlro%40firm.com.au`,
-      submit: `${API}/api/v1/reports/${reportId}/submit`,
-      acknowledge: `${API}/api/v1/reports/${reportId}/acknowledge`,
-    };
+  const advanceStatus = async (report: Report, action: "review" | "approve" | "submit" | "acknowledge") => {
+    const base = `${API}/api/v1/reports/${report.report_type}/${report.id}`;
     const statusMap: Record<string, string> = { review: "under_review", approve: "approved", submit: "submitted", acknowledge: "acknowledged" };
+    let url = "";
+    if (action === "review") url = `${base}/review`;
+    else if (action === "approve") url = report.report_type === "smr" ? `${base}/mlro-sign-off` : `${base}/approve`;
+    else if (action === "submit") url = `${base}/submit?submission_reference=${encodeURIComponent(`AUTO-${Date.now()}`)}`;
+    else url = `${base}/acknowledge?acknowledgement_ref=${encodeURIComponent(`ACK-${Date.now()}`)}`;
     try {
-      const opts: RequestInit = action === "submit"
-        ? { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ submitted_to: "AUSTRAC", approved_by: "mlro@firm.com.au" }) }
-        : { method: "POST", credentials: "include" };
-      await fetch(endpoints[action], opts);
-    } catch {}
-    setReports(prev => prev.map(r => r.report_id === reportId ? { ...r, status: statusMap[action] } : r));
-    setSelected(prev => prev?.report_id === reportId ? { ...prev, status: statusMap[action] } : prev);
+      const res = await fetch(url, { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+    } catch (err: any) {
+      showToast("error", `Failed to ${action}: ${err.message || "request failed"}`);
+      return;
+    }
+    setReports(prev => prev.map(r => r.id === report.id ? { ...r, status: statusMap[action] } : r));
+    setSelected(prev => prev?.id === report.id ? { ...prev, status: statusMap[action] } : prev);
     showToast("success", `Report ${action === "acknowledge" ? "acknowledged" : action + "d"}`);
   };
 
-  const autoGenerate = async () => {
-    try { await fetch(`${API}/api/v1/reports/auto-generate/bulk`, { method: "POST", credentials: "include" }); } catch {}
-    showToast("success", "Auto-generation triggered — check reports list");
-    fetchData();
+  const downloadBlob = (filename: string, content: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCsv = () => {
+    const rows = ["report_ref,type,status,title,amount_flagged,due_date,submitted_at",
+      ...filtered.map(r => `${r.report_ref},${r.austrac_report_type},${r.status},"${r.title.replace(/"/g,'""')}",${r.total_amount_flagged},${r.due_date || ""},${r.submitted_at || ""}`)];
+    downloadBlob("reports-export.csv", rows.join("\n"), "text/csv");
+    showToast("success", `Exported ${filtered.length} report(s) to CSV`);
+  };
+
+  const exportReportPdf = (r: Report) => {
+    const lines = [
+      `AUSTRAC REPORT — ${r.austrac_report_type}`,
+      `Report ref: ${r.report_ref}`,
+      `Status: ${r.status}`,
+      `Title: ${r.title}`,
+      "",
+      "Summary:", r.summary,
+      r.narrative ? `\nMLRO Narrative:\n${r.narrative}` : "",
+      "",
+      `Amount flagged: AUD $${r.total_amount_flagged.toLocaleString()}`,
+      `Prepared by: ${r.prepared_by || "—"}`,
+      `Reviewed by: ${r.reviewed_by || "—"}`,
+      `Approved by: ${r.approved_by || "—"}`,
+      `MLRO sign-off: ${r.mlro_sign_off || "Pending"}`,
+      r.submission_reference ? `AUSTRAC reference: ${r.submission_reference}` : "",
+    ].filter(Boolean).join("\n");
+    downloadBlob(`${r.report_ref}.txt`, lines, "text/plain");
+    showToast("success", `${r.report_ref} exported`);
   };
 
   const filtered = reports.filter(r => {
     const q = search.toLowerCase();
-    return (!search || r.title.toLowerCase().includes(q) || r.report_id.toLowerCase().includes(q))
+    return (!search || r.title.toLowerCase().includes(q) || r.report_ref.toLowerCase().includes(q))
       && (typeFilter === "all" || r.report_type === typeFilter)
       && (statusFilter === "all" || r.status === statusFilter);
   });
 
   const TABS = [
-    { id: "reports" as Tab,     label: "Reports",        icon: FileText },
-    { id: "create" as Tab,      label: "Create Report",  icon: Plus },
-    { id: "obligations" as Tab, label: "Obligations",    icon: AlertTriangle },
+    { id: "reports" as Tab,     label: "Reports",     icon: FileText },
+    { id: "obligations" as Tab, label: "Obligations", icon: AlertTriangle },
   ];
 
   return (
@@ -193,8 +299,8 @@ export default function ReportingDashboard() {
                 <AlertTriangle className="w-4 h-4" />{summary.overdue} overdue
               </div>
             )}
-            <button onClick={autoGenerate} className="btn-secondary text-sm py-2 px-4">
-              <Zap className="w-4 h-4" /> Auto-Generate
+            <button onClick={exportCsv} className="btn-secondary text-sm py-2 px-4">
+              <Download className="w-4 h-4" /> Export CSV
             </button>
             <button onClick={fetchData} className="btn-secondary text-sm py-2 px-4">
               <RefreshCw className="w-4 h-4" />
@@ -241,6 +347,10 @@ export default function ReportingDashboard() {
         {/* ── Reports list ─────────────────────────────────────────────── */}
         {tab === "reports" && (
           <div className="space-y-4">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-brand-500/10 border border-brand-500/20 text-xs text-slate-400">
+              <Info className="w-4 h-4 text-brand-300 shrink-0 mt-0.5" />
+              <span>New reports aren't created freeform here — IFTI/TTR reports are generated from a qualifying transaction in <strong className="text-slate-200">Transaction Monitoring</strong>, and SMRs are generated from a case flagged for SMR consideration in the <strong className="text-slate-200">MLRO Dashboard</strong>.</span>
+            </div>
             <div className="flex flex-wrap gap-3">
               <div className="relative flex-1 min-w-48">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -276,15 +386,17 @@ export default function ReportingDashboard() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr><td colSpan={7} className="text-center py-12 text-slate-500">No reports found</td></tr>
-                  ) : filtered.map(r => (
-                    <tr key={r.report_id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(r)}>
+                  ) : filtered.map(r => {
+                    const dr = daysRemaining(r.due_date);
+                    return (
+                    <tr key={r.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(r)}>
                       <td className="px-4 py-3">
-                        <div className="font-mono text-xs text-slate-500 mb-0.5">{r.report_id}</div>
+                        <div className="font-mono text-xs text-slate-500 mb-0.5">{r.report_ref}</div>
                         <div className="text-slate-200 text-xs font-medium line-clamp-1 max-w-xs">{r.title}</div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border", TYPE_COLOR[r.report_type] || "bg-slate-500/20 text-slate-400")}>
-                          {r.austrac_report_type || r.report_type.toUpperCase()}
+                          {r.austrac_report_type}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -297,8 +409,8 @@ export default function ReportingDashboard() {
                       </td>
                       <td className="px-4 py-3">
                         {r.due_date ? (
-                          <div className={clsx("text-xs font-medium", (r.days_remaining ?? 99) <= 1 ? "text-red-400" : (r.days_remaining ?? 99) <= 3 ? "text-amber-400" : "text-slate-400")}>
-                            {r.days_remaining === 0 ? "Due today" : r.days_remaining === 1 ? "1 day left" : r.days_remaining !== undefined ? `${r.days_remaining}d` : "—"}
+                          <div className={clsx("text-xs font-medium", (dr ?? 99) <= 1 ? "text-red-400" : (dr ?? 99) <= 3 ? "text-amber-400" : "text-slate-400")}>
+                            {dr === 0 ? "Due today" : dr === 1 ? "1 day left" : dr !== undefined ? `${dr}d` : "—"}
                           </div>
                         ) : r.submitted_at ? (
                           <span className="text-xs text-teal-400">Submitted</span>
@@ -311,16 +423,13 @@ export default function ReportingDashboard() {
                         <Eye className="w-4 h-4 text-slate-600 hover:text-brand-400 transition-colors" />
                       </td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {reports.length} reports</div>
           </div>
         )}
-
-        {/* ── Create report ─────────────────────────────────────────────── */}
-        {tab === "create" && <CreateReportForm onCreated={(r) => { setReports(prev => [r, ...prev]); showToast("success", `${r.report_id} created`); setTab("reports"); }} />}
 
         {/* ── Obligations ────────────────────────────────────────────────── */}
         {tab === "obligations" && <ObligationsPanel />}
@@ -332,17 +441,22 @@ export default function ReportingDashboard() {
           <div className="w-full max-w-lg bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
-                <div className="font-mono text-xs text-slate-500 mb-1">{selected.report_id}</div>
+                <div className="font-mono text-xs text-slate-500 mb-1">{selected.report_ref}</div>
                 <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border", TYPE_COLOR[selected.report_type] || "")}>
-                  {selected.austrac_report_type || selected.report_type.toUpperCase()}
+                  {selected.austrac_report_type}
                 </span>
                 {selected.priority && (
-                  <span className={clsx("ml-2 text-xs font-medium capitalize", PRIORITY_COLOR[selected.priority])}>
+                  <span className="ml-2 text-xs font-medium capitalize text-slate-400">
                     {selected.priority} priority
                   </span>
                 )}
               </div>
-              <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => exportReportPdf(selected)} title="Export report" className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 hover:text-brand-400 transition-colors">
+                  <Download className="w-4 h-4" />
+                </button>
+                <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
+              </div>
             </div>
 
             <div>
@@ -366,12 +480,11 @@ export default function ReportingDashboard() {
               {[
                 { label: "Status", value: <span className={clsx("px-2 py-0.5 rounded-full text-xs capitalize", STATUS_COLOR[selected.status] || "")}>{selected.status.replace(/_/g," ")}</span> },
                 { label: "Amount", value: selected.total_amount_flagged > 0 ? `AUD $${selected.total_amount_flagged.toLocaleString()}` : "—" },
-                { label: "Txn count", value: selected.transaction_count },
-                { label: "Days remaining", value: selected.days_remaining !== undefined ? `${selected.days_remaining}d` : "—" },
+                { label: "Days remaining", value: (() => { const dr = daysRemaining(selected.due_date); return dr !== undefined ? `${dr}d` : "—"; })() },
                 { label: "Prepared by", value: selected.prepared_by || "—" },
                 { label: "Reviewed by", value: selected.reviewed_by || "—" },
                 { label: "Approved by", value: selected.approved_by || "—" },
-                { label: "MLRO sign-off", value: selected.mlro_sign_off ? "✓ Yes" : "Pending" },
+                { label: "MLRO sign-off", value: selected.mlro_sign_off ? `✓ ${selected.mlro_sign_off}` : "Pending" },
                 ...(selected.submission_reference ? [{ label: "AUSTRAC ref", value: selected.submission_reference }] : []),
               ].map(({ label, value }) => (
                 <div key={label}>
@@ -396,25 +509,25 @@ export default function ReportingDashboard() {
               <div className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-3">Workflow</div>
               <div className="flex gap-2 flex-wrap">
                 {selected.status === "draft" && (
-                  <button onClick={() => advanceStatus(selected.report_id, "review")}
+                  <button onClick={() => advanceStatus(selected, "review")}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/15 border border-purple-500/25 text-purple-300 text-xs font-medium hover:bg-purple-500/25 transition-colors">
                     <Eye className="w-3.5 h-3.5" /> Send for Review
                   </button>
                 )}
                 {selected.status === "under_review" && (
-                  <button onClick={() => advanceStatus(selected.report_id, "approve")}
+                  <button onClick={() => advanceStatus(selected, "approve")}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 text-xs font-medium hover:bg-emerald-500/25 transition-colors">
-                    <CheckCircle className="w-3.5 h-3.5" /> Approve (MLRO)
+                    <CheckCircle className="w-3.5 h-3.5" /> {selected.report_type === "smr" ? "MLRO Sign-Off" : "Approve (MLRO)"}
                   </button>
                 )}
                 {selected.status === "approved" && (
-                  <button onClick={() => advanceStatus(selected.report_id, "submit")}
+                  <button onClick={() => advanceStatus(selected, "submit")}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-500/15 border border-brand-500/25 text-brand-300 text-xs font-medium hover:bg-brand-500/25 transition-colors">
                     <Send className="w-3.5 h-3.5" /> Submit to AUSTRAC
                   </button>
                 )}
                 {selected.status === "submitted" && (
-                  <button onClick={() => advanceStatus(selected.report_id, "acknowledge")}
+                  <button onClick={() => advanceStatus(selected, "acknowledge")}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/15 border border-teal-500/25 text-teal-300 text-xs font-medium hover:bg-teal-500/25 transition-colors">
                     <CheckCircle className="w-3.5 h-3.5" /> Mark Acknowledged
                   </button>
@@ -426,6 +539,15 @@ export default function ReportingDashboard() {
                 )}
               </div>
             </div>
+
+            {selected.customer_id && (
+              <div className="border-t border-navy-700 pt-4 space-y-2">
+                <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+                <QuickActions actions={[
+                  { label: "View Customer", href: `/customers/${selected.customer_id}`, icon: User },
+                ]} />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -437,102 +559,6 @@ export default function ReportingDashboard() {
           {toast.msg}
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Create Report Form ──────────────────────────────────────────────────────────────
-
-function CreateReportForm({ onCreated }: { onCreated: (r: Report) => void }) {
-  const [form, setForm] = useState({
-    report_type: "smr", customer_id: 1, title: "", summary: "", narrative: "",
-    total_amount_flagged: 0, transaction_count: 1, prepared_by: "",
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true); setError(null);
-    try {
-      const res = await fetch(`${API}/api/v1/reports/`, {
-        credentials: "include",
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onCreated(await res.json());
-    } catch (err: any) {
-      // Demo fallback
-      const demoReport: Report = {
-        id: Date.now(), report_id: `RPT-${Math.random().toString(36).slice(2,12).toUpperCase()}`,
-        customer_id: form.customer_id, report_type: form.report_type, status: "draft",
-        priority: "medium", title: form.title, summary: form.summary,
-        austrac_report_type: { smr:"SMR", ttr:"TTR", ifti_in:"IFTI-I", ifti_out:"IFTI-E" }[form.report_type] || form.report_type.toUpperCase(),
-        total_amount_flagged: form.total_amount_flagged, transaction_count: form.transaction_count,
-        prepared_by: form.prepared_by, days_remaining: form.report_type === "smr" ? 4 : 14,
-        created_at: new Date().toISOString(),
-      };
-      onCreated(demoReport);
-    } finally { setSubmitting(false); }
-  };
-
-  return (
-    <div className="max-w-2xl">
-      <h2 className="text-lg font-semibold text-slate-100 mb-6">Create New Report</h2>
-      <form onSubmit={handleSubmit} className="card space-y-5">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Report type *</label>
-            <select required className="field-input" value={form.report_type} onChange={e => setForm(f => ({ ...f, report_type: e.target.value }))}>
-              {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Customer ID *</label>
-            <input type="number" required className="field-input" value={form.customer_id} onChange={e => setForm(f => ({ ...f, customer_id: Number(e.target.value) }))} />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400">Title *</label>
-          <input required className="field-input" placeholder="e.g. SMR — John Smith — Structuring" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400">Summary *</label>
-          <textarea required className="field-input min-h-[90px] resize-none" placeholder="Factual description of the reportable matter…" value={form.summary} onChange={e => setForm(f => ({ ...f, summary: e.target.value }))} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400">MLRO narrative</label>
-          <textarea className="field-input min-h-[80px] resize-none" placeholder="Compliance officer narrative for AUSTRAC submission…" value={form.narrative} onChange={e => setForm(f => ({ ...f, narrative: e.target.value }))} />
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Amount flagged (AUD)</label>
-            <input type="number" className="field-input" value={form.total_amount_flagged} onChange={e => setForm(f => ({ ...f, total_amount_flagged: Number(e.target.value) }))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Transaction count</label>
-            <input type="number" className="field-input" value={form.transaction_count} onChange={e => setForm(f => ({ ...f, transaction_count: Number(e.target.value) }))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Prepared by</label>
-            <input className="field-input" placeholder="email or name" value={form.prepared_by} onChange={e => setForm(f => ({ ...f, prepared_by: e.target.value }))} />
-          </div>
-        </div>
-
-        {/* Statutory deadline info */}
-        {STATUTORY_INFO[form.report_type] && (
-          <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-xs">
-            <div className="font-medium text-amber-300 mb-1">Statutory deadline</div>
-            <div className="text-slate-400">This report type must be lodged with AUSTRAC within <strong className="text-amber-300">{STATUTORY_INFO[form.report_type].deadline}</strong> per {STATUTORY_INFO[form.report_type].obligation}.</div>
-          </div>
-        )}
-
-        {error && <div className="text-red-400 text-sm">{error}</div>}
-        <button type="submit" disabled={submitting} className="btn-primary w-full justify-center">
-          {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><FileText className="w-4 h-4" />Create Report</>}
-        </button>
-      </form>
     </div>
   );
 }

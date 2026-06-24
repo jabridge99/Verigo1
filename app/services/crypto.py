@@ -46,3 +46,12 @@ def decrypt_secret(value: str) -> str:
 
 def is_encrypted(value) -> bool:
     return isinstance(value, str) and value.startswith(ENC_PREFIX)
+
+
+def encrypt_credentials(data: dict) -> dict:
+    """Encrypt each value of a flat credentials dict (e.g. {"api_key": "..."})."""
+    return {k: encrypt_secret(str(v)) for k, v in (data or {}).items()}
+
+
+def decrypt_credentials(data: dict) -> dict:
+    return {k: decrypt_secret(v) for k, v in (data or {}).items()}

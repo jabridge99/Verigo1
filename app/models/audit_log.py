@@ -78,6 +78,7 @@ class AuditEventType(str, enum.Enum):
     rule_modified = "rule_modified"
     rule_status_changed = "rule_status_changed"
     rule_deleted = "rule_deleted"
+    automation_rule_triggered = "automation_rule_triggered"
 
     # Compliance calendar
     calendar_item_created = "calendar_item_created"

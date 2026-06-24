@@ -35,6 +35,8 @@ from app.api.deps import (
 )
 from app.db.database import get_db
 from app.models.audit_log import AuditEventType, AuditLog
+from app.models.governance_controls import GovernanceControl
+from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.risk_engine import (
     AssessmentStatus,
     MitigationStatus,
@@ -48,6 +50,7 @@ from app.models.risk_engine import (
     RiskScoreHistory,
 )
 from app.models.user import User
+from app.services.control_effectiveness import governance_rating_to_score
 from app.services.risk_engine import (
     inherent_risk,
     residual_risk,
@@ -575,6 +578,10 @@ def score_factor(
     likelihood: Optional[int] = Query(None, ge=1, le=5),
     consequence: Optional[int] = Query(None, ge=1, le=5),
     control_effectiveness: Optional[int] = Query(None, ge=1, le=5),
+    source_control_id: Optional[str] = Query(
+        None,
+        description="Link to a tested GovernanceControl; derives control_effectiveness from it",
+    ),
     comments: Optional[str] = None,
     override_residual_score: Optional[float] = Query(None, ge=0, le=25),
     override_justification: Optional[str] = None,
@@ -615,8 +622,24 @@ def score_factor(
         fs.likelihood = likelihood
     if consequence is not None:
         fs.consequence = consequence
-    if control_effectiveness is not None:
+
+    if source_control_id is not None:
+        control = (
+            db.query(GovernanceControl)
+            .filter(
+                GovernanceControl.id == source_control_id,
+                GovernanceControl.org_id == run.org_id,
+            )
+            .first()
+        )
+        if not control:
+            raise HTTPException(404, "Governance control not found")
+        fs.source_control_id = control.id
+        fs.control_effectiveness = governance_rating_to_score(control.effectiveness)
+    elif control_effectiveness is not None:
+        fs.source_control_id = None
         fs.control_effectiveness = control_effectiveness
+
     if comments is not None:
         fs.comments = comments
 
@@ -766,6 +789,9 @@ def add_mitigation(
     owner_id: str,
     due_date: date,
     factor_score_id: Optional[str] = None,
+    library_item_id: Optional[str] = Query(
+        None, description="Optional link to a MitigationLibraryItem catalogue entry"
+    ),
     current_user: User = Depends(require_compliance_or_above),
     db: Session = Depends(get_db),
 ):
@@ -773,6 +799,7 @@ def add_mitigation(
     mit = RiskMitigation(
         assessment_id=run_id,
         factor_score_id=factor_score_id,
+        library_item_id=library_item_id,
         org_id=run.org_id,
         risk_description=risk_description,
         mitigation_action=mitigation_action,
@@ -998,3 +1025,95 @@ def list_library_factors(
     return q.order_by(
         RiskLibraryFactor.category_type, RiskLibraryFactor.sort_order
     ).all()
+
+
+# ── Mitigation Library (reusable catalogue) ────────────────────────────────────
+
+
+@router.get("/mitigation-library")
+def list_mitigation_library(
+    category: Optional[MitigationCategory] = Query(None),
+    industry: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """System-seeded items (org_id null) plus this org's custom additions."""
+    org_id = org_id_for(current_user)
+    q = db.query(MitigationLibraryItem).filter(
+        (MitigationLibraryItem.org_id.is_(None))
+        | (MitigationLibraryItem.org_id == org_id),
+        MitigationLibraryItem.is_active.is_(True),
+    )
+    if category:
+        q = q.filter(MitigationLibraryItem.category == category)
+    items = q.order_by(MitigationLibraryItem.name).all()
+    if industry:
+        items = [
+            i
+            for i in items
+            if not i.applicable_industries or industry in i.applicable_industries
+        ]
+    return items
+
+
+@router.post("/mitigation-library")
+def create_mitigation_library_item(
+    name: str = Query(...),
+    description: Optional[str] = Query(None),
+    category: MitigationCategory = Query(MitigationCategory.other),
+    control_weighting: float = Query(0.1, ge=0.0, le=1.0),
+    applicable_industries: Optional[List[str]] = Query(None),
+    risk_categories: Optional[List[str]] = Query(None),
+    current_user: User = Depends(require_mlro_or_above),
+    db: Session = Depends(get_db),
+):
+    """Director/MLRO/Compliance only — org-scoped custom mitigation catalogue entry."""
+    item = MitigationLibraryItem(
+        org_id=org_id_for(current_user),
+        name=name,
+        description=description,
+        category=category,
+        control_weighting=control_weighting,
+        applicable_industries=applicable_industries or [],
+        risk_categories=risk_categories or [],
+        created_by=current_user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.patch("/mitigation-library/{item_id}")
+def update_mitigation_library_item(
+    item_id: str,
+    name: Optional[str] = Query(None),
+    description: Optional[str] = Query(None),
+    control_weighting: Optional[float] = Query(None, ge=0.0, le=1.0),
+    is_active: Optional[bool] = Query(None),
+    current_user: User = Depends(require_mlro_or_above),
+    db: Session = Depends(get_db),
+):
+    item = (
+        db.query(MitigationLibraryItem)
+        .filter(
+            MitigationLibraryItem.id == item_id,
+            MitigationLibraryItem.org_id == org_id_for(current_user),
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(
+            404, "Mitigation library item not found (system-seeded items are read-only)"
+        )
+    if name is not None:
+        item.name = name
+    if description is not None:
+        item.description = description
+    if control_weighting is not None:
+        item.control_weighting = control_weighting
+    if is_active is not None:
+        item.is_active = is_active
+    db.commit()
+    db.refresh(item)
+    return item

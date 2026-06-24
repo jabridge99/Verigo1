@@ -18,6 +18,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Integer,
     String,
     Text,
     func,
@@ -495,6 +496,15 @@ class CustomerRiskScoreHistory(Base):
     risk_level = Column(Enum(RiskLevel), nullable=False)
     cdd_level = Column(Enum(CDDLevel), nullable=False)
     scoring_factors = Column(JSON)  # breakdown of contributing factors
+
+    # Inherent/residual breakdown (same formula as app.services.risk_engine):
+    # inherent = likelihood x consequence, residual = inherent x CEF.
+    # Nullable — populated only when the customer-level scoring run computes
+    # a full breakdown; legacy rows and simple manual scores leave these null.
+    inherent_score = Column(Float)
+    residual_score = Column(Float)
+    control_effectiveness_score = Column(Integer)  # 1-5, see ControlEffectivenessScore
+
     trigger = Column(String(100))  # onboarding | periodic_review | event | manual
     triggered_by = Column(String)  # user_id or "system"
     notes = Column(Text)

@@ -3,6 +3,7 @@ Phase B — Organisation / membership / role / permission service layer.
 """
 
 from typing import Optional
+from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,7 +16,48 @@ from app.models.organisation import (
     Permission,
     Role,
 )
+from app.models.risk_matrix import OrgApprovalQuestion, QuestionContext
 from app.models.user import User
+
+# ── Default pre-approval checklist questions (AML/CTF brief examples) ──────────
+# Seeded once per new org as a starting point; compliance/MLRO/admin may edit,
+# add, or deactivate them afterwards via /org/approval-questions.
+
+DEFAULT_TRANSACTION_QUESTIONS: list[str] = [
+    "Have you verified the source of funds for this transaction?",
+    "Is the transaction consistent with the customer's stated business or income profile?",
+    "Is the counterparty a known business contact on file?",
+    "Does the transaction amount fall within expected thresholds for this customer?",
+    "Have any third-party payment instructions been verified?",
+]
+
+DEFAULT_CUSTOMER_QUESTIONS: list[str] = [
+    "Has the customer's identity been independently verified?",
+    "Has a PEP and sanctions screening been completed with no unresolved matches?",
+    "Has the source of wealth been assessed as consistent with the customer's profile?",
+    "Has beneficial ownership been identified and verified (where applicable)?",
+    "Has adverse media screening been completed with no unresolved findings?",
+]
+
+
+def _seed_default_approval_questions(db: Session, org_id: str) -> None:
+    rows = [
+        (DEFAULT_TRANSACTION_QUESTIONS, QuestionContext.transaction),
+        (DEFAULT_CUSTOMER_QUESTIONS, QuestionContext.customer),
+    ]
+    for questions, context in rows:
+        for i, text in enumerate(questions, start=1):
+            db.add(
+                OrgApprovalQuestion(
+                    id=f"oaq_{uuid4().hex[:10]}",
+                    org_id=org_id,
+                    question_text=text,
+                    question_order=i,
+                    context=context,
+                    is_system=True,
+                )
+            )
+
 
 # ── Permission catalog (seeded once, idempotent) ────────────────────────────
 
@@ -171,6 +213,8 @@ def create_organisation(
     )
     if not owner.primary_organisation_id:
         owner.primary_organisation_id = org.id
+
+    _seed_default_approval_questions(db, org.id)
     db.commit()
     return org
 

@@ -213,6 +213,14 @@ from app.models.kyc import (
     VerificationResult,
     VerificationSource,
 )
+from app.models.marketplace import (
+    VerificationCheckType,
+    VerificationIntegrationMode,
+    VerificationOrder,
+    VerificationOrderStatus,
+    VerificationProvider,
+)
+from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.monitoring import (
     AlertCategory,
     AlertEvidence,
@@ -266,6 +274,8 @@ from app.models.regulatory_recommendation import (
     RegulatoryRecommendation,
 )
 from app.models.report import (
+    ECDDRecord,
+    ECDDStatus,
     FilingRegisterEntry,
     IFTIDirection,
     IFTIReport,
@@ -300,10 +310,12 @@ from app.models.risk_engine import (
     RiskScoreHistory,
 )
 from app.models.risk_matrix import (
+    CustomerQuestionResponse,
     OrgApprovalQuestion,
     OrgMonitoringConfig,
     QuestionAnswer,
     QuestionCategory,
+    QuestionContext,
     TransactionQuestionResponse,
 )
 from app.models.risk_matrix_config import (
@@ -510,6 +522,8 @@ __all__ = [
     "OrgMonitoringConfig",
     "OrgApprovalQuestion",
     "TransactionQuestionResponse",
+    "CustomerQuestionResponse",
+    "QuestionContext",
     "QuestionAnswer",
     "QuestionCategory",
     # Professional Services Assessments
@@ -610,6 +624,15 @@ __all__ = [
     "RiskFactorScore",
     "RiskMitigation",
     "RiskScoreHistory",
+    # Mitigation Library
+    "MitigationLibraryItem",
+    "MitigationCategory",
+    # Verification Marketplace
+    "VerificationProvider",
+    "VerificationOrder",
+    "VerificationCheckType",
+    "VerificationIntegrationMode",
+    "VerificationOrderStatus",
     # Board & Executive Reporting
     "BoardReport",
     "BoardReportType",

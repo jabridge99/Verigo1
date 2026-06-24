@@ -150,3 +150,55 @@ def audit_trend(
         _industry(current_user, industry_id),
         _organisation(current_user, industry_id),
     )
+
+
+@router.get("/customers/pending-reviews")
+def pending_reviews(
+    industry_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.pending_customer_reviews(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
+
+
+@router.get("/cases/open-stats")
+def open_cases(
+    industry_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.open_case_stats(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
+
+
+@router.get("/training/status-breakdown")
+def training_status(
+    industry_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.training_status_breakdown(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
+
+
+@router.get("/governance/overview")
+def governance_overview(
+    industry_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.governance_overview(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )

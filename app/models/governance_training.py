@@ -158,12 +158,22 @@ class TrainingCourse(Base):
     # ── Applicability ─────────────────────────────────────────────────────────
     applicable_roles = Column(JSON, default=list)
     # ["admin", "mlro", "compliance", "analyst", "all"] — roles that must complete this
+    applicable_industries = Column(JSON, default=list)
+    # ["remittance", "vasp", "financial_services", "all"] — IndustryType values
+    # this course's pack targets; ["all"] = applies to every industry
     is_mandatory = Column(Boolean, default=False)
     is_custom = Column(Boolean, default=False)  # org-created custom course
     is_active = Column(Boolean, default=True)
 
     # ── Regulatory references ─────────────────────────────────────────────────
     regulatory_references = Column(JSON, default=list)
+
+    # ── Governance linkage (static mapping — distinct from the risk-event-
+    # triggered auto-assignment in training_trigger.py) ────────────────────────
+    linked_control_ids = Column(JSON, default=list)
+    # GovernanceControl.id values this course evidences staff competency for
+    linked_risk_factor_categories = Column(JSON, default=list)
+    # RiskFactorCategory values (e.g. ["customer", "geographic"]) this course covers
 
     created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -446,3 +456,126 @@ STANDARD_TRAINING_COURSES = [
         "applicable_roles": ["mlro", "compliance"],
     },
 ]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INDUSTRY-SPECIFIC TRAINING PACKS
+# Tagged via applicable_industries (IndustryType values). Seeded on demand via
+# POST /governance/training/courses/seed-industry-pack, separately from the
+# org-wide STANDARD_TRAINING_COURSES above.
+# ══════════════════════════════════════════════════════════════════════════════
+
+INDUSTRY_TRAINING_PACKS: dict[str, list[dict]] = {
+    "remittance": [
+        {
+            "course_code": "TRN-RMT-001",
+            "name": "Remittance Sector AML/CTF Obligations",
+            "training_type": TrainingType.custom,
+            "description": "IFTI reporting, agent network oversight, and structuring red flags specific to remittance service providers.",
+            "duration_minutes": 45,
+            "has_assessment": True,
+            "pass_mark": 80.0,
+            "expiry_months": 12,
+            "is_mandatory": True,
+            "applicable_roles": ["analyst", "compliance", "mlro"],
+            "applicable_industries": ["remittance"],
+            "regulatory_references": ["AML/CTF Act s.45", "AML/CTF Rules 2025 Pt 4"],
+        },
+    ],
+    "financial_services": [
+        {
+            "course_code": "TRN-FX-001",
+            "name": "FX & Payment Services AML/CTF Training",
+            "training_type": TrainingType.custom,
+            "description": "Foreign exchange dealing and payment service provider obligations: settlement risk, correspondent banking, and cross-border payment screening.",
+            "duration_minutes": 45,
+            "has_assessment": True,
+            "pass_mark": 80.0,
+            "expiry_months": 12,
+            "is_mandatory": True,
+            "applicable_roles": ["analyst", "compliance", "mlro"],
+            "applicable_industries": ["financial_services"],
+            "regulatory_references": ["AML/CTF Act s.45"],
+        },
+    ],
+    "vasp": [
+        {
+            "course_code": "TRN-CRY-001",
+            "name": "Virtual Asset Service Provider (Crypto) AML/CTF Training",
+            "training_type": TrainingType.travel_rule_training,
+            "description": "Travel Rule compliance, wallet attribution, mixer/darknet exposure red flags, and DeFi/cross-chain bridge risk for VASPs.",
+            "duration_minutes": 60,
+            "has_assessment": True,
+            "pass_mark": 80.0,
+            "expiry_months": 12,
+            "is_mandatory": True,
+            "applicable_roles": ["analyst", "compliance", "mlro"],
+            "applicable_industries": ["vasp"],
+            "regulatory_references": ["AML/CTF Rules 2025 — Travel Rule"],
+        },
+    ],
+    "legal_professionals": [
+        {
+            "course_code": "TRN-LAW-001",
+            "name": "Legal Practitioner AML/CTF Training",
+            "training_type": TrainingType.custom,
+            "description": "Trust account obligations, client legal privilege boundaries, and designated service triggers for legal practitioners under Tranche 2.",
+            "duration_minutes": 45,
+            "has_assessment": True,
+            "pass_mark": 80.0,
+            "expiry_months": 12,
+            "is_mandatory": True,
+            "applicable_roles": ["analyst", "compliance", "mlro"],
+            "applicable_industries": ["legal_professionals"],
+            "regulatory_references": ["AML/CTF Act Tranche 2 reforms"],
+        },
+    ],
+    "accountants": [
+        {
+            "course_code": "TRN-ACC-001",
+            "name": "Accountant AML/CTF Training",
+            "training_type": TrainingType.custom,
+            "description": "Source of funds/wealth verification, trust and company service provider risk, and designated service identification for accountants.",
+            "duration_minutes": 45,
+            "has_assessment": True,
+            "pass_mark": 80.0,
+            "expiry_months": 12,
+            "is_mandatory": True,
+            "applicable_roles": ["analyst", "compliance", "mlro"],
+            "applicable_industries": ["accountants"],
+            "regulatory_references": ["AML/CTF Act Tranche 2 reforms"],
+        },
+    ],
+    "real_estate": [
+        {
+            "course_code": "TRN-RE-001",
+            "name": "Real Estate Agent AML/CTF Training",
+            "training_type": TrainingType.custom,
+            "description": "Property settlement red flags, foreign buyer screening, and beneficial ownership verification for real estate agents.",
+            "duration_minutes": 45,
+            "has_assessment": True,
+            "pass_mark": 80.0,
+            "expiry_months": 12,
+            "is_mandatory": True,
+            "applicable_roles": ["analyst", "compliance", "mlro"],
+            "applicable_industries": ["real_estate"],
+            "regulatory_references": ["AML/CTF Act Tranche 2 reforms"],
+        },
+    ],
+    "conveyancers": [
+        {
+            "course_code": "TRN-CNV-001",
+            "name": "Conveyancer AML/CTF Training",
+            "training_type": TrainingType.custom,
+            "description": "Settlement fund handling, client identification for property transfers, and structuring indicators specific to conveyancing.",
+            "duration_minutes": 45,
+            "has_assessment": True,
+            "pass_mark": 80.0,
+            "expiry_months": 12,
+            "is_mandatory": True,
+            "applicable_roles": ["analyst", "compliance", "mlro"],
+            "applicable_industries": ["conveyancers"],
+            "regulatory_references": ["AML/CTF Act Tranche 2 reforms"],
+        },
+    ],
+}

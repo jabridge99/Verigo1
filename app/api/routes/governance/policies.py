@@ -8,11 +8,13 @@ Version control: every publish creates an immutable PolicyVersion snapshot.
 Audit trail:     every status transition creates an immutable PolicyWorkflowEvent.
 """
 
+import html
 import logging
 from datetime import date, datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -403,6 +405,65 @@ def list_policy_versions(
         .filter(PolicyVersion.policy_id == policy_id)
         .order_by(PolicyVersion.created_at.desc())
         .all()
+    )
+
+
+# ── PDF / print export ─────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/{policy_id}/export-html",
+    response_class=HTMLResponse,
+    summary="Export policy as print-ready HTML (browser print-to-PDF)",
+)
+def export_policy_html(
+    policy_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    policy = _get_policy(policy_id, org_id_for(current_user), db)
+
+    def esc(v) -> str:
+        return html.escape(str(v)) if v else "—"
+
+    refs_html = "".join(
+        f"<li>{esc(r)}</li>" for r in (policy.regulatory_references or [])
+    )
+    return HTMLResponse(
+        content=f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{esc(policy.title)}</title>
+<style>
+body {{ font-family: Georgia, serif; max-width: 820px; margin: 40px auto; color: #1a1a1a; }}
+h1 {{ font-size: 22px; border-bottom: 2px solid #333; padding-bottom: 8px; }}
+.meta {{ font-size: 13px; color: #555; margin-bottom: 24px; }}
+.meta span {{ margin-right: 18px; }}
+.section-title {{ font-size: 14px; font-weight: bold; text-transform: uppercase; margin-top: 24px; color: #333; }}
+.content {{ white-space: pre-wrap; font-size: 14px; line-height: 1.6; }}
+.disclaimer {{ margin-top: 40px; font-size: 11px; color: #777; border-top: 1px solid #ccc; padding-top: 10px; }}
+</style></head>
+<body>
+<h1>{esc(policy.title)}</h1>
+<div class="meta">
+<span><strong>Policy No:</strong> {esc(policy.policy_number)}</span>
+<span><strong>Version:</strong> {esc(policy.version_string)}</span>
+<span><strong>Status:</strong> {esc(policy.status.value)}</span>
+<span><strong>Effective:</strong> {esc(policy.effective_date)}</span>
+<span><strong>Review due:</strong> {esc(policy.review_due_date)}</span>
+</div>
+<div class="section-title">Summary</div>
+<div class="content">{esc(policy.summary)}</div>
+<div class="section-title">Scope</div>
+<div class="content">{esc(policy.scope)}</div>
+<div class="section-title">Policy Content</div>
+<div class="content">{esc(policy.content)}</div>
+<div class="section-title">Regulatory References</div>
+<ul>{refs_html or "<li>—</li>"}</ul>
+<div class="disclaimer">
+This document is generated from VeriGo's governance register and reflects the policy
+content as recorded at export time. All AML/CTF policy decisions remain the responsibility
+of the reporting entity.
+</div>
+</body></html>"""
     )
 
 

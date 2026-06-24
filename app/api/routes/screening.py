@@ -241,6 +241,7 @@ def run_screening(
     )
 
     created_records = []
+    matched_record_ids = []
     for stype in payload.screening_types:
         result = _simulate_screening(stype, entity_name, payload.provider)
 
@@ -285,12 +286,40 @@ def run_screening(
                 ),
             )
             db.add(alert)
+            matched_record_ids.append(record.id)
 
         created_records.append(record)
 
     db.commit()
     for r in created_records:
         db.refresh(r)
+
+    if matched_record_ids:
+        from app.models.automation_rule import RuleEventType
+        from app.services.automation_engine import evaluate_automation_rules
+
+        matched_records = [r for r in created_records if r.id in matched_record_ids]
+        for r in matched_records:
+            evaluate_automation_rules(
+                db,
+                RuleEventType.screening_match,
+                org_id,
+                "customer",
+                customer.id,
+                {
+                    "screening": {
+                        "screening_type": r.screening_type.value
+                        if hasattr(r.screening_type, "value")
+                        else r.screening_type,
+                        "status": r.status.value
+                        if hasattr(r.status, "value")
+                        else r.status,
+                        "match_count": r.match_count,
+                        "match_score": r.match_score,
+                    }
+                },
+                triggered_by=current_user.id,
+            )
 
     return {
         "records_created": len(created_records),

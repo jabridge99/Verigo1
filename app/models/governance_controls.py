@@ -277,6 +277,11 @@ class GovernanceControl(Base):
     custom_fields = Column(JSON, default=dict)
     # {"field_name": value} — populated from GovernanceCustomField definitions
 
+    # Optional link to the reusable mitigation catalogue (see mitigation_library.py)
+    library_item_id = Column(
+        String, ForeignKey("mitigation_library_items.id"), nullable=True, index=True
+    )
+
     # ── Audit ─────────────────────────────────────────────────────────────────
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

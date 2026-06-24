@@ -46,6 +46,14 @@ class NotificationType(str, enum.Enum):
     # ── Examination pack ──────────────────────────────────────────────────────
     exam_pack_ready = "exam_pack_ready"  # AUSTRAC examination pack generated
 
+    # ── Integrations ──────────────────────────────────────────────────────────
+    integration_credential_expiring = (
+        "integration_credential_expiring"  # API key/OAuth token expiring soon
+    )
+    integration_health_degraded = (
+        "integration_health_degraded"  # provider health check failing
+    )
+
 
 class NotificationPriority(str, enum.Enum):
     low = "low"
