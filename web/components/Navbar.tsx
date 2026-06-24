@@ -267,7 +267,6 @@ export default function Navbar() {
             ) : (
               <>
                 <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Sign in</Link>
-                <Link href="/live-demo" className="pub-btn-secondary text-sm py-2 px-4">Book Demo</Link>
                 <Link href="/start-trial" className="pub-btn-primary text-sm py-2 px-4">Start Free Trial</Link>
               </>
             )}
@@ -328,7 +327,6 @@ export default function Navbar() {
             ) : (
               <>
                 <Link href="/login" onClick={() => setMobileOpen(false)} className="pub-btn-secondary justify-center">Sign in</Link>
-                <Link href="/live-demo" onClick={() => setMobileOpen(false)} className="pub-btn-secondary justify-center">Book Demo</Link>
                 <Link href="/start-trial" onClick={() => setMobileOpen(false)} className="pub-btn-primary justify-center">Start Free Trial</Link>
               </>
             )}

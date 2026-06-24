@@ -12,9 +12,9 @@ const contactOptions = [
     icon: MessageSquare,
     color: 'bg-blue-50 text-blue-600',
     title: 'Sales & Pricing',
-    desc: 'Discuss your requirements, explore pricing options, or arrange a personalised demo. Our sales team understands compliance — not just software.',
+    desc: 'Discuss your requirements, explore pricing options, or start a free trial to see the platform in action. Our sales team understands compliance — not just software.',
     email: 'sales@verigo.com.au',
-    cta: { label: 'Book a Demo', href: '/live-demo' },
+    cta: { label: 'Start Free Trial', href: '/start-trial' },
     hours: 'Mon–Fri 9am–5pm AEST',
   },
   {

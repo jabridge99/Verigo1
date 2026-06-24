@@ -111,7 +111,7 @@ const plans = [
       { label: 'SLA guarantee', included: true },
     ],
     cta: 'Contact Sales',
-    href: '/live-demo',
+    href: '/contact',
   },
 ]
 
@@ -312,7 +312,7 @@ export default function PricingPage() {
               <span className="font-semibold">† AML/CTF Program — basic reference template only.</span>{' '}
               Every Essential and Professional plan includes a preloaded industry reference template to help you get started.
               Each business must tailor its own AML/CTF Program to reflect its specific operations, customer types, and risk profile.
-              Program tailoring and review services are available as an additional engagement — <Link href="/live-demo" className="underline hover:text-amber-900">contact us</Link> to discuss.
+              Program tailoring and review services are available as an additional engagement — <Link href="/start-trial" className="underline hover:text-amber-900">contact us</Link> to discuss.
             </p>
           </div>
 
@@ -433,13 +433,10 @@ export default function PricingPage() {
             <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
               Start Free Trial <ArrowRight className="w-5 h-5" />
             </Link>
-            <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
-              Talk to Sales
-            </Link>
           </div>
           <p className="text-slate-500 text-sm">
             Questions about pricing?{' '}
-            <Link href="/live-demo" className="text-slate-400 underline hover:text-slate-300">Book a demo</Link>{' '}
+            <Link href="/contact" className="text-slate-400 underline hover:text-slate-300">Contact us</Link>{' '}
             and we&apos;ll walk you through the right plan for your business.
           </p>
         </div>

@@ -49,8 +49,8 @@ function Hero() {
           <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors shadow-lg">
             Start Free Trial <ArrowRight className="w-5 h-5" />
           </Link>
-          <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-            Book Demo
+          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+            Start Free Trial
           </Link>
         </div>
 
@@ -456,7 +456,7 @@ function WhyVerigo() {
               <Link href="/start-trial" className="pub-btn-primary">
                 Start Free Trial <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link href="/live-demo" className="pub-btn-secondary">Book a Demo</Link>
+              <Link href="/start-trial" className="pub-btn-secondary">Start Free Trial</Link>
             </div>
           </div>
 
@@ -570,7 +570,7 @@ function PricingPreview() {
       desc: 'For reporting groups, financial institutions, and SaaS resellers.',
       features: ['Everything in Professional', 'All compliance packs', 'Reporting groups (multi-entity)', 'White label branding', 'Dedicated compliance support', 'SLA guarantee'],
       cta: 'Contact Sales',
-      href: '/live-demo',
+      href: '/contact',
       highlight: false,
     },
   ]
@@ -661,8 +661,8 @@ function FinalCTA() {
           <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors shadow-lg">
             Start Free Trial <ArrowRight className="w-5 h-5" />
           </Link>
-          <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-            Book Demo
+          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+            Start Free Trial
           </Link>
         </div>
         <div className="flex flex-wrap justify-center gap-6 text-sm text-slate-500">
