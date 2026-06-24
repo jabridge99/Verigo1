@@ -7,6 +7,7 @@ import AppChrome from '@/components/AppChrome'
 import PWAProvider from '@/components/PWAProvider'
 import AnalyticsProvider from '@/components/AnalyticsProvider'
 import CookieNotice from '@/components/CookieNotice'
+import ThemeProvider from '@/components/ThemeProvider'
 
 export const metadata: Metadata = {
   title: 'Verigo | Australian AML/CTF Compliance Platform',
@@ -35,20 +36,22 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
       </head>
       <body>
-        <Navbar />
-        <AppChrome>{children}</AppChrome>
-        <Footer />
-        <MobileNav />
-        <PWAProvider />
-        <AnalyticsProvider />
-        <CookieNotice />
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <Navbar />
+          <AppChrome>{children}</AppChrome>
+          <Footer />
+          <MobileNav />
+          <PWAProvider />
+          <AnalyticsProvider />
+          <CookieNotice />
+        </ThemeProvider>
       </body>
     </html>
   )
