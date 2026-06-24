@@ -57,6 +57,7 @@ from app.models.screening import (
 )
 from app.models.user import User
 from app.services import billing_service as billing_svc
+from app.services.identity_verification_service import compute_identity_score
 
 router = APIRouter(prefix="/screening", tags=["Screening Hub"])
 
@@ -1162,3 +1163,22 @@ def customer_screening_summary(
         "overall_clear": len(open_alerts) == 0 and media == 0,
         "disclaimer": DISCLAIMER,
     }
+
+
+@router.get("/customers/{customer_id}/identity-score")
+def customer_identity_score(
+    customer_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Composite identity-verification score (Australia "100-point ID check" style):
+    even-weighted across OCR, manual review, PEP, sanctions, adverse media and
+    company/UBO screening, with a Pass / ECDD-required / Fail decision.
+    """
+    org_id = org_id_for(current_user)
+    customer = _resolve_customer(customer_id, org_id, db)
+
+    return compute_identity_score(
+        db, customer_id, is_business=getattr(customer, "customer_type", None) == "business"
+    )
