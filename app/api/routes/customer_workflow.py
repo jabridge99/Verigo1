@@ -536,11 +536,19 @@ def run_risk_assessment(
 
     if old_risk_level != new_level or old_risk_score != result.overall_score:
         from app.models.automation_rule import RuleEventType
-        from app.services.automation_engine import customer_context, evaluate_automation_rules
+        from app.services.automation_engine import (
+            customer_context,
+            evaluate_automation_rules,
+        )
 
         evaluate_automation_rules(
-            db, RuleEventType.customer_risk_changed, customer.org_id, "customer", customer.id,
-            customer_context(customer), triggered_by=current_user.id,
+            db,
+            RuleEventType.customer_risk_changed,
+            customer.org_id,
+            "customer",
+            customer.id,
+            customer_context(customer),
+            triggered_by=current_user.id,
         )
 
     state_after = (

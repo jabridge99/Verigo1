@@ -198,7 +198,8 @@ def global_dashboard(
     ).count()
     edd_required = cust_q.filter(Customer.status == CustomerStatus.edd_required).count()
     by_risk_level = {
-        lvl.value: cust_q.filter(Customer.risk_level == lvl).count() for lvl in RiskLevel
+        lvl.value: cust_q.filter(Customer.risk_level == lvl).count()
+        for lvl in RiskLevel
     }
 
     # ── Compliance Calendar ───────────────────────────────────────────────────

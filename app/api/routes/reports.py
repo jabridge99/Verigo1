@@ -46,11 +46,11 @@ from app.models.report import (
     TTRIndustryType,
     TTRReport,
 )
-from app.schemas.report import ECDDCreate, ECDDResponse
-from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.schemas.report import ECDDCreate, ECDDResponse
 from app.services import audit_service
+from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
 from app.services.reporting_service import (
     generate_ifti_from_transaction,
     generate_smr_from_case,
@@ -1492,7 +1492,8 @@ def create_ecdd(
         beneficial_owner_details=payload.beneficial_owner_details,
         source_of_wealth_verified=bool(payload.source_of_wealth_verified),
         source_of_funds=payload.source_of_funds,
-        source_of_wealth_notes=payload.source_of_wealth_notes or payload.source_of_wealth_details,
+        source_of_wealth_notes=payload.source_of_wealth_notes
+        or payload.source_of_wealth_details,
         purpose_of_transaction=payload.purpose_of_transaction,
         high_tax_risk=bool(payload.high_tax_risk),
         tax_risk_notes=payload.tax_risk_notes,

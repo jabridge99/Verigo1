@@ -311,7 +311,9 @@ def run_screening(
                         "screening_type": r.screening_type.value
                         if hasattr(r.screening_type, "value")
                         else r.screening_type,
-                        "status": r.status.value if hasattr(r.status, "value") else r.status,
+                        "status": r.status.value
+                        if hasattr(r.status, "value")
+                        else r.status,
                         "match_count": r.match_count,
                         "match_score": r.match_score,
                     }

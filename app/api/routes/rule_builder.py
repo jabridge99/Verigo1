@@ -90,12 +90,16 @@ class ConditionSchema(BaseModel):
 
 
 class ConditionGroupSchema(BaseModel):
-    logic: str = Field(default="AND", description="AND (all must match) or OR (any must match) within this group")
+    logic: str = Field(
+        default="AND",
+        description="AND (all must match) or OR (any must match) within this group",
+    )
     description: Optional[str] = None
     negate: bool = Field(default=False, description="NOT the whole group's result")
     conditions: list[ConditionSchema] = Field(default_factory=list)
     groups: list["ConditionGroupSchema"] = Field(
-        default_factory=list, description="Nested sub-groups, combined per this group's logic"
+        default_factory=list,
+        description="Nested sub-groups, combined per this group's logic",
     )
 
 
@@ -146,7 +150,11 @@ def _rule_ref(db: Session, org_id: str) -> str:
 
 
 def _snapshot_version(
-    db: Session, r: AutomationRule, version_number: int, change_summary: str, changed_by: str
+    db: Session,
+    r: AutomationRule,
+    version_number: int,
+    change_summary: str,
+    changed_by: str,
 ) -> None:
     db.add(
         AutomationRuleVersion(
@@ -272,7 +280,10 @@ def rule_builder_reference(
     """
     return {
         "event_types": [
-            {"value": e.value, "label": EVENT_LABELS.get(e.value, e.value.replace("_", " ").title())}
+            {
+                "value": e.value,
+                "label": EVENT_LABELS.get(e.value, e.value.replace("_", " ").title()),
+            }
             for e in RuleEventType
         ],
         "action_types": [
@@ -415,7 +426,13 @@ def create_rule(
     db.commit()
     db.refresh(r)
 
-    _snapshot_version(db, r, version_number=1, change_summary="Rule created", changed_by=current_user.id)
+    _snapshot_version(
+        db,
+        r,
+        version_number=1,
+        change_summary="Rule created",
+        changed_by=current_user.id,
+    )
     db.add(
         AuditLog(
             org_id=org_id,
@@ -496,7 +513,9 @@ def update_rule(
     db.add(
         AuditLog(
             org_id=org_id,
-            event_type=AuditEventType.rule_status_changed if status_changed else AuditEventType.rule_modified,
+            event_type=AuditEventType.rule_status_changed
+            if status_changed
+            else AuditEventType.rule_modified,
             actor_id=current_user.id,
             action=f"Automation rule '{r.name}' updated",
             object_type="AutomationRule",
@@ -590,7 +609,10 @@ def rule_versions(
     org_id = org_id_for(current_user)
     versions = (
         db.query(AutomationRuleVersion)
-        .filter(AutomationRuleVersion.rule_id == rule_id, AutomationRuleVersion.org_id == org_id)
+        .filter(
+            AutomationRuleVersion.rule_id == rule_id,
+            AutomationRuleVersion.org_id == org_id,
+        )
         .order_by(AutomationRuleVersion.version_number.desc())
         .all()
     )
@@ -612,7 +634,8 @@ def rule_versions(
 
 class RuleTestRequest(BaseModel):
     context: dict = Field(
-        ..., description="Sample event context to test the rule's conditions against, e.g. {'customer': {'risk_level': 'high'}}"
+        ...,
+        description="Sample event context to test the rule's conditions against, e.g. {'customer': {'risk_level': 'high'}}",
     )
 
 

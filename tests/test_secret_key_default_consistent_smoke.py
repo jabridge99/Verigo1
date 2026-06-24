@@ -25,4 +25,5 @@ def test_unset_secret_key_is_caught_by_production_guard():
             environment="production",
             database_url="postgresql://localhost/test",
             cors_origins="https://app.example.com",
+            secret_key="change-me-in-production",
         )
