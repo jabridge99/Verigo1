@@ -20,6 +20,7 @@ from datetime import date, datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -28,9 +29,11 @@ from app.api.deps import (
     org_id_for,
     require_analyst_or_above,
     require_compliance_or_above,
+    require_mlro_or_above,
 )
 from app.db.database import get_db
 from app.models.audit_log import AuditEventType, AuditLog
+from app.models.case import Case
 from app.models.customer import (
     BeneficialOwner,
     BusinessDetail,
@@ -45,6 +48,8 @@ from app.models.customer import (
     CustomerStatus,
     RiskLevel,
 )
+from app.models.document import Document
+from app.models.transaction import Transaction
 from app.models.kyc import (
     CustomerAddressVerification,
     CustomerEmailVerification,
@@ -60,6 +65,14 @@ from app.models.screening import (
     ScreeningStatus,
     ScreeningType,
 )
+from app.models.risk_matrix import (
+    CustomerQuestionResponse,
+    OrgApprovalQuestion,
+    OrgMonitoringConfig,
+    QuestionAnswer,
+    QuestionContext,
+)
+from app.models.marketplace import VerificationOrder
 from app.models.user import User
 from app.schemas.customer import (
     AddressVerificationCreate,
@@ -101,6 +114,12 @@ from app.schemas.customer import (
     WalletScreeningResponse,
 )
 from app.services import audit_service
+from app.services.risk_engine import inherent_risk, residual_risk
+from app.services.risk_matrix_service import (
+    compute_final_approval_score,
+    compute_question_score,
+)
+from uuid import uuid4
 
 log = logging.getLogger("verigo.api.customers")
 router = APIRouter(prefix="/customers", tags=["Customers"])
@@ -200,7 +219,16 @@ def _record_risk_history(
     db: Session,
     notes: Optional[str] = None,
     scoring_factors: Optional[dict] = None,
+    likelihood: Optional[int] = None,
+    consequence: Optional[int] = None,
+    control_effectiveness: Optional[int] = None,
 ) -> None:
+    inherent_score = residual_score = None
+    if likelihood and consequence:
+        inherent_score = inherent_risk(likelihood, consequence)
+        if control_effectiveness:
+            residual_score = residual_risk(inherent_score, control_effectiveness)
+
     db.add(
         CustomerRiskScoreHistory(
             customer_id=customer.id,
@@ -209,11 +237,42 @@ def _record_risk_history(
             risk_level=customer.risk_level,
             cdd_level=customer.cdd_level,
             scoring_factors=scoring_factors,
+            inherent_score=inherent_score,
+            residual_score=residual_score,
+            control_effectiveness_score=control_effectiveness,
             trigger=trigger,
             triggered_by=actor_id,
             notes=notes,
         )
     )
+
+
+def _customer_checklist_summary(customer_id: str, org_id: str, db: Session) -> dict:
+    questions = (
+        db.query(OrgApprovalQuestion)
+        .filter(
+            OrgApprovalQuestion.org_id == org_id,
+            OrgApprovalQuestion.is_active == True,
+            OrgApprovalQuestion.context == QuestionContext.customer,
+        )
+        .all()
+    )
+    responses = (
+        db.query(CustomerQuestionResponse)
+        .filter(CustomerQuestionResponse.customer_id == customer_id)
+        .all()
+    )
+    response_map = {r.question_id: r for r in responses}
+    answered_required = [
+        q for q in questions if q.is_required and response_map.get(q.id) is not None
+    ]
+    required = [q for q in questions if q.is_required]
+    return {
+        "questions_configured": len(questions),
+        "questions_answered": len(responses),
+        "complete": len(questions) > 0 and len(answered_required) == len(required),
+        "question_score": compute_question_score(responses) if responses else None,
+    }
 
 
 # ── Customer CRUD ─────────────────────────────────────────────────────────────
@@ -290,6 +349,15 @@ def create_customer(
     )
     db.commit()
     db.refresh(customer)
+
+    from app.models.automation_rule import RuleEventType
+    from app.services.automation_engine import customer_context, evaluate_automation_rules
+
+    evaluate_automation_rules(
+        db, RuleEventType.customer_created, oid, "customer", customer.id,
+        customer_context(customer), triggered_by=current_user.id,
+    )
+
     log.info("Customer created: %s org=%s", customer.customer_ref, oid)
     return customer
 
@@ -1213,6 +1281,11 @@ def get_risk_score_history(
 @router.post("/{customer_id}/rescore")
 def rescore_customer(
     customer_id: str,
+    likelihood: Optional[int] = Query(
+        None, ge=1, le=5, description="Optional: record inherent/residual breakdown"
+    ),
+    consequence: Optional[int] = Query(None, ge=1, le=5),
+    control_effectiveness: Optional[int] = Query(None, ge=1, le=5),
     current_user: User = Depends(require_compliance_or_above),
     db: Session = Depends(get_db),
 ):
@@ -1238,20 +1311,57 @@ def rescore_customer(
         factors["edd_flag"] = 10.0
 
     score = min(score, 100.0)
-    if score >= 75:
-        level = RiskLevel.critical
-    elif score >= 50:
-        level = RiskLevel.high
-    elif score >= 25:
+
+    def _level_for(s: float) -> RiskLevel:
+        if s >= 75:
+            return RiskLevel.critical
+        elif s >= 50:
+            return RiskLevel.high
+        elif s >= 25:
+            return RiskLevel.medium
+        return RiskLevel.low
+
+    base_level = _level_for(score)
+
+    # Checklist completion may nudge the score down by a small, capped amount
+    # (never enough to flip an above-low rating to Low on its own — that
+    # decision stays with the compliance reviewer, not the checklist).
+    responses = (
+        db.query(CustomerQuestionResponse)
+        .filter(CustomerQuestionResponse.customer_id == customer_id)
+        .all()
+    )
+    question_score = compute_question_score(responses) if responses else None
+    score = score
+    if question_score is not None:
+        config = (
+            db.query(OrgMonitoringConfig)
+            .filter(OrgMonitoringConfig.org_id == customer.org_id)
+            .first()
+        )
+        q_weight = getattr(config, "custom_question_weight", 0.20) if config else 0.20
+        q_weight = max(0.0, min(q_weight, 0.40))
+        max_reduction = 10.0  # hard cap regardless of weight
+        reduction = min(max_reduction, (question_score / 100.0) * max_reduction * q_weight / 0.40)
+        score = max(0.0, score - reduction)
+
+    level = _level_for(score)
+    if base_level != RiskLevel.low and level == RiskLevel.low:
+        # Checklist alone must never produce a Low Risk outcome.
         level = RiskLevel.medium
-    else:
-        level = RiskLevel.low
 
     customer.risk_score = score
     customer.risk_level = level
 
     _record_risk_history(
-        customer, "manual_rescore", current_user.id, db, scoring_factors=factors
+        customer,
+        "manual_rescore",
+        current_user.id,
+        db,
+        scoring_factors=factors,
+        likelihood=likelihood,
+        consequence=consequence,
+        control_effectiveness=control_effectiveness,
     )
     audit_service.log_action(
         db,
@@ -1270,6 +1380,189 @@ def rescore_customer(
     db.commit()
 
     return {"customer_id": customer_id, "risk_score": score, "risk_level": level.value}
+
+
+# ── Pre-Approval Question Checklist (customer onboarding/EDD context) ──────────
+
+
+class CustomerQuestionAnswerItem(BaseModel):
+    question_id: str
+    answer: QuestionAnswer
+    notes: Optional[str] = None
+
+
+class CustomerAnswerQuestionsRequest(BaseModel):
+    answers: List[CustomerQuestionAnswerItem]
+
+
+@router.get("/{customer_id}/approval-checklist")
+def get_customer_approval_checklist(
+    customer_id: str,
+    current_user: User = Depends(require_compliance_or_above),
+    db: Session = Depends(get_db),
+):
+    """
+    Return the org's customer/onboarding pre-approval checklist questions and
+    any existing answers for this customer, plus the computed question score.
+
+    Mirrors the transaction checklist at /transactions/{id}/approval-checklist,
+    scoped to context=customer questions (see app.models.risk_matrix.QuestionContext).
+
+    DISCLAIMER: Checklist results support the compliance workflow only.
+    All regulatory decisions remain with the reporting entity.
+    """
+    org_id = org_id_for(current_user)
+    customer = _get_customer(customer_id, org_id, db)
+
+    questions = (
+        db.query(OrgApprovalQuestion)
+        .filter(
+            OrgApprovalQuestion.org_id == org_id,
+            OrgApprovalQuestion.is_active == True,
+            OrgApprovalQuestion.context == QuestionContext.customer,
+        )
+        .order_by(OrgApprovalQuestion.question_order)
+        .all()
+    )
+
+    responses = (
+        db.query(CustomerQuestionResponse)
+        .filter(
+            CustomerQuestionResponse.customer_id == customer_id,
+            CustomerQuestionResponse.org_id == org_id,
+        )
+        .all()
+    )
+    response_map = {r.question_id: r for r in responses}
+
+    question_score = compute_question_score(responses) if responses else None
+
+    items = []
+    for q in questions:
+        r = response_map.get(q.id)
+        items.append(
+            {
+                "question_id": q.id,
+                "question_order": q.question_order,
+                "question_text": q.question_text,
+                "help_text": q.help_text,
+                "industry_context": q.industry_context,
+                "is_required": q.is_required,
+                "compliant_answer": q.compliant_answer.value
+                if q.compliant_answer
+                else "yes",
+                "answer": r.answer.value if r else None,
+                "notes": r.notes if r else None,
+                "answered_by": r.answered_by if r else None,
+                "answered_at": r.answered_at if r else None,
+            }
+        )
+
+    return {
+        "customer_id": customer_id,
+        "questions_configured": len(questions),
+        "questions_answered": len([i for i in items if i["answer"] is not None]),
+        "checklist_complete": len(questions) > 0
+        and all(i["answer"] is not None for i in items if i["is_required"]),
+        "question_score": question_score,
+        "questions": items,
+        "disclaimer": (
+            "Checklist results support the compliance workflow only. "
+            "All regulatory decisions remain with the reporting entity."
+        ),
+    }
+
+
+@router.post("/{customer_id}/answer-questions", status_code=200)
+def answer_customer_approval_questions(
+    customer_id: str,
+    payload: CustomerAnswerQuestionsRequest,
+    current_user: User = Depends(require_compliance_or_above),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit or update answers to the customer pre-approval checklist questions.
+
+    Each answer is upserted (existing answer updated if already submitted).
+    Answers feed into a question_score; call POST /{customer_id}/rescore to
+    apply the bounded, capped checklist adjustment to the customer's risk
+    score (the checklist can never, by itself, produce a Low Risk outcome).
+
+    DISCLAIMER: Answers are compliance workflow records only.
+    """
+    org_id = org_id_for(current_user)
+    customer = _get_customer(customer_id, org_id, db)
+
+    question_ids = [a.question_id for a in payload.answers]
+    valid_questions = (
+        db.query(OrgApprovalQuestion)
+        .filter(
+            OrgApprovalQuestion.id.in_(question_ids),
+            OrgApprovalQuestion.org_id == org_id,
+            OrgApprovalQuestion.is_active == True,
+            OrgApprovalQuestion.context == QuestionContext.customer,
+        )
+        .all()
+    )
+    valid_ids = {q.id for q in valid_questions}
+    invalid = [qid for qid in question_ids if qid not in valid_ids]
+    if invalid:
+        raise HTTPException(400, f"Unknown or inactive customer question IDs: {invalid}")
+
+    now = datetime.now(timezone.utc)
+    saved = []
+    for item in payload.answers:
+        existing = (
+            db.query(CustomerQuestionResponse)
+            .filter(
+                CustomerQuestionResponse.customer_id == customer_id,
+                CustomerQuestionResponse.question_id == item.question_id,
+            )
+            .first()
+        )
+        if existing:
+            existing.answer = item.answer
+            existing.notes = item.notes
+            existing.answered_by = current_user.id
+            existing.answered_at = now
+            saved.append(existing)
+        else:
+            r = CustomerQuestionResponse(
+                id=f"cqr_{uuid4().hex[:10]}",
+                customer_id=customer_id,
+                question_id=item.question_id,
+                org_id=org_id,
+                answer=item.answer,
+                notes=item.notes,
+                answered_by=current_user.id,
+                answered_at=now,
+            )
+            db.add(r)
+            saved.append(r)
+
+    db.flush()
+
+    all_responses = (
+        db.query(CustomerQuestionResponse)
+        .filter(
+            CustomerQuestionResponse.customer_id == customer_id,
+            CustomerQuestionResponse.org_id == org_id,
+        )
+        .all()
+    )
+    question_score = compute_question_score(all_responses)
+
+    db.commit()
+
+    return {
+        "customer_id": customer_id,
+        "answers_submitted": len(saved),
+        "question_score": question_score,
+        "disclaimer": (
+            "Answers are compliance workflow records only. "
+            "All regulatory decisions remain with the reporting entity."
+        ),
+    }
 
 
 # ── Periodic Reviews ───────────────────────────────────────────────────────────
@@ -1367,6 +1660,377 @@ def list_notes(
     if current_user.role.value not in ("admin", "mlro"):
         q = q.filter(CustomerNote.is_confidential == False)
     return q.order_by(CustomerNote.created_at.desc()).all()
+
+
+# ── Customer Workspace (aggregated, read-only) ─────────────────────────────────
+# A single call that assembles everything an officer needs for one customer —
+# avoids forcing the UI to fan out across a dozen endpoints to render one screen.
+# All data here already exists via the per-resource endpoints above; this is a
+# read-only join, not a new source of truth.
+
+
+@router.get("/{customer_id}/workspace")
+def get_customer_workspace(
+    customer_id: str,
+    current_user: User = Depends(require_analyst_or_above),
+    db: Session = Depends(get_db),
+):
+    customer = _get_customer(customer_id, org_id_for(current_user), db)
+    can_see_confidential = current_user.role.value in ("admin", "mlro")
+
+    business_detail = customer.business_detail if customer.business_detail_id else None
+
+    beneficial_owners = (
+        db.query(BeneficialOwner)
+        .filter(BeneficialOwner.customer_id == customer_id)
+        .order_by(BeneficialOwner.created_at)
+        .all()
+    )
+
+    documents = (
+        db.query(Document)
+        .filter(Document.entity_type == "customer", Document.entity_id == customer_id)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+    corporate_documents = (
+        db.query(CorporateDocument)
+        .filter(CorporateDocument.customer_id == customer_id)
+        .order_by(CorporateDocument.created_at.desc())
+        .all()
+    )
+
+    screenings = (
+        db.query(ScreeningRecord)
+        .filter(ScreeningRecord.customer_id == customer_id)
+        .order_by(ScreeningRecord.screened_at.desc())
+        .all()
+    )
+    latest_screening_by_type = {}
+    for s in screenings:
+        if s.screening_type not in latest_screening_by_type:
+            latest_screening_by_type[s.screening_type.value] = s
+    open_alerts = (
+        db.query(ScreeningAlert)
+        .filter(
+            ScreeningAlert.customer_id == customer_id,
+            ScreeningAlert.status.notin_(["dismissed", "closed"]),
+        )
+        .order_by(ScreeningAlert.created_at.desc())
+        .all()
+    )
+
+    checklist = (
+        db.query(CustomerOnboardingChecklist)
+        .filter(CustomerOnboardingChecklist.customer_id == customer_id)
+        .first()
+    )
+
+    risk_history = (
+        db.query(CustomerRiskScoreHistory)
+        .filter(CustomerRiskScoreHistory.customer_id == customer_id)
+        .order_by(CustomerRiskScoreHistory.scored_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    reviews = (
+        db.query(CustomerReview)
+        .filter(CustomerReview.customer_id == customer_id)
+        .order_by(CustomerReview.review_date.desc())
+        .all()
+    )
+
+    notes_q = db.query(CustomerNote).filter(CustomerNote.customer_id == customer_id)
+    if not can_see_confidential:
+        notes_q = notes_q.filter(CustomerNote.is_confidential == False)
+    notes = notes_q.order_by(CustomerNote.created_at.desc()).all()
+
+    cases = (
+        db.query(Case)
+        .filter(Case.customer_id == customer_id)
+        .order_by(Case.created_at.desc())
+        .all()
+    )
+
+    transactions = (
+        db.query(Transaction)
+        .filter(Transaction.customer_id == customer_id)
+        .order_by(Transaction.created_at.desc())
+        .limit(25)
+        .all()
+    )
+    txn_count = (
+        db.query(Transaction).filter(Transaction.customer_id == customer_id).count()
+    )
+    txn_volume = sum(t.amount_aud or t.amount or 0.0 for t in transactions)
+
+    return {
+        "customer": customer,
+        "business_detail": business_detail,
+        "beneficial_owners": beneficial_owners,
+        "documents": documents,
+        "corporate_documents": corporate_documents,
+        "screening": {
+            "records": screenings,
+            "latest_by_type": {
+                k: {
+                    "status": v.status.value,
+                    "screened_at": v.screened_at,
+                    "provider": v.provider.value if v.provider else None,
+                }
+                for k, v in latest_screening_by_type.items()
+            },
+            "open_alerts": open_alerts,
+        },
+        "onboarding_checklist": checklist,
+        "risk": {
+            "risk_score": customer.risk_score,
+            "risk_level": customer.risk_level.value if customer.risk_level else None,
+            "inherent_score": risk_history[0].inherent_score if risk_history else None,
+            "residual_score": risk_history[0].residual_score if risk_history else None,
+            "control_effectiveness_score": (
+                risk_history[0].control_effectiveness_score if risk_history else None
+            ),
+            "trend": [
+                {"scored_at": h.scored_at, "risk_score": h.risk_score, "risk_level": h.risk_level.value if h.risk_level else None}
+                for h in reversed(risk_history)
+            ],
+            "history": risk_history,
+        },
+        "verification": {
+            "orders": [
+                {
+                    "id": o.id,
+                    "provider_id": o.provider_id,
+                    "status": o.status.value,
+                    "evidence_url": o.evidence_url,
+                    "reviewed_by": o.reviewed_by,
+                    "created_at": o.created_at,
+                    "completed_at": o.completed_at,
+                }
+                for o in db.query(VerificationOrder)
+                .filter(VerificationOrder.entity_type == "customer", VerificationOrder.entity_id == customer_id)
+                .order_by(VerificationOrder.created_at.desc())
+                .all()
+            ],
+        },
+        "checklist_completion": _customer_checklist_summary(customer_id, customer.org_id, db),
+        "sof_sow": {
+            "source_of_funds": customer.source_of_funds,
+            "source_of_funds_verified": customer.source_of_funds_verified,
+            "source_of_wealth": customer.source_of_wealth,
+            "source_of_wealth_verified": customer.source_of_wealth_verified,
+        },
+        "cdd": {
+            "cdd_level": customer.cdd_level.value if customer.cdd_level else None,
+            "last_reviewed_date": customer.last_reviewed_date,
+            "last_reviewed_by": customer.last_reviewed_by,
+            "next_review_date": customer.next_review_date,
+        },
+        "reviews": reviews,
+        "notes": notes,
+        "cases": {
+            "open": [c for c in cases if c.status.value not in ("closed_no_action", "closed_smr_filed", "closed_no_smr")],
+            "closed": [c for c in cases if c.status.value in ("closed_no_action", "closed_smr_filed", "closed_no_smr")],
+            "escalated": [c for c in cases if c.escalated_to],
+            "smr_linked": [c for c in cases if c.smr_lodged or c.is_smr_candidate],
+        },
+        "transactions": {
+            "recent": transactions,
+            "total_count": txn_count,
+            "recent_volume_aud": txn_volume,
+        },
+        "assigned_officer": customer.relationship_manager,
+        "disclaimer": DISCLAIMER,
+    }
+
+
+# ── Customer Timeline (synthesized, read-only) ─────────────────────────────────
+# Chronological feed assembled from existing audit/case/transaction/review/
+# screening records — there is no separate "timeline" table to keep in sync.
+
+
+@router.get("/{customer_id}/timeline")
+def get_customer_timeline(
+    customer_id: str,
+    limit: int = Query(200, le=500),
+    current_user: User = Depends(require_analyst_or_above),
+    db: Session = Depends(get_db),
+):
+    customer = _get_customer(customer_id, org_id_for(current_user), db)
+    events: List[dict] = []
+
+    events.append(
+        {
+            "type": "customer_created",
+            "label": "Customer created",
+            "at": customer.created_at,
+            "actor": customer.onboarded_by,
+        }
+    )
+
+    audit_rows = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.org_id == customer.org_id,
+            AuditLog.object_type == "Customer",
+            AuditLog.object_id == customer_id,
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    for a in audit_rows:
+        events.append(
+            {
+                "type": a.event_type.value,
+                "label": a.action,
+                "at": a.created_at,
+                "actor": a.actor_id,
+                "detail": a.new_value,
+            }
+        )
+
+    for r in db.query(CustomerReview).filter(CustomerReview.customer_id == customer_id):
+        events.append(
+            {
+                "type": "review",
+                "label": f"{r.review_type or 'Periodic'} review completed",
+                "at": r.review_date,
+                "actor": r.reviewed_by,
+            }
+        )
+
+    for c in db.query(Case).filter(Case.customer_id == customer_id):
+        events.append(
+            {
+                "type": "case",
+                "label": f"Case {c.case_ref} ({c.case_type.value}) — {c.status.value}",
+                "at": c.created_at,
+                "actor": c.created_by,
+            }
+        )
+
+    for s in (
+        db.query(ScreeningRecord)
+        .filter(ScreeningRecord.customer_id == customer_id)
+        .order_by(ScreeningRecord.screened_at.desc())
+        .limit(50)
+    ):
+        events.append(
+            {
+                "type": "screening",
+                "label": f"{s.screening_type.value} screening — {s.status.value}",
+                "at": s.screened_at,
+                "actor": s.triggered_by,
+            }
+        )
+
+    txn_count = (
+        db.query(Transaction).filter(Transaction.customer_id == customer_id).count()
+    )
+    for t in (
+        db.query(Transaction)
+        .filter(Transaction.customer_id == customer_id)
+        .order_by(Transaction.created_at.desc())
+        .limit(50)
+    ):
+        events.append(
+            {
+                "type": "transaction",
+                "label": f"Transaction {t.direction.value} {t.amount} — risk {t.risk_score}",
+                "at": t.created_at,
+            }
+        )
+
+    events = [e for e in events if e["at"] is not None]
+    events.sort(key=lambda e: e["at"], reverse=True)
+    return {
+        "customer_id": customer_id,
+        "total_events": len(events),
+        "transaction_count": txn_count,
+        "events": events[:limit],
+    }
+
+
+# ── MLRO Unified Override ───────────────────────────────────────────────────────
+# A single, audited entry point for the manual overrides an MLRO needs to make.
+# Writes to existing Customer fields only — every change is reasoned and logged
+# to the canonical AuditLog, never silent.
+
+
+class CustomerOverrideRequest(BaseModel):
+    reason: str
+    risk_score: Optional[float] = None
+    risk_level: Optional[RiskLevel] = None
+    cdd_level: Optional[CDDLevel] = None
+    status: Optional[CustomerStatus] = None
+    relationship_manager: Optional[str] = None
+    next_review_date: Optional[date] = None
+    # Free-form classification/monitoring overrides without dedicated columns —
+    # stored in the existing custom_fields JSON rather than adding new schema.
+    classification: Optional[str] = None
+    monitoring_level: Optional[str] = None
+
+
+@router.post("/{customer_id}/override", response_model=CustomerResponse)
+def override_customer(
+    customer_id: str,
+    payload: CustomerOverrideRequest,
+    current_user: User = Depends(require_mlro_or_above),
+    db: Session = Depends(get_db),
+):
+    customer = _get_customer(customer_id, org_id_for(current_user), db)
+
+    changes = payload.model_dump(
+        exclude={"reason", "classification", "monitoring_level"}, exclude_none=True
+    )
+    custom_field_changes = payload.model_dump(
+        include={"classification", "monitoring_level"}, exclude_none=True
+    )
+    if not changes and not custom_field_changes:
+        raise HTTPException(422, "No fields supplied to override")
+
+    before = {f: getattr(customer, f) for f in changes}
+    risk_changed = "risk_score" in changes or "risk_level" in changes
+    cdd_changed = "cdd_level" in changes
+
+    for field, value in changes.items():
+        setattr(customer, field, value)
+
+    if custom_field_changes:
+        before_custom = dict(customer.custom_fields or {})
+        customer.custom_fields = {**before_custom, **custom_field_changes}
+        before["custom_fields"] = before_custom
+
+    if risk_changed or cdd_changed:
+        _record_risk_history(
+            customer, "mlro_override", current_user.id, db, notes=payload.reason
+        )
+
+    def _serialise(v):
+        return v.value if hasattr(v, "value") else (v.isoformat() if hasattr(v, "isoformat") else v)
+
+    db.add(
+        AuditLog(
+            org_id=customer.org_id,
+            actor_id=current_user.id,
+            event_type=AuditEventType.customer_updated,
+            action="customer.mlro_override",
+            object_type="Customer",
+            object_id=customer.id,
+            old_value={k: _serialise(v) for k, v in before.items()},
+            new_value={
+                **{k: _serialise(v) for k, v in changes.items()},
+                **custom_field_changes,
+                "reason": payload.reason,
+            },
+        )
+    )
+    db.commit()
+    db.refresh(customer)
+    return customer
 
 
 # ── Bulk Import ───────────────────────────────────────────────────────────────

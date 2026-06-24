@@ -10,22 +10,22 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Organisation Setup',
     items: [
-      { label: 'Onboarding Setup', href: '/onboarding-setup' },
-      { label: 'Industry Pack', href: '/industry' },
-      { label: 'AML Program', href: '/aml-program' },
-      { label: 'Compliance Packs', href: '/packs' },
+      { label: 'Setup & Compliance Program', href: '/onboarding-setup' },
+      { label: 'Industry & Pack Configuration', href: '/industry' },
+      { label: 'AML Program & Risk Appetite', href: '/aml-program' },
     ],
   },
   {
-    label: 'Onboarding',
+    label: 'Customer Lifecycle',
     items: [
       { label: 'Customers', href: '/customers' },
       { label: 'KYC / KYB Pipeline', href: '/onboarding' },
       { label: 'Enhanced Due Diligence', href: '/ecdd' },
+      { label: 'Documents', href: '/documents' },
     ],
   },
   {
-    label: 'Monitoring',
+    label: 'Transaction Lifecycle',
     items: [
       { label: 'Transaction Monitoring', href: '/monitoring' },
       { label: 'Alerts', href: '/notifications' },
@@ -33,22 +33,46 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Reports',
+    label: 'Compliance Lifecycle',
     items: [
       { label: 'Reporting Queue', href: '/reporting' },
-      { label: 'IFTI', href: '/ifti' },
+      { label: 'Retention & Archival', href: '/retention' },
+    ],
+  },
+  {
+    label: 'Analytics & Benchmarking',
+    items: [
+      { label: 'Executive Dashboard', href: '/analytics/executive' },
+      { label: 'Compliance Dashboard', href: '/analytics/compliance' },
+      { label: 'MLRO Analytics', href: '/analytics/mlro' },
+      { label: 'Operations Dashboard', href: '/analytics/operations' },
+      { label: 'Industry Benchmarking', href: '/analytics/benchmarking' },
     ],
   },
   {
     label: 'Governance',
     items: [
+      { label: 'Compliance Calendar', href: '/governance/calendar' },
+      { label: 'Risk Matrix', href: '/governance/risk-matrix' },
+      { label: 'Policies', href: '/governance/policies' },
+      { label: 'Controls', href: '/governance/controls' },
+      { label: 'Training Suite', href: '/governance/training' },
+      { label: 'Independent Reviews', href: '/governance/independent-review' },
+      { label: 'Board Reports', href: '/governance/board-reports' },
+      { label: 'Examination Packs', href: '/governance/examination-packs' },
       { label: 'Audit Logs', href: '/audit' },
-      { label: 'Documents', href: '/documents' },
-      { label: 'Analytics', href: '/analytics' },
+      { label: 'API Integrations', href: '/api-integrations' },
     ],
   },
   {
-    label: 'Settings',
+    label: 'Automation',
+    items: [
+      { label: 'Rule Builder', href: '/rule-builder' },
+      { label: 'Decision Support', href: '/decision-support' },
+    ],
+  },
+  {
+    label: 'Admin',
     items: [
       { label: 'Users', href: '/users' },
       { label: 'API & Webhooks', href: '/api-keys' },
@@ -83,7 +107,21 @@ export const ROUTE_LABELS: Record<string, string> = {
   company: 'Organisation Profile',
   notifications: 'Notifications',
   analytics: 'Analytics',
+  executive: 'Executive Dashboard',
+  compliance: 'Compliance Dashboard',
+  operations: 'Operations Dashboard',
+  benchmarking: 'Industry Benchmarking',
   retention: 'Retention',
+  connectors: 'Data Connectors',
+  governance: 'Governance',
+  calendar: 'Compliance Calendar',
+  policies: 'Policies',
+  controls: 'Controls',
+  'risk-matrix': 'Risk Matrix',
+  training: 'Training Suite',
+  'independent-review': 'Independent Reviews',
+  'board-reports': 'Board Reports',
+  'examination-packs': 'Examination Packs',
   kyc: 'KYC Review',
   kyb: 'KYB Review',
   screening: 'Screening',
@@ -95,6 +133,8 @@ export const ROUTE_LABELS: Record<string, string> = {
   tasks: 'Tasks',
   timeline: 'Timeline',
   new: 'New',
+  'rule-builder': 'Rule Builder',
+  'decision-support': 'Decision Support',
 }
 
 // Paths that should never render the app chrome (sidebar/breadcrumbs) — marketing/public/auth pages.

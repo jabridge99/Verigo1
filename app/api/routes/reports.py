@@ -15,6 +15,7 @@ All decisions to lodge reports with AUSTRAC remain with the reporting entity.
 
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -31,6 +32,8 @@ from app.db.database import get_db
 from app.models.case import Case
 from app.models.customer import Customer
 from app.models.report import (
+    ECDDRecord,
+    ECDDStatus,
     FilingRegisterEntry,
     IFTIDirection,
     IFTIReport,
@@ -43,6 +46,8 @@ from app.models.report import (
     TTRIndustryType,
     TTRReport,
 )
+from app.schemas.report import ECDDCreate, ECDDResponse
+from app.services.ecdd_service import compute_ecdd_score, determine_recommendation
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services import audit_service
@@ -1430,3 +1435,117 @@ def _filing_dict(e: FilingRegisterEntry) -> dict:
         "supersedes_id": e.supersedes_id,
         "created_at": e.created_at,
     }
+
+
+# ── ECDD (Enhanced Customer Due Diligence) ───────────────────────────────────
+
+
+def _get_ecdd_or_404(ecdd_id: str, org_id: str, db: Session) -> ECDDRecord:
+    r = (
+        db.query(ECDDRecord)
+        .filter(ECDDRecord.ecdd_id == ecdd_id, ECDDRecord.org_id == org_id)
+        .first()
+    )
+    if not r:
+        raise HTTPException(404, "ECDD record not found.")
+    return r
+
+
+@router.get("/ecdd/", response_model=list[ECDDResponse])
+def list_ecdd(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    org_id = org_id_for(current_user)
+    return (
+        db.query(ECDDRecord)
+        .filter(ECDDRecord.org_id == org_id)
+        .order_by(ECDDRecord.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/ecdd/", response_model=ECDDResponse, status_code=status.HTTP_201_CREATED)
+def create_ecdd(
+    payload: ECDDCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    org_id = org_id_for(current_user)
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == str(payload.customer_id), Customer.org_id == org_id)
+        .first()
+    )
+    if not customer:
+        raise HTTPException(404, "Customer not found.")
+
+    record = ECDDRecord(
+        ecdd_id=f"ECDD-{uuid4().hex[:12].upper()}",
+        org_id=org_id,
+        customer_id=customer.id,
+        trigger_reason=payload.trigger_reason,
+        pep_status=bool(payload.pep_status),
+        adverse_media_found=bool(payload.adverse_media_found),
+        adverse_media_details=payload.adverse_media_details,
+        beneficial_owner_verified=bool(payload.beneficial_owner_verified),
+        beneficial_owner_details=payload.beneficial_owner_details,
+        source_of_wealth_verified=bool(payload.source_of_wealth_verified),
+        source_of_funds=payload.source_of_funds,
+        source_of_wealth_notes=payload.source_of_wealth_notes or payload.source_of_wealth_details,
+        purpose_of_transaction=payload.purpose_of_transaction,
+        high_tax_risk=bool(payload.high_tax_risk),
+        tax_risk_notes=payload.tax_risk_notes,
+        investment_legitimacy_notes=payload.investment_legitimacy_notes,
+        analyst_notes=payload.analyst_notes,
+        created_by=current_user.id,
+    )
+    record.enhanced_risk_score = compute_ecdd_score(record)
+    record.recommendation = determine_recommendation(
+        record.enhanced_risk_score, record.pep_status, record.adverse_media_found
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    audit_service.log_action(
+        db,
+        action="ecdd_created",
+        entity_type="ecdd_record",
+        entity_id=record.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={
+            "ecdd_id": record.ecdd_id,
+            "enhanced_risk_score": record.enhanced_risk_score,
+            "recommendation": record.recommendation,
+        },
+    )
+    return record
+
+
+@router.patch("/ecdd/{ecdd_id}/complete", response_model=ECDDResponse)
+def complete_ecdd(
+    ecdd_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    org_id = org_id_for(current_user)
+    record = _get_ecdd_or_404(ecdd_id, org_id, db)
+    record.status = ECDDStatus.completed
+    record.completed_by = current_user.id
+    record.completed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(record)
+
+    audit_service.log_action(
+        db,
+        action="ecdd_completed",
+        entity_type="ecdd_record",
+        entity_id=record.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+    )
+    return record

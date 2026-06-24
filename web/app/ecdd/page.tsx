@@ -3,16 +3,17 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   ShieldCheck, AlertTriangle, CheckCircle, XCircle,
-  Clock, RefreshCw, Plus, Eye, User, Search, ChevronLeft, ChevronRight, Download,
+  Clock, RefreshCw, Plus, Eye, User, Search, ChevronLeft, ChevronRight, Download, Scale,
 } from "lucide-react";
 import clsx from "clsx";
+import QuickActions from "@/components/QuickActions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface ECDDRecord {
-  id: number;
+  id: string;
   ecdd_id: string;
-  customer_id: number;
+  customer_id: string;
   trigger_reason: string;
   pep_status: number;
   adverse_media_found: number;
@@ -46,10 +47,10 @@ const SCORE_COLOR = (s: number) =>
   s >= 80 ? "text-red-400" : s >= 50 ? "text-amber-400" : "text-emerald-400";
 
 const DEMO_RECORDS: ECDDRecord[] = [
-  { id: 1, ecdd_id: "ECDD-DEMO00001", customer_id: 3, trigger_reason: "Sanctions screening hit — OFAC SDN list match on transaction counterparty", pep_status: 0, adverse_media_found: 1, beneficial_owner_verified: 0, source_of_wealth_verified: 0, enhanced_risk_score: 70, recommendation: "reject", status: "pending", created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 2, ecdd_id: "ECDD-DEMO00002", customer_id: 2, trigger_reason: "PEP identified — customer declared as foreign politically exposed person", pep_status: 1, adverse_media_found: 0, beneficial_owner_verified: 1, source_of_wealth_verified: 0, enhanced_risk_score: 45, recommendation: "monitor", status: "pending", created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 3, ecdd_id: "ECDD-DEMO00003", customer_id: 1, trigger_reason: "Periodic review — 12-month scheduled ECDD refresh", pep_status: 0, adverse_media_found: 0, beneficial_owner_verified: 1, source_of_wealth_verified: 1, enhanced_risk_score: 0, recommendation: "approve", status: "completed", created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: 4, ecdd_id: "ECDD-DEMO00004", customer_id: 5, trigger_reason: "Unusual transaction pattern — structuring detected across 3 accounts", pep_status: 0, adverse_media_found: 0, beneficial_owner_verified: 0, source_of_wealth_verified: 1, enhanced_risk_score: 20, recommendation: "monitor", status: "pending", created_at: new Date(Date.now() - 259200000).toISOString() },
+  { id: "1", ecdd_id: "ECDD-DEMO00001", customer_id: "3", trigger_reason: "Sanctions screening hit — OFAC SDN list match on transaction counterparty", pep_status: 0, adverse_media_found: 1, beneficial_owner_verified: 0, source_of_wealth_verified: 0, enhanced_risk_score: 70, recommendation: "reject", status: "pending", created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: "2", ecdd_id: "ECDD-DEMO00002", customer_id: "2", trigger_reason: "PEP identified — customer declared as foreign politically exposed person", pep_status: 1, adverse_media_found: 0, beneficial_owner_verified: 1, source_of_wealth_verified: 0, enhanced_risk_score: 45, recommendation: "monitor", status: "pending", created_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: "3", ecdd_id: "ECDD-DEMO00003", customer_id: "1", trigger_reason: "Periodic review — 12-month scheduled ECDD refresh", pep_status: 0, adverse_media_found: 0, beneficial_owner_verified: 1, source_of_wealth_verified: 1, enhanced_risk_score: 0, recommendation: "approve", status: "completed", created_at: new Date(Date.now() - 172800000).toISOString() },
+  { id: "4", ecdd_id: "ECDD-DEMO00004", customer_id: "5", trigger_reason: "Unusual transaction pattern — structuring detected across 3 accounts", pep_status: 0, adverse_media_found: 0, beneficial_owner_verified: 0, source_of_wealth_verified: 1, enhanced_risk_score: 20, recommendation: "monitor", status: "pending", created_at: new Date(Date.now() - 259200000).toISOString() },
 ];
 
 type Tab = "records" | "create";
@@ -384,15 +385,20 @@ export default function ECDDDashboard() {
               ))}
             </div>
 
-            {selected.status === "pending" && (
-              <div className="border-t border-navy-700 pt-4">
+            <div className="border-t border-navy-700 pt-4 space-y-3">
+              <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+              <QuickActions actions={[
+                { label: "Escalate to MLRO", href: `/mlro?customer=${selected.customer_id}&action=new-case&ecdd=${selected.ecdd_id}`, icon: Scale },
+                { label: "View Customer", href: `/customers/${selected.customer_id}`, icon: User },
+              ]} />
+              {selected.status === "pending" && (
                 <button
                   onClick={() => completeECDD(selected.ecdd_id)}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-500/15 border border-teal-500/25 text-teal-300 text-sm font-medium hover:bg-teal-500/25 transition-colors w-full justify-center">
                   <CheckCircle className="w-4 h-4" /> Mark Assessment Complete
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -421,7 +427,7 @@ const WIZARD_STEPS = [
 function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
-    customer_id: 1,
+    customer_id: "",
     trigger_reason: "",
     pep_status: 0,
     adverse_media_found: 0,
@@ -458,7 +464,7 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
   const { score, recommendation } = computeScore();
 
   const buildRecord = (): ECDDRecord => ({
-    id: Date.now(), ecdd_id: `ECDD-${Math.random().toString(36).slice(2, 12).toUpperCase()}`,
+    id: String(Date.now()), ecdd_id: `ECDD-${Math.random().toString(36).slice(2, 12).toUpperCase()}`,
     customer_id: form.customer_id, trigger_reason: form.trigger_reason,
     pep_status: form.pep_status, adverse_media_found: form.adverse_media_found,
     beneficial_owner_verified: form.beneficial_owner_verified,
@@ -485,7 +491,7 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
     } finally { setSubmitting(false); }
   };
 
-  const canAdvance = step !== 0 || form.trigger_reason.trim().length > 0;
+  const canAdvance = step !== 0 || (form.customer_id.trim().length > 0 && form.trigger_reason.trim().length > 0);
   const isLast = step === WIZARD_STEPS.length - 1;
 
   return (
@@ -508,8 +514,8 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
           <>
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-400">Customer ID *</label>
-              <input type="number" className="field-input" value={form.customer_id}
-                onChange={e => setForm(f => ({ ...f, customer_id: Number(e.target.value) }))} />
+              <input type="text" className="field-input" placeholder="e.g. cust_a1b2c3d4e5f6" value={form.customer_id}
+                onChange={e => setForm(f => ({ ...f, customer_id: e.target.value }))} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-400">Trigger reason *</label>

@@ -12,6 +12,16 @@ const nextConfig = {
         destination: '/solutions/remittance',
         permanent: true,
       },
+      {
+        source: '/ifti',
+        destination: '/reporting?type=ifti',
+        permanent: false,
+      },
+      {
+        source: '/packs',
+        destination: '/industry',
+        permanent: false,
+      },
     ]
   },
   async headers() {

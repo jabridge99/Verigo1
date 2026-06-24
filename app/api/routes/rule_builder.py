@@ -36,6 +36,7 @@ from app.api.deps import (
     require_compliance_or_above,
 )
 from app.db.database import get_db
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.automation_rule import (
     ApprovalDecisionType,
     ApprovalStepType,
@@ -43,11 +44,25 @@ from app.models.automation_rule import (
     AutomationRule,
     AutomationRuleExecution,
     AutomationRuleStatus,
+    AutomationRuleVersion,
     DecisionSupportPanel,
     RuleActionType,
     RuleEventType,
 )
 from app.models.user import User
+from app.services.automation_engine import evaluate_condition_groups
+
+EVENT_LABELS: dict[str, str] = {
+    "customer_created": "Customer Created",
+    "customer_review_due": "Customer Review Due",
+    "kyc_completed": "KYC Completed",
+    "screening_match": "Screening Match",
+    "transaction_created": "Transaction Created",
+    "customer_risk_changed": "Risk Score Changed",
+    "policy_expiring": "Policy Review Due",
+    "training_expiring": "Training Expired",
+    "independent_review_finding": "Independent Review Finding",
+}
 
 router = APIRouter(prefix="/rule-builder", tags=["Rule Builder"])
 
@@ -67,16 +82,24 @@ class ConditionSchema(BaseModel):
     )
     operator: str = Field(
         ...,
-        description="eq | ne | gt | lt | gte | lte | in | not_in | contains | is_true | is_false | between",
+        description="eq | ne | gt | lt | gte | lte | in | not_in | contains | starts_with | is_true | is_false | is_null | between",
     )
     value: object = None
     value_label: Optional[str] = None
+    negate: bool = Field(default=False, description="NOT this condition")
 
 
 class ConditionGroupSchema(BaseModel):
-    logic: str = Field(default="AND", description="AND (all must match within group)")
+    logic: str = Field(default="AND", description="AND (all must match) or OR (any must match) within this group")
     description: Optional[str] = None
-    conditions: list[ConditionSchema]
+    negate: bool = Field(default=False, description="NOT the whole group's result")
+    conditions: list[ConditionSchema] = Field(default_factory=list)
+    groups: list["ConditionGroupSchema"] = Field(
+        default_factory=list, description="Nested sub-groups, combined per this group's logic"
+    )
+
+
+ConditionGroupSchema.model_rebuild()
 
 
 class ActionSchema(BaseModel):
@@ -120,6 +143,28 @@ class ApprovalDecision(BaseModel):
 def _rule_ref(db: Session, org_id: str) -> str:
     count = db.query(AutomationRule).filter(AutomationRule.org_id == org_id).count()
     return f"AUTO-{count + 1:04d}"
+
+
+def _snapshot_version(
+    db: Session, r: AutomationRule, version_number: int, change_summary: str, changed_by: str
+) -> None:
+    db.add(
+        AutomationRuleVersion(
+            rule_id=r.id,
+            org_id=r.org_id,
+            version_number=version_number,
+            name=r.name,
+            description=r.description,
+            event_type=r.event_type.value,
+            status=r.status.value,
+            priority=r.priority,
+            condition_groups=r.condition_groups or [],
+            actions=r.actions or [],
+            applicable_industries=r.applicable_industries or [],
+            change_summary=change_summary,
+            changed_by=changed_by,
+        )
+    )
 
 
 def _rule_dict(r: AutomationRule) -> dict:
@@ -227,7 +272,7 @@ def rule_builder_reference(
     """
     return {
         "event_types": [
-            {"value": e.value, "label": e.value.replace("_", " ").title()}
+            {"value": e.value, "label": EVENT_LABELS.get(e.value, e.value.replace("_", " ").title())}
             for e in RuleEventType
         ],
         "action_types": [
@@ -369,6 +414,19 @@ def create_rule(
     db.add(r)
     db.commit()
     db.refresh(r)
+
+    _snapshot_version(db, r, version_number=1, change_summary="Rule created", changed_by=current_user.id)
+    db.add(
+        AuditLog(
+            org_id=org_id,
+            event_type=AuditEventType.rule_created,
+            actor_id=current_user.id,
+            action=f"Automation rule '{r.name}' created",
+            object_type="AutomationRule",
+            object_id=r.id,
+        )
+    )
+    db.commit()
     return _rule_dict(r)
 
 
@@ -415,21 +473,38 @@ def update_rule(
         raise HTTPException(409, "System rules cannot be archived.")
 
     data = payload.model_dump(exclude_none=True)
-    if "condition_groups" in data:
-        data["condition_groups"] = [g for g in data["condition_groups"]]
-    if "actions" in data:
-        data["actions"] = [a for a in data["actions"]]
-
+    status_changed = "status" in data and data["status"] != r.status.value
     for k, v in data.items():
-        if k == "status":
-            setattr(r, k, v)
-        elif k in ("condition_groups", "actions"):
-            setattr(r, k, v)
-        else:
-            setattr(r, k, v)
+        setattr(r, k, v)
 
     db.commit()
     db.refresh(r)
+
+    next_version = (
+        db.query(AutomationRuleVersion)
+        .filter(AutomationRuleVersion.rule_id == r.id)
+        .count()
+        + 1
+    )
+    _snapshot_version(
+        db,
+        r,
+        version_number=next_version,
+        change_summary=f"Updated fields: {', '.join(data.keys())}",
+        changed_by=current_user.id,
+    )
+    db.add(
+        AuditLog(
+            org_id=org_id,
+            event_type=AuditEventType.rule_status_changed if status_changed else AuditEventType.rule_modified,
+            actor_id=current_user.id,
+            action=f"Automation rule '{r.name}' updated",
+            object_type="AutomationRule",
+            object_id=r.id,
+            new_value=data,
+        )
+    )
+    db.commit()
     return _rule_dict(r)
 
 
@@ -455,6 +530,16 @@ def delete_rule(
         raise HTTPException(
             409, "System rules cannot be deleted. Set status=inactive to disable."
         )
+    db.add(
+        AuditLog(
+            org_id=org_id,
+            event_type=AuditEventType.rule_deleted,
+            actor_id=current_user.id,
+            action=f"Automation rule '{r.name}' deleted",
+            object_type="AutomationRule",
+            object_id=r.id,
+        )
+    )
     db.delete(r)
     db.commit()
 
@@ -493,6 +578,75 @@ def rule_executions(
         }
         for e in execs
     ]
+
+
+@router.get("/rules/{rule_id}/versions")
+def rule_versions(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """Immutable version history for a rule — one snapshot per create/update."""
+    org_id = org_id_for(current_user)
+    versions = (
+        db.query(AutomationRuleVersion)
+        .filter(AutomationRuleVersion.rule_id == rule_id, AutomationRuleVersion.org_id == org_id)
+        .order_by(AutomationRuleVersion.version_number.desc())
+        .all()
+    )
+    return [
+        {
+            "id": v.id,
+            "version_number": v.version_number,
+            "name": v.name,
+            "status": v.status,
+            "condition_groups": v.condition_groups or [],
+            "actions": v.actions or [],
+            "change_summary": v.change_summary,
+            "changed_by": v.changed_by,
+            "created_at": v.created_at,
+        }
+        for v in versions
+    ]
+
+
+class RuleTestRequest(BaseModel):
+    context: dict = Field(
+        ..., description="Sample event context to test the rule's conditions against, e.g. {'customer': {'risk_level': 'high'}}"
+    )
+
+
+@router.post("/rules/{rule_id}/test")
+def test_rule(
+    rule_id: str,
+    payload: RuleTestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Dry-run a rule's conditions against a sample context.
+
+    Never executes actions and never writes an AutomationRuleExecution row —
+    this is a pure evaluation test for building/debugging rules in the UI,
+    distinct from real (shadow-mode) execution which is logged.
+    """
+    org_id = org_id_for(current_user)
+    r = (
+        db.query(AutomationRule)
+        .filter(AutomationRule.id == rule_id, AutomationRule.org_id == org_id)
+        .first()
+    )
+    if not r:
+        raise HTTPException(404, "Rule not found.")
+
+    matched_index = evaluate_condition_groups(payload.context, r.condition_groups or [])
+    return {
+        "rule_id": r.id,
+        "matched": matched_index is not None,
+        "matched_group_index": matched_index,
+        "would_execute_actions": (r.actions or []) if matched_index is not None else [],
+        "disclaimer": DISCLAIMER,
+    }
 
 
 # ── Decision Support Panel ────────────────────────────────────────────────────
