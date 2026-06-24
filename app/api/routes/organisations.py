@@ -516,12 +516,8 @@ def list_members(
     # Batch-load users/roles instead of two queries per member (N+1).
     user_ids = {m.user_id for m in members}
     role_ids = {m.role_id for m in members}
-    users_by_id = {
-        u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()
-    }
-    roles_by_id = {
-        r.id: r for r in db.query(Role).filter(Role.id.in_(role_ids)).all()
-    }
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()}
+    roles_by_id = {r.id: r for r in db.query(Role).filter(Role.id.in_(role_ids)).all()}
 
     return [
         MemberResponse(

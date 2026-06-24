@@ -84,10 +84,10 @@ function CustomerRiskDashboard() {
             <p className="text-slate-500 text-sm mt-0.5">Risk profiles · KYC status · AML exposure per customer</p>
           </div>
           <div className="flex items-center gap-2 self-start">
-            <Link href="/onboarding" className="btn-secondary text-sm py-2 px-3 flex items-center gap-1.5">
+            <Link href="/onboarding?tab=manual" className="btn-secondary text-sm py-2 px-3 flex items-center gap-1.5">
               <UserPlus className="w-4 h-4" /> Add Customer
             </Link>
-            <Link href="/onboarding?tab=bulk-import" className="btn-secondary text-sm py-2 px-3 flex items-center gap-1.5">
+            <Link href="/onboarding?tab=import" className="btn-secondary text-sm py-2 px-3 flex items-center gap-1.5">
               <Upload className="w-4 h-4" /> Bulk Import
             </Link>
             <button

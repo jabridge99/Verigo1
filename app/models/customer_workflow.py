@@ -165,6 +165,7 @@ class EDDTrigger(str, enum.Enum):
     cash_intensive = "cash_intensive"
     unusual_activity = "unusual_activity"
     compliance_discretion = "compliance_discretion"
+    other = "other"
 
 
 # ── Customer Workflow Record ───────────────────────────────────────────────────
