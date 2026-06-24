@@ -99,6 +99,7 @@ from app.api.routes.ifti_e import router as ifti_e_router
 from app.api.routes.ifti_receipts import router as ifti_receipts_router
 from app.api.routes.independent_review import router as independent_review_router
 from app.api.routes.integrations import router as integrations_router
+from app.api.routes.marketplace import router as marketplace_router
 from app.api.routes.monitoring import router as monitoring_router
 from app.api.routes.org_config import router as org_config_router
 from app.api.routes.professional_assessment import (
@@ -322,6 +323,7 @@ app.include_router(customer_portal_public_router, prefix="/api/v1")
 app.include_router(training_triggers_router, prefix="/api/v1")
 app.include_router(examination_packs_router, prefix="/api/v1")
 app.include_router(benchmark_router, prefix="/api/v1")
+app.include_router(marketplace_router, prefix="/api/v1")
 app.include_router(verify.router, prefix="/api/v1")
 app.include_router(storage.router, prefix="/api/v1")
 app.include_router(organisations.router, prefix="/api/v1")

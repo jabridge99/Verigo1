@@ -228,6 +228,14 @@ from app.models.monitoring import (
     RuleStatus,
     TransactionAlert,
 )
+from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
+from app.models.marketplace import (
+    VerificationCheckType,
+    VerificationIntegrationMode,
+    VerificationOrder,
+    VerificationOrderStatus,
+    VerificationProvider,
+)
 from app.models.organisation import (
     CUSTOM_PACKAGE_INDUSTRIES,
     IndustryType,
@@ -302,10 +310,12 @@ from app.models.risk_engine import (
     RiskScoreHistory,
 )
 from app.models.risk_matrix import (
+    CustomerQuestionResponse,
     OrgApprovalQuestion,
     OrgMonitoringConfig,
     QuestionAnswer,
     QuestionCategory,
+    QuestionContext,
     TransactionQuestionResponse,
 )
 from app.models.risk_matrix_config import (
@@ -512,6 +522,8 @@ __all__ = [
     "OrgMonitoringConfig",
     "OrgApprovalQuestion",
     "TransactionQuestionResponse",
+    "CustomerQuestionResponse",
+    "QuestionContext",
     "QuestionAnswer",
     "QuestionCategory",
     # Professional Services Assessments
@@ -612,6 +624,15 @@ __all__ = [
     "RiskFactorScore",
     "RiskMitigation",
     "RiskScoreHistory",
+    # Mitigation Library
+    "MitigationLibraryItem",
+    "MitigationCategory",
+    # Verification Marketplace
+    "VerificationProvider",
+    "VerificationOrder",
+    "VerificationCheckType",
+    "VerificationIntegrationMode",
+    "VerificationOrderStatus",
     # Board & Executive Reporting
     "BoardReport",
     "BoardReportType",

@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import org_id_for, require_compliance_or_above
 from app.db.database import get_db
-from app.models.risk_matrix import OrgApprovalQuestion, OrgMonitoringConfig
+from app.models.risk_matrix import OrgApprovalQuestion, OrgMonitoringConfig, QuestionContext
 from app.models.user import User
 
 router = APIRouter(prefix="/org", tags=["Org Config"])
@@ -62,6 +62,7 @@ class ApprovalQuestionCreate(BaseModel):
     is_required: bool = True
     industry_context: Optional[str] = Field(None, max_length=200)
     help_text: Optional[str] = Field(None, max_length=500)
+    context: QuestionContext = QuestionContext.transaction
 
 
 class ApprovalQuestionUpdate(BaseModel):
@@ -136,6 +137,7 @@ def _question_dict(q: OrgApprovalQuestion) -> dict:
         "is_active": q.is_active,
         "industry_context": q.industry_context,
         "help_text": q.help_text,
+        "context": q.context.value if q.context else "transaction",
         "compliant_answer": q.compliant_answer.value if q.compliant_answer else "yes",
         "created_by": q.created_by,
         "created_at": q.created_at,
@@ -226,6 +228,7 @@ def update_monitoring_config(
 
 @router.get("/approval-questions")
 def list_approval_questions(
+    context: Optional[QuestionContext] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
@@ -233,16 +236,21 @@ def list_approval_questions(
     List the org's pre-approval checklist questions, ordered by question_order.
 
     These questions are presented to the compliance officer when reviewing an
-    alert or approving a transaction. Answers contribute custom_question_weight
-    percent of the final approval score.
+    alert, approving a transaction, or approving a customer/onboarding record
+    (depending on `context`). Answers contribute custom_question_weight
+    percent of the final approval score. Pass `context=transaction` or
+    `context=customer` to filter to one workflow; omit to list both.
     """
     org_id = org_id_for(current_user)
+    filters = [
+        OrgApprovalQuestion.org_id == org_id,
+        OrgApprovalQuestion.is_active == True,
+    ]
+    if context is not None:
+        filters.append(OrgApprovalQuestion.context == context)
     questions = (
         db.query(OrgApprovalQuestion)
-        .filter(
-            OrgApprovalQuestion.org_id == org_id,
-            OrgApprovalQuestion.is_active == True,
-        )
+        .filter(*filters)
         .order_by(OrgApprovalQuestion.question_order)
         .all()
     )
@@ -286,14 +294,15 @@ def create_approval_question(
         .filter(
             OrgApprovalQuestion.org_id == org_id,
             OrgApprovalQuestion.is_active == True,
+            OrgApprovalQuestion.context == payload.context,
         )
         .count()
     )
     if active_count >= MAX_APPROVAL_QUESTIONS:
         raise HTTPException(
             status_code=409,
-            detail=f"Maximum of {MAX_APPROVAL_QUESTIONS} active questions allowed. "
-            "Deactivate an existing question before adding a new one.",
+            detail=f"Maximum of {MAX_APPROVAL_QUESTIONS} active {payload.context.value} "
+            "questions allowed. Deactivate an existing question before adding a new one.",
         )
 
     q = OrgApprovalQuestion(
