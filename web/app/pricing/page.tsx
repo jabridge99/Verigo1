@@ -32,21 +32,23 @@ const plans = [
     href: '/start-trial',
   },
   {
-    name: 'Essential',
+    name: 'Starter',
     price: '$299',
-    period: '/year',
-    billing: 'Billed annually',
+    period: '/mo',
+    billing: 'or $2,870.40/yr billed annually (20% off)',
     badge: null,
     description: 'For small reporting entities building their first AML/CTF programme.',
     highlight: false,
     features: [
-      { label: 'Up to 50 customers', included: true },
+      { label: 'Up to 500 customers', included: true },
+      { label: 'Up to 5 users per tenant', included: true },
+      { label: '10,000 API calls / month', included: true },
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
       { label: 'AML/CTF Program — basic reference template', included: true, note: true },
       { label: 'SMR & TTR reporting', included: true },
-      { label: 'Basic transaction monitoring', included: true },
+      { label: 'AML transaction monitoring', included: true },
       { label: 'Essential integrations (Email, Cloud Storage)', included: true },
       { label: 'Enhanced due diligence (EDD)', included: true },
       { label: 'Sanctions screening (OFAC, UN, EU, DFAT, UK HMT)', included: true },
@@ -65,141 +67,169 @@ const plans = [
   {
     name: 'Professional',
     price: '$799',
-    period: '/year',
-    billing: 'Billed annually',
+    period: '/mo',
+    billing: 'or $7,670.40/yr billed annually (20% off)',
     badge: 'Most Popular',
     description: 'For growing compliance teams with full AUSTRAC reporting obligations.',
     highlight: true,
     features: [
-      { label: 'Up to 200 customers', included: true },
+      { label: 'Up to 5,000 customers', included: true },
+      { label: 'Up to 25 users per tenant', included: true },
+      { label: '100,000 API calls / month', included: true },
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC + KYB verification', included: true },
       { label: 'AML/CTF Program — basic reference template', included: true, note: true },
       { label: 'IFTI IN, OUT & bulk import', included: true },
       { label: 'SMR & TTR reporting', included: true },
       { label: 'Sanctions, PEP + adverse media', included: true },
-      { label: 'Advanced transaction monitoring', included: true },
-      { label: 'EDD workflows', included: true },
-      { label: 'Case management', included: true },
+      { label: 'Advanced rule builder', included: true },
+      { label: 'ECDD assessments', included: true },
+      { label: 'MLRO case management', included: true },
       { label: 'Workflow automation', included: true },
-      { label: 'Essential integrations (Email, Cloud Storage)', included: true },
+      { label: 'Webhooks & API access', included: true },
+      { label: 'Document vault (50 GB)', included: true },
+      { label: 'Analytics dashboard', included: true },
       { label: 'AML data connectors', included: true },
-      { label: 'Connect Verigo to your existing systems', included: true },
     ],
     cta: 'Start Free Trial',
     href: '/start-trial',
   },
   {
     name: 'Enterprise',
-    price: 'Custom',
-    period: '',
-    billing: 'Tailored to your organisation',
+    price: '$1,999',
+    period: '/mo',
+    billing: 'or $19,190.40/yr billed annually (20% off)',
     badge: null,
     description: 'For reporting groups, financial institutions, and SaaS resellers.',
     highlight: false,
     features: [
-      { label: 'Customizable customer limit', included: true },
+      { label: 'Unlimited customers', included: true },
+      { label: 'Unlimited users per tenant', included: true },
+      { label: 'Unlimited API calls / month', included: true },
       { label: 'Up to 2 compliance packs', included: true },
       { label: 'KYC, KYB + beneficial ownership', included: true },
       { label: 'AML/CTF Program — tailored to your industry', included: true },
       { label: 'Full IFTI, SMR, TTR suite', included: true },
-      { label: 'Essential integrations + AML data connectors', included: true },
-      { label: 'Reporting groups (multi-entity)', included: true },
-      { label: 'White label branding', included: true },
-      { label: 'Dedicated compliance support', included: true },
-      { label: 'Connect Verigo to your existing systems', included: true },
-      { label: 'SLA guarantee', included: true },
+      { label: 'White-label branding', included: true },
+      { label: 'Custom domain', included: true },
+      { label: 'Multi-tenant management', included: true },
+      { label: 'Dedicated MLRO support', included: true },
+      { label: 'Document vault (500 GB)', included: true },
+      { label: '99.9% uptime SLA', included: true },
+      { label: 'Dedicated account manager', included: true },
+    ],
+    cta: 'Start Free Trial',
+    href: '/start-trial',
+  },
+  {
+    name: 'VVIP',
+    price: 'Custom',
+    period: '',
+    billing: 'Custom pricing per tenant',
+    badge: null,
+    description: 'Everything in Enterprise, plus white-glove service for the largest reporting groups.',
+    highlight: false,
+    features: [
+      { label: 'Everything in Enterprise', included: true },
+      { label: 'Custom SLA', included: true },
+      { label: 'On-site training', included: true },
+      { label: 'Regulatory liaison support', included: true },
+      { label: 'Custom integrations', included: true },
     ],
     cta: 'Contact Sales',
-    href: '/live-demo',
+    href: '/contact',
   },
 ]
 
 type CellValue = true | false | string
 
+// Columns: Free Trial, Starter, Professional, Enterprise, VVIP — matches
+// plans[] order above, which mirrors the backend PLAN_CATALOGUE.
 const compareGroups: { group: string; rows: { feature: string; tooltip?: string; values: CellValue[] }[] }[] = [
   {
     group: 'Platform',
     rows: [
-      { feature: 'Customer limit', values: ['10', '50', '200', 'Customizable'] },
-      { feature: 'Users per tenant', values: ['1', '1', '3', '5'] },
-      { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'Up to 2 packs'] },
-      { feature: 'AML/CTF Program', tooltip: 'Basic reference template preloaded. Tailoring to your specific business is an additional service.', values: ['Reference only', 'Reference only', 'Reference only', 'Tailored'] },
-      { feature: 'Annual review workflow', values: [true, true, true, true] },
+      { feature: 'Customer limit', values: ['10', '500', '5,000', 'Unlimited', 'Unlimited'] },
+      { feature: 'Users per tenant', values: ['1', '5', '25', 'Unlimited', 'Unlimited'] },
+      { feature: 'API calls / month', values: ['—', '10,000', '100,000', 'Unlimited', 'Unlimited'] },
+      { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'Up to 2 packs', 'Up to 2 packs'] },
+      { feature: 'AML/CTF Program', tooltip: 'Basic reference template preloaded. Tailoring to your specific business is an additional service.', values: ['Reference only', 'Reference only', 'Reference only', 'Tailored', 'Tailored'] },
+      { feature: 'Annual review workflow', values: [true, true, true, true, true] },
     ],
   },
   {
     group: 'Customer Verification',
     rows: [
-      { feature: 'KYC — identity verification', values: [true, true, true, true] },
-      { feature: 'KYB — business verification', values: [true, true, true, true] },
-      { feature: 'Beneficial ownership mapping', values: [true, true, true, true] },
-      { feature: 'Enhanced due diligence (EDD)', values: [true, true, true, true] },
-      { feature: 'Ongoing periodic re-verification', values: [true, true, true, true] },
+      { feature: 'KYC — identity verification', values: [true, true, true, true, true] },
+      { feature: 'KYB — business verification', values: [true, true, true, true, true] },
+      { feature: 'Beneficial ownership mapping', values: [true, true, true, true, true] },
+      { feature: 'Enhanced due diligence (EDD)', values: [true, true, true, true, true] },
+      { feature: 'Ongoing periodic re-verification', values: [true, true, true, true, true] },
     ],
   },
   {
     group: 'Screening',
     rows: [
-      { feature: 'Sanctions screening (OFAC, UN, EU, DFAT, UK HMT)', values: [true, true, true, true] },
-      { feature: 'PEP screening', values: [true, true, true, true] },
-      { feature: 'Adverse media monitoring', values: [true, true, true, true] },
+      { feature: 'Sanctions screening (OFAC, UN, EU, DFAT, UK HMT)', values: [true, true, true, true, true] },
+      { feature: 'PEP screening', values: [true, true, true, true, true] },
+      { feature: 'Adverse media monitoring', values: [true, true, true, true, true] },
     ],
   },
   {
     group: 'Transaction Monitoring',
     rows: [
-      { feature: 'Transaction monitoring rules', values: [true, 'Basic', 'Advanced', 'Advanced'] },
-      { feature: 'Structuring & velocity detection', values: [true, false, true, true] },
-      { feature: 'High-risk jurisdiction flags', values: [true, false, true, true] },
+      { feature: 'Transaction monitoring rules', values: [true, 'Basic', 'Advanced', 'Advanced', 'Advanced'] },
+      { feature: 'Structuring & velocity detection', values: [true, false, true, true, true] },
+      { feature: 'High-risk jurisdiction flags', values: [true, false, true, true, true] },
     ],
   },
   {
     group: 'AUSTRAC Reporting',
     rows: [
-      { feature: 'IFTI IN & OUT reporting', values: [true, false, true, true] },
-      { feature: 'IFTI bulk import', values: [true, false, true, true] },
-      { feature: 'SMR reporting', values: [true, true, true, true] },
-      { feature: 'TTR reporting', values: [true, true, true, true] },
-      { feature: 'Report review & MLRO sign-off', values: [true, false, true, true] },
+      { feature: 'IFTI IN & OUT reporting', values: [true, false, true, true, true] },
+      { feature: 'IFTI bulk import', values: [true, false, true, true, true] },
+      { feature: 'SMR reporting', values: [true, true, true, true, true] },
+      { feature: 'TTR reporting', values: [true, true, true, true, true] },
+      { feature: 'Report review & MLRO sign-off', values: [true, false, true, true, true] },
     ],
   },
   {
     group: 'Case Management & Automation',
     rows: [
-      { feature: 'Case management & investigation', values: [true, false, true, true] },
-      { feature: 'No-code workflow automation', values: [true, false, true, true] },
-      { feature: 'Reporting groups (multi-entity)', values: [true, false, false, true] },
-      { feature: 'White label branding', values: [false, false, false, true] },
-      { feature: 'Connect Verigo to your existing systems', values: [false, false, true, true] },
+      { feature: 'Case management & investigation (MLRO)', values: [true, false, true, true, true] },
+      { feature: 'No-code workflow automation', values: [true, false, true, true, true] },
+      { feature: 'Reporting groups (multi-entity)', values: [true, false, false, true, true] },
+      { feature: 'White-label branding', values: [false, false, false, true, true] },
+      { feature: 'Connect Verigo to your existing systems', values: [false, false, true, true, true] },
+      { feature: 'Multi-tenant management', values: [false, false, false, true, true] },
     ],
   },
   {
     group: 'Integrations',
     rows: [
-      { feature: 'Essential integrations (Email, Cloud Storage)', values: [true, true, true, true] },
-      { feature: 'AML data connectors', values: [false, false, true, true] },
-      { feature: 'API access & webhooks', values: [false, false, true, true] },
-      { feature: 'API calls / month', values: ['—', '10,000', '100,000', 'Unlimited'] },
-      { feature: 'Custom domain', values: [false, false, false, true] },
+      { feature: 'Essential integrations (Email, Cloud Storage)', values: [true, true, true, true, true] },
+      { feature: 'AML data connectors', values: [false, false, true, true, true] },
+      { feature: 'API access & webhooks', values: [false, false, true, true, true] },
+      { feature: 'Custom domain', values: [false, false, false, true, true] },
+      { feature: 'Custom integrations', values: [false, false, false, false, true] },
     ],
   },
   {
     group: 'Compliance Records',
     rows: [
-      { feature: 'Immutable audit log', values: [true, true, true, true] },
-      { feature: 'Document vault storage', values: ['1 GB', '5 GB', '50 GB', '500 GB'] },
-      { feature: 'AUSTRAC-aligned data retention (7–10 yr)', values: [true, true, true, true] },
-      { feature: 'Legal hold management', values: [false, false, false, true] },
+      { feature: 'Immutable audit log', values: [true, true, true, true, true] },
+      { feature: 'Document vault storage', values: ['1 GB', '5 GB', '50 GB', '500 GB', '500 GB'] },
+      { feature: 'AUSTRAC-aligned data retention (7–10 yr)', values: [true, true, true, true, true] },
+      { feature: 'Legal hold management', values: [false, false, false, true, true] },
     ],
   },
   {
     group: 'Support & Infrastructure',
     rows: [
-      { feature: 'Australian data hosting', values: [true, true, true, true] },
-      { feature: 'AES-256 encryption', values: [true, true, true, true] },
-      { feature: '99.9% uptime SLA', values: [true, true, true, true] },
-      { feature: 'Support level', values: ['Email (trial)', 'Email', 'Priority', 'Dedicated'] },
+      { feature: 'Australian data hosting', values: [true, true, true, true, true] },
+      { feature: 'AES-256 encryption', values: [true, true, true, true, true] },
+      { feature: '99.9% uptime SLA', values: [false, false, false, true, true] },
+      { feature: 'Support level', values: ['Email (trial)', 'Standard', 'Priority', 'Dedicated account manager', 'Custom SLA'] },
     ],
   },
 ]
@@ -258,7 +288,7 @@ export default function PricingPage() {
       {/* Plans */}
       <section className="pub-section pt-8">
         <div className="pub-container">
-          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+          <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-5 mb-8">
             {plans.map(plan => (
               <div
                 key={plan.name}
@@ -310,9 +340,9 @@ export default function PricingPage() {
             <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-amber-800 text-sm leading-relaxed">
               <span className="font-semibold">† AML/CTF Program — basic reference template only.</span>{' '}
-              Every Essential and Professional plan includes a preloaded industry reference template to help you get started.
+              Every Free Trial, Starter, and Professional plan includes a preloaded industry reference template to help you get started.
               Each business must tailor its own AML/CTF Program to reflect its specific operations, customer types, and risk profile.
-              Program tailoring and review services are available as an additional engagement — <Link href="/live-demo" className="underline hover:text-amber-900">contact us</Link> to discuss.
+              Program tailoring and review services are available as an additional engagement — <Link href="/contact" className="underline hover:text-amber-900">contact us</Link> to discuss.
             </p>
           </div>
 
@@ -337,7 +367,7 @@ export default function PricingPage() {
             <p className="text-slate-500 text-center mb-10">Every feature, every plan — side by side.</p>
 
             <div className="overflow-x-auto rounded-2xl ring-1 ring-slate-200 shadow-sm">
-              <table className="w-full border-collapse min-w-[640px]">
+              <table className="w-full border-collapse min-w-[800px]">
 
                 {/* Sticky header */}
                 <thead className="sticky top-0 z-10">
@@ -369,7 +399,7 @@ export default function PricingPage() {
                     <>
                       {/* Category group header */}
                       <tr key={`group-${gi}`} className="bg-slate-50 border-y border-slate-200">
-                        <td colSpan={5} className="py-2.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <td colSpan={plans.length + 1} className="py-2.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">
                           {group.group}
                         </td>
                       </tr>
@@ -433,13 +463,10 @@ export default function PricingPage() {
             <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
               Start Free Trial <ArrowRight className="w-5 h-5" />
             </Link>
-            <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
-              Talk to Sales
-            </Link>
           </div>
           <p className="text-slate-500 text-sm">
             Questions about pricing?{' '}
-            <Link href="/live-demo" className="text-slate-400 underline hover:text-slate-300">Book a demo</Link>{' '}
+            <Link href="/contact" className="text-slate-400 underline hover:text-slate-300">Contact us</Link>{' '}
             and we&apos;ll walk you through the right plan for your business.
           </p>
         </div>

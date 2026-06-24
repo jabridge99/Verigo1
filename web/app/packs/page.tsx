@@ -130,8 +130,8 @@ export default function PacksIndexPage() {
               <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
                 Start Free Trial <ArrowRight className="w-5 h-5" />
               </Link>
-              <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
-                Book Demo
+              <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
+                Start Free Trial
               </Link>
             </div>
           </div>
