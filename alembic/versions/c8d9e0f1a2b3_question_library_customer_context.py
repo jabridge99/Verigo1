@@ -31,10 +31,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 question_context_enum = sa.Enum('transaction', 'customer', name='questioncontext')
+# `questionanswer` already exists in the DB (created by an earlier migration
+# for transaction_question_responses.answer). Passing create_type=False on an
+# inline sa.Enum() inside op.create_table() does NOT suppress Alembic's
+# emitted CREATE TYPE for that type — PostgresSQL's ENUM._on_table_create()
+# only skips creation if checkfirst is honoured, which create_type=False does
+# not request. Explicitly create with checkfirst=True instead, exactly like
+# question_context_enum below.
+question_answer_enum = sa.Enum(
+    'yes', 'no', 'not_applicable', name='questionanswer', create_type=False
+)
 
 
 def upgrade() -> None:
     question_context_enum.create(op.get_bind(), checkfirst=True)
+    question_answer_enum.create(op.get_bind(), checkfirst=True)
 
     op.add_column(
         'org_approval_questions',
@@ -67,10 +78,7 @@ def upgrade() -> None:
         sa.Column('org_id', sa.String(), nullable=False),
         sa.Column(
             'answer',
-            sa.Enum(
-                'yes', 'no', 'not_applicable',
-                name='questionanswer', create_type=False,
-            ),
+            question_answer_enum,
             nullable=False,
         ),
         sa.Column('notes', sa.Text(), nullable=True),
