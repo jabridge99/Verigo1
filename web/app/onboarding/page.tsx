@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Users, Upload, UserPlus, BarChart3, RefreshCw, X, CheckCircle, AlertCircle } from "lucide-react";
 import BulkUpload from "@/components/Onboarding/BulkUpload";
 import ApplicantTable from "@/components/Onboarding/ApplicantTable";
@@ -35,8 +36,33 @@ interface PipelineStats {
 
 type Tab = "pipeline" | "applicants" | "import" | "manual";
 
+const TAB_ALIASES: Record<string, Tab> = {
+  pipeline: "pipeline",
+  applicants: "applicants",
+  import: "import",
+  "bulk-import": "import",
+  bulk: "import",
+  manual: "manual",
+  "manual-entry": "manual",
+  add: "manual",
+};
+
+function tabFromParam(value: string | null): Tab {
+  if (!value) return "pipeline";
+  return TAB_ALIASES[value] ?? "pipeline";
+}
+
 export default function OnboardingDashboard() {
-  const [tab, setTab] = useState<Tab>("pipeline");
+  return (
+    <Suspense fallback={null}>
+      <OnboardingDashboardInner />
+    </Suspense>
+  );
+}
+
+function OnboardingDashboardInner() {
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => tabFromParam(searchParams.get("tab")));
   const [sessions, setSessions] = useState<Session[]>([]);
   const [stats, setStats] = useState<PipelineStats | null>(null);
   const [loading, setLoading] = useState(true);
