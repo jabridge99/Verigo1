@@ -26,17 +26,20 @@ Training completion records do not constitute regulatory certification.
 
 from __future__ import annotations
 
+import html
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import uuid4
 
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
     Pagination,
+    get_current_user,
     org_id_for,
     require_analyst_or_above,
     require_compliance_or_above,
@@ -45,6 +48,7 @@ from app.api.deps import (
 from app.db.database import get_db
 from app.models.aml_solution import AMLSolution
 from app.models.governance_training import (
+    INDUSTRY_TRAINING_PACKS,
     STANDARD_TRAINING_COURSES,
     AssignmentTrigger,
     GovernanceTrainingRecord,
@@ -116,6 +120,9 @@ class CourseCreate(BaseModel):
     applicable_roles: List[str] = ["all"]
     is_mandatory: bool = False
     regulatory_references: List[str] = []
+    applicable_industries: List[str] = ["all"]
+    linked_control_ids: List[str] = []
+    linked_risk_factor_categories: List[str] = []
 
 
 class CourseUpdate(BaseModel):
@@ -132,6 +139,9 @@ class CourseUpdate(BaseModel):
     applicable_roles: Optional[List[str]] = None
     is_mandatory: Optional[bool] = None
     is_active: Optional[bool] = None
+    applicable_industries: Optional[List[str]] = None
+    linked_control_ids: Optional[List[str]] = None
+    linked_risk_factor_categories: Optional[List[str]] = None
 
 
 class AssignRequest(BaseModel):
@@ -193,6 +203,9 @@ def _course_dict(c: TrainingCourse) -> dict:
         "is_custom": c.is_custom,
         "is_active": c.is_active,
         "regulatory_references": c.regulatory_references or [],
+        "applicable_industries": c.applicable_industries or ["all"],
+        "linked_control_ids": c.linked_control_ids or [],
+        "linked_risk_factor_categories": c.linked_risk_factor_categories or [],
         "created_at": c.created_at,
         "updated_at": c.updated_at,
     }
@@ -330,6 +343,73 @@ def seed_standard_courses(
         "message": f"{seeded} standard courses added."
         if seeded
         else "All standard courses already seeded.",
+    }
+
+
+@router.post("/courses/seed-industry-pack", status_code=201)
+def seed_industry_pack(
+    industry: Optional[str] = Query(
+        None, description="IndustryType value, e.g. 'remittance'. Omit to seed all packs."
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    """
+    Seed industry-specific training pack course(s) for this org.
+
+    Available packs: remittance, financial_services (covers FX & PSP),
+    vasp (crypto), legal_professionals, accountants, real_estate, conveyancers.
+
+    Idempotent — only creates courses that don't already exist (by course_code).
+    Pass no `industry` to seed every pack at once.
+    """
+    org_id = org_id_for(current_user)
+    solution = _get_solution(org_id, db)
+
+    if industry is not None and industry not in INDUSTRY_TRAINING_PACKS:
+        raise HTTPException(
+            404,
+            f"Unknown industry pack '{industry}'. Available: "
+            f"{', '.join(INDUSTRY_TRAINING_PACKS.keys())}",
+        )
+
+    packs = (
+        {industry: INDUSTRY_TRAINING_PACKS[industry]}
+        if industry
+        else INDUSTRY_TRAINING_PACKS
+    )
+
+    existing_codes = {
+        c.course_code
+        for c in db.query(TrainingCourse.course_code)
+        .filter(TrainingCourse.org_id == org_id)
+        .all()
+    }
+
+    seeded = 0
+    for seeds in packs.values():
+        for seed in seeds:
+            if seed["course_code"] in existing_codes:
+                continue
+            db.add(
+                TrainingCourse(
+                    id=f"tc_{uuid4().hex[:12]}",
+                    org_id=org_id,
+                    solution_id=solution.id,
+                    is_custom=False,
+                    created_by=current_user.id,
+                    **seed,
+                )
+            )
+            seeded += 1
+
+    db.commit()
+    return {
+        "seeded": seeded,
+        "packs_seeded": list(packs.keys()),
+        "message": f"{seeded} industry-pack course(s) added."
+        if seeded
+        else "All requested industry-pack courses already seeded.",
     }
 
 
@@ -826,6 +906,149 @@ def revoke_exemption(
     db.commit()
     db.refresh(record)
     return _record_dict(record)
+
+
+@router.post("/records/{record_id}/retake")
+def retake_training(
+    record_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Retake a failed training record (resets attempt for the same record).
+
+    Allowed when a non-exempt record exists with a recorded fail
+    (completion_date set, passed == False) and attempt_number < course.max_attempts.
+    """
+    org_id = org_id_for(current_user)
+    record = _get_record(record_id, org_id, db)
+
+    if current_user.role.value == "analyst" and record.user_id != current_user.id:
+        raise HTTPException(403, "You can only retake your own training records.")
+    if record.is_exempt:
+        raise HTTPException(409, "This training record is exempt.")
+    if record.passed is not False:
+        raise HTTPException(409, "Only a failed attempt can be retaken.")
+
+    course = (
+        db.query(TrainingCourse).filter(TrainingCourse.id == record.course_id).first()
+    )
+    if course and record.attempt_number >= course.max_attempts:
+        raise HTTPException(
+            409, f"Maximum attempts ({course.max_attempts}) reached for this course."
+        )
+
+    record.attempt_number += 1
+    record.completion_date = None
+    record.score = None
+    record.passed = None
+    record.expiry_date = None
+    record.certificate_number = None
+    record.certificate_document_id = None
+    record.started_at = None
+    _sync_status(record, db)
+    db.commit()
+    db.refresh(record)
+    return _record_dict(record)
+
+
+@router.post("/records/{record_id}/renew", status_code=201)
+def renew_training(
+    record_id: str,
+    due_date: date = Query(..., description="Due date for the renewed training cycle."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Renew an expired (or expiring) training record by creating a new record
+    for the next cycle, linked back to the same course and user.
+    """
+    org_id = org_id_for(current_user)
+    old_record = _get_record(record_id, org_id, db)
+
+    if old_record.status not in (TrainingStatus.expired, TrainingStatus.completed):
+        raise HTTPException(
+            409, "Only an expired or completed training record can be renewed."
+        )
+
+    new_record = GovernanceTrainingRecord(
+        id=f"gtr_{uuid4().hex[:12]}",
+        org_id=org_id,
+        solution_id=old_record.solution_id,
+        course_id=old_record.course_id,
+        user_id=old_record.user_id,
+        assigned_by=current_user.id,
+        assigned_date=date.today(),
+        due_date=due_date,
+        trigger=AssignmentTrigger.annual_cycle,
+        status=TrainingStatus.assigned,
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+    return _record_dict(new_record)
+
+
+@router.get(
+    "/records/{record_id}/certificate-html",
+    response_class=HTMLResponse,
+    summary="Export training completion certificate as print-ready HTML (browser print-to-PDF)",
+)
+def export_certificate_html(
+    record_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    org_id = org_id_for(current_user)
+    record = _get_record(record_id, org_id, db)
+    if current_user.role.value == "analyst" and record.user_id != current_user.id:
+        raise HTTPException(403, "You can only export your own certificate.")
+    if not record.completion_date or record.status != TrainingStatus.completed:
+        raise HTTPException(409, "Certificate is only available for completed training.")
+
+    course = (
+        db.query(TrainingCourse).filter(TrainingCourse.id == record.course_id).first()
+    )
+
+    def esc(v) -> str:
+        return html.escape(str(v)) if v not in (None, "") else "—"
+
+    return HTMLResponse(
+        content=f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Certificate of Completion</title>
+<style>
+body {{ font-family: Georgia, serif; max-width: 820px; margin: 60px auto; color: #1a1a1a; text-align: center; }}
+.border {{ border: 4px double #333; padding: 50px 40px; }}
+h1 {{ font-size: 26px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }}
+.subtitle {{ font-size: 13px; color: #777; margin-bottom: 30px; }}
+.course-name {{ font-size: 20px; font-weight: bold; margin: 24px 0; }}
+.meta {{ font-size: 13px; color: #444; margin-top: 30px; }}
+.meta div {{ margin: 4px 0; }}
+.disclaimer {{ margin-top: 40px; font-size: 11px; color: #777; border-top: 1px solid #ccc; padding-top: 10px; text-align: left; }}
+</style></head>
+<body>
+<div class="border">
+<h1>Certificate of Completion</h1>
+<div class="subtitle">AML/CTF Training — Governance Record</div>
+<div>This certifies that</div>
+<div class="course-name">User {esc(record.user_id)}</div>
+<div>has completed</div>
+<div class="course-name">{esc(course.name if course else record.course_id)}</div>
+<div class="meta">
+<div><strong>Completion date:</strong> {esc(record.completion_date)}</div>
+<div><strong>Score:</strong> {esc(record.score) if record.score is not None else "N/A"}</div>
+<div><strong>Result:</strong> {"Passed" if record.passed else "N/A"}</div>
+<div><strong>Certificate number:</strong> {esc(record.certificate_number)}</div>
+<div><strong>Expiry date:</strong> {esc(record.expiry_date) if record.expiry_date else "No expiry"}</div>
+</div>
+</div>
+<div class="disclaimer">
+This document is generated from VeriGo's governance training register and reflects the
+completion record as recorded at export time. It does not constitute external regulatory
+certification or qualification.
+</div>
+</body></html>"""
+    )
 
 
 # ── Dashboard & Analytics ─────────────────────────────────────────────────────

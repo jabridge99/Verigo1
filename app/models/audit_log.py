@@ -78,6 +78,7 @@ class AuditEventType(str, enum.Enum):
     rule_modified = "rule_modified"
     rule_status_changed = "rule_status_changed"
     rule_deleted = "rule_deleted"
+    automation_rule_triggered = "automation_rule_triggered"
 
     # Compliance calendar
     calendar_item_created = "calendar_item_created"
@@ -114,7 +115,12 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(String, primary_key=True, default=lambda: f"aud_{uuid4().hex[:14]}")
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     event_type = Column(Enum(AuditEventType), nullable=False, index=True)
     actor_id = Column(String, index=True)  # user_id; None for system events

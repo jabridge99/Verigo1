@@ -103,7 +103,19 @@ class TestIFTIWorkflow:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ready"
 
-    def test_mark_submitted_requires_mlro(self, client, compliance_headers, mlro_headers):
+    def _same_org_mlro_headers(self, db, compliance_user):
+        from tests.conftest import _auth, _make_user
+        from app.models.user import UserRole
+
+        mlro_same_org = _make_user(
+            db, UserRole.mlro, industry_id=compliance_user.org_id
+        )
+        return _auth(mlro_same_org)
+
+    def test_mark_submitted_requires_mlro(
+        self, client, db, compliance_user, compliance_headers
+    ):
+        mlro_headers = self._same_org_mlro_headers(db, compliance_user)
         ifti_id = self._create(client, compliance_headers)
 
         # Compliance cannot submit
@@ -115,14 +127,16 @@ class TestIFTIWorkflow:
         assert resp.status_code == 200
         assert resp.json()["status"] == "submitted"
 
-    def test_cannot_edit_submitted(self, client, compliance_headers, mlro_headers):
+    def test_cannot_edit_submitted(self, client, db, compliance_user, compliance_headers):
+        mlro_headers = self._same_org_mlro_headers(db, compliance_user)
         ifti_id = self._create(client, compliance_headers)
         client.post(f"/api/v1/ifti/{ifti_id}/submitted", headers=mlro_headers)
 
         resp = client.patch(f"/api/v1/ifti/{ifti_id}", json=IFTI_OUT_PAYLOAD, headers=compliance_headers)
         assert resp.status_code == 400
 
-    def test_cannot_delete_submitted(self, client, compliance_headers, mlro_headers):
+    def test_cannot_delete_submitted(self, client, db, compliance_user, compliance_headers):
+        mlro_headers = self._same_org_mlro_headers(db, compliance_user)
         ifti_id = self._create(client, compliance_headers)
         client.post(f"/api/v1/ifti/{ifti_id}/submitted", headers=mlro_headers)
 

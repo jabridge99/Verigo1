@@ -33,6 +33,8 @@ def test_upload_download_roundtrip_via_storage_provider(client, db):
 
 def test_delete_removes_underlying_object(client, db):
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     headers = _auth(admin)
     user = _make_user(db, UserRole.analyst, industry_id="IND-DOC-002")
     user_headers = _auth(user)

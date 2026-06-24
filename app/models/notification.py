@@ -46,6 +46,12 @@ class NotificationType(str, enum.Enum):
     # ── Examination pack ──────────────────────────────────────────────────────
     exam_pack_ready = "exam_pack_ready"  # AUSTRAC examination pack generated
 
+    # ── Integrations ──────────────────────────────────────────────────────────
+    integration_credential_expiring = (
+        "integration_credential_expiring"  # API key/OAuth token expiring soon
+    )
+    integration_health_degraded = "integration_health_degraded"  # provider health check failing
+
 
 class NotificationPriority(str, enum.Enum):
     low = "low"
@@ -67,6 +73,11 @@ class Notification(Base):
     link = Column(String(500))  # frontend deep-link
     entity_type = Column(String(50))  # customer | report | case | alert
     entity_id = Column(String(100))
+    # Unique when set — lets callers (deadline reminders, training overdue
+    # checks, etc.) pass a stable key (e.g. f"{notif_type}:{entity_id}:{date}")
+    # so re-running the same check doesn't create duplicate notifications/
+    # emails. NULL for one-off/manual notifications that don't need dedup.
+    dedupe_key = Column(String(150), unique=True, index=True, nullable=True)
     read = Column(Boolean, default=False)
     emailed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -1,25 +1,54 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle, ShieldAlert, Activity, BarChart3,
-  RefreshCw, CheckCircle, XCircle, ArrowUpCircle, Search, Eye,
+  RefreshCw, CheckCircle, XCircle, ArrowUpCircle, Search, Eye, FilePlus2, Scale, FileText,
 } from "lucide-react";
 import clsx from "clsx";
+import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
+import QuickActions from "@/components/QuickActions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface Alert {
-  id: number; alert_id: string; transaction_id: number; customer_id?: number;
+  id: string; alert_id: string; transaction_id?: string; customer_id?: string;
   industry_id?: string; alert_type: string; severity: string; status: string;
   description: string; rule_name?: string; action_taken?: string; notes?: string;
   assigned_to?: string; is_resolved: number; created_at?: string; resolved_at?: string;
 }
 
 interface Stats {
-  total_alerts: number; open_alerts: number; by_severity: Record<string, number>;
+  total_alerts: number; open_alerts: number; smr_candidates: number;
+  by_severity: Record<string, number>;
   by_type: Record<string, number>; by_status: Record<string, number>;
-  total_transactions: number; flagged_transactions: number;
+}
+
+// Backend statuses (AlertStatus) collapsed to the simpler set this page displays.
+const STATUS_DISPLAY: Record<string, string> = {
+  generated: "open", assigned: "open", under_review: "under_review",
+  escalated: "escalated", dismissed: "dismissed", resolved: "resolved",
+  smr_candidate: "reported",
+};
+
+function mapAlert(raw: any): Alert {
+  const status = STATUS_DISPLAY[raw.status] || raw.status;
+  return {
+    id: raw.id,
+    alert_id: raw.alert_ref ?? raw.alert_id,
+    transaction_id: raw.transaction_id,
+    customer_id: raw.customer_id,
+    alert_type: raw.category ?? raw.alert_type,
+    severity: raw.severity,
+    status,
+    description: raw.description ?? raw.title ?? "",
+    rule_name: raw.rule_name,
+    assigned_to: raw.assigned_to,
+    is_resolved: status === "resolved" || status === "dismissed" ? 1 : 0,
+    created_at: raw.trigger_date ?? raw.created_at,
+    resolved_at: raw.resolved_at,
+  };
 }
 
 const SEV_COLORS: Record<string, string> = {
@@ -51,28 +80,37 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const DEMO_ALERTS: Alert[] = [
-  { id: 1, alert_id: "ALT-DEMO0001", transaction_id: 1, customer_id: 1, alert_type: "sanctions_match", severity: "critical", status: "open", description: "Counterparty 'Petrov Trading LLC' matched on OFAC SDN sanctions watchlist.", is_resolved: 0, created_at: new Date(Date.now() - 300000).toISOString() },
-  { id: 2, alert_id: "ALT-DEMO0002", transaction_id: 2, customer_id: 2, alert_type: "large_transaction", severity: "high", status: "under_review", description: "Transaction AUD $45,000.00 meets or exceeds the CTR threshold of $10,000. AUSTRAC reporting may be required.", is_resolved: 0, assigned_to: "compliance@firm.com.au", created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 3, alert_id: "ALT-DEMO0003", transaction_id: 3, customer_id: 3, alert_type: "structuring", severity: "high", status: "open", description: "4 transactions totalling AUD $38,200 detected near the CTR threshold within 24 hours — possible structuring.", is_resolved: 0, created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: 4, alert_id: "ALT-DEMO0004", transaction_id: 4, customer_id: 1, alert_type: "cross_border", severity: "high", status: "open", description: "International funds transfer instruction (IFTI) detected to/from IR. AUSTRAC IFTI report may be required.", is_resolved: 0, created_at: new Date(Date.now() - 10800000).toISOString() },
-  { id: 5, alert_id: "ALT-DEMO0005", transaction_id: 5, customer_id: 4, alert_type: "velocity_breach", severity: "medium", status: "open", description: "Velocity breach (24h): 18 transactions totalling AUD $72,400 exceed thresholds (15 txns / $50,000).", is_resolved: 0, created_at: new Date(Date.now() - 14400000).toISOString() },
-  { id: 6, alert_id: "ALT-DEMO0006", transaction_id: 6, customer_id: 5, alert_type: "pep_transaction", severity: "high", status: "escalated", description: "Transaction of AUD $25,000.00 by a Politically Exposed Person (PEP). Enhanced due diligence required.", is_resolved: 0, created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 7, alert_id: "ALT-DEMO0007", transaction_id: 7, customer_id: 2, alert_type: "high_risk_country", severity: "medium", status: "dismissed", description: "Counterparty country RU is on FATF/AUSTRAC high-risk jurisdiction list.", is_resolved: 1, created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: 8, alert_id: "ALT-DEMO0008", transaction_id: 8, customer_id: 3, alert_type: "rule_triggered", severity: "medium", status: "resolved", description: "Custom rule triggered: 'Crypto withdrawal > $5,000'. Action: flag.", rule_name: "Crypto withdrawal > $5,000", is_resolved: 1, created_at: new Date(Date.now() - 259200000).toISOString() },
+  { id: "1", alert_id: "ALT-DEMO0001", transaction_id: "1", customer_id: "1", alert_type: "sanctions_match", severity: "critical", status: "open", description: "Counterparty 'Petrov Trading LLC' matched on OFAC SDN sanctions watchlist.", is_resolved: 0, created_at: new Date(Date.now() - 300000).toISOString() },
+  { id: "2", alert_id: "ALT-DEMO0002", transaction_id: "2", customer_id: "2", alert_type: "large_transaction", severity: "high", status: "under_review", description: "Transaction AUD $45,000.00 meets or exceeds the CTR threshold of $10,000. AUSTRAC reporting may be required.", is_resolved: 0, assigned_to: "compliance@firm.com.au", created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: "3", alert_id: "ALT-DEMO0003", transaction_id: "3", customer_id: "3", alert_type: "structuring", severity: "high", status: "open", description: "4 transactions totalling AUD $38,200 detected near the CTR threshold within 24 hours — possible structuring.", is_resolved: 0, created_at: new Date(Date.now() - 7200000).toISOString() },
+  { id: "4", alert_id: "ALT-DEMO0004", transaction_id: "4", customer_id: "1", alert_type: "cross_border", severity: "high", status: "open", description: "International funds transfer instruction (IFTI) detected to/from IR. AUSTRAC IFTI report may be required.", is_resolved: 0, created_at: new Date(Date.now() - 10800000).toISOString() },
+  { id: "5", alert_id: "ALT-DEMO0005", transaction_id: "5", customer_id: "4", alert_type: "velocity_breach", severity: "medium", status: "open", description: "Velocity breach (24h): 18 transactions totalling AUD $72,400 exceed thresholds (15 txns / $50,000).", is_resolved: 0, created_at: new Date(Date.now() - 14400000).toISOString() },
+  { id: "6", alert_id: "ALT-DEMO0006", transaction_id: "6", customer_id: "5", alert_type: "pep_transaction", severity: "high", status: "escalated", description: "Transaction of AUD $25,000.00 by a Politically Exposed Person (PEP). Enhanced due diligence required.", is_resolved: 0, created_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: "7", alert_id: "ALT-DEMO0007", transaction_id: "7", customer_id: "2", alert_type: "high_risk_country", severity: "medium", status: "dismissed", description: "Counterparty country RU is on FATF/AUSTRAC high-risk jurisdiction list.", is_resolved: 1, created_at: new Date(Date.now() - 172800000).toISOString() },
+  { id: "8", alert_id: "ALT-DEMO0008", transaction_id: "8", customer_id: "3", alert_type: "rule_triggered", severity: "medium", status: "resolved", description: "Custom rule triggered: 'Crypto withdrawal > $5,000'. Action: flag.", rule_name: "Crypto withdrawal > $5,000", is_resolved: 1, created_at: new Date(Date.now() - 259200000).toISOString() },
 ];
 
 const DEMO_STATS: Stats = {
-  total_alerts: 8, open_alerts: 5,
+  total_alerts: 8, open_alerts: 5, smr_candidates: 1,
   by_severity: { critical: 1, high: 4, medium: 3, low: 0 },
   by_type: { large_transaction: 1, structuring: 1, cross_border: 1, sanctions_match: 1, velocity_breach: 1, pep_transaction: 1, high_risk_country: 1, rule_triggered: 1 },
   by_status: { open: 4, under_review: 1, escalated: 1, dismissed: 1, resolved: 1 },
-  total_transactions: 124, flagged_transactions: 8,
 };
 
-type Tab = "queue" | "stats" | "simulate";
+type Tab = "queue" | "stats" | "create" | "simulate";
 
-export default function MonitoringDashboard() {
-  const [tab, setTab] = useState<Tab>("queue");
+export default function MonitoringDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <MonitoringDashboard />
+    </Suspense>
+  );
+}
+
+function MonitoringDashboard() {
+  const searchParams = useSearchParams();
+  const customerParam = searchParams.get("customer") || "";
+  const [tab, setTab] = useState<Tab>(searchParams.get("action") === "new" ? "create" : "queue");
   const [alerts, setAlerts] = useState<Alert[]>(DEMO_ALERTS);
   const [stats, setStats] = useState<Stats>(DEMO_STATS);
   const [search, setSearch] = useState("");
@@ -90,11 +128,23 @@ export default function MonitoringDashboard() {
   const fetchData = useCallback(async () => {
     try {
       const [aRes, sRes] = await Promise.all([
-        fetch(`${API}/api/v1/transactions/alerts/queue?limit=200`, { credentials: "include" }),
-        fetch(`${API}/api/v1/transactions/alerts/stats`, { credentials: "include" }),
+        fetch(`${API}/api/v1/alerts?limit=200`, { credentials: "include" }),
+        fetch(`${API}/api/v1/alerts/dashboard`, { credentials: "include" }),
       ]);
-      if (aRes.ok) { const d = await aRes.json(); if (d.length) setAlerts(d); }
-      if (sRes.ok) { const d = await sRes.json(); if (d.total_alerts) setStats(d); }
+      if (aRes.ok) {
+        const d = await aRes.json();
+        if (d.length) {
+          const mapped = d.map(mapAlert);
+          setAlerts(mapped);
+          const byType: Record<string, number> = {};
+          for (const a of mapped) byType[a.alert_type] = (byType[a.alert_type] || 0) + 1;
+          setStats(prev => ({ ...prev, by_type: byType }));
+        }
+      }
+      if (sRes.ok) {
+        const d = await sRes.json();
+        if (d.total_alerts) setStats(prev => ({ ...prev, total_alerts: d.total_alerts, open_alerts: d.open_alerts, smr_candidates: d.smr_candidates, by_severity: d.by_severity, by_status: d.by_status }));
+      }
     } catch {}
   }, []);
 
@@ -103,12 +153,26 @@ export default function MonitoringDashboard() {
   const doAction = async (action: "resolve" | "dismiss" | "escalate", alertId: string) => {
     const statusMap: Record<string, string> = { resolve: "resolved", dismiss: "dismissed", escalate: "escalated" };
     try {
-      await fetch(`${API}/api/v1/transactions/alerts/${alertId}/${action}`, { method: "POST", credentials: "include" });
+      if (action === "escalate") {
+        await fetch(`${API}/api/v1/alerts/${alertId}/escalate`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." }),
+        });
+      } else {
+        await fetch(`${API}/api/v1/alerts/${alertId}/review`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resolution: action === "resolve" ? "cleared" : "dismissed",
+            review_notes: actionNote || (action === "resolve" ? "Reviewed and cleared." : "Dismissed — false positive."),
+          }),
+        });
+      }
     } catch {}
     setAlerts(prev => prev.map(a =>
-      a.alert_id === alertId ? { ...a, status: statusMap[action], is_resolved: action !== "escalate" ? 1 : 0 } : a
+      a.id === alertId ? { ...a, status: statusMap[action], is_resolved: action !== "escalate" ? 1 : 0 } : a
     ));
     setSelected(null);
+    setActionNote("");
     showToast("success", `Alert ${action}d`);
   };
 
@@ -123,6 +187,7 @@ export default function MonitoringDashboard() {
   const TABS = [
     { id: "queue" as Tab, label: "Alert Queue", icon: AlertTriangle },
     { id: "stats" as Tab, label: "Analytics", icon: BarChart3 },
+    { id: "create" as Tab, label: "Create Transaction", icon: FilePlus2 },
     { id: "simulate" as Tab, label: "Test Monitor", icon: Activity },
   ];
 
@@ -153,8 +218,7 @@ export default function MonitoringDashboard() {
             { label: "High",     count: stats.by_severity.high,     color: "text-orange-400" },
             { label: "Medium",   count: stats.by_severity.medium,   color: "text-amber-400" },
             { label: "Open",     count: stats.open_alerts,          color: "text-slate-300" },
-            { label: "Txns",     count: stats.total_transactions,   color: "text-brand-400" },
-            { label: "Flagged",  count: stats.flagged_transactions,  color: "text-orange-400" },
+            { label: "SMR Candidates", count: stats.smr_candidates, color: "text-brand-400" },
           ].map(({ label, count, color }) => (
             <div key={label} className="flex items-center gap-2 whitespace-nowrap">
               <span className="text-slate-500 text-xs">{label}</span>
@@ -240,8 +304,7 @@ export default function MonitoringDashboard() {
               {[
                 { label: "Total Alerts",  value: stats.total_alerts,        color: "text-slate-200" },
                 { label: "Open Alerts",   value: stats.open_alerts,          color: "text-amber-400" },
-                { label: "Transactions",  value: stats.total_transactions,  color: "text-brand-400" },
-                { label: "Flagged Txns",  value: stats.flagged_transactions, color: "text-orange-400" },
+                { label: "SMR Candidates", value: stats.smr_candidates, color: "text-brand-400" },
               ].map(({ label, value, color }) => (
                 <div key={label} className="card p-5 text-center">
                   <div className={`text-3xl font-bold ${color}`}>{value}</div>
@@ -298,17 +361,31 @@ export default function MonitoringDashboard() {
                 </div>
               </div>
               <div className="card">
-                <h3 className="font-semibold text-slate-200 mb-4">Detection Rate</h3>
+                <h3 className="font-semibold text-slate-200 mb-4">SMR Candidate Rate</h3>
                 <div className="flex items-center justify-center h-32">
                   <div className="text-center">
-                    <div className="text-5xl font-bold text-brand-400">{stats.total_transactions > 0 ? `${Math.round((stats.flagged_transactions / stats.total_transactions) * 100)}%` : "0%"}</div>
-                    <div className="text-slate-500 text-sm mt-2">of transactions flagged</div>
-                    <div className="text-xs text-slate-600 mt-1">{stats.flagged_transactions} / {stats.total_transactions}</div>
+                    <div className="text-5xl font-bold text-brand-400">{stats.total_alerts > 0 ? `${Math.round((stats.smr_candidates / stats.total_alerts) * 100)}%` : "0%"}</div>
+                    <div className="text-slate-500 text-sm mt-2">of alerts flagged for SMR</div>
+                    <div className="text-xs text-slate-600 mt-1">{stats.smr_candidates} / {stats.total_alerts}</div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        )}
+
+        {tab === "create" && (
+          <TransactionEntryPanel
+            defaultCustomerId={customerParam}
+            onCreate={(result) => {
+              if (result.error) { showToast("error", result.error); return; }
+              fetchData();
+              showToast("success", result.alertsGenerated
+                ? `Transaction created — ${result.alertsGenerated} alert(s) generated`
+                : "Transaction created — no alerts triggered");
+              setTab("queue");
+            }}
+          />
         )}
 
         {tab === "simulate" && <SimulatePanel onAlert={(a) => { setAlerts(prev => [a, ...prev]); showToast("success", `Alert generated: ${a.alert_type}`); setTab("queue"); }} />}
@@ -336,13 +413,20 @@ export default function MonitoringDashboard() {
               <div className="border-t border-navy-700 pt-4 space-y-3">
                 <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Actions</div>
                 <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => doAction("resolve", selected.alert_id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 text-xs font-medium hover:bg-emerald-500/25 transition-colors"><CheckCircle className="w-3.5 h-3.5" /> Resolve</button>
-                  <button onClick={() => doAction("escalate", selected.alert_id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/25 text-orange-300 text-xs font-medium hover:bg-orange-500/25 transition-colors"><ArrowUpCircle className="w-3.5 h-3.5" /> Escalate</button>
-                  <button onClick={() => doAction("dismiss", selected.alert_id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-500/15 border border-slate-500/25 text-slate-400 text-xs font-medium hover:bg-slate-500/25 transition-colors"><XCircle className="w-3.5 h-3.5" /> Dismiss</button>
+                  <button onClick={() => doAction("resolve", selected.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 text-xs font-medium hover:bg-emerald-500/25 transition-colors"><CheckCircle className="w-3.5 h-3.5" /> Resolve</button>
+                  <button onClick={() => doAction("escalate", selected.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/25 text-orange-300 text-xs font-medium hover:bg-orange-500/25 transition-colors"><ArrowUpCircle className="w-3.5 h-3.5" /> Escalate</button>
+                  <button onClick={() => doAction("dismiss", selected.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-500/15 border border-slate-500/25 text-slate-400 text-xs font-medium hover:bg-slate-500/25 transition-colors"><XCircle className="w-3.5 h-3.5" /> Dismiss</button>
                 </div>
                 <textarea className="field-input min-h-[70px] resize-none text-xs" placeholder="Add notes…" value={actionNote} onChange={e => setActionNote(e.target.value)} />
               </div>
             )}
+            <div className="border-t border-navy-700 pt-4 space-y-2">
+              <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+              <QuickActions actions={[
+                { label: "Create Case", href: `/mlro?customer=${selected.customer_id ?? ""}&action=new-case&alert=${selected.alert_id}`, icon: Scale },
+                { label: "File Report", href: `/reporting?customer=${selected.customer_id ?? ""}&action=new&alert=${selected.alert_id}`, icon: FileText },
+              ]} />
+            </div>
           </div>
         </div>
       )}
@@ -369,11 +453,11 @@ function SimulatePanel({ onAlert }: { onAlert: (a: Alert) => void }) {
     const generatedAlerts: Alert[] = [];
     const now = new Date().toISOString();
     if (form.amount >= 10000) {
-      generatedAlerts.push({ id: Date.now(), alert_id: `ALT-SIM${Math.random().toString(36).slice(2,8).toUpperCase()}`, transaction_id: 999, alert_type: "large_transaction", severity: "high", status: "open", description: `Transaction AUD $${form.amount.toLocaleString()} meets or exceeds CTR threshold of $10,000. AUSTRAC reporting may be required.`, is_resolved: 0, created_at: now });
+      generatedAlerts.push({ id: String(Date.now()), alert_id: `ALT-SIM${Math.random().toString(36).slice(2,8).toUpperCase()}`, transaction_id: "999", alert_type: "large_transaction", severity: "high", status: "open", description: `Transaction AUD $${form.amount.toLocaleString()} meets or exceeds CTR threshold of $10,000. AUSTRAC reporting may be required.`, is_resolved: 0, created_at: now });
     }
     if (form.is_cross_border) {
       const highRisk = ["IR","KP","RU","SY","AF","BY","MM"].includes(form.counterparty_country.toUpperCase());
-      generatedAlerts.push({ id: Date.now()+1, alert_id: `ALT-SIM${Math.random().toString(36).slice(2,8).toUpperCase()}`, transaction_id: 999, alert_type: highRisk ? "high_risk_country" : "cross_border", severity: highRisk ? "high" : "medium", status: "open", description: `International funds transfer to ${form.counterparty_country}. ${highRisk ? "High-risk jurisdiction — FATF listed." : "AUSTRAC IFTI report may be required."}`, is_resolved: 0, created_at: now });
+      generatedAlerts.push({ id: String(Date.now()+1), alert_id: `ALT-SIM${Math.random().toString(36).slice(2,8).toUpperCase()}`, transaction_id: "999", alert_type: highRisk ? "high_risk_country" : "cross_border", severity: highRisk ? "high" : "medium", status: "open", description: `International funds transfer to ${form.counterparty_country}. ${highRisk ? "High-risk jurisdiction — FATF listed." : "AUSTRAC IFTI report may be required."}`, is_resolved: 0, created_at: now });
     }
     if (generatedAlerts.length === 0) { setResult("No alerts triggered — transaction appears normal."); }
     else { generatedAlerts.forEach(a => onAlert(a)); setResult(`${generatedAlerts.length} alert(s) triggered — see Alert Queue.`); }
@@ -412,6 +496,258 @@ function SimulatePanel({ onAlert }: { onAlert: (a: Alert) => void }) {
             <span className="text-slate-500">{label}</span><span className="text-slate-300">{value}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+const HIGH_RISK_COUNTRIES = ["IR", "KP", "RU", "SY", "AF", "BY", "MM"];
+const DELIVERY_METHODS = ["bank_transfer", "cash", "crypto", "cheque", "card", "other"];
+const PURPOSES = ["personal", "business", "investment", "property", "gift", "remittance", "trade", "other"];
+
+interface TxnRisk {
+  score: number;
+  rules: { label: string; severity: string }[];
+  reports: { label: string; reason: string }[];
+  actions: string[];
+}
+
+function assessTransaction(form: {
+  amount: number; currency: string; country: string; delivery_method: string; purpose: string; is_cross_border: boolean;
+}): TxnRisk {
+  const rules: TxnRisk["rules"] = [];
+  const reports: TxnRisk["reports"] = [];
+  let score = 5;
+
+  if (form.amount >= 10000) {
+    rules.push({ label: "CTR threshold (≥ $10,000)", severity: "high" });
+    reports.push({ label: "TTR (Threshold Transaction Report)", reason: "Transaction meets or exceeds the AUD $10,000 CTR threshold." });
+    score += 35;
+  } else if (form.amount >= 7000) {
+    rules.push({ label: "Near-threshold amount ($7k–$10k)", severity: "medium" });
+    score += 15;
+  }
+
+  const highRisk = HIGH_RISK_COUNTRIES.includes(form.country.toUpperCase());
+  if (form.is_cross_border) {
+    rules.push({ label: highRisk ? "High-risk jurisdiction (cross-border)" : "Cross-border transfer (IFTI)", severity: highRisk ? "high" : "medium" });
+    reports.push({ label: "IFTI (International Funds Transfer Instruction)", reason: `Funds transfer to/from ${form.country || "overseas jurisdiction"}.` });
+    score += highRisk ? 35 : 15;
+  }
+
+  if (form.delivery_method === "cash" && form.amount >= 5000) {
+    rules.push({ label: "Large cash transaction", severity: "medium" });
+    score += 10;
+  }
+
+  if (form.delivery_method === "crypto") {
+    rules.push({ label: "Virtual asset transfer", severity: "medium" });
+    score += 10;
+  }
+
+  score = Math.min(100, score);
+
+  if (score >= 70) {
+    reports.push({ label: "SMR (Suspicious Matter Report)", reason: "Aggregate risk score indicates potential suspicious activity requiring MLRO review." });
+  }
+
+  const actions: string[] = [];
+  if (score >= 70) actions.push("Escalate to MLRO for review before processing");
+  if (reports.some(r => r.label.startsWith("TTR"))) actions.push("File TTR with AUSTRAC within 10 business days");
+  if (reports.some(r => r.label.startsWith("IFTI"))) actions.push("File IFTI with AUSTRAC within 10 business days");
+  if (reports.some(r => r.label.startsWith("SMR"))) actions.push("Consider SMR filing — do not disclose to customer (tipping-off offence)");
+  if (highRisk) actions.push("Apply Enhanced Customer Due Diligence (ECDD)");
+  if (actions.length === 0) actions.push("No further action required — process as normal");
+
+  return { score, rules, reports, actions };
+}
+
+const RISK_BAND = (score: number) =>
+  score >= 70 ? { label: "Critical", color: "text-red-400", bar: "bg-red-500" }
+  : score >= 45 ? { label: "High", color: "text-orange-400", bar: "bg-orange-500" }
+  : score >= 20 ? { label: "Medium", color: "text-amber-400", bar: "bg-amber-500" }
+  : { label: "Low", color: "text-emerald-400", bar: "bg-emerald-500" };
+
+const PAYMENT_METHOD_MAP: Record<string, string> = {
+  bank_transfer: "bank_transfer", cash: "cash", crypto: "crypto",
+  cheque: "cheque", card: "card", other: "third_party_payment",
+};
+
+function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustomerId: string; onCreate: (result: { error?: string; alertsGenerated?: number }) => void }) {
+  const [form, setForm] = useState({
+    amount: 5000, currency: "AUD", country: "AU", delivery_method: "bank_transfer", purpose: "business",
+    customer_id: defaultCustomerId, reference: "", notes: "", is_cross_border: false,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [customers, setCustomers] = useState<{ id: string; full_name: string }[]>(
+    DEMO_CUSTOMERS.map(c => ({ id: c.customer_id, full_name: c.full_name }))
+  );
+
+  useEffect(() => {
+    fetch(`${API}/api/v1/customers/?limit=200`, { credentials: "include" })
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(d => { if (d.length) setCustomers(d.map((c: any) => ({ id: c.id, full_name: c.full_name }))); })
+      .catch(() => {});
+  }, []);
+
+  const risk = assessTransaction(form);
+  const band = RISK_BAND(risk.score);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.customer_id) { onCreate({ error: "Select a customer before creating a transaction." }); return; }
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API}/api/v1/transactions`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transaction_ref: `TXN-${Date.now()}`,
+          customer_id: form.customer_id,
+          transaction_type: "transfer",
+          direction: "outgoing",
+          payment_method: PAYMENT_METHOD_MAP[form.delivery_method] || "bank_transfer",
+          currency: form.currency,
+          amount: form.amount,
+          is_cross_border: form.is_cross_border,
+          country_destination: form.is_cross_border ? form.country : undefined,
+          purpose: form.purpose,
+          reference: form.reference || undefined,
+          description: form.notes || undefined,
+          transaction_date: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || "Failed to create transaction.");
+      const txn = await res.json();
+
+      let alertsGenerated = 0;
+      try {
+        const monRes = await fetch(`${API}/api/v1/transactions/${txn.id}/run-monitoring`, {
+          method: "POST", credentials: "include",
+        });
+        if (monRes.ok) alertsGenerated = (await monRes.json()).alerts_generated ?? 0;
+      } catch {}
+
+      onCreate({ alertsGenerated });
+    } catch (err: any) {
+      onCreate({ error: err.message || "Failed to create transaction." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-6 max-w-5xl">
+      <form onSubmit={submit} className="card space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-100 mb-1">Create Transaction</h2>
+          <p className="text-slate-500 text-sm">Manually record a transaction for testing, training, or demo purposes.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Amount *</label>
+            <input required type="number" min={0} className="field-input" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Currency</label>
+            <select className="field-input" value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
+              {["AUD", "USD", "EUR", "GBP", "NZD", "SGD"].map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Counterparty country (ISO-2)</label>
+            <input className="field-input" placeholder="e.g. AU, IR, RU" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value.toUpperCase() }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Delivery method</label>
+            <select className="field-input" value={form.delivery_method} onChange={e => setForm(f => ({ ...f, delivery_method: e.target.value }))}>
+              {DELIVERY_METHODS.map(m => <option key={m} value={m}>{m.replace(/_/g, " ")}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Purpose</label>
+            <select className="field-input" value={form.purpose} onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}>
+              {PURPOSES.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Customer</label>
+            <select className="field-input" value={form.customer_id} onChange={e => setForm(f => ({ ...f, customer_id: e.target.value }))}>
+              <option value="">Select customer…</option>
+              {customers.map(c => <option key={c.id} value={c.id}>{c.full_name} ({c.id})</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Reference</label>
+            <input className="field-input" placeholder="Optional" value={form.reference} onChange={e => setForm(f => ({ ...f, reference: e.target.value }))} />
+          </div>
+          <div className="space-y-1 flex flex-col justify-end">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" className="accent-brand-500" checked={form.is_cross_border} onChange={e => setForm(f => ({ ...f, is_cross_border: e.target.checked }))} />
+              <span className="text-sm text-slate-300">Cross-border transfer</span>
+            </label>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-slate-400">Notes</label>
+          <textarea className="field-input min-h-[70px] resize-none" placeholder="Optional notes…" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+        </div>
+        <button type="submit" disabled={submitting} className="btn-primary w-full justify-center">
+          {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><FilePlus2 className="w-4 h-4" />Create Transaction &amp; Run Compliance Check</>}
+        </button>
+      </form>
+
+      <div className="space-y-4">
+        <div className="card">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Live Risk Score</div>
+          <div className="flex items-center gap-4">
+            <div className={`text-4xl font-bold ${band.color}`}>{risk.score}</div>
+            <div className="flex-1">
+              <div className={clsx("text-sm font-semibold mb-1", band.color)}>{band.label} risk</div>
+              <div className="h-2 rounded-full bg-navy-700 overflow-hidden">
+                <div className={`h-full rounded-full ${band.bar}`} style={{ width: `${risk.score}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Triggered Rules</div>
+          {risk.rules.length === 0 ? (
+            <div className="text-sm text-slate-500">No rules triggered.</div>
+          ) : (
+            <div className="space-y-2">
+              {risk.rules.map(r => (
+                <div key={r.label} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-300">{r.label}</span>
+                  <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLORS[r.severity])}>{r.severity}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Potential Reports</div>
+          {risk.reports.length === 0 ? (
+            <div className="text-sm text-slate-500">No reportable obligations identified.</div>
+          ) : (
+            <div className="space-y-3">
+              {risk.reports.map(r => (
+                <div key={r.label} className="text-sm">
+                  <div className="font-medium text-amber-300">{r.label}</div>
+                  <div className="text-xs text-slate-500">{r.reason}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Recommended Actions</div>
+          <ul className="space-y-1.5 text-sm text-slate-300 list-disc list-inside">
+            {risk.actions.map(a => <li key={a}>{a}</li>)}
+          </ul>
+        </div>
       </div>
     </div>
   );

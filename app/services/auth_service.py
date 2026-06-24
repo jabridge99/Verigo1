@@ -19,6 +19,7 @@ from typing import Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -101,9 +102,11 @@ def seed_master_admin(db: Session) -> Optional[User]:
     """
     Idempotently ensure a global super-admin account exists, from
     settings.master_admin_email / master_admin_password. No-op if either
-    is unset, or if a user with that email already exists (in which case
-    it's promoted to super-admin if it isn't already, but its password is
-    left untouched).
+    is unset. If a user with that email already exists, it's promoted to
+    super-admin if it isn't already, and its password is resynced to
+    master_admin_password if it doesn't already match (the env var is the
+    source of truth for this account, not whatever hash was set at
+    creation time).
     """
     email = settings.master_admin_email.strip().lower()
     if not email or not settings.master_admin_password:
@@ -111,15 +114,41 @@ def seed_master_admin(db: Session) -> Optional[User]:
 
     user = get_user_by_email(db, email)
     if user:
+        changed = False
+        changes: list[str] = []
         if not user.is_super_admin or user.role != "admin":
             user.is_super_admin = True
             user.role = "admin"
+            changed = True
+            changes.append("role/super_admin")
+        # Resync password to MASTER_ADMIN_PASSWORD on every boot — this is an
+        # env-var-controlled admin account, so the env var is the source of
+        # truth, not whatever hash happened to be set on first creation.
+        if not verify_password(settings.master_admin_password, user.hashed_password):
+            user.hashed_password = hash_password(settings.master_admin_password)
+            changed = True
+            changes.append("password")
+        if changed:
+            # A boot-time resync that silently overwrites an admin account's
+            # credentials/role is exactly the kind of privileged change that
+            # must leave a trail — without this, an investigator has no
+            # record of why/when this account's password or role flipped.
+            from app.services.audit_service import log_action
+
+            log_action(
+                db,
+                action="master_admin.resync",
+                entity_type="User",
+                entity_id=user.id,
+                actor="system",
+                actor_role="system",
+                notes=f"Boot-time master admin resync: {', '.join(changes)}",
+            )
             db.commit()
             db.refresh(user)
         return user
 
     user = User(
-        user_id=f"USR-{uuid.uuid4().hex[:10].upper()}",
         email=email,
         full_name="Master Admin",
         hashed_password=hash_password(settings.master_admin_password),
@@ -129,7 +158,13 @@ def seed_master_admin(db: Session) -> Optional[User]:
         is_super_admin=True,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another worker process won the race to insert this row first
+        # (multiple uvicorn workers run lifespan/seeding concurrently).
+        db.rollback()
+        return get_user_by_email(db, email)
     db.refresh(user)
     return user
 
@@ -274,20 +309,39 @@ def consume_email_action_token(
 # ── Session cookie helpers ───────────────────────────────────────────────────
 
 
+# In production the frontend (Vercel) and API (Railway) are on different
+# domains, so this is a cross-site request from the browser's point of view.
+# SameSite=Lax cookies are withheld by the browser on cross-site fetch/XHR —
+# only top-level navigations get them — so the session cookie would never
+# reach the API after login, silently logging every user back out on their
+# very next request. SameSite=None (paired with Secure, required by spec)
+# is needed whenever frontend and API are on different origins.
+def _session_cookie_samesite() -> str:
+    return "none" if settings.is_production else "lax"
+
+
 def set_session_cookie(response, token: str) -> None:
     response.set_cookie(
         key=settings.session_cookie_name,
         value=token,
         httponly=True,
-        secure=settings.is_production,
-        samesite="lax",
+        # Secure for anything other than local dev — staging is a valid,
+        # often internet-exposed environment and must not ship session
+        # cookies over plain HTTP just because it isn't "production".
+        secure=settings.environment != "development",
+        samesite=_session_cookie_samesite(),
         max_age=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
         path="/",
     )
 
 
 def clear_session_cookie(response) -> None:
-    response.delete_cookie(key=settings.session_cookie_name, path="/")
+    response.delete_cookie(
+        key=settings.session_cookie_name,
+        path="/",
+        secure=settings.environment != "development",
+        samesite=_session_cookie_samesite(),
+    )
 
 
 # ── Security event logging ────────────────────────────────────────────────────

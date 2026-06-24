@@ -52,7 +52,22 @@ from app.services import usage_billing_service as usage_billing_svc
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
-_ADMIN = _require_roles(UserRole.admin)
+_ROLE_GATE = _require_roles(UserRole.admin)
+
+
+def _require_super_admin(current_user: User = Depends(_ROLE_GATE)) -> User:
+    # UserRole.admin is a per-organisation role, not a platform operator tier
+    # (see app/api/routes/auth.py's _get_org_scoped_user / list_users for the
+    # established pattern). Billing admin routes can target any
+    # industry_id/organisation_id, so without this check any tenant's own
+    # admin user could activate, terminate, or apply custom pricing to
+    # another tenant's subscription. Only is_super_admin may proceed.
+    if not current_user.is_super_admin:
+        raise HTTPException(403, "Requires global super-admin access")
+    return current_user
+
+
+_ADMIN = _require_super_admin
 
 
 # ── Public ────────────────────────────────────────────────────────────────────
@@ -94,7 +109,7 @@ def my_subscription(
 def create_checkout(
     req: CheckoutSessionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
@@ -112,7 +127,7 @@ def create_checkout(
 def customer_portal(
     return_url: str = Query(default=""),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
@@ -129,7 +144,7 @@ def customer_portal(
 def cancel_subscription(
     at_period_end: bool = Query(True),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     sub = svc.cancel_subscription(
         db,
@@ -175,7 +190,7 @@ def my_addons(
 def purchase_addon(
     addon_key: AddonKey,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     if not current_user.org_id:
         raise HTTPException(400, "User has no org_id")
@@ -189,7 +204,7 @@ def purchase_addon(
 def cancel_addon(
     addon_key: AddonKey,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_current_user),
+    current_user: User = Depends(_ROLE_GATE),
 ):
     addon = svc.cancel_addon(db, current_user.org_id or "", addon_key)
     if not addon:

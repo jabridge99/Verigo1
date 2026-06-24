@@ -77,22 +77,24 @@ def _verify_magic(content: bytes, declared_mime: str) -> bool:
 
 
 def _assert_tenant(current_user: User, doc_industry_id: Optional[str]):
-    """Explicit check — admin sees all, non-admin must match their industry_id."""
-    if current_user.role == UserRole.admin:
-        return  # admin has cross-tenant read access by design
+    """Explicit check — global super-admin sees all, everyone else (including
+    UserRole.admin, which is per-organisation, not global) must match their
+    industry_id."""
+    if current_user.is_super_admin:
+        return  # global super-admin has cross-tenant read access by design
     if doc_industry_id and doc_industry_id != current_user.org_id:
         raise HTTPException(403, "Cross-tenant document access denied")
 
 
 def _industry_scope(current_user: User) -> Optional[str]:
-    """Return the industry_id to filter on, or None for admin (no filter)."""
-    return None if current_user.role == UserRole.admin else current_user.org_id
+    """Return the industry_id to filter on, or None for global super-admin."""
+    return None if current_user.is_super_admin else current_user.org_id
 
 
 def _org_scope(current_user: User) -> Optional[str]:
     return (
         None
-        if current_user.role == UserRole.admin
+        if current_user.is_super_admin
         else current_user.primary_organisation_id
     )
 
@@ -191,7 +193,7 @@ def get_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    _assert_tenant(current_user, doc)
+    _assert_tenant(current_user, doc.industry_id)
     return doc
 
 
@@ -208,11 +210,39 @@ async def download_document(
     if not await svc.file_exists(doc):
         raise HTTPException(404, "File not found on storage")
     content = await svc.get_file_bytes(doc)
+
+    # KYC/AML documents are sensitive; downloads need an access trail just
+    # like other compliance-relevant actions in this codebase.
+    from app.services.audit_service import log_action
+
+    log_action(
+        db,
+        action="document.download",
+        entity_type="Document",
+        entity_id=doc.doc_id,
+        actor=current_user.id,
+        actor_role=current_user.role.value
+        if hasattr(current_user.role, "value")
+        else str(current_user.role),
+        industry_id=doc.industry_id,
+        organisation_id=doc.organisation_id,
+    )
+
+    from urllib.parse import quote
+
+    # doc.filename is client-controlled at upload time. A raw quote or CRLF
+    # in it could break out of the quoted Content-Disposition value, so
+    # sanitize the fallback ASCII name and RFC 5987-encode the real one.
+    safe_ascii = (doc.filename or "download").replace('"', "").replace("\\", "")
+    safe_ascii = safe_ascii.encode("ascii", "ignore").decode("ascii") or "download"
+    encoded = quote(doc.filename or "download")
     return Response(
         content=content,
         media_type=doc.mime_type or "application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{doc.filename}"',
+            "Content-Disposition": (
+                f'attachment; filename="{safe_ascii}"; filename*=UTF-8\'\'{encoded}'
+            ),
             "X-Content-Type-Options": "nosniff",
         },
     )
@@ -258,6 +288,7 @@ async def delete_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
     if doc.legal_hold:
         raise HTTPException(409, "Document is under legal hold and cannot be deleted.")
     if not await svc.delete_document(db, doc_id, _industry_scope(current_user)):

@@ -82,6 +82,8 @@ def test_free_trial_risk_assessment_is_a_shrunken_preview(client, db):
 def test_paid_plan_gets_full_program_and_assessment(client, db):
     seed_permission_catalog_and_roles(db)
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     owner = _make_user(db, UserRole.analyst, industry_id=None)
     headers = _auth(owner)
 

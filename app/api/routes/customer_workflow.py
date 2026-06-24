@@ -452,6 +452,8 @@ def run_risk_assessment(
     profile.assessment_notes = payload.assessment_notes
 
     # Update customer risk fields
+    old_risk_level = customer.risk_level
+    old_risk_score = customer.risk_score
     new_level = risk_level_from_score(result.overall_score)
     new_cdd = cdd_level_from_gateway(result.gateway_decision, result.overall_score)
     customer.risk_score = result.overall_score
@@ -531,6 +533,15 @@ def run_risk_assessment(
         )
     )
     db.commit()
+
+    if old_risk_level != new_level or old_risk_score != result.overall_score:
+        from app.models.automation_rule import RuleEventType
+        from app.services.automation_engine import customer_context, evaluate_automation_rules
+
+        evaluate_automation_rules(
+            db, RuleEventType.customer_risk_changed, customer.org_id, "customer", customer.id,
+            customer_context(customer), triggered_by=current_user.id,
+        )
 
     state_after = (
         WorkflowState.edd_required.value

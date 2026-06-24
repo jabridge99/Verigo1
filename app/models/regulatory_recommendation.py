@@ -90,7 +90,12 @@ class RegulatoryRecommendation(Base):
     __tablename__ = "regulatory_recommendations"
 
     id = Column(String, primary_key=True, default=lambda: f"rec_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     # Links — at least one must be set
     transaction_id = Column(

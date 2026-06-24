@@ -333,6 +333,8 @@ def mark_ready(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
+    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
     r.status = IFTIStatus.ready
     db.commit()
     return {"ifti_id": ifti_id, "status": r.status}
@@ -347,6 +349,8 @@ def mark_submitted(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
+    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
     r.status = IFTIStatus.submitted
     r.submitted_at = datetime.now(timezone.utc)
     db.commit()

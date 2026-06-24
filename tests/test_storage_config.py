@@ -26,6 +26,8 @@ def _set_plan(client, admin_headers, industry_id: str, plan: str):
 def test_starter_plan_tenant_cannot_set_own_storage(client, db):
     _make_tenant(db, "IND-STOR-001")
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     _set_plan(client, _auth(admin), "IND-STOR-001", "starter")
 
     user = _make_user(db, UserRole.analyst, industry_id="IND-STOR-001")
@@ -40,6 +42,8 @@ def test_starter_plan_tenant_cannot_set_own_storage(client, db):
 def test_enterprise_plan_tenant_can_bring_own_storage(client, db):
     _make_tenant(db, "IND-STOR-002")
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     _set_plan(client, _auth(admin), "IND-STOR-002", "enterprise")
 
     user = _make_user(db, UserRole.analyst, industry_id="IND-STOR-002")
@@ -70,6 +74,8 @@ def test_enterprise_plan_tenant_can_bring_own_storage(client, db):
 def test_missing_required_fields_rejected(client, db):
     _make_tenant(db, "IND-STOR-003")
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     _set_plan(client, _auth(admin), "IND-STOR-003", "vvip")
 
     user = _make_user(db, UserRole.analyst, industry_id="IND-STOR-003")
@@ -84,6 +90,8 @@ def test_missing_required_fields_rejected(client, db):
 def test_admin_can_assign_storage_to_any_tenant_regardless_of_plan(client, db):
     _make_tenant(db, "IND-STOR-004")
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     headers = _auth(admin)
     _set_plan(client, headers, "IND-STOR-004", "starter")
 
@@ -113,6 +121,8 @@ def test_non_admin_cannot_use_admin_storage_routes(client, db):
 def test_secret_fields_encrypted_at_rest(client, db):
     _make_tenant(db, "IND-STOR-006")
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     _set_plan(client, _auth(admin), "IND-STOR-006", "enterprise")
 
     user = _make_user(db, UserRole.analyst, industry_id="IND-STOR-006")

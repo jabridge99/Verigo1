@@ -76,7 +76,15 @@ class Consequence(int, enum.Enum):
     severe = 5
 
 
-class ControlEffectiveness(int, enum.Enum):
+class ControlEffectivenessScore(int, enum.Enum):
+    """
+    Numeric 1-5 control effectiveness scale used as input to the residual-risk
+    formula. Distinct from app.models.governance_controls.ControlEffectiveness
+    (a %-based string rating calculated from ControlTest results) — use
+    app.services.control_effectiveness.governance_rating_to_score() to derive
+    this scale from a tested GovernanceControl rating instead of guessing.
+    """
+
     strong = 1  # 80% risk reduction
     effective = 2  # 60% risk reduction
     moderate = 3  # 40% risk reduction
@@ -219,7 +227,12 @@ class RiskCategory(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     category_type = Column(Enum(RiskCategoryType), nullable=False)
     name = Column(String(255), nullable=False)  # user can rename
@@ -254,7 +267,12 @@ class RiskFactor(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     library_factor_id = Column(
         String, ForeignKey("risk_library_factors.id"), nullable=True
     )
@@ -301,7 +319,9 @@ class RiskControl(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     control_ref = Column(String(20))
     name = Column(String(255), nullable=False)
@@ -330,7 +350,12 @@ class RiskAssessmentRun(Base):
     framework_id = Column(
         String, ForeignKey("risk_frameworks.id"), nullable=False, index=True
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     # Linkage to AMLSolution RiskAssessment record (high-level summary)
     aml_risk_assessment_id = Column(
@@ -415,12 +440,21 @@ class RiskFactorScore(Base):
     factor_id = Column(
         String, ForeignKey("risk_factors.id"), nullable=False, index=True
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     # ── User-entered values (1-5 scales) ──────────────────────────────────────
     likelihood = Column(Integer)  # 1-5 (Rare → Almost Certain)
     consequence = Column(Integer)  # 1-5 (Insignificant → Severe)
     control_effectiveness = Column(Integer)  # 1-5 (Strong → Ineffective)
+
+    # When set, control_effectiveness is derived from this tested governance
+    # control's effectiveness rating (see app.services.control_effectiveness)
+    # rather than entered manually. Nullable — manual entry remains supported.
+    source_control_id = Column(
+        String, ForeignKey("governance_controls.id"), nullable=True, index=True
+    )
 
     # ── Calculated by engine (read-only for display) ───────────────────────────
     inherent_risk_score = Column(Float)  # likelihood × consequence (1-25)
@@ -466,7 +500,12 @@ class RiskMitigation(Base):
         index=True,
     )
     factor_score_id = Column(String, ForeignKey("risk_factor_scores.id"), nullable=True)
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    library_item_id = Column(
+        String, ForeignKey("mitigation_library_items.id"), nullable=True, index=True
+    )
 
     risk_description = Column(Text, nullable=False)
     mitigation_action = Column(Text, nullable=False)

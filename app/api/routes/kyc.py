@@ -15,20 +15,20 @@ from app.config import settings
 from app.db.database import get_db
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
 from app.integrations.identity import get_provider
-from app.models.customer import Customer, CustomerStatus
+from app.models.customer import Customer, CustomerOnboardingChecklist, CustomerStatus
 from app.models.kyc import (
     CustomerIdentityDocument,
     IdentityDocumentType,
     VerificationProvider,
     VerificationResult,
 )
+from app.models.screening import ScreeningRecord, ScreeningStatus
 from app.models.usage import UsageEventType, UsageRecordStatus
 from app.models.user import User, UserRole
 from app.services.identity_verification import (
     compute_kyc_identity_score,
     verify_document,
 )
-from app.services.sanctions_screening import screen_name
 from app.services.usage_billing_service import (
     find_by_reference,
     mark_completed,
@@ -115,14 +115,25 @@ async def upload_document(
     if not safe_name or safe_name.startswith("."):
         raise HTTPException(400, "Invalid filename")
 
+    def _parse_date(value: str):
+        if not value:
+            return None
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(
+                400, f"Invalid date format: {value!r}, expected YYYY-MM-DD"
+            )
+
     doc = CustomerIdentityDocument(
         customer_id=customer.id,
         org_id=customer.org_id,
         document_type=document_type,
         document_ref_front=safe_name,
         extracted_name=extracted_name,
-        extracted_dob=extracted_dob,
+        extracted_dob=_parse_date(extracted_dob),
         extracted_mrz=extracted_id_number,
+        expiry_date=_parse_date(extracted_expiry),
         uploaded_by=current_user.id,
     )
     db.add(doc)
@@ -158,6 +169,16 @@ def review_kyc(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
+    """
+    Reviews and decides a customer's KYC outcome.
+
+    This used to be a standalone activation path that bypassed the checklist/
+    screening gates enforced by POST /customers/{id}/status, and used a hardcoded
+    3-name sample watchlist instead of real ScreeningRecord data. It now applies
+    the same gates: activation requires the onboarding checklist to be complete
+    and requires there be no unresolved (potential/confirmed match, or
+    requires-EDD) screening record for the customer.
+    """
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(404, "Customer not found")
@@ -168,17 +189,47 @@ def review_kyc(
         .filter(CustomerIdentityDocument.customer_id == customer.id)
         .all()
     )
-    sanctions = screen_name(customer.full_name)
-    # `kyc.identity_score`/`reviewer_id`/`reviewer_notes`/`reviewed_at` had no
-    # surviving columns on Customer or CustomerIdentityDocument to persist into;
-    # they are computed/used for the decision below but not stored, since there is no
-    # current equivalent field. This is a (non-blocking) loss of persistence noted here
-    # rather than silently dropped.
+    # Informational only — does not gate the decision below; final approve/reject
+    # is a human compliance decision, but it can never result in `active` unless
+    # the checklist + screening gates below are satisfied.
     identity_score = compute_kyc_identity_score(documents)
 
-    if sanctions["match_found"]:
+    unresolved_screening = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.customer_id == customer.id,
+            ScreeningRecord.status.in_(
+                (
+                    ScreeningStatus.potential_match,
+                    ScreeningStatus.confirmed_match,
+                    ScreeningStatus.requires_edd,
+                )
+            ),
+        )
+        .first()
+    )
+
+    chk = (
+        db.query(CustomerOnboardingChecklist)
+        .filter(CustomerOnboardingChecklist.customer_id == customer.id)
+        .first()
+    )
+    checklist_complete = bool(
+        chk
+        and chk.pep_screened
+        and chk.sanctions_screened
+        and chk.identity_document_verified
+    )
+
+    if unresolved_screening:
         customer.status = CustomerStatus.rejected
     elif approve:
+        if not checklist_complete:
+            raise HTTPException(
+                422,
+                "Cannot activate: PEP screening, sanctions screening, and "
+                "identity verification must be complete",
+            )
         requires_ecdd = customer.is_pep or customer.risk_score >= 61
         customer.status = (
             CustomerStatus.edd_required if requires_ecdd else CustomerStatus.active
@@ -187,6 +238,16 @@ def review_kyc(
         customer.status = CustomerStatus.rejected
 
     db.commit()
+
+    if customer.status == CustomerStatus.active:
+        from app.models.automation_rule import RuleEventType
+        from app.services.automation_engine import customer_context, evaluate_automation_rules
+
+        evaluate_automation_rules(
+            db, RuleEventType.kyc_completed, customer.org_id, "customer", customer.id,
+            customer_context(customer), triggered_by=current_user.id,
+        )
+
     return {
         "customer_id": customer.id,
         "status": customer.status,

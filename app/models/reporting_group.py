@@ -39,7 +39,10 @@ class ReportingGroup(Base):
         Enum(GroupType), default=GroupType.holding_company, nullable=False
     )
     holding_org_id = Column(
-        String, ForeignKey("organisations.id"), nullable=False, index=True
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     shared_aml_program_id = Column(String, nullable=True)
     austrac_group_id = Column(String(50), nullable=True)

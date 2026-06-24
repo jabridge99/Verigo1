@@ -59,6 +59,7 @@ class RuleEventType(str, enum.Enum):
     policy_expiring = "policy_expiring"
     training_expiring = "training_expiring"
     control_test_due = "control_test_due"
+    independent_review_finding = "independent_review_finding"
     # Calendar
     compliance_item_due = "compliance_item_due"
     compliance_item_overdue = "compliance_item_overdue"
@@ -184,6 +185,43 @@ class AutomationRule(Base):
     created_by = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class AutomationRuleVersion(Base):
+    """
+    Immutable snapshot of an AutomationRule taken on every create/update.
+
+    Same pattern as governance.PolicyVersion: provides full history of what
+    conditions/actions were in force at any point in time, for audit and
+    rollback reference. Rows are never modified or deleted.
+    """
+
+    __tablename__ = "automation_rule_versions"
+
+    id = Column(String, primary_key=True, default=lambda: f"arv_{uuid4().hex[:12]}")
+    rule_id = Column(
+        String,
+        ForeignKey("automation_rules.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    org_id = Column(String, nullable=False, index=True)
+
+    version_number = Column(Integer, nullable=False)
+
+    # Full snapshot of the rule definition at this version
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    event_type = Column(String(50), nullable=False)
+    status = Column(String(20), nullable=False)
+    priority = Column(Integer)
+    condition_groups = Column(JSON, default=list)
+    actions = Column(JSON, default=list)
+    applicable_industries = Column(JSON, default=list)
+
+    change_summary = Column(Text)
+    changed_by = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class AutomationRuleExecution(Base):

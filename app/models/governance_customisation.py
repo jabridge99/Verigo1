@@ -148,7 +148,7 @@ class GovernanceCustomField(Base):
     is_searchable = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
 
-    created_by = Column(String, ForeignKey("users.id"))
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -193,7 +193,7 @@ class GovernanceCustomList(Base):
     is_active = Column(Boolean, default=True)
     colour = Column(String(7))  # #RRGGBB — optional UI colour tag
 
-    created_by = Column(String, ForeignKey("users.id"))
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -241,7 +241,9 @@ class GovernanceCustomWorkflow(Base):
 
     # ── Approver routing ──────────────────────────────────────────────────────
     approver_role = Column(Enum(ApprovalRole), nullable=False)
-    specific_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    specific_user_id = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     # used when approver_role = specific_user
 
     # ── SLA ───────────────────────────────────────────────────────────────────
@@ -254,7 +256,7 @@ class GovernanceCustomWorkflow(Base):
     requires_comment = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
 
-    created_by = Column(String, ForeignKey("users.id"))
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -326,7 +328,7 @@ class GovernanceCustomScoring(Base):
     governance_health_weights = Column(JSON, default=dict)
     # {"policy_health": 0.30, "control_health": 0.40, "training_health": 0.30}
 
-    updated_by = Column(String, ForeignKey("users.id"))
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -382,7 +384,7 @@ class GovernanceApprovalMatrix(Base):
     priority = Column(Integer, default=0)  # lower = evaluated first
     is_active = Column(Boolean, default=True)
 
-    created_by = Column(String, ForeignKey("users.id"))
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -446,5 +448,5 @@ class GovernanceDashboardMetric(Base):
     # True: green when high (e.g. completion %); False: green when low (e.g. overdue count)
 
     is_active = Column(Boolean, default=True)
-    created_by = Column(String, ForeignKey("users.id"))
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

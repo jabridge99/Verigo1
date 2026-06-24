@@ -99,6 +99,7 @@ from app.api.routes.ifti_e import router as ifti_e_router
 from app.api.routes.ifti_receipts import router as ifti_receipts_router
 from app.api.routes.independent_review import router as independent_review_router
 from app.api.routes.integrations import router as integrations_router
+from app.api.routes.marketplace import router as marketplace_router
 from app.api.routes.monitoring import router as monitoring_router
 from app.api.routes.org_config import router as org_config_router
 from app.api.routes.professional_assessment import (
@@ -122,21 +123,22 @@ from app.middleware import (
 )
 from app.scheduler import start_scheduler, stop_scheduler
 
+print("main.py: imports complete", flush=True)
+
+# setup_logging() also initialises Sentry (with FastApiIntegration,
+# SqlalchemyIntegration, release tagging, and send_default_pii=False) when
+# SENTRY_DSN is set — do not call sentry_sdk.init() again here, a second
+# call replaces that client and silently drops all of that configuration.
 setup_logging()
 
-if settings.sentry_dsn:
-    import sentry_sdk
-
-    sentry_sdk.init(
-        dsn=settings.sentry_dsn,
-        environment=settings.environment,
-        traces_sample_rate=0.1 if settings.is_production else 0.0,
-    )
+print("main.py: logging configured (Sentry init, if any, handled there)", flush=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import logging
+
+    print("lifespan: entered", flush=True)
 
     log = logging.getLogger("tvg.startup")
     log.info(
@@ -146,8 +148,24 @@ async def lifespan(app: FastAPI):
         settings.environment,
     )
 
-    Base.metadata.create_all(bind=engine)
-    log.info("Database tables verified")
+    if settings.is_production:
+        # Production schema is owned by Alembic (`alembic upgrade head` runs as a
+        # Railway pre-deploy step, once, before any worker starts). Running
+        # create_all() here too is redundant and slow: with --workers N, each
+        # worker's checkfirst=True scan does a catalog round-trip per table for
+        # ~130 tables, and a previous advisory-lock fix to stop them racing on
+        # DDL meant later workers waited out earlier workers' full scan before
+        # running their own — over 90s of workers not yet serving requests,
+        # during which Railway's proxy returned 502s for routed traffic.
+        print(
+            "lifespan: production — skipping create_all (Alembic owns schema)",
+            flush=True,
+        )
+    else:
+        print("lifespan: about to create_all", flush=True)
+        Base.metadata.create_all(bind=engine)
+        print("lifespan: create_all done", flush=True)
+        log.info("Database tables verified")
 
     try:
         from app.services.pack_engine import seed_all_packs
@@ -162,6 +180,7 @@ async def lifespan(app: FastAPI):
     except ImportError:
         log.debug("pack_engine not available — skipping pack seeding")
 
+    print("lifespan: about to seed permissions/roles", flush=True)
     from app.services.auth_service import seed_master_admin
     from app.services.org_service import seed_permission_catalog_and_roles
 
@@ -169,14 +188,18 @@ async def lifespan(app: FastAPI):
     try:
         seed_permission_catalog_and_roles(db)
         log.info("Permission catalog and system roles seeded")
+        print("lifespan: permission catalog seeded", flush=True)
         admin = seed_master_admin(db)
         if admin:
             log.info("Master admin ensured: %s", admin.email)
+        print("lifespan: master admin seeded", flush=True)
     finally:
         db.close()
 
+    print("lifespan: about to start scheduler", flush=True)
     start_scheduler()
     log.info("Background scheduler started")
+    print("lifespan: scheduler started, about to yield", flush=True)
 
     yield
 
@@ -300,6 +323,7 @@ app.include_router(customer_portal_public_router, prefix="/api/v1")
 app.include_router(training_triggers_router, prefix="/api/v1")
 app.include_router(examination_packs_router, prefix="/api/v1")
 app.include_router(benchmark_router, prefix="/api/v1")
+app.include_router(marketplace_router, prefix="/api/v1")
 app.include_router(verify.router, prefix="/api/v1")
 app.include_router(storage.router, prefix="/api/v1")
 app.include_router(organisations.router, prefix="/api/v1")

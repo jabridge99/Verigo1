@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user
 from app.db.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.branding import BrandingConfig, BrandingResponse
 from app.services import branding_service as svc
 
@@ -56,7 +56,7 @@ def update_branding(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    if current_user.role != "admin":
+    if current_user.role != UserRole.admin:
         raise HTTPException(403, "Only admins can update branding")
     if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id — cannot update branding")
@@ -71,7 +71,7 @@ def reset_branding(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    if current_user.role != "admin":
+    if current_user.role != UserRole.admin:
         raise HTTPException(403, "Only admins can reset branding")
     if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")

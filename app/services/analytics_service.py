@@ -206,6 +206,148 @@ def audit_activity_trend(
 # ── Composite Dashboard Summary ────────────────────────────────────────────────
 
 
+def pending_customer_reviews(
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
+):
+    from app.models.customer import CustomerStatus
+
+    today = _now().date()
+    q = _scope(db.query(Customer), Customer, industry_id, organisation_id)
+    due = q.filter(
+        Customer.next_review_date.isnot(None),
+        Customer.next_review_date <= today,
+        Customer.status == CustomerStatus.active,
+    ).count()
+    due_30d = q.filter(
+        Customer.next_review_date.isnot(None),
+        Customer.next_review_date > today,
+        Customer.next_review_date <= today + timedelta(days=30),
+        Customer.status == CustomerStatus.active,
+    ).count()
+    return {"overdue": due, "due_within_30_days": due_30d}
+
+
+def open_case_stats(
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
+):
+    from app.models.case import Case, CaseSeverity, CaseStatus
+
+    CLOSED_STATUSES = {
+        CaseStatus.closed_no_action,
+        CaseStatus.closed_smr_filed,
+        CaseStatus.closed_referred,
+        CaseStatus.closed_exited,
+        CaseStatus.closed_no_smr,
+    }
+    q = _scope(db.query(Case), Case, industry_id, organisation_id)
+    open_q = q.filter(~Case.status.in_(CLOSED_STATUSES))
+    by_status = {s.value: open_q.filter(Case.status == s).count() for s in CaseStatus if s not in CLOSED_STATUSES}
+    by_severity = {s.value: open_q.filter(Case.severity == s).count() for s in CaseSeverity}
+    return {
+        "open_total": open_q.count(),
+        "by_status": by_status,
+        "by_severity": by_severity,
+        "overdue": open_q.filter(Case.is_overdue.is_(True)).count(),
+        "smr_candidates": open_q.filter(Case.is_smr_candidate.is_(True)).count(),
+    }
+
+
+# ── Training Analytics ──────────────────────────────────────────────────────────
+
+
+def training_status_breakdown(
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
+):
+    from app.models.governance_training import GovernanceTrainingRecord, TrainingStatus
+
+    today = _now().date()
+    q = _scope(
+        db.query(GovernanceTrainingRecord), GovernanceTrainingRecord, industry_id, organisation_id
+    )
+    by_status = {s.value: q.filter(GovernanceTrainingRecord.status == s).count() for s in TrainingStatus}
+    overdue = q.filter(
+        GovernanceTrainingRecord.due_date < today,
+        GovernanceTrainingRecord.status.in_([TrainingStatus.assigned, TrainingStatus.in_progress, TrainingStatus.overdue]),
+    ).count()
+    due_soon = q.filter(
+        GovernanceTrainingRecord.due_date >= today,
+        GovernanceTrainingRecord.due_date <= today + timedelta(days=30),
+        GovernanceTrainingRecord.status.in_([TrainingStatus.assigned, TrainingStatus.in_progress]),
+    ).count()
+    total = q.count()
+    completed = by_status.get(TrainingStatus.completed.value, 0)
+    return {
+        "total": total,
+        "by_status": by_status,
+        "overdue": overdue,
+        "due_within_30_days": due_soon,
+        "completion_pct": round(completed / total * 100, 1) if total else 0,
+    }
+
+
+# ── Governance Analytics ─────────────────────────────────────────────────────────
+
+
+def governance_overview(
+    db: Session,
+    industry_id: Optional[str] = None,
+    organisation_id: Optional[str] = None,
+):
+    from app.models.governance import Policy, PolicyLifecycleStatus
+    from app.models.governance_controls import ControlStatus, GovernanceControl
+    from app.models.independent_review import FindingRisk, FindingStatus, ReviewFinding
+
+    today = _now().date()
+    in_30 = today + timedelta(days=30)
+
+    policy_q = _scope(db.query(Policy), Policy, industry_id, organisation_id)
+    active_states = [PolicyLifecycleStatus.published, PolicyLifecycleStatus.periodic_review]
+    policies_due = policy_q.filter(
+        Policy.review_due_date.isnot(None),
+        Policy.review_due_date <= in_30,
+        Policy.status.in_(active_states),
+    ).count()
+    policies_overdue = policy_q.filter(
+        Policy.review_due_date.isnot(None),
+        Policy.review_due_date < today,
+        Policy.status.in_(active_states),
+    ).count()
+
+    controls_q = _scope(db.query(GovernanceControl), GovernanceControl, industry_id, organisation_id)
+    controls_total = controls_q.count()
+    control_tests_overdue = controls_q.filter(
+        GovernanceControl.next_test_date.isnot(None),
+        GovernanceControl.next_test_date < today,
+        GovernanceControl.status == ControlStatus.active,
+    ).count()
+
+    finding_q = _scope(db.query(ReviewFinding), ReviewFinding, industry_id, organisation_id)
+    open_findings = finding_q.filter(
+        ReviewFinding.status.in_([FindingStatus.open, FindingStatus.response_submitted, FindingStatus.in_remediation, FindingStatus.overdue])
+    )
+    findings_by_risk = {
+        r.value: open_findings.filter(ReviewFinding.risk_rating == r).count() for r in FindingRisk
+    }
+
+    return {
+        "policy_reviews_due_30d": policies_due,
+        "policy_reviews_overdue": policies_overdue,
+        "control_tests_overdue": control_tests_overdue,
+        "controls_total": controls_total,
+        "open_findings_total": open_findings.count(),
+        "open_findings_by_risk": findings_by_risk,
+    }
+
+
+# ── Composite Dashboard Summary ────────────────────────────────────────────────
+
+
 def dashboard_summary(
     db: Session,
     industry_id: Optional[str] = None,

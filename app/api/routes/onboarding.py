@@ -290,7 +290,12 @@ def run_reminders(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_roles(UserRole.admin)),
 ):
-    """System/cron job — admin only. Processes due reminders across all tenants."""
+    """System/cron job — global super-admin only. Processes due reminders
+    across all tenants. UserRole.admin alone is a per-organisation role and
+    must not be sufficient to trigger a job that reads/writes every
+    tenant's onboarding sessions."""
+    if not current_user.is_super_admin:
+        raise HTTPException(403, "Requires global super-admin access")
     due = get_sessions_needing_reminder(db)
     sent = 0
     for s in due:

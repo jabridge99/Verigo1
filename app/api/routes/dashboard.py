@@ -188,6 +188,7 @@ def global_dashboard(
 
     # ── Customers ─────────────────────────────────────────────────────────────
     cust_q = db.query(Customer).filter(Customer.org_id == org_id)
+    total_customers = cust_q.count()
     high_risk_customers = cust_q.filter(
         Customer.risk_level.in_([RiskLevel.high, RiskLevel.critical])
     ).count()
@@ -196,6 +197,9 @@ def global_dashboard(
         Customer.status == CustomerStatus.under_review
     ).count()
     edd_required = cust_q.filter(Customer.status == CustomerStatus.edd_required).count()
+    by_risk_level = {
+        lvl.value: cust_q.filter(Customer.risk_level == lvl).count() for lvl in RiskLevel
+    }
 
     # ── Compliance Calendar ───────────────────────────────────────────────────
     cal_q = db.query(ComplianceCalendarItem).filter(
@@ -277,10 +281,12 @@ def global_dashboard(
             "traffic_light": _traffic_light(ifti_overdue + ttr_overdue, 1, 3),
         },
         "customers": {
+            "total": total_customers,
             "high_risk": high_risk_customers,
             "pep": pep_customers,
             "pending_review": pending_reviews,
             "edd_required": edd_required,
+            "by_risk_level": by_risk_level,
             "traffic_light": _traffic_light(edd_required, 3, 10),
         },
         "compliance_calendar": {

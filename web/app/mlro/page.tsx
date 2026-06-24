@@ -7,13 +7,14 @@ import {
   Shield, BarChart2, Calendar, Send, XCircle, ArrowUpRight,
 } from "lucide-react";
 import clsx from "clsx";
+import QuickActions from "@/components/QuickActions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface Case {
-  id: number;
-  case_id: string;
-  customer_id: number;
+  id: string;
+  case_ref: string;
+  customer_id: string;
   industry_id?: string;
   title: string;
   description?: string;
@@ -38,19 +39,24 @@ const SEV_DOT: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  open:          "bg-red-500/20 text-red-300",
-  investigating: "bg-blue-500/20 text-blue-300",
-  escalated:     "bg-purple-500/20 text-purple-300",
-  pending_review:"bg-amber-500/20 text-amber-300",
-  closed:        "bg-teal-500/20 text-teal-300",
+  open:                  "bg-red-500/20 text-red-300",
+  under_investigation:   "bg-blue-500/20 text-blue-300",
+  additional_information:"bg-sky-500/20 text-sky-300",
+  escalated:              "bg-purple-500/20 text-purple-300",
+  decision:               "bg-amber-500/20 text-amber-300",
+  closed_no_action:       "bg-teal-500/20 text-teal-300",
+  closed_smr_filed:       "bg-emerald-500/20 text-emerald-300",
+  closed_referred:        "bg-orange-500/20 text-orange-300",
+  closed_exited:          "bg-slate-500/20 text-slate-300",
+  closed_no_smr:          "bg-teal-500/20 text-teal-300",
 };
 
 const DEMO_CASES: Case[] = [
-  { id: 1, case_id: "CASE-DEMO00001", customer_id: 3, title: "Sanctions Match — Ivan Petrov", description: "OFAC SDN list hit detected during transaction processing. Customer account suspended. Awaiting MLRO review and determination on SAR filing.", severity: "critical", status: "open", assigned_to: "mlro@firm.com.au", alert_ids: ["ALT-001", "ALT-003"], created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 2, case_id: "CASE-DEMO00002", customer_id: 4, title: "PEP Structuring Pattern — Li Wei", description: "PEP customer identified structuring cash deposits across multiple branches. 6 transactions below $10k threshold over 48 hours. SMR filed.", severity: "high", status: "investigating", assigned_to: "analyst@firm.com.au", alert_ids: ["ALT-007", "ALT-008", "ALT-009"], created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 3, case_id: "CASE-DEMO00003", customer_id: 2, title: "Velocity Breach — Acme Pty Ltd", description: "Corporate account exceeded 24h velocity threshold. 18 transactions totalling $412k. Business justification requested from RM.", severity: "medium", status: "pending_review", assigned_to: "compliance@firm.com.au", alert_ids: ["ALT-012"], created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: 4, case_id: "CASE-DEMO00004", customer_id: 1, title: "Cross-Border IFTI — Jane Smith", description: "Outbound IFTI to Iran flagged. IFTI-E report generated. Customer provided documentation. Under MLRO review.", severity: "high", status: "escalated", assigned_to: "mlro@firm.com.au", alert_ids: ["ALT-015"], created_at: new Date(Date.now() - 259200000).toISOString() },
-  { id: 5, case_id: "CASE-DEMO00005", customer_id: 5, title: "Periodic Review — Wei Zhang", description: "Annual EDD review completed. No adverse findings. Customer risk rating maintained at medium. Case closed.", severity: "low", status: "closed", assigned_to: "analyst@firm.com.au", alert_ids: [], created_at: new Date(Date.now() - 604800000).toISOString(), closed_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: "case_demo00001", case_ref: "CASE-DEMO00001", customer_id: "3", title: "Sanctions Match — Ivan Petrov", description: "OFAC SDN list hit detected during transaction processing. Customer account suspended. Awaiting MLRO review and determination on SAR filing.", severity: "critical", status: "open", assigned_to: "mlro@firm.com.au", alert_ids: ["ALT-001", "ALT-003"], created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: "case_demo00002", case_ref: "CASE-DEMO00002", customer_id: "4", title: "PEP Structuring Pattern — Li Wei", description: "PEP customer identified structuring cash deposits across multiple branches. 6 transactions below $10k threshold over 48 hours. SMR filed.", severity: "high", status: "under_investigation", assigned_to: "analyst@firm.com.au", alert_ids: ["ALT-007", "ALT-008", "ALT-009"], created_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: "case_demo00003", case_ref: "CASE-DEMO00003", customer_id: "2", title: "Velocity Breach — Acme Pty Ltd", description: "Corporate account exceeded 24h velocity threshold. 18 transactions totalling $412k. Business justification requested from RM.", severity: "medium", status: "decision", assigned_to: "compliance@firm.com.au", alert_ids: ["ALT-012"], created_at: new Date(Date.now() - 172800000).toISOString() },
+  { id: "case_demo00004", case_ref: "CASE-DEMO00004", customer_id: "1", title: "Cross-Border IFTI — Jane Smith", description: "Outbound IFTI to Iran flagged. IFTI-E report generated. Customer provided documentation. Under MLRO review.", severity: "high", status: "escalated", assigned_to: "mlro@firm.com.au", alert_ids: ["ALT-015"], created_at: new Date(Date.now() - 259200000).toISOString() },
+  { id: "case_demo00005", case_ref: "CASE-DEMO00005", customer_id: "5", title: "Periodic Review — Wei Zhang", description: "Annual EDD review completed. No adverse findings. Customer risk rating maintained at medium. Case closed.", severity: "low", status: "closed_no_action", assigned_to: "analyst@firm.com.au", alert_ids: [], created_at: new Date(Date.now() - 604800000).toISOString(), closed_at: new Date(Date.now() - 86400000).toISOString() },
 ];
 
 const OBLIGATIONS = [
@@ -78,7 +84,7 @@ export default function MLRODashboard() {
 
   const fetchCases = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/transactions/cases?limit=100`, { credentials: "include" });
+      const res = await fetch(`${API}/api/v1/cases?limit=100`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setCases(d); }
     } catch {}
   }, []);
@@ -86,25 +92,30 @@ export default function MLRODashboard() {
   useEffect(() => { fetchCases(); }, [fetchCases]);
 
   const updateStatus = async (caseId: string, status: string) => {
-    try { await fetch(`${API}/api/v1/transactions/cases/${caseId}/status?status=${status}`, { method: "PATCH", credentials: "include" }); } catch {}
-    setCases(prev => prev.map(c => c.case_id === caseId ? { ...c, status } : c));
-    setSelected(prev => prev?.case_id === caseId ? { ...prev, status } : prev);
+    try {
+      await fetch(`${API}/api/v1/cases/${caseId}/status`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ new_status: status }),
+      });
+    } catch {}
+    setCases(prev => prev.map(c => c.id === caseId ? { ...c, status } : c));
+    setSelected(prev => prev?.id === caseId ? { ...prev, status } : prev);
     showToast("success", `Case moved to ${status.replace(/_/g, " ")}`);
   };
 
   const filtered = cases.filter(c => {
     const q = search.toLowerCase();
-    return (!search || c.title.toLowerCase().includes(q) || c.case_id.toLowerCase().includes(q))
+    return (!search || c.title.toLowerCase().includes(q) || c.case_ref.toLowerCase().includes(q))
       && (sevFilter === "all" || c.severity === sevFilter)
       && (statusFilter === "all" || c.status === statusFilter);
   });
 
   const stats = {
     open: cases.filter(c => c.status === "open").length,
-    investigating: cases.filter(c => c.status === "investigating").length,
+    investigating: cases.filter(c => c.status === "under_investigation").length,
     escalated: cases.filter(c => c.status === "escalated").length,
     critical: cases.filter(c => c.severity === "critical").length,
-    closed_this_week: cases.filter(c => c.status === "closed" && c.closed_at && Date.now() - new Date(c.closed_at).getTime() < 604800000).length,
+    closed_this_week: cases.filter(c => c.status === "closed_no_action" && c.closed_at && Date.now() - new Date(c.closed_at).getTime() < 604800000).length,
   };
 
   const TABS = [
@@ -190,18 +201,18 @@ export default function MLRODashboard() {
               ))}
             </div>
 
-            {cases.filter(c => c.severity === "critical" && c.status !== "closed").length > 0 && (
+            {cases.filter(c => c.severity === "critical" && c.status !== "closed_no_action").length > 0 && (
               <div>
                 <h2 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-400" /> Critical cases requiring immediate attention
                 </h2>
                 <div className="space-y-2">
-                  {cases.filter(c => c.severity === "critical" && c.status !== "closed").map(c => (
-                    <div key={c.case_id} className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 flex items-start justify-between gap-4 cursor-pointer hover:bg-red-500/10 transition-colors"
+                  {cases.filter(c => c.severity === "critical" && c.status !== "closed_no_action").map(c => (
+                    <div key={c.case_ref} className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 flex items-start justify-between gap-4 cursor-pointer hover:bg-red-500/10 transition-colors"
                       onClick={() => { setSelected(c); setTab("cases"); }}>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-mono text-xs text-slate-500">{c.case_id}</span>
+                          <span className="font-mono text-xs text-slate-500">{c.case_ref}</span>
                           <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium", STATUS_COLOR[c.status] || "")}>{c.status.replace(/_/g, " ")}</span>
                         </div>
                         <div className="font-semibold text-slate-100 text-sm">{c.title}</div>
@@ -277,7 +288,7 @@ export default function MLRODashboard() {
                 </select>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
                   className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
-                  {["all","open","investigating","escalated","pending_review","closed"].map(v => (
+                  {["all","open","under_investigation","escalated","decision","closed_no_action"].map(v => (
                     <option key={v} value={v}>{v === "all" ? "Status — All" : v.replace(/_/g," ")}</option>
                   ))}
                 </select>
@@ -286,17 +297,17 @@ export default function MLRODashboard() {
               <div className="space-y-2">
                 {filtered.length === 0 && <div className="text-center py-16 text-slate-500">No cases found</div>}
                 {filtered.map(c => (
-                  <div key={c.case_id}
+                  <div key={c.case_ref}
                     className={clsx(
                       "rounded-xl border p-4 cursor-pointer transition-all hover:border-brand-500/40",
-                      selected?.case_id === c.case_id ? "border-brand-500/50 bg-brand-500/5" : "border-navy-700 bg-navy-800/30 hover:bg-navy-800/60"
+                      selected?.case_ref === c.case_ref ? "border-brand-500/50 bg-brand-500/5" : "border-navy-700 bg-navy-800/30 hover:bg-navy-800/60"
                     )}
                     onClick={() => setSelected(c)}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <div className={`w-2 h-2 rounded-full shrink-0 ${SEV_DOT[c.severity]}`} />
-                          <span className="font-mono text-xs text-slate-500">{c.case_id}</span>
+                          <span className="font-mono text-xs text-slate-500">{c.case_ref}</span>
                           <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium", STATUS_COLOR[c.status] || "")}>{c.status.replace(/_/g," ")}</span>
                           <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLOR[c.severity] || "")}>{c.severity}</span>
                         </div>
@@ -326,7 +337,7 @@ export default function MLRODashboard() {
                 <div className="rounded-xl border border-navy-700 bg-navy-800 p-5 space-y-4">
                   <div className="flex items-start justify-between">
                     <div>
-                      <div className="font-mono text-xs text-slate-500 mb-1">{selected.case_id}</div>
+                      <div className="font-mono text-xs text-slate-500 mb-1">{selected.case_ref}</div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLOR[selected.severity] || "")}>{selected.severity}</span>
                         <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status] || "")}>{selected.status.replace(/_/g," ")}</span>
@@ -359,36 +370,36 @@ export default function MLRODashboard() {
                     <div className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-3">Actions</div>
                     <div className="flex flex-wrap gap-2">
                       {selected.status === "open" && (
-                        <button onClick={() => updateStatus(selected.case_id, "investigating")}
+                        <button onClick={() => updateStatus(selected.id, "under_investigation")}
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/15 border border-blue-500/25 text-blue-300 text-xs font-medium hover:bg-blue-500/25 transition-colors">
                           <Search className="w-3.5 h-3.5" /> Start Investigating
                         </button>
                       )}
-                      {selected.status === "investigating" && (
+                      {selected.status === "under_investigation" && (
                         <>
-                          <button onClick={() => updateStatus(selected.case_id, "escalated")}
+                          <button onClick={() => updateStatus(selected.id, "escalated")}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/15 border border-purple-500/25 text-purple-300 text-xs font-medium hover:bg-purple-500/25 transition-colors">
                             <ArrowUpRight className="w-3.5 h-3.5" /> Escalate to MLRO
                           </button>
-                          <button onClick={() => updateStatus(selected.case_id, "pending_review")}
+                          <button onClick={() => updateStatus(selected.id, "decision")}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/15 border border-amber-500/25 text-amber-300 text-xs font-medium hover:bg-amber-500/25 transition-colors">
                             <Clock className="w-3.5 h-3.5" /> Pending Review
                           </button>
                         </>
                       )}
                       {selected.status === "escalated" && (
-                        <button onClick={() => updateStatus(selected.case_id, "pending_review")}
+                        <button onClick={() => updateStatus(selected.id, "decision")}
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/15 border border-amber-500/25 text-amber-300 text-xs font-medium hover:bg-amber-500/25 transition-colors">
                           <FileText className="w-3.5 h-3.5" /> MLRO Sign-off
                         </button>
                       )}
-                      {selected.status === "pending_review" && (
-                        <button onClick={() => updateStatus(selected.case_id, "closed")}
+                      {selected.status === "decision" && (
+                        <button onClick={() => updateStatus(selected.id, "closed_no_action")}
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/15 border border-teal-500/25 text-teal-300 text-xs font-medium hover:bg-teal-500/25 transition-colors">
                           <CheckCircle className="w-3.5 h-3.5" /> Close Case
                         </button>
                       )}
-                      {selected.status === "closed" && (
+                      {selected.status === "closed_no_action" && (
                         <div className="flex items-center gap-2 text-teal-400 text-sm">
                           <CheckCircle className="w-4 h-4" /> Case closed
                         </div>
@@ -396,20 +407,13 @@ export default function MLRODashboard() {
                     </div>
                   </div>
 
-                  <div className="border-t border-navy-700 pt-4">
-                    <div className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-2">Related</div>
-                    <div className="space-y-1">
-                      {[
-                        { label: "View alerts",      href: "/monitoring", icon: AlertTriangle },
-                        { label: "File report",       href: "/reporting",  icon: FileText },
-                        { label: "Customer profile", href: "/customers",  icon: User },
-                      ].map(({ label, href, icon: Icon }) => (
-                        <a key={label} href={href} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-navy-700 transition-colors text-sm text-slate-300 hover:text-white">
-                          <div className="flex items-center gap-2"><Icon className="w-4 h-4 text-slate-500" />{label}</div>
-                          <ChevronRight className="w-4 h-4 text-slate-600" />
-                        </a>
-                      ))}
-                    </div>
+                  <div className="border-t border-navy-700 pt-4 space-y-2">
+                    <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+                    <QuickActions actions={[
+                      { label: "View alerts", href: selected.alert_ids?.length ? `/monitoring?customer=${selected.customer_id}` : "/monitoring", icon: AlertTriangle },
+                      { label: "File report", href: `/reporting?customer=${selected.customer_id}&action=new&case=${selected.case_ref}`, icon: FileText },
+                      { label: "Customer profile", href: `/customers/${selected.customer_id}`, icon: User },
+                    ]} />
                   </div>
                 </div>
               </div>
@@ -421,7 +425,7 @@ export default function MLRODashboard() {
           <CreateCaseForm
             onCreated={(c) => {
               setCases(prev => [c, ...prev]);
-              showToast("success", `${c.case_id} created`);
+              showToast("success", `${c.case_ref} created`);
               setTab("cases");
               setSelected(c);
             }}
@@ -471,12 +475,12 @@ export default function MLRODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cases.filter(c => c.status !== "closed").sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()).map(c => {
+                    {cases.filter(c => c.status !== "closed_no_action").sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()).map(c => {
                       const ageDays = c.created_at ? Math.floor((Date.now() - new Date(c.created_at).getTime()) / 86400000) : 0;
                       return (
-                        <tr key={c.case_id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer" onClick={() => { setSelected(c); setTab("cases"); }}>
+                        <tr key={c.case_ref} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer" onClick={() => { setSelected(c); setTab("cases"); }}>
                           <td className="px-4 py-3">
-                            <div className="font-mono text-xs text-slate-500">{c.case_id}</div>
+                            <div className="font-mono text-xs text-slate-500">{c.case_ref}</div>
                             <div className="text-slate-200 text-xs font-medium mt-0.5 line-clamp-1">{c.title}</div>
                           </td>
                           <td className="px-4 py-3"><span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLOR[c.severity] || "")}>{c.severity}</span></td>
@@ -507,7 +511,7 @@ export default function MLRODashboard() {
 
 function CreateCaseForm({ onCreated }: { onCreated: (c: Case) => void }) {
   const [form, setForm] = useState({
-    customer_id: 1, title: "", description: "",
+    customer_id: "", title: "", description: "",
     severity: "medium", assigned_to: "", created_by: "mlro@firm.com.au",
   });
   const [submitting, setSubmitting] = useState(false);
@@ -516,7 +520,7 @@ function CreateCaseForm({ onCreated }: { onCreated: (c: Case) => void }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/transactions/cases`, {
+      const res = await fetch(`${API}/api/v1/cases`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
@@ -524,8 +528,8 @@ function CreateCaseForm({ onCreated }: { onCreated: (c: Case) => void }) {
       onCreated(await res.json());
     } catch {
       onCreated({
-        id: Date.now(),
-        case_id: `CASE-${Math.random().toString(36).slice(2,12).toUpperCase()}`,
+        id: `case_${Date.now()}`,
+        case_ref: `CASE-${Math.random().toString(36).slice(2,12).toUpperCase()}`,
         customer_id: form.customer_id, title: form.title, description: form.description,
         severity: form.severity, status: "open", assigned_to: form.assigned_to,
         alert_ids: [], created_at: new Date().toISOString(),
@@ -540,8 +544,8 @@ function CreateCaseForm({ onCreated }: { onCreated: (c: Case) => void }) {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-400">Customer ID *</label>
-            <input type="number" required className="field-input" value={form.customer_id}
-              onChange={e => setForm(f => ({ ...f, customer_id: Number(e.target.value) }))} />
+            <input type="text" required placeholder="e.g. cust_a1b2c3d4e5f6" className="field-input" value={form.customer_id}
+              onChange={e => setForm(f => ({ ...f, customer_id: e.target.value }))} />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-400">Severity *</label>

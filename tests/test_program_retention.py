@@ -31,6 +31,8 @@ def _set_plan(client, admin_headers, industry_id, org_id, plan, status="active")
 def _setup_program(client, db, plan="professional", status="active"):
     seed_permission_catalog_and_roles(db)
     admin = _make_user(db, UserRole.admin, industry_id=None)
+    admin.is_super_admin = True
+    db.commit()
     owner = _make_user(db, UserRole.analyst, industry_id=None)
     headers = _auth(owner)
     admin_headers = _auth(admin)

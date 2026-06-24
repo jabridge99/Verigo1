@@ -39,7 +39,12 @@ class CustomerPortalSession(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     invited_by = Column(String, nullable=False)
     status = Column(
         Enum(PortalSessionStatus),

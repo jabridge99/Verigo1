@@ -145,20 +145,14 @@ async def _redis_allow(
     now = time.time()
     window_start = now - window_seconds
 
-    try:
-        pipe = redis_client.pipeline()
-        pipe.zremrangebyscore(key, "-inf", window_start)
-        pipe.zadd(key, {str(now): now})
-        pipe.zcard(key)
-        pipe.expire(key, window_seconds + 5)
-        results = await pipe.execute()
-        count = results[2]
-        return count <= limit
-    except Exception as exc:
-        logger.warning(
-            "Redis rate-limit error for key %s: %s — allowing request", key, exc
-        )
-        return True  # Fail open
+    pipe = redis_client.pipeline()
+    pipe.zremrangebyscore(key, "-inf", window_start)
+    pipe.zadd(key, {str(now): now})
+    pipe.zcard(key)
+    pipe.expire(key, window_seconds + 5)
+    results = await pipe.execute()
+    count = results[2]
+    return count <= limit
 
 
 # ── Unified RateLimitMiddleware ────────────────────────────────────────────────
@@ -193,18 +187,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 try:
                     import redis.asyncio as aioredis
 
-                    self._redis = aioredis.from_url(
+                    client = aioredis.from_url(
                         settings.redis_url,
                         encoding="utf-8",
                         decode_responses=True,
+                        socket_connect_timeout=2,
+                        socket_timeout=2,
                     )
+                    await client.ping()
+                    self._redis = client
                     logger.info(
                         "RateLimitMiddleware: using Redis backend (%s)",
                         settings.redis_url,
                     )
                 except Exception as exc:
                     logger.warning(
-                        "RateLimitMiddleware: Redis init failed, using in-process fallback: %s",
+                        "RateLimitMiddleware: Redis unreachable, using in-process "
+                        "fallback for this worker's lifetime: %s",
                         exc,
                     )
             else:
@@ -214,9 +213,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return self._redis
 
     def _real_ip(self, request: Request) -> str:
-        xff = request.headers.get("X-Forwarded-For", "")
-        if xff:
-            return xff.split(",")[0].strip()
+        from app.config import settings
+
+        if settings.trust_proxy_headers:
+            xff = request.headers.get("X-Forwarded-For", "")
+            if xff:
+                return xff.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -224,7 +226,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = self._real_ip(request)
 
         # Tiered rate limits
-        if path in ("/api/v1/auth/login", "/api/v1/auth/magic-link"):
+        if path in (
+            "/api/v1/auth/login",
+            "/api/v1/auth/magic-link",
+            "/api/v1/auth/mfa/challenge",
+        ):
             rpm, bucket_label = 10, "login"
         elif path.startswith("/api/v1/auth"):
             rpm, bucket_label = 20, "auth"
@@ -235,7 +241,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if redis_client is not None:
             key = f"rl:{bucket_label}:{client_ip}"
-            allowed = await _redis_allow(redis_client, key, rpm)
+            try:
+                allowed = await _redis_allow(redis_client, key, rpm)
+            except Exception as exc:
+                # Redis died after passing the initial ping (e.g. network
+                # blip) — stop retrying a dead connection on every request
+                # for the rest of this worker's life; fall back permanently.
+                logger.warning(
+                    "RateLimitMiddleware: Redis call failed (%s) — disabling "
+                    "Redis backend for this worker, falling back to in-process",
+                    exc,
+                )
+                self._redis = None
+                key = f"{client_ip}:{bucket_label}"
+                allowed = _in_process_limiter.allow(key, rpm)
         else:
             key = f"{client_ip}:{bucket_label}"
             allowed = _in_process_limiter.allow(key, rpm)

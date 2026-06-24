@@ -21,6 +21,7 @@ import logging
 from datetime import date
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.notification import Notification, NotificationPriority, NotificationType
@@ -72,7 +73,23 @@ def _create(
     entity_id: Optional[str] = None,
     link: Optional[str] = None,
     send_email: bool = True,
+    dedupe_key: Optional[str] = None,
 ) -> Notification:
+    """
+    dedupe_key makes this idempotent for scheduled checks (deadline_check
+    runs daily and, without a distributed lock on a multi-worker deploy,
+    could in theory run more than once for the same day) — pass a key
+    stable per user/entity/day (e.g. f"{notif_type}:{entity_id}:{user_id}:
+    {date.today()}") and a re-run returns the existing notification
+    instead of creating + re-emailing a duplicate.
+    """
+    if dedupe_key:
+        existing = (
+            db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
+        )
+        if existing:
+            return existing
+
     n = Notification(
         notif_id=_next_id(),
         user_id=user_id,
@@ -83,10 +100,20 @@ def _create(
         entity_type=entity_type,
         entity_id=entity_id,
         link=link,
+        dedupe_key=dedupe_key,
         emailed=False,
     )
     db.add(n)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        existing = (
+            db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
+        )
+        if existing:
+            return existing
+        raise
 
     if send_email and user_id:
         _send_email_for(db, n)
@@ -104,11 +131,22 @@ def _notify_users(
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
     link: Optional[str] = None,
+    dedupe_key_prefix: Optional[str] = None,
 ) -> int:
     count = 0
     for user in users:
+        dedupe_key = f"{dedupe_key_prefix}:{user.id}" if dedupe_key_prefix else None
         _create(
-            db, user.id, notif_type, priority, title, body, entity_type, entity_id, link
+            db,
+            user.id,
+            notif_type,
+            priority,
+            title,
+            body,
+            entity_type,
+            entity_id,
+            link,
+            dedupe_key=dedupe_key,
         )
         count += 1
     return count
@@ -171,6 +209,7 @@ def notify_smr_deadline(
         "smr",
         smr_id,
         f"/reports/smr/{smr_id}",
+        dedupe_key_prefix=f"smr_deadline:{smr_id}:{date.today()}",
     )
     db.commit()
     return count
@@ -204,6 +243,7 @@ def notify_ifti_deadline(
         "ifti",
         ifti_id,
         f"/reports/ifti/{ifti_id}",
+        dedupe_key_prefix=f"ifti_deadline:{ifti_id}:{date.today()}",
     )
     db.commit()
     return count
@@ -237,6 +277,7 @@ def notify_ttr_deadline(
         "ttr",
         ttr_id,
         f"/reports/ttr/{ttr_id}",
+        dedupe_key_prefix=f"ttr_deadline:{ttr_id}:{date.today()}",
     )
     db.commit()
     return count
@@ -290,6 +331,7 @@ def notify_training_overdue(
         f"Mandatory training '{course_name}' is {days_overdue} days overdue. "
         f"This is a regulatory obligation under AML/CTF Act s.36."
     )
+    today = date.today()
     _create(
         db,
         user_id,
@@ -300,6 +342,7 @@ def notify_training_overdue(
         "training_record",
         record_id,
         f"/training/{record_id}",
+        dedupe_key=f"training_overdue:{record_id}:{user_id}:{today}",
     )
 
     # Also alert the MLRO
@@ -316,6 +359,7 @@ def notify_training_overdue(
                 record_id,
                 f"/training/{record_id}",
                 send_email=False,
+                dedupe_key=f"training_overdue:{record_id}:{mlro.id}:{today}",
             )
     db.commit()
 
@@ -442,6 +486,7 @@ def notify_independent_review_due(
         "independent_review",
         review_id,
         f"/independent-reviews/{review_id}",
+        dedupe_key_prefix=f"independent_review_due:{review_id}:{date.today()}",
     )
     db.commit()
 
@@ -486,6 +531,7 @@ def notify_control_test_overdue(
         "governance_control",
         control_id,
         f"/governance/controls/{control_id}",
+        dedupe_key_prefix=f"control_test_overdue:{control_id}:{date.today()}",
     )
     db.commit()
 
@@ -514,6 +560,7 @@ def notify_policy_review_due(
         "policy",
         policy_id,
         f"/governance/policies/{policy_id}",
+        dedupe_key_prefix=f"policy_review_due:{policy_id}:{date.today()}",
     )
     db.commit()
 

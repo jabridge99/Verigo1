@@ -35,6 +35,8 @@ def get_redis():
             settings.redis_url,
             encoding="utf-8",
             decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
         )
     except Exception as exc:
         log.warning("Redis connection failed — cache disabled: %s", exc)

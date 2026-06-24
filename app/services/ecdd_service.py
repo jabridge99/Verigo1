@@ -8,6 +8,8 @@ def compute_ecdd_score(ecdd) -> float:
         score += 20
     if not ecdd.source_of_wealth_verified:
         score += 15
+    if ecdd.high_tax_risk:
+        score += 10
     return min(score, 100.0)
 
 

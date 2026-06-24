@@ -237,9 +237,9 @@ class GovernanceControl(Base):
     control_owner = Column(String, ForeignKey("users.id"), nullable=False)
     # 1L — business unit owner
     business_unit = Column(String(100))
-    reviewer_id = Column(String, ForeignKey("users.id"))
+    reviewer_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     # 2L — MLRO / compliance reviewer
-    auditor_id = Column(String, ForeignKey("users.id"))
+    auditor_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     # 3L — internal audit / independent reviewer
 
     # ── Operating characteristics ─────────────────────────────────────────────
@@ -276,6 +276,11 @@ class GovernanceControl(Base):
     # ── Custom fields (no-code extensibility) ────────────────────────────────
     custom_fields = Column(JSON, default=dict)
     # {"field_name": value} — populated from GovernanceCustomField definitions
+
+    # Optional link to the reusable mitigation catalogue (see mitigation_library.py)
+    library_item_id = Column(
+        String, ForeignKey("mitigation_library_items.id"), nullable=True, index=True
+    )
 
     # ── Audit ─────────────────────────────────────────────────────────────────
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
@@ -335,7 +340,9 @@ class ControlTest(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     # ── Test execution ────────────────────────────────────────────────────────
     test_date = Column(Date, nullable=False)
@@ -368,7 +375,7 @@ class ControlTest(Base):
     # set True if any finding requires remediation
 
     # ── Reviewer sign-off (2L) ────────────────────────────────────────────────
-    reviewed_by = Column(String, ForeignKey("users.id"))
+    reviewed_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     reviewed_at = Column(DateTime(timezone=True))
     reviewer_comments = Column(Text)
     is_finalised = Column(Boolean, default=False)
@@ -432,7 +439,9 @@ class ControlTestFinding(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     # ── Finding detail ────────────────────────────────────────────────────────
     finding_ref = Column(String(20))  # e.g. F-001, F-002
@@ -500,7 +509,9 @@ class ControlRemediationAction(Base):
         index=True,
     )
     finding_id = Column(String, ForeignKey("control_test_findings.id"), nullable=True)
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     # ── Action detail ─────────────────────────────────────────────────────────
     action_ref = Column(String(20))  # e.g. REM-001
@@ -511,7 +522,7 @@ class ControlRemediationAction(Base):
 
     # ── Ownership ─────────────────────────────────────────────────────────────
     owner_id = Column(String, ForeignKey("users.id"), nullable=False)
-    escalation_owner_id = Column(String, ForeignKey("users.id"))
+    escalation_owner_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     # escalation owner if primary owner doesn't close in time
 
     # ── Dates ─────────────────────────────────────────────────────────────────
@@ -531,9 +542,9 @@ class ControlRemediationAction(Base):
     # ── Closure ───────────────────────────────────────────────────────────────
     closure_evidence = Column(JSON, default=list)  # [document.id]
     closure_notes = Column(Text)
-    closed_by = Column(String, ForeignKey("users.id"))
+    closed_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     closed_at = Column(DateTime(timezone=True))
-    risk_acceptance_by = Column(String, ForeignKey("users.id"))
+    risk_acceptance_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     # MLRO/Board user id if risk accepted without full remediation
     risk_acceptance_note = Column(Text)
 
@@ -571,7 +582,9 @@ class ControlEvidenceItem(Base):
         nullable=False,
         index=True,
     )
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False)
+    org_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
 
     title = Column(String(255), nullable=False)
     description = Column(Text)
@@ -580,7 +593,7 @@ class ControlEvidenceItem(Base):
     evidence_type = Column(String(50))
     # e.g. "system_report", "sign_off_log", "alert_summary", "management_attestation"
 
-    uploaded_by = Column(String, ForeignKey("users.id"))
+    uploaded_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
 
     control = relationship("GovernanceControl", back_populates="evidence")

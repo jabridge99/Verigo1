@@ -31,6 +31,39 @@ def _get_tenant(db: Session, industry_id: str) -> Optional[IndustryTenant]:
     return db.query(IndustryTenant).filter_by(industry_id=industry_id).first()
 
 
+def _validate_endpoint_url(url: str) -> None:
+    """
+    Block SSRF: a tenant-supplied custom S3/Azure/GCS endpoint_url is used
+    directly by boto3/storage adapters to issue live outbound requests
+    (including the connectivity check below), so it must not be allowed to
+    target private/loopback/link-local/reserved IPs or cloud metadata hosts.
+    """
+    import ipaddress
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Storage endpoint_url must use HTTPS")
+    host = parsed.hostname or ""
+    _BLOCKED_HOSTS = {
+        "169.254.169.254",
+        "metadata.google.internal",
+        "metadata.internal",
+    }
+    if host.lower() in _BLOCKED_HOSTS or host.lower().endswith(".internal"):
+        raise ValueError(f"Storage endpoint_url host '{host}' is not allowed")
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise ValueError(
+                f"Storage endpoint_url must not target a private/loopback/reserved IP: {host}"
+            )
+    except ValueError as e:
+        if "Storage endpoint_url" in str(e):
+            raise
+        pass  # not a raw IP — hostname is fine
+
+
 def get_config(db: Session, industry_id: str) -> dict:
     tenant = _get_tenant(db, industry_id)
     return (tenant.storage_config or {}) if tenant else {}
@@ -49,6 +82,9 @@ async def set_config(db: Session, industry_id: str, data: StorageConfigInput) ->
         raise ValueError(
             f"Missing required field(s) for {backend}: {', '.join(missing)}"
         )
+
+    if data.endpoint_url:
+        _validate_endpoint_url(data.endpoint_url)
 
     cfg = data.model_dump(exclude_none=True)
     cfg["backend"] = backend

@@ -721,3 +721,150 @@ def get_version_snapshot(
         "profiles_snapshot": v.profiles_snapshot,
         "created_at": v.created_at,
     }
+
+
+# ── Excel Export (Board / Audit / Independent Review / Regulator) ──────────────
+
+
+@router.get("/export/excel")
+def export_risk_matrix_excel(
+    run_id: Optional[str] = Query(
+        None, description="Assessment run to export; defaults to the most recent run."
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Export the org's risk assessment as an .xlsx workbook, structured as the
+    Risk Category → Risk Event → Likelihood → Consequence → Mitigation →
+    Control Effectiveness → Residual Risk chain — not a raw dump of the
+    spreadsheet/config layout. This structure is what lets the same data
+    later drive Customer/Transaction/Industry/AML Program risk assessments
+    and Independent Review findings, instead of being a one-off report.
+
+    Reuses the existing risk_engine chain (RiskCategory → RiskFactor →
+    RiskFactorScore → RiskMitigation) for the latest assessment run — no
+    separate export data model — plus the org's customer risk distribution
+    for context.
+
+    For Board / Audit / Independent Review / Regulator distribution.
+    """
+    import io
+
+    from openpyxl import Workbook
+    from fastapi.responses import StreamingResponse
+
+    from app.models.customer import Customer
+    from app.models.risk_engine import (
+        RiskAssessmentRun,
+        RiskCategory,
+        RiskFactor,
+        RiskFactorScore,
+        RiskMitigation,
+    )
+
+    org_id = org_id_for(current_user)
+
+    if run_id:
+        run = (
+            db.query(RiskAssessmentRun)
+            .filter(RiskAssessmentRun.id == run_id, RiskAssessmentRun.org_id == org_id)
+            .first()
+        )
+        if not run:
+            raise HTTPException(404, "Assessment run not found.")
+    else:
+        run = (
+            db.query(RiskAssessmentRun)
+            .filter(RiskAssessmentRun.org_id == org_id)
+            .order_by(RiskAssessmentRun.assessment_date.desc())
+            .first()
+        )
+
+    wb = Workbook()
+    ws1 = wb.active
+    ws1.title = "Risk Assessment Chain"
+    ws1.append([
+        "Risk Category", "Risk Event", "Likelihood (1-5)", "Consequence (1-5)",
+        "Inherent Risk", "Inherent Rating", "Mitigation", "Control Effectiveness (1-5)",
+        "Residual Risk", "Residual Rating",
+    ])
+
+    if run:
+        categories = (
+            db.query(RiskCategory)
+            .filter(RiskCategory.framework_id == run.framework_id, RiskCategory.is_active == True)
+            .order_by(RiskCategory.sort_order)
+            .all()
+        )
+        for cat in categories:
+            factors = (
+                db.query(RiskFactor)
+                .filter(RiskFactor.category_id == cat.id, RiskFactor.is_active == True)
+                .order_by(RiskFactor.sort_order)
+                .all()
+            )
+            for factor in factors:
+                score = (
+                    db.query(RiskFactorScore)
+                    .filter(
+                        RiskFactorScore.assessment_id == run.id,
+                        RiskFactorScore.factor_id == factor.id,
+                    )
+                    .first()
+                )
+                mitigations = (
+                    db.query(RiskMitigation)
+                    .filter(
+                        RiskMitigation.assessment_id == run.id,
+                        RiskMitigation.factor_score_id == (score.id if score else None),
+                    )
+                    .all()
+                    if score
+                    else []
+                )
+                mitigation_text = "; ".join(m.mitigation_action for m in mitigations) or "—"
+                residual_score = (
+                    score.override_residual_score
+                    if score and score.score_override
+                    else (score.residual_risk_score if score else None)
+                )
+                ws1.append([
+                    cat.name,
+                    factor.name,
+                    score.likelihood if score else None,
+                    score.consequence if score else None,
+                    score.inherent_risk_score if score else None,
+                    score.inherent_rating.value if score and score.inherent_rating else None,
+                    mitigation_text,
+                    score.control_effectiveness if score else None,
+                    residual_score,
+                    score.residual_rating.value if score and score.residual_rating else None,
+                ])
+    else:
+        ws1.append(["No assessment run found for this organisation.", "", "", "", "", "", "", "", "", ""])
+
+    ws2 = wb.create_sheet("Customer Risk Distribution")
+    ws2.append(["Risk Level", "Customer Count"])
+    customers = db.query(Customer).filter(Customer.org_id == org_id).all()
+    counts: dict[str, int] = {}
+    for c in customers:
+        key = c.risk_level.value if c.risk_level else "unrated"
+        counts[key] = counts.get(key, 0) + 1
+    for level, count in sorted(counts.items()):
+        ws2.append([level, count])
+
+    ws3 = wb.create_sheet("Disclaimer")
+    ws3.append([DISCLAIMER])
+    ws3.append(["Assessment run", run.title if run else "—"])
+    ws3.append(["Generated by", current_user.email])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=risk-matrix-export.xlsx"},
+    )

@@ -1036,51 +1036,67 @@ def run_monitoring(
 
         title = _build_alert_title(transaction, signals, primary_rule)
 
-        alert_id = f"alrt_{uuid4().hex[:10]}"
-        alert_ref = f"{alert_ref_prefix}-{uuid4().hex[:8].upper()}"
-
-        alert = TransactionAlert(
-            id=alert_id,
-            alert_ref=alert_ref,
-            org_id=transaction.org_id,
-            transaction_id=transaction.id,
-            customer_id=transaction.customer_id,
-            alert_type=AlertType.rule_triggered
-            if matched_rules
-            else AlertType.behaviour_anomaly,
-            category=category,
-            severity=severity,
-            status=AlertStatus.generated,
-            rule_id=primary_rule["rule_id"] if primary_rule else None,
-            rule_name=primary_rule["rule_name"] if primary_rule else None,
-            rules_matched=[r["rule_id"] for r in matched_rules],
-            alert_score=alert_score,
-            score_breakdown=score_breakdown,
-            title=title,
-            behaviour_signals=signals.to_dict(),
-            is_smr_candidate=False,
-            risk_matrix_score=matrix_result.overall_score,
-            risk_matrix_level=matrix_result.risk_level,
-            risk_matrix_detail=matrix_result.to_dict(),
-        )
-        db.add(alert)
-        alerts.append(alert)
-
-        # Update transaction counters
-        transaction.alerts_generated = (transaction.alerts_generated or 0) + 1
-        transaction.behaviour_signals = signals.to_dict()
-        transaction.behaviour_score = signals.combined_score
-
-        # Update rule statistics
-        for rule_match in matched_rules:
-            rule_obj = next(
-                (r for r in active_rules if r.id == rule_match["rule_id"]), None
+        # Re-evaluation (manual re-run, backfill, retried webhook) must not
+        # spawn a second alert for the same transaction while an existing
+        # one is still open — that pollutes the analyst queue and lets the
+        # same suspicious activity get buried in duplicate noise.
+        existing_open_alert = (
+            db.query(TransactionAlert)
+            .filter(
+                TransactionAlert.transaction_id == transaction.id,
+                TransactionAlert.status.notin_(
+                    [AlertStatus.dismissed, AlertStatus.resolved]
+                ),
             )
-            if rule_obj:
-                rule_obj.total_alerts_generated = (
-                    rule_obj.total_alerts_generated or 0
-                ) + 1
-                rule_obj.last_triggered_at = datetime.now(timezone.utc)
+            .first()
+        )
+
+        if existing_open_alert is None:
+            alert_id = f"alrt_{uuid4().hex[:10]}"
+            alert_ref = f"{alert_ref_prefix}-{uuid4().hex[:8].upper()}"
+
+            alert = TransactionAlert(
+                id=alert_id,
+                alert_ref=alert_ref,
+                org_id=transaction.org_id,
+                transaction_id=transaction.id,
+                customer_id=transaction.customer_id,
+                alert_type=AlertType.rule_triggered
+                if matched_rules
+                else AlertType.behaviour_anomaly,
+                category=category,
+                severity=severity,
+                status=AlertStatus.generated,
+                rule_id=primary_rule["rule_id"] if primary_rule else None,
+                rule_name=primary_rule["rule_name"] if primary_rule else None,
+                rules_matched=[r["rule_id"] for r in matched_rules],
+                alert_score=alert_score,
+                score_breakdown=score_breakdown,
+                title=title,
+                behaviour_signals=signals.to_dict(),
+                is_smr_candidate=False,
+                risk_matrix_score=matrix_result.overall_score,
+                risk_matrix_level=matrix_result.risk_level,
+                risk_matrix_detail=matrix_result.to_dict(),
+            )
+            db.add(alert)
+            alerts.append(alert)
+
+            # Update transaction counters
+            transaction.alerts_generated = (transaction.alerts_generated or 0) + 1
+            transaction.behaviour_signals = signals.to_dict()
+            transaction.behaviour_score = signals.combined_score
+
+            # Update rule statistics
+            for rule_match in matched_rules:
+                rule_obj = next(
+                    (r for r in active_rules if r.id == rule_match["rule_id"]), None
+                )
+                if rule_obj:
+                    rule_obj.total_alerts_generated = (
+                        rule_obj.total_alerts_generated or 0
+                    ) + 1
+                    rule_obj.last_triggered_at = datetime.now(timezone.utc)
 
     # 5. Update (or create) the customer behaviour profile with this transaction's data
     update_behaviour_profile(transaction, customer, db)

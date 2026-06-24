@@ -1,4 +1,3 @@
-import secrets
 from typing import List
 
 from pydantic import model_validator
@@ -16,13 +15,27 @@ class Settings(BaseSettings):
     # Production: postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres
     database_url: str = "sqlite:///./tvg.db"
 
+    # Alembic migrations need a direct (non-pooled) connection — PgBouncer's
+    # transaction-mode pooling (used by database_url above, port 6543) doesn't
+    # reliably support Alembic's long multi-statement DDL transactions and can
+    # hang indefinitely. Point this at the direct connection (port 5432), e.g.
+    # postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
+    # Falls back to database_url if unset (e.g. local sqlite/dev Postgres).
+    migration_database_url: str = ""
+
     # ── Supabase ──────────────────────────────────────────────────────────────
     supabase_url: str = ""  # https://[ref].supabase.co
     supabase_anon_key: str = ""  # public anon key (frontend)
     supabase_service_role_key: str = ""  # secret service role key (backend only)
 
     # ── Auth ─────────────────────────────────────────────────────────────────
-    secret_key: str = secrets.token_urlsafe(32)
+    # A random per-process default (secrets.token_urlsafe(32)) would differ
+    # across worker processes, making JWTs signed by one worker fail to
+    # validate on another, and would never equal the literal string the
+    # production guard below checks for — silently defeating that guard.
+    # Use a fixed, obviously-insecure placeholder instead so the guard works
+    # and dev/test workers agree on a secret.
+    secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480  # 8 hours
 
@@ -35,6 +48,12 @@ class Settings(BaseSettings):
     rate_limit_default: str = "200/minute"
     rate_limit_auth: str = "20/minute"
     redis_url: str = ""  # e.g. redis://localhost:6379/0 — optional, enables Redis-backed rate limiting & cache
+    # X-Forwarded-For is attacker-controlled unless the app sits behind a
+    # proxy/load balancer that overwrites it. Only honor it for client-IP-based
+    # rate limiting when explicitly enabled (i.e. deployed behind such a proxy) —
+    # otherwise any client can set a fresh value per request to bypass per-IP
+    # limits entirely.
+    trust_proxy_headers: bool = False
 
     # ── Document storage ──────────────────────────────────────────────────────
     document_store_path: str = "./uploads"
@@ -179,6 +198,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def check_production_secrets(self):
+        # CORSMiddleware is configured with allow_credentials=True regardless
+        # of environment, so wildcard CORS is exploitable (any origin gets its
+        # requests echoed back with credentials) in staging just as much as
+        # production — gate on "not local dev", not literally "production".
+        if self.environment in ("production", "staging"):
+            if self.cors_origins == "*":
+                raise ValueError(
+                    f"CORS_ORIGINS must be set to explicit origin(s) in "
+                    f"{self.environment} — wildcard '*' combined with "
+                    f"allow_credentials is unsafe"
+                )
         if self.environment == "production":
             if self.secret_key == "change-me-in-production":
                 raise ValueError("SECRET_KEY must be changed in production")
@@ -186,11 +216,6 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "SQLite is not supported in production — set DATABASE_URL to a "
                     "PostgreSQL connection string (data loss / no concurrency guarantees)"
-                )
-            if self.cors_origins == "*":
-                raise ValueError(
-                    "CORS_ORIGINS must be set to explicit origin(s) in production — "
-                    "wildcard '*' combined with allow_credentials is unsafe"
                 )
             if not self.redis_url:
                 import warnings
