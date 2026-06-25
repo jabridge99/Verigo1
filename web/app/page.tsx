@@ -8,6 +8,7 @@ import {
   Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Landmark,
 } from 'lucide-react'
 import { industries } from '@/lib/industries'
+import { fetchPlanPrices, formatAud, type PlanPrice } from '@/lib/pricing'
 
 export const metadata = {
   title: 'Verigo — Compliance Made Practical. Built for Australian Business.',
@@ -538,12 +539,12 @@ function TrustSecurity() {
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 9 — PRICING PREVIEW
 // ─────────────────────────────────────────────────────────────────────────────
-function PricingPreview() {
+function PricingPreview({ prices }: { prices: Record<string, PlanPrice> }) {
   const plans = [
     {
       name: 'Essential',
-      price: '$299',
-      period: '/year',
+      price: formatAud(prices.starter.monthly_aud),
+      period: prices.starter.monthly_aud != null ? '/month' : '',
       badge: null,
       desc: 'For small reporting entities building their first AML/CTF programme.',
       features: ['Unlimited customers', 'KYC & KYB verification', 'AML/CTF Program template', 'IFTI, SMR & TTR reporting', 'Basic transaction monitoring', 'Essential integrations'],
@@ -553,8 +554,8 @@ function PricingPreview() {
     },
     {
       name: 'Professional',
-      price: '$799',
-      period: '/year',
+      price: formatAud(prices.professional.monthly_aud),
+      period: prices.professional.monthly_aud != null ? '/month' : '',
       badge: 'Most Popular',
       desc: 'For growing compliance teams with full AUSTRAC reporting obligations.',
       features: ['Everything in Essential', 'Sanctions, PEP & adverse media', 'Advanced transaction monitoring', 'EDD workflows', 'Case management', 'Workflow automation', 'AML data connectors'],
@@ -680,7 +681,8 @@ function FinalCTA() {
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE
 // ─────────────────────────────────────────────────────────────────────────────
-export default function HomePage() {
+export default async function HomePage() {
+  const prices = await fetchPlanPrices()
   return (
     <div className="bg-white text-slate-900">
       <Hero />
@@ -691,7 +693,7 @@ export default function HomePage() {
       <PlatformOverview />
       <WhyVerigo />
       <TrustSecurity />
-      <PricingPreview />
+      <PricingPreview prices={prices} />
       <FinalCTA />
     </div>
   )

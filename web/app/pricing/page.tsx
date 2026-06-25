@@ -1,12 +1,22 @@
 import Link from 'next/link'
 import { CheckCircle, X, ArrowRight, Shield, Zap, Database, Minus, Info } from 'lucide-react'
+import { fetchPlanPrices, formatAud, annualSavingsPct } from '@/lib/pricing'
 
 export const metadata = {
   title: 'Pricing | Verigo',
-  description: 'Simple, transparent annual pricing for Australian regulated businesses. Start with a 7-day free trial.',
+  description: 'Simple, transparent monthly or annual pricing for Australian regulated businesses. Start with a 7-day free trial.',
 }
 
-const plans = [
+async function getPlans() {
+  const prices = await fetchPlanPrices()
+  const starter = prices.starter
+  const professional = prices.professional
+  const enterprise = prices.enterprise
+  const starterSavings = annualSavingsPct(starter.monthly_aud, starter.annual_aud)
+  const proSavings = annualSavingsPct(professional.monthly_aud, professional.annual_aud)
+  const entSavings = annualSavingsPct(enterprise.monthly_aud, enterprise.annual_aud)
+
+  return [
   {
     name: 'Free Trial',
     price: 'Free',
@@ -33,9 +43,11 @@ const plans = [
   },
   {
     name: 'Starter',
-    price: '$299',
-    period: '/mo',
-    billing: 'or $2,870.40/yr billed annually (20% off)',
+    price: formatAud(starter.monthly_aud),
+    period: starter.monthly_aud != null ? '/mo' : '',
+    billing: starter.annual_aud != null
+      ? `or ${formatAud(starter.annual_aud)}/yr billed annually${starterSavings ? ` (${starterSavings}% off)` : ''}`
+      : '',
     badge: null,
     description: 'For small reporting entities building their first AML/CTF programme.',
     highlight: false,
@@ -66,9 +78,11 @@ const plans = [
   },
   {
     name: 'Professional',
-    price: '$799',
-    period: '/mo',
-    billing: 'or $7,670.40/yr billed annually (20% off)',
+    price: formatAud(professional.monthly_aud),
+    period: professional.monthly_aud != null ? '/mo' : '',
+    billing: professional.annual_aud != null
+      ? `or ${formatAud(professional.annual_aud)}/yr billed annually${proSavings ? ` (${proSavings}% off)` : ''}`
+      : '',
     badge: 'Most Popular',
     description: 'For growing compliance teams with full AUSTRAC reporting obligations.',
     highlight: true,
@@ -96,9 +110,11 @@ const plans = [
   },
   {
     name: 'Enterprise',
-    price: '$1,999',
-    period: '/mo',
-    billing: 'or $19,190.40/yr billed annually (20% off)',
+    price: formatAud(enterprise.monthly_aud),
+    period: enterprise.monthly_aud != null ? '/mo' : '',
+    billing: enterprise.annual_aud != null
+      ? `or ${formatAud(enterprise.annual_aud)}/yr billed annually${entSavings ? ` (${entSavings}% off)` : ''}`
+      : '',
     badge: null,
     description: 'For reporting groups, financial institutions, and SaaS resellers.',
     highlight: false,
@@ -139,7 +155,8 @@ const plans = [
     cta: 'Contact Sales',
     href: '/contact',
   },
-]
+  ]
+}
 
 type CellValue = true | false | string
 
@@ -267,7 +284,8 @@ function CellDisplay({ value, highlight }: { value: CellValue; highlight: boolea
   )
 }
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const plans = await getPlans()
   return (
     <div className="bg-white text-slate-900">
       {/* Hero */}
@@ -279,7 +297,7 @@ export default function PricingPage() {
             <span className="text-blue-600">Start free for 7 days.</span>
           </h1>
           <p className="text-xl text-slate-600 max-w-xl mx-auto mb-4">
-            Annual plans. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
+            Monthly or annual billing. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
           </p>
           <p className="text-sm text-slate-400">No credit card required for trial. Cancel anytime.</p>
         </div>

@@ -127,8 +127,8 @@ VeriGo includes all of these in a single platform, pre-configured for your indus
 - **Enterprise contracts** — custom pricing for large organisations, reporting groups, or businesses with specific integration requirements.
 
 **VeriGo pricing (all plans include unlimited customers):**
-- **Essential — $299/year.** 1 industry pack. Core KYC, KYB, IFTI/SMR/TTR reporting, and essential integrations (email, cloud storage).
-- **Professional — $799/year.** Everything in Essential plus advanced monitoring, case management, workflow automation, AML data connectors, and the ability to connect Verigo to your existing systems.
+- **Essential — $59/month** (or $599/year). 1 industry pack. Core KYC, KYB, IFTI/SMR/TTR reporting, and essential integrations (email, cloud storage).
+- **Professional — $79/month** (or $799/year). Everything in Essential plus advanced monitoring, case management, workflow automation, AML data connectors, and the ability to connect Verigo to your existing systems.
 - **Enterprise — Custom pricing** for reporting groups, large institutions, and SaaS resellers.
 
 All plans include a 7-day free trial with no credit card required. The AML/CTF Program included is a basic reference template — tailoring it to your specific business is available as an additional service.`,

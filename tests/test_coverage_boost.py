@@ -502,7 +502,7 @@ def test_plan_pricing_override(db):
     from app.services import billing_service as svc
 
     default = svc.get_plan_pricing(db, BillingPlan.starter)
-    assert default["monthly_aud"] == 299.00
+    assert default["monthly_aud"] == 59.00
 
     updated = svc.update_plan_pricing(
         db, BillingPlan.starter, 349.00, None, "admin@test.com"
