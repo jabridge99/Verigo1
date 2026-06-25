@@ -1,20 +1,12 @@
 """
-Email service — renders HTML templates and sends via SMTP.
-Falls back to console logging when SMTP is not configured (dev mode).
+Email service — renders HTML templates and sends via the configured
+EmailProvider (console / SMTP / Resend — see app/services/email/factory.py).
 """
 
-import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from app.config import settings
+from app.services.email.factory import get_email_provider
 
-SMTP_HOST = os.getenv("SMTP_HOST", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@verigo.com.au")
-FROM_NAME = os.getenv("FROM_NAME", "Verigo")
-APP_URL = os.getenv("APP_URL", "http://localhost:3000")
+APP_URL = settings.app_url
 
 _BRAND_HEADER = """
 <div style="background:#1e3a8a;padding:24px 32px;border-radius:12px 12px 0 0;">
@@ -23,30 +15,13 @@ _BRAND_HEADER = """
 """
 
 _WRAP_OPEN = '<div style="font-family:Inter,system-ui,sans-serif;max-width:580px;margin:0 auto;background:#0d1526;border-radius:12px;overflow:hidden;">'
-_WRAP_CLOSE = '<p style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Verigo · Australian Compliance Operating System<br>© 2025 Verigo Pty Ltd</p></div>'
+_WRAP_CLOSE = '<p style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Verigo · Australian Compliance Operating System<br>© 2025 PSP Education Pty Ltd (ABN 21 628 429 925), trading as Verigo</p></div>'
 _BODY_OPEN = '<div style="padding:28px 32px;">'
 _BODY_CLOSE = "</div>"
 
 
 def _send(to: str, subject: str, html: str) -> bool:
-    if not SMTP_HOST or not SMTP_USER:
-        print(f"[email DEV] To: {to} | Subject: {subject}")
-        print(f"[email DEV] HTML length: {len(html)} chars")
-        return True
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
-        msg["To"] = to
-        msg.attach(MIMEText(html, "html"))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(FROM_EMAIL, to, msg.as_string())
-        return True
-    except Exception as e:
-        print(f"[email ERROR] {e}")
-        return False
+    return get_email_provider().send(to, subject, html)
 
 
 # ─── Templates ────────────────────────────────────────────────────────────────
@@ -166,7 +141,12 @@ def send_compliance_notification(
     urgency: str = "info",
 ) -> bool:
     """Generic compliance notification — used by compliance_event_notifier for all event types."""
-    color_map = {"critical": "#ef4444", "high": "#f97316", "warning": "#f59e0b", "info": "#60a5fa"}
+    color_map = {
+        "critical": "#ef4444",
+        "high": "#f97316",
+        "warning": "#f59e0b",
+        "info": "#60a5fa",
+    }
     accent = color_map.get(urgency, "#60a5fa")
     url = action_url or APP_URL
     badge = (
@@ -185,7 +165,9 @@ def send_compliance_notification(
     return _send(to, subject, html)
 
 
-def send_portal_invite(to: str, customer_name: str, portal_url: str, expires_hours: int = 72) -> bool:
+def send_portal_invite(
+    to: str, customer_name: str, portal_url: str, expires_hours: int = 72
+) -> bool:
     html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
 <h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Complete your compliance verification</h2>
 <p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {customer_name},<br><br>
@@ -194,7 +176,9 @@ You have been invited to complete your identity verification and compliance docu
 <a href="{portal_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Start Verification</a>
 <p style="color:#64748b;font-size:12px;margin-top:20px;">If you did not expect this email, please contact the organisation that sent it. Do not click the link if you are unsure.</p>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
-    return _send(to, "Action required: Complete your compliance verification — Verigo", html)
+    return _send(
+        to, "Action required: Complete your compliance verification — Verigo", html
+    )
 
 
 def send_aml_alert(
@@ -217,3 +201,96 @@ An AML alert has been triggered for customer <strong style="color:#fff;">{custom
 <a href="{monitor_url}" style="display:inline-block;background:#ef4444;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:8px 0;">Review Alert</a>
 {_BODY_CLOSE}{_WRAP_CLOSE}"""
     return _send(to, f"AML Alert: {alert_type} — {customer_name} — Verigo", html)
+
+
+def send_email_verification(to: str, full_name: str, token: str) -> bool:
+    verify_url = f"{APP_URL}/verify-email?token={token}"
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Confirm your email address</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {full_name},<br><br>
+Please confirm this is your email address to finish setting up your Verigo account. This link expires shortly and can only be used once.</p>
+<a href="{verify_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Verify Email Address</a>
+<p style="color:#64748b;font-size:12px;margin-top:20px;">If you didn't create a Verigo account, you can safely ignore this email.</p>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(to, "Verify your email — Verigo", html)
+
+
+def send_password_reset(to: str, full_name: str, token: str) -> bool:
+    reset_url = f"{APP_URL}/reset-password?token={token}"
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Reset your password</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {full_name},<br><br>
+We received a request to reset your Verigo password. This link expires shortly and can only be used once.</p>
+<a href="{reset_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Reset Password</a>
+<p style="color:#64748b;font-size:12px;margin-top:20px;">If you didn't request a password reset, you can safely ignore this email — your password will not change.</p>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(to, "Reset your password — Verigo", html)
+
+
+def send_training_reminder(
+    to: str, full_name: str, course_name: str, due_date: str
+) -> bool:
+    training_url = f"{APP_URL}/training"
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">AML/CTF training due</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {full_name},<br><br>
+Your <strong style="color:#fff;">{course_name}</strong> training module is due by <strong style="color:#fff;">{due_date}</strong>. Completing it on time keeps your organisation's AML/CTF Program compliant.</p>
+<a href="{training_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:20px 0;">Complete Training</a>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(to, f"Training due: {course_name} — Verigo", html)
+
+
+def send_review_reminder(
+    to: str, full_name: str, customer_name: str, review_id: str, due_date: str
+) -> bool:
+    review_url = f"{APP_URL}/customers"
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Periodic customer review due</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {full_name},<br><br>
+The periodic KYC review for <strong style="color:#fff;">{customer_name}</strong> is due by <strong style="color:#fff;">{due_date}</strong>.</p>
+<div style="background:#111c33;border-radius:8px;padding:16px;margin:16px 0;">
+  <div style="color:#64748b;font-size:12px;margin-bottom:4px;">Review ID</div>
+  <div style="color:#60a5fa;font-family:monospace;font-size:14px;">{review_id}</div>
+</div>
+<a href="{review_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:8px 0;">Review Customer</a>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(to, f"Review due: {customer_name} — Verigo", html)
+
+
+def send_admin_retention_alert(
+    to: str, org_name: str, org_id: str, version: int, requested_by: str
+) -> bool:
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+<div style="background:#f59e0b22;border:1px solid #f59e0b55;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+  <span style="color:#f59e0b;font-weight:700;font-size:13px;">RETENTION FOLLOW-UP</span>
+</div>
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Lapsed customer requested an older AML program version</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;"><strong style="color:#fff;">{requested_by}</strong> at <strong style="color:#fff;">{org_name}</strong> ({org_id}) requested archived version <strong style="color:#fff;">v{version}</strong> after their subscription lapsed.</p>
+<p style="color:#94a3b8;font-size:14px;">This usually means they still need their compliance records but haven't resubscribed — a good time for a win-back call.</p>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(
+        to,
+        f"Retention follow-up: {org_name} requested an old AML program version",
+        html,
+    )
+
+
+def send_smr_review_notice(
+    to: str, full_name: str, smr_id: str, customer_name: str, days_remaining: int
+) -> bool:
+    urgency_color = "#ef4444" if days_remaining <= 2 else "#f59e0b"
+    report_url = f"{APP_URL}/reporting"
+    html = f"""{_WRAP_OPEN}{_BRAND_HEADER}{_BODY_OPEN}
+<div style="background:{urgency_color}22;border:1px solid {urgency_color}55;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+  <span style="color:{urgency_color};font-weight:700;font-size:13px;">SMR REVIEW REQUIRED</span>
+</div>
+<h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Suspicious Matter Report awaiting review</h2>
+<p style="color:#94a3b8;font-size:15px;line-height:1.6;">Hi {full_name},<br><br>
+A draft Suspicious Matter Report concerning <strong style="color:#fff;">{customer_name}</strong> needs your review before it can be submitted to AUSTRAC. The statutory submission window closes in <strong style="color:{urgency_color};">{days_remaining} day{"s" if days_remaining != 1 else ""}</strong>.</p>
+<div style="background:#111c33;border-radius:8px;padding:16px;margin:16px 0;">
+  <div style="color:#64748b;font-size:12px;margin-bottom:4px;">SMR ID</div>
+  <div style="color:#60a5fa;font-family:monospace;font-size:14px;">{smr_id}</div>
+</div>
+<a href="{report_url}" style="display:inline-block;background:{urgency_color};color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:8px 0;">Review SMR</a>
+{_BODY_CLOSE}{_WRAP_CLOSE}"""
+    return _send(to, f"SMR review required: {smr_id} — Verigo", html)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from .base import EmailProvider, EmailMessage
+
+from .base import EmailMessage, EmailProvider
 
 log = logging.getLogger("verigo.integrations.email")
 

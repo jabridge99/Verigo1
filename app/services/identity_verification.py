@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime
+from datetime import date
 
 
 def _normalize(text: str) -> str:
@@ -17,23 +17,13 @@ def verify_document(customer, document) -> dict:
             score -= 30
             issues.append("Name on document does not match customer record")
     if document.extracted_dob and customer.date_of_birth:
-        if _normalize(document.extracted_dob) != _normalize(customer.date_of_birth):
+        if document.extracted_dob != customer.date_of_birth:
             score -= 25
             issues.append("Date of birth mismatch")
-    if document.extracted_expiry:
-        try:
-            expiry_date = datetime.strptime(
-                document.extracted_expiry, "%Y-%m-%d"
-            ).date()
-            if expiry_date < date.today():
-                score -= 40
-                issues.append("Document is expired")
-        except ValueError:
-            pass
-    if document.extracted_id_number and customer.id_number:
-        if _normalize(document.extracted_id_number) != _normalize(customer.id_number):
-            score -= 20
-            issues.append("ID number mismatch")
+    if document.expiry_date:
+        if document.expiry_date < date.today():
+            score -= 40
+            issues.append("Document is expired")
     score = max(score, 0.0)
     result = (
         "valid" if score >= 70 else ("invalid" if score < 40 else "review_required")

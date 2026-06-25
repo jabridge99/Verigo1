@@ -14,11 +14,17 @@ if _is_sqlite:
 elif _is_supabase:
     # Supabase uses PgBouncer (transaction mode) — needs pool config
     _connect_args["options"] = "-c statement_timeout=30000"
+    _connect_args["connect_timeout"] = 10
     _engine_kwargs["pool_pre_ping"] = True
-    _engine_kwargs["pool_size"] = 10
-    _engine_kwargs["max_overflow"] = 20
+    # Supabase's pooler backs onto a fixed number of Postgres connections
+    # (visible in Database > Settings > Connection pooling — currently 15).
+    # With --workers 2, each worker's pool_size + max_overflow must leave
+    # room for the other worker: 5 + 2 = 7 per worker, 14 total, under 15.
+    _engine_kwargs["pool_size"] = 5
+    _engine_kwargs["max_overflow"] = 2
 else:
     # Generic Postgres
+    _connect_args["connect_timeout"] = 10
     _engine_kwargs["pool_pre_ping"] = True
 
 engine = create_engine(

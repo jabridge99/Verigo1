@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Users, Upload, UserPlus, BarChart3, RefreshCw, X, CheckCircle, AlertCircle } from "lucide-react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { Users, Upload, UserPlus, BarChart3, RefreshCw, X, CheckCircle, AlertCircle, FolderUp, ScanSearch } from "lucide-react";
 import BulkUpload from "@/components/Onboarding/BulkUpload";
 import ApplicantTable from "@/components/Onboarding/ApplicantTable";
 import PipelineView from "@/components/Onboarding/PipelineView";
+import DocumentUploadStep from "@/components/Onboarding/DocumentUploadStep";
+import ScreeningStep from "@/components/Onboarding/ScreeningStep";
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const INDUSTRY_ID = "digital-currency-exchange";
 
 interface Session {
@@ -24,6 +28,7 @@ interface Session {
   risk_level?: string;
   risk_score?: number;
   created_at?: string;
+  customer_id?: string;
 }
 
 interface PipelineStats {
@@ -32,10 +37,43 @@ interface PipelineStats {
   avg_completion_pct: number; sanctions_matches: number;
 }
 
-type Tab = "pipeline" | "applicants" | "import" | "manual";
+// Step 1 "Applicant" has its own sub-tabs (list / bulk import / manual entry),
+// nested one layer below the top-level step tabs.
+type Tab = "pipeline" | "applicants" | "import" | "manual" | "documents" | "screening";
+type ApplicantSubTab = "applicants" | "import" | "manual";
+
+const TAB_ALIASES: Record<string, Tab> = {
+  pipeline: "pipeline",
+  applicants: "applicants",
+  import: "import",
+  "bulk-import": "import",
+  bulk: "import",
+  manual: "manual",
+  "manual-entry": "manual",
+  add: "manual",
+  documents: "documents",
+  "document-upload": "documents",
+  screening: "screening",
+};
+
+const APPLICANT_TABS: Tab[] = ["applicants", "import", "manual"];
+
+function tabFromParam(value: string | null): Tab {
+  if (!value) return "pipeline";
+  return TAB_ALIASES[value] ?? "pipeline";
+}
 
 export default function OnboardingDashboard() {
-  const [tab, setTab] = useState<Tab>("pipeline");
+  return (
+    <Suspense fallback={null}>
+      <OnboardingDashboardInner />
+    </Suspense>
+  );
+}
+
+function OnboardingDashboardInner() {
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => tabFromParam(searchParams.get("tab")));
   const [sessions, setSessions] = useState<Session[]>([]);
   const [stats, setStats] = useState<PipelineStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,8 +91,8 @@ export default function OnboardingDashboard() {
     setLoading(true);
     try {
       const [sessRes, statsRes] = await Promise.all([
-        fetch(`/api/v1/onboarding/sessions?industry_id=${INDUSTRY_ID}&limit=200`),
-        fetch(`/api/v1/onboarding/stats?industry_id=${INDUSTRY_ID}`),
+        fetch(`${API}/api/v1/onboarding/sessions?industry_id=${INDUSTRY_ID}&limit=200`, { credentials: "include" }),
+        fetch(`${API}/api/v1/onboarding/stats?industry_id=${INDUSTRY_ID}`, { credentials: "include" }),
       ]);
       if (sessRes.ok) setSessions(await sessRes.json());
       if (statsRes.ok) setStats(await statsRes.json());
@@ -79,22 +117,37 @@ export default function OnboardingDashboard() {
 
   const handleRemind = async (sessionId: string) => {
     try {
-      const res = await fetch(`/api/v1/onboarding/sessions/${sessionId}/remind`, { method: "POST" });
+      const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/remind`, { method: "POST", credentials: "include" });
       if (res.ok) { showToast("success", "Reminder sent"); fetchData(); }
+      else throw new Error();
     } catch { showToast("error", "Failed to send reminder"); }
+  };
+
+  const handleCancel = async (sessionId: string) => {
+    try {
+      const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/cancel`, { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error();
+      showToast("success", "Verification request cancelled");
+      setSessions(prev => prev.map(s => s.session_id === sessionId ? { ...s, status: "cancelled" } : s));
+      setSelectedSession(null);
+      fetchData();
+    } catch {
+      showToast("error", "Failed to cancel verification request");
+    }
   };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingManual(true);
     try {
-      const res = await fetch("/api/v1/onboarding/sessions", {
+      const res = await fetch(`${API}/api/v1/onboarding/sessions`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...manualForm, industry_id: INDUSTRY_ID }),
       });
       if (!res.ok) throw new Error(await res.text());
-      showToast("success", `Invite sent to ${manualForm.applicant_email}`);
+      showToast("success", `${manualForm.applicant_name} saved`);
       setManualForm({ applicant_name: "", applicant_email: "", applicant_phone: "", applicant_company: "", customer_type: "individual" });
       setTab("applicants");
       fetchData();
@@ -103,11 +156,19 @@ export default function OnboardingDashboard() {
     } finally { setSubmittingManual(false); }
   };
 
+  // The 3-step KYC pipeline: applicant self-entry, operator-assisted document
+  // upload, then document screening with the composite identity score.
   const TABS = [
-    { id: "pipeline" as Tab,   label: "Pipeline",    icon: BarChart3 },
-    { id: "applicants" as Tab, label: "Applicants",  icon: Users },
-    { id: "import" as Tab,     label: "Bulk Import", icon: Upload },
-    { id: "manual" as Tab,     label: "Manual Entry",icon: UserPlus },
+    { id: "applicants" as Tab,  label: "Step 1 · Applicant",  icon: Users },
+    { id: "documents" as Tab,   label: "Step 2 · Document Upload", icon: FolderUp },
+    { id: "screening" as Tab,   label: "Step 3 · Screening",  icon: ScanSearch },
+    { id: "pipeline" as Tab,    label: "Pipeline Overview",   icon: BarChart3 },
+  ];
+
+  const APPLICANT_SUBTABS: { id: ApplicantSubTab; label: string; icon: typeof Users }[] = [
+    { id: "applicants", label: "Applicants",   icon: Users },
+    { id: "import",     label: "Bulk Import",  icon: Upload },
+    { id: "manual",     label: "Manual Entry", icon: UserPlus },
   ];
 
   return (
@@ -126,62 +187,99 @@ export default function OnboardingDashboard() {
 
       <div className="border-b border-navy-800 px-6">
         <div className="max-w-7xl mx-auto flex gap-1">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => setTab(id)}
-              className={`flex items-center gap-2 px-4 py-4 text-sm font-medium border-b-2 transition-colors ${
-                tab === id ? "border-brand-400 text-brand-400" : "border-transparent text-slate-500 hover:text-slate-300"
-              }`}>
-              <Icon className="w-4 h-4" />{label}
-            </button>
-          ))}
+          {TABS.map(({ id, label, icon: Icon }) => {
+            const active = id === "applicants" ? APPLICANT_TABS.includes(tab) : tab === id;
+            return (
+              <button key={id} onClick={() => setTab(id === "applicants" && APPLICANT_TABS.includes(tab) ? tab : id)}
+                className={`flex items-center gap-2 px-4 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  active ? "border-brand-400 text-brand-400" : "border-transparent text-slate-500 hover:text-slate-300"
+                }`}>
+                <Icon className="w-4 h-4" />{label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {tab === "pipeline" && stats && <><h2 className="text-lg font-semibold text-slate-100 mb-6">Pipeline Overview</h2><PipelineView stats={stats} /></>}
-        {tab === "applicants" && <><h2 className="text-lg font-semibold text-slate-100 mb-6">All Applicants</h2><ApplicantTable sessions={sessions} onRemind={handleRemind} onSelect={setSelectedSession} /></>}
-        {tab === "import" && (
-          <div className="max-w-2xl">
-            <h2 className="text-lg font-semibold text-slate-100 mb-2">Bulk Import</h2>
-            <p className="text-slate-500 text-sm mb-6">Upload a CSV or Excel file to create multiple onboarding sessions at once.</p>
-            <BulkUpload industryId={INDUSTRY_ID} onComplete={(batchId) => { showToast("success", `Batch ${batchId} imported`); setTab("applicants"); fetchData(); }} />
+
+        {APPLICANT_TABS.includes(tab) && (
+          <div className="space-y-6">
+            <div className="flex gap-1 border-b border-navy-800">
+              {APPLICANT_SUBTABS.map(({ id, label, icon: Icon }) => (
+                <button key={id} onClick={() => setTab(id)}
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    tab === id ? "border-brand-400 text-brand-400" : "border-transparent text-slate-500 hover:text-slate-300"
+                  }`}>
+                  <Icon className="w-3.5 h-3.5" />{label}
+                </button>
+              ))}
+            </div>
+
+            {tab === "applicants" && <><h2 className="text-lg font-semibold text-slate-100 mb-6">All Applicants</h2><ApplicantTable sessions={sessions} onRemind={handleRemind} onSelect={setSelectedSession} /></>}
+
+            {tab === "import" && (
+              <div className="max-w-2xl">
+                <h2 className="text-lg font-semibold text-slate-100 mb-2">Bulk Import</h2>
+                <p className="text-slate-500 text-sm mb-6">Upload a CSV or Excel file to create multiple onboarding sessions at once.</p>
+                <BulkUpload industryId={INDUSTRY_ID} onComplete={(batchId) => { showToast("success", `Batch ${batchId} imported`); setTab("applicants"); fetchData(); }} />
+              </div>
+            )}
+
+            {tab === "manual" && (
+              <div className="max-w-xl">
+                <h2 className="text-lg font-semibold text-slate-100 mb-2">Manual Entry</h2>
+                <p className="text-slate-500 text-sm mb-6">Add a single applicant yourself — they'll appear immediately, ready for you to upload their ID documents in Step 2.</p>
+                <form onSubmit={handleManualSubmit} className="card space-y-4">
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-xs font-medium text-slate-400">Full name *</label>
+                    <input required className="field-input" placeholder="Jane Smith" value={manualForm.applicant_name} onChange={e => setManualForm(f => ({ ...f, applicant_name: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-400">Email address *</label>
+                    <input required type="email" className="field-input" placeholder="jane@example.com" value={manualForm.applicant_email} onChange={e => setManualForm(f => ({ ...f, applicant_email: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-400">Phone</label>
+                      <input className="field-input" placeholder="+61 400 000 000" value={manualForm.applicant_phone} onChange={e => setManualForm(f => ({ ...f, applicant_phone: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-400">Customer type</label>
+                      <select className="field-input" value={manualForm.customer_type} onChange={e => setManualForm(f => ({ ...f, customer_type: e.target.value }))}>
+                        <option value="individual">Individual</option>
+                        <option value="business">Business</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-400">Company name</label>
+                    <input className="field-input" placeholder="Optional" value={manualForm.applicant_company} onChange={e => setManualForm(f => ({ ...f, applicant_company: e.target.value }))} />
+                  </div>
+                  <button type="submit" disabled={submittingManual} className="btn-primary w-full justify-center">
+                    {submittingManual ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><UserPlus className="w-4 h-4" />Save Applicant</>}
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
         )}
-        {tab === "manual" && (
-          <div className="max-w-xl">
-            <h2 className="text-lg font-semibold text-slate-100 mb-2">Manual Entry</h2>
-            <p className="text-slate-500 text-sm mb-6">Add a single applicant and send them an onboarding invite.</p>
-            <form onSubmit={handleManualSubmit} className="card space-y-4">
-              <div className="space-y-1 col-span-2">
-                <label className="text-xs font-medium text-slate-400">Full name *</label>
-                <input required className="field-input" placeholder="Jane Smith" value={manualForm.applicant_name} onChange={e => setManualForm(f => ({ ...f, applicant_name: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400">Email address *</label>
-                <input required type="email" className="field-input" placeholder="jane@example.com" value={manualForm.applicant_email} onChange={e => setManualForm(f => ({ ...f, applicant_email: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-400">Phone</label>
-                  <input className="field-input" placeholder="+61 400 000 000" value={manualForm.applicant_phone} onChange={e => setManualForm(f => ({ ...f, applicant_phone: e.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-400">Customer type</label>
-                  <select className="field-input" value={manualForm.customer_type} onChange={e => setManualForm(f => ({ ...f, customer_type: e.target.value }))}>
-                    <option value="individual">Individual</option>
-                    <option value="business">Business</option>
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400">Company name</label>
-                <input className="field-input" placeholder="Optional" value={manualForm.applicant_company} onChange={e => setManualForm(f => ({ ...f, applicant_company: e.target.value }))} />
-              </div>
-              <button type="submit" disabled={submittingManual} className="btn-primary w-full justify-center">
-                {submittingManual ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><UserPlus className="w-4 h-4" />Send Invite</>}
-              </button>
-            </form>
-          </div>
+
+        {tab === "documents" && (
+          <>
+            <h2 className="text-lg font-semibold text-slate-100 mb-2">Step 2 · Document Upload</h2>
+            <p className="text-slate-500 text-sm mb-6">Operator-assisted — open an applicant's profile and drag and drop their identity documents.</p>
+            <DocumentUploadStep sessions={sessions} onUploaded={() => fetchData()} />
+          </>
+        )}
+
+        {tab === "screening" && (
+          <>
+            <h2 className="text-lg font-semibold text-slate-100 mb-2">Step 3 · Document Screening</h2>
+            <p className="text-slate-500 text-sm mb-6">OCR, manual review, PEP, sanctions, adverse media and company checks combined into a single weighted identity score — Australia's 100-point ID check, digitised.</p>
+            <ScreeningStep sessions={sessions} />
+          </>
         )}
       </div>
 
@@ -197,6 +295,8 @@ export default function OnboardingDashboard() {
                 { label: "Session ID", value: selectedSession.session_id },
                 { label: "Status", value: selectedSession.status.replace(/_/g, " ") },
                 { label: "Progress", value: `${selectedSession.completion_pct}%` },
+                { label: "Documents submitted", value: `${selectedSession.documents_uploaded}` },
+                { label: "Reminders sent", value: `${selectedSession.reminders_sent}` },
                 { label: "Risk", value: selectedSession.risk_level || "—" },
                 { label: "Sanctions", value: selectedSession.sanctions_match ? "⚠ Match found" : "Clear" },
               ].map(({ label, value }) => (
@@ -206,6 +306,31 @@ export default function OnboardingDashboard() {
                 </div>
               ))}
             </div>
+
+            <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-navy-700">
+              {selectedSession.customer_id && (
+                <a href={`/customers/${selectedSession.customer_id}`} className="btn-primary text-xs py-1.5 px-3">
+                  View customer profile
+                </a>
+              )}
+              {!["completed", "rejected", "cancelled"].includes(selectedSession.status) && (
+                <>
+                  <button onClick={() => handleRemind(selectedSession.session_id)} className="btn-secondary text-xs py-1.5 px-3">
+                    Resend Link
+                  </button>
+                  <button onClick={() => handleCancel(selectedSession.session_id)} className="text-xs py-1.5 px-3 rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-colors">
+                    Cancel Request
+                  </button>
+                </>
+              )}
+            </div>
+            {selectedSession.documents_uploaded > 0 && (
+              <div className="mt-3">
+                <a href={`/documents?session=${selectedSession.session_id}`} className="text-xs text-brand-400 hover:underline">
+                  View submitted documents →
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}

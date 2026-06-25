@@ -8,6 +8,7 @@ Step 1-4 of the user journey:
   PATCH /orgs/me      — update org details
   GET  /orgs/:id      — admin: any org
 """
+
 import logging
 from typing import Optional
 
@@ -15,14 +16,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    Pagination, get_current_user, org_id_for,
-    require_admin, require_compliance_or_above,
+    Pagination,
+    get_current_user,
+    org_id_for,
+    require_admin,
+    require_compliance_or_above,
 )
 from app.db.database import get_db
-from app.models.organisation import CUSTOM_PACKAGE_INDUSTRIES, Organisation, OrganisationStatus
+from app.models.organisation import (
+    CUSTOM_PACKAGE_INDUSTRIES,
+    Organisation,
+    OrganisationStatus,
+)
 from app.models.user import User, UserRole, UserStatus
-from app.schemas.aml_solution import AMLSolutionResponse
-from app.schemas.org import OrgCreate, OrgOnboardRequest, OrgResponse, OrgUpdate
+from app.schemas.org import OrgOnboardRequest, OrgResponse, OrgUpdate
 from app.services.auth_service import hash_password
 
 log = logging.getLogger("verigo.api.orgs")
@@ -30,6 +37,7 @@ router = APIRouter(prefix="/orgs", tags=["Organisations"])
 
 
 # ── Onboarding wizard (Steps 1-4) ─────────────────────────────────────────────
+
 
 @router.post("/onboard", status_code=201, summary="Full signup wizard (Steps 1-4)")
 def onboard(payload: OrgOnboardRequest, db: Session = Depends(get_db)):
@@ -40,7 +48,6 @@ def onboard(payload: OrgOnboardRequest, db: Session = Depends(get_db)):
     Custom-package industries (banking, casinos, etc.) are rejected here
     — the frontend should redirect them before this endpoint is called.
     """
-    from app.models.organisation import IndustryType
 
     if payload.industry_type in CUSTOM_PACKAGE_INDUSTRIES:
         raise HTTPException(
@@ -52,7 +59,9 @@ def onboard(payload: OrgOnboardRequest, db: Session = Depends(get_db)):
         )
 
     if payload.abn:
-        existing = db.query(Organisation).filter(Organisation.abn == payload.abn).first()
+        existing = (
+            db.query(Organisation).filter(Organisation.abn == payload.abn).first()
+        )
         if existing:
             raise HTTPException(400, "An organisation with this ABN already exists")
 
@@ -111,7 +120,10 @@ def onboard(payload: OrgOnboardRequest, db: Session = Depends(get_db)):
 
     log.info(
         "Onboarded org=%s industry=%s risk=%s admin=%s",
-        org.id, org.industry_type.value, payload.risk_level, admin.id,
+        org.id,
+        org.industry_type.value,
+        payload.risk_level,
+        admin.id,
     )
 
     return {
@@ -126,14 +138,17 @@ def onboard(payload: OrgOnboardRequest, db: Session = Depends(get_db)):
 
 # ── Current user's org ────────────────────────────────────────────────────────
 
+
 @router.get("/me", response_model=OrgResponse)
 def get_my_org(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    org = db.query(Organisation).filter(
-        Organisation.id == org_id_for(current_user)
-    ).first()
+    org = (
+        db.query(Organisation)
+        .filter(Organisation.id == org_id_for(current_user))
+        .first()
+    )
     if not org:
         raise HTTPException(404, "Organisation not found")
     return org
@@ -145,9 +160,11 @@ def update_my_org(
     current_user: User = Depends(require_compliance_or_above),
     db: Session = Depends(get_db),
 ):
-    org = db.query(Organisation).filter(
-        Organisation.id == org_id_for(current_user)
-    ).first()
+    org = (
+        db.query(Organisation)
+        .filter(Organisation.id == org_id_for(current_user))
+        .first()
+    )
     if not org:
         raise HTTPException(404, "Organisation not found")
 
@@ -160,6 +177,7 @@ def update_my_org(
 
 
 # ── Admin: any org ────────────────────────────────────────────────────────────
+
 
 @router.get("", response_model=list[OrgResponse])
 def list_orgs(

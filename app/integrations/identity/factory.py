@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.config import settings
+
 from .base import IdentityProvider
 
 
@@ -9,6 +10,7 @@ def get_provider() -> IdentityProvider:
 
     if provider == "sumsub":
         from .sumsub import SumsubProvider
+
         return SumsubProvider(
             app_token=settings.sumsub_app_token,
             secret_key=settings.sumsub_secret_key,

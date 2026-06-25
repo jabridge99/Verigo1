@@ -191,8 +191,8 @@ export default function FAQPage() {
               <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
                 Start Free Trial <ArrowRight className="w-5 h-5" />
               </Link>
-              <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-                Book a Demo
+              <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+                Start Free Trial
               </Link>
             </div>
           </div>

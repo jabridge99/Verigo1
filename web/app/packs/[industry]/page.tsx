@@ -1,8 +1,10 @@
+import React from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import {
   CheckCircle, ArrowRight, Shield, Users, Search, BarChart3,
   FileText, Zap, AlertTriangle, Clock, Package,
+  Coins, Globe, Gem, Home, FileCheck, Scale, Calculator, Building2, Network,
 } from 'lucide-react'
 import { industries, getIndustry } from '@/lib/industries'
 
@@ -23,8 +25,21 @@ type PackExtra = {
   gettingStarted: string[]
 }
 
+const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  'vasp': Coins,
+  'remittance': Globe,
+  'bullion_dealers': Gem,
+  'real_estate': Home,
+  'conveyancers': FileCheck,
+  'legal_professionals': Scale,
+  'accountants': Calculator,
+  'precious_metals': Gem,
+  'pubs_clubs': Building2,
+  'reporting_group': Network,
+}
+
 const packExtras: Record<string, PackExtra> = {
-  'digital-currency-exchange': {
+  'vasp': {
     setupTime: '< 10 minutes',
     customerLimit: 'Unlimited retail and institutional customers',
     headline: 'Everything a Digital Currency Exchange needs to meet AUSTRAC obligations from day one.',
@@ -101,7 +116,7 @@ const packExtras: Record<string, PackExtra> = {
       'Go live — onboard your first customer',
     ],
   },
-  'remittance-provider': {
+  'remittance': {
     setupTime: '< 10 minutes',
     customerLimit: 'Unlimited senders and beneficiaries',
     headline: 'Built for the remittance sector — covering sender KYC, beneficiary capture, IFTI IN/OUT, and suspicious activity reporting.',
@@ -326,7 +341,7 @@ const packExtras: Record<string, PackExtra> = {
       'Begin KYB verification on highest-risk merchants first',
     ],
   },
-  'real-estate': {
+  'real_estate': {
     setupTime: '< 20 minutes',
     customerLimit: 'Unlimited buyers, vendors, and transactions',
     headline: 'Designed for real estate professionals preparing for Tranche 2 — buyer CDD, beneficial ownership mapping, source of funds, and AML program templates for 2026 compliance.',
@@ -402,7 +417,7 @@ const packExtras: Record<string, PackExtra> = {
       'Complete your AML/CTF Program using included templates',
     ],
   },
-  'conveyancer': {
+  'conveyancers': {
     setupTime: '< 20 minutes',
     customerLimit: 'Unlimited clients and property matters',
     headline: 'Built for conveyancers navigating Tranche 2 — client CDD, source of funds, and AML program templates ready for 2026 AUSTRAC obligations.',
@@ -474,7 +489,7 @@ const packExtras: Record<string, PackExtra> = {
       'Complete your AML/CTF Program templates',
     ],
   },
-  'lawyer': {
+  'legal_professionals': {
     setupTime: '< 20 minutes',
     customerLimit: 'Unlimited clients and matters',
     headline: 'Purpose-built for law firms entering the AML/CTF regime under Tranche 2 — client CDD, matter-level risk management, and AML program templates for 2026.',
@@ -548,7 +563,7 @@ const packExtras: Record<string, PackExtra> = {
       'Complete AML/CTF Program and AUSTRAC enrolment',
     ],
   },
-  'accountant': {
+  'accountants': {
     setupTime: '< 20 minutes',
     customerLimit: 'Unlimited clients and engagements',
     headline: 'Built for accounting firms preparing for Tranche 2 — client CDD, designated services tracking, and AML program templates for 2026 AUSTRAC obligations.',
@@ -621,7 +636,7 @@ const packExtras: Record<string, PackExtra> = {
       'Complete AML/CTF Program and AUSTRAC enrolment',
     ],
   },
-  'precious-metals': {
+  'precious_metals': {
     setupTime: '< 15 minutes',
     customerLimit: 'Unlimited buyers, sellers, and transactions',
     headline: 'Designed for precious metal dealers preparing for Tranche 2 — transaction monitoring, threshold cash reporting, and AML program templates for 2026.',
@@ -698,7 +713,7 @@ const packExtras: Record<string, PackExtra> = {
 // ── Static params ─────────────────────────────────────────────────────────────
 
 export async function generateStaticParams() {
-  return industries.map(i => ({ industry: i.id }))
+  return industries.map(i => ({ industry: i.slug }))
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ industry: string }> }) {
@@ -730,11 +745,11 @@ export default async function PackPage({ params }: { params: Promise<{ industry:
       {/* Hero */}
       <section className="bg-gradient-to-b from-slate-50 to-white pt-32 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <Link href={`/solutions/${ind.id}`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-8">
+          <Link href={`/solutions/${ind.slug}`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-8">
             ← {ind.label} compliance guide
           </Link>
           <div className="flex items-start gap-6 mb-8">
-            <div className={`w-16 h-16 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center text-3xl flex-shrink-0`}>{ind.icon}</div>
+            <div className={`w-16 h-16 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}>{(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <Icon className="w-8 h-8 text-white" /> })()}</div>
             <div>
               <div className="flex items-center gap-3 mb-3 flex-wrap">
                 <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-700/10">
@@ -906,8 +921,8 @@ export default async function PackPage({ params }: { params: Promise<{ industry:
                   </li>
                 ))}
               </ul>
-              <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-6 py-3 text-sm font-semibold text-white ring-1 ring-slate-600 hover:bg-slate-600 transition-colors">
-                Book Demo <ArrowRight className="w-4 h-4" />
+              <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-6 py-3 text-sm font-semibold text-white ring-1 ring-slate-600 hover:bg-slate-600 transition-colors">
+                Start Free Trial <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>

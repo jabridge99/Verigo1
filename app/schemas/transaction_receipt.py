@@ -17,6 +17,7 @@ Receipt includes:
 DISCLAIMER: This receipt is a structured data export for compliance workflow
 support only. It does not constitute a report to AUSTRAC or any other regulator.
 """
+
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
@@ -97,6 +98,7 @@ class AUSTRACReportingBlock(BaseModel):
     The reporting entity bears sole responsibility for the accuracy and
     completeness of any report submitted to AUSTRAC.
     """
+
     # TTR (Threshold Transaction Report) indicators
     is_ttr_reportable: bool = Field(
         description="True if amount_aud >= AUD 10,000 — TTR may be required"
@@ -134,9 +136,10 @@ class TransactionReceipt(BaseModel):
     Complete transaction receipt for compliance workflow and reporting support.
     Suitable for printing, PDF export, and downstream reporting population.
     """
+
     # ── Receipt metadata ────────────────────────────────────────────────────────
     receipt_generated_at: datetime
-    receipt_generated_by: str    # user_id
+    receipt_generated_by: str  # user_id
     receipt_version: str = "1.0"
     disclaimer: str = (
         "This receipt is a structured compliance workflow document. "
@@ -249,19 +252,24 @@ def build_receipt(
     amount_aud = txn.amount_aud or txn.amount
 
     countries_involved = {
-        c for c in [
-            txn.source_country, txn.destination_country,
-            txn.country_origin, txn.country_destination,
-        ] if c
+        c
+        for c in [
+            txn.source_country,
+            txn.destination_country,
+            txn.country_origin,
+            txn.country_destination,
+        ]
+        if c
     }
 
     fatf_blacklist_hits = [c for c in countries_involved if c.upper() in FATF_BLACKLIST]
-    sanctioned_hits = [c for c in countries_involved if c.upper() in SANCTIONED_COUNTRIES]
+    sanctioned_hits = [
+        c for c in countries_involved if c.upper() in SANCTIONED_COUNTRIES
+    ]
     high_risk = list(set(fatf_blacklist_hits + sanctioned_hits))
 
     smr_references = [
-        c.smr_reference for c in cases
-        if getattr(c, "smr_reference", None)
+        c.smr_reference for c in cases if getattr(c, "smr_reference", None)
     ]
     has_open_smr_alert = any(getattr(a, "is_smr_candidate", False) for a in alerts)
     has_lodged_smr = any(getattr(c, "smr_lodged", False) for c in cases)
@@ -320,15 +328,15 @@ def build_receipt(
         customer_ref=getattr(customer, "customer_ref", customer.id),
         full_name=getattr(customer, "full_name", ""),
         customer_type=getattr(customer, "customer_type", {}).value
-            if hasattr(getattr(customer, "customer_type", None), "value")
-            else str(getattr(customer, "customer_type", "")),
+        if hasattr(getattr(customer, "customer_type", None), "value")
+        else str(getattr(customer, "customer_type", "")),
         risk_level=getattr(customer, "risk_level", {}).value
-            if hasattr(getattr(customer, "risk_level", None), "value")
-            else getattr(customer, "risk_level", None),
+        if hasattr(getattr(customer, "risk_level", None), "value")
+        else getattr(customer, "risk_level", None),
         risk_score=getattr(customer, "risk_score", None),
         cdd_level=getattr(customer, "cdd_level", {}).value
-            if hasattr(getattr(customer, "cdd_level", None), "value")
-            else getattr(customer, "cdd_level", None),
+        if hasattr(getattr(customer, "cdd_level", None), "value")
+        else getattr(customer, "cdd_level", None),
         is_pep=bool(getattr(customer, "is_pep", False)),
         country_of_residence=getattr(customer, "country_of_residence", None),
         nationality=getattr(customer, "nationality", None),

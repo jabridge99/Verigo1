@@ -20,6 +20,7 @@ Approval Workflow:
 DISCLAIMER: The rule engine and decision support are compliance workflow tools.
 All decisions remain with the reporting entity.
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -33,9 +34,9 @@ from app.api.deps import (
     org_id_for,
     require_analyst_or_above,
     require_compliance_or_above,
-    require_mlro_or_above,
 )
 from app.db.database import get_db
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.automation_rule import (
     ApprovalDecisionType,
     ApprovalStepType,
@@ -43,11 +44,25 @@ from app.models.automation_rule import (
     AutomationRule,
     AutomationRuleExecution,
     AutomationRuleStatus,
+    AutomationRuleVersion,
     DecisionSupportPanel,
     RuleActionType,
     RuleEventType,
 )
 from app.models.user import User
+from app.services.automation_engine import evaluate_condition_groups
+
+EVENT_LABELS: dict[str, str] = {
+    "customer_created": "Customer Created",
+    "customer_review_due": "Customer Review Due",
+    "kyc_completed": "KYC Completed",
+    "screening_match": "Screening Match",
+    "transaction_created": "Transaction Created",
+    "customer_risk_changed": "Risk Score Changed",
+    "policy_expiring": "Policy Review Due",
+    "training_expiring": "Training Expired",
+    "independent_review_finding": "Independent Review Finding",
+}
 
 router = APIRouter(prefix="/rule-builder", tags=["Rule Builder"])
 
@@ -60,59 +75,104 @@ DISCLAIMER = (
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class ConditionSchema(BaseModel):
-    field:          str = Field(..., description="Dot-notation field path e.g. 'customer.risk_level'")
-    operator:       str = Field(..., description="eq | ne | gt | lt | gte | lte | in | not_in | contains | is_true | is_false | between")
-    value:          object = None
-    value_label:    Optional[str] = None
+    field: str = Field(
+        ..., description="Dot-notation field path e.g. 'customer.risk_level'"
+    )
+    operator: str = Field(
+        ...,
+        description="eq | ne | gt | lt | gte | lte | in | not_in | contains | starts_with | is_true | is_false | is_null | between",
+    )
+    value: object = None
+    value_label: Optional[str] = None
+    negate: bool = Field(default=False, description="NOT this condition")
 
 
 class ConditionGroupSchema(BaseModel):
-    logic:          str = Field(default="AND", description="AND (all must match within group)")
-    description:    Optional[str] = None
-    conditions:     list[ConditionSchema]
+    logic: str = Field(
+        default="AND",
+        description="AND (all must match) or OR (any must match) within this group",
+    )
+    description: Optional[str] = None
+    negate: bool = Field(default=False, description="NOT the whole group's result")
+    conditions: list[ConditionSchema] = Field(default_factory=list)
+    groups: list["ConditionGroupSchema"] = Field(
+        default_factory=list,
+        description="Nested sub-groups, combined per this group's logic",
+    )
+
+
+ConditionGroupSchema.model_rebuild()
 
 
 class ActionSchema(BaseModel):
-    action_type:    RuleActionType
-    params:         dict = Field(default_factory=dict)
-    delay_minutes:  int = Field(default=0, ge=0)
-    description:    Optional[str] = None
+    action_type: RuleActionType
+    params: dict = Field(default_factory=dict)
+    delay_minutes: int = Field(default=0, ge=0)
+    description: Optional[str] = None
 
 
 class RuleCreate(BaseModel):
-    name:                   str = Field(..., min_length=3, max_length=255)
-    description:            Optional[str] = None
-    event_type:             RuleEventType
-    condition_groups:       list[ConditionGroupSchema] = Field(default_factory=list)
-    actions:                list[ActionSchema] = Field(..., min_length=1)
-    priority:               int = Field(default=100, ge=1, le=9999)
-    applicable_industries:  list[str] = Field(default_factory=list)
-    tags:                   list[str] = Field(default_factory=list)
+    name: str = Field(..., min_length=3, max_length=255)
+    description: Optional[str] = None
+    event_type: RuleEventType
+    condition_groups: list[ConditionGroupSchema] = Field(default_factory=list)
+    actions: list[ActionSchema] = Field(..., min_length=1)
+    priority: int = Field(default=100, ge=1, le=9999)
+    applicable_industries: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 class RuleUpdate(BaseModel):
-    name:                   Optional[str] = Field(None, max_length=255)
-    description:            Optional[str] = None
-    status:                 Optional[AutomationRuleStatus] = None
-    condition_groups:       Optional[list[ConditionGroupSchema]] = None
-    actions:                Optional[list[ActionSchema]] = None
-    priority:               Optional[int] = Field(None, ge=1, le=9999)
-    applicable_industries:  Optional[list[str]] = None
-    tags:                   Optional[list[str]] = None
+    name: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    status: Optional[AutomationRuleStatus] = None
+    condition_groups: Optional[list[ConditionGroupSchema]] = None
+    actions: Optional[list[ActionSchema]] = None
+    priority: Optional[int] = Field(None, ge=1, le=9999)
+    applicable_industries: Optional[list[str]] = None
+    tags: Optional[list[str]] = None
 
 
 class ApprovalDecision(BaseModel):
-    decision:       ApprovalDecisionType
-    review_notes:   str = Field(..., min_length=5)
-    conditions:     list[str] = Field(default_factory=list)
+    decision: ApprovalDecisionType
+    review_notes: str = Field(..., min_length=5)
+    conditions: list[str] = Field(default_factory=list)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _rule_ref(db: Session, org_id: str) -> str:
     count = db.query(AutomationRule).filter(AutomationRule.org_id == org_id).count()
     return f"AUTO-{count + 1:04d}"
+
+
+def _snapshot_version(
+    db: Session,
+    r: AutomationRule,
+    version_number: int,
+    change_summary: str,
+    changed_by: str,
+) -> None:
+    db.add(
+        AutomationRuleVersion(
+            rule_id=r.id,
+            org_id=r.org_id,
+            version_number=version_number,
+            name=r.name,
+            description=r.description,
+            event_type=r.event_type.value,
+            status=r.status.value,
+            priority=r.priority,
+            condition_groups=r.condition_groups or [],
+            actions=r.actions or [],
+            applicable_industries=r.applicable_industries or [],
+            change_summary=change_summary,
+            changed_by=changed_by,
+        )
+    )
 
 
 def _rule_dict(r: AutomationRule) -> dict:
@@ -146,42 +206,43 @@ def _panel_dict(p: DecisionSupportPanel) -> dict:
         "case_id": p.case_id,
         "customer_id": p.customer_id,
         "risk_summary": {
-            "customer_risk_score":    p.customer_risk_score,
-            "customer_risk_level":    p.customer_risk_level,
+            "customer_risk_score": p.customer_risk_score,
+            "customer_risk_level": p.customer_risk_level,
             "transaction_risk_score": p.transaction_risk_score,
-            "geographic_risk_score":  p.geographic_risk_score,
-            "product_risk_score":     p.product_risk_score,
-            "behaviour_risk_score":   p.behaviour_risk_score,
-            "risk_matrix_score":      p.risk_matrix_score,
-            "alert_score":            p.alert_score,
-            "final_approval_score":   p.final_approval_score,
+            "geographic_risk_score": p.geographic_risk_score,
+            "product_risk_score": p.product_risk_score,
+            "behaviour_risk_score": p.behaviour_risk_score,
+            "risk_matrix_score": p.risk_matrix_score,
+            "alert_score": p.alert_score,
+            "final_approval_score": p.final_approval_score,
         },
-        "triggered_rules":          p.triggered_rules or [],
-        "required_actions":         p.required_actions or [],
-        "recommended_actions":      p.recommended_actions or [],
+        "triggered_rules": p.triggered_rules or [],
+        "required_actions": p.required_actions or [],
+        "recommended_actions": p.recommended_actions or [],
         "reporting_obligations": {
-            "potential_ttr":  p.potential_ttr,
+            "potential_ttr": p.potential_ttr,
             "potential_ifti": p.potential_ifti,
-            "potential_smr":  p.potential_smr,
-            "rationale":      p.reporting_rationale or {},
+            "potential_smr": p.potential_smr,
+            "rationale": p.reporting_rationale or {},
         },
-        "outstanding_tasks":        p.outstanding_tasks or [],
-        "missing_documents":        p.missing_documents or [],
+        "outstanding_tasks": p.outstanding_tasks or [],
+        "missing_documents": p.missing_documents or [],
         "workflow": {
-            "current_step":         p.current_step.value if p.current_step else None,
-            "is_complete":          p.is_complete,
-            "final_decision":       p.final_decision.value if p.final_decision else None,
-            "final_decision_by":    p.final_decision_by,
-            "final_decision_at":    p.final_decision_at,
+            "current_step": p.current_step.value if p.current_step else None,
+            "is_complete": p.is_complete,
+            "final_decision": p.final_decision.value if p.final_decision else None,
+            "final_decision_by": p.final_decision_by,
+            "final_decision_at": p.final_decision_at,
             "final_decision_notes": p.final_decision_notes,
         },
-        "generated_by":  p.generated_by,
-        "generated_at":  p.generated_at,
-        "disclaimer":    DISCLAIMER,
+        "generated_by": p.generated_by,
+        "generated_at": p.generated_at,
+        "disclaimer": DISCLAIMER,
     }
 
 
 # ── Rule Builder CRUD ─────────────────────────────────────────────────────────
+
 
 @router.get("/rules")
 def list_rules(
@@ -219,7 +280,10 @@ def rule_builder_reference(
     """
     return {
         "event_types": [
-            {"value": e.value, "label": e.value.replace("_", " ").title()}
+            {
+                "value": e.value,
+                "label": EVENT_LABELS.get(e.value, e.value.replace("_", " ").title()),
+            }
             for e in RuleEventType
         ],
         "action_types": [
@@ -227,42 +291,60 @@ def rule_builder_reference(
             for a in RuleActionType
         ],
         "operators": [
-            {"value": "eq",       "label": "Equals"},
-            {"value": "ne",       "label": "Not equals"},
-            {"value": "gt",       "label": "Greater than"},
-            {"value": "lt",       "label": "Less than"},
-            {"value": "gte",      "label": "Greater than or equal"},
-            {"value": "lte",      "label": "Less than or equal"},
-            {"value": "in",       "label": "In list"},
-            {"value": "not_in",   "label": "Not in list"},
+            {"value": "eq", "label": "Equals"},
+            {"value": "ne", "label": "Not equals"},
+            {"value": "gt", "label": "Greater than"},
+            {"value": "lt", "label": "Less than"},
+            {"value": "gte", "label": "Greater than or equal"},
+            {"value": "lte", "label": "Less than or equal"},
+            {"value": "in", "label": "In list"},
+            {"value": "not_in", "label": "Not in list"},
             {"value": "contains", "label": "Contains"},
-            {"value": "between",  "label": "Between (value is [min, max])"},
-            {"value": "is_true",  "label": "Is true"},
+            {"value": "between", "label": "Between (value is [min, max])"},
+            {"value": "is_true", "label": "Is true"},
             {"value": "is_false", "label": "Is false"},
         ],
         "condition_fields": {
             "customer": [
-                "customer.risk_level", "customer.is_pep", "customer.customer_type",
-                "customer.nationality", "customer.country_of_residence",
-                "customer.cdd_level", "customer.risk_score", "customer.status",
+                "customer.risk_level",
+                "customer.is_pep",
+                "customer.customer_type",
+                "customer.nationality",
+                "customer.country_of_residence",
+                "customer.cdd_level",
+                "customer.risk_score",
+                "customer.status",
             ],
             "transaction": [
-                "transaction.amount_aud", "transaction.currency", "transaction.transaction_type",
-                "transaction.payment_method", "transaction.is_cross_border",
-                "transaction.source_country", "transaction.destination_country",
-                "transaction.is_structuring_suspect", "transaction.is_near_threshold",
-                "transaction.is_round_number", "transaction.risk_score",
+                "transaction.amount_aud",
+                "transaction.currency",
+                "transaction.transaction_type",
+                "transaction.payment_method",
+                "transaction.is_cross_border",
+                "transaction.source_country",
+                "transaction.destination_country",
+                "transaction.is_structuring_suspect",
+                "transaction.is_near_threshold",
+                "transaction.is_round_number",
+                "transaction.risk_score",
             ],
             "alert": [
-                "alert.severity", "alert.category", "alert.alert_score",
-                "alert.is_smr_candidate", "alert.risk_matrix_level",
+                "alert.severity",
+                "alert.category",
+                "alert.alert_score",
+                "alert.is_smr_candidate",
+                "alert.risk_matrix_level",
             ],
             "case": [
-                "case.status", "case.case_type", "case.severity",
+                "case.status",
+                "case.case_type",
+                "case.severity",
             ],
             "screening": [
-                "screening.match_type", "screening.risk_level",
-                "crypto_wallet.risk_category", "crypto_wallet.mixer_exposure_pct",
+                "screening.match_type",
+                "screening.risk_level",
+                "crypto_wallet.risk_category",
+                "crypto_wallet.mixer_exposure_pct",
             ],
         },
         "action_params_reference": {
@@ -343,6 +425,25 @@ def create_rule(
     db.add(r)
     db.commit()
     db.refresh(r)
+
+    _snapshot_version(
+        db,
+        r,
+        version_number=1,
+        change_summary="Rule created",
+        changed_by=current_user.id,
+    )
+    db.add(
+        AuditLog(
+            org_id=org_id,
+            event_type=AuditEventType.rule_created,
+            actor_id=current_user.id,
+            action=f"Automation rule '{r.name}' created",
+            object_type="AutomationRule",
+            object_id=r.id,
+        )
+    )
+    db.commit()
     return _rule_dict(r)
 
 
@@ -353,10 +454,14 @@ def get_rule(
     current_user: User = Depends(require_analyst_or_above),
 ):
     org_id = org_id_for(current_user)
-    r = db.query(AutomationRule).filter(
-        AutomationRule.id == rule_id,
-        AutomationRule.org_id == org_id,
-    ).first()
+    r = (
+        db.query(AutomationRule)
+        .filter(
+            AutomationRule.id == rule_id,
+            AutomationRule.org_id == org_id,
+        )
+        .first()
+    )
     if not r:
         raise HTTPException(404, "Rule not found.")
     return _rule_dict(r)
@@ -371,31 +476,54 @@ def update_rule(
 ):
     """Update an automation rule. System rules (is_system=True) cannot be deleted or archived."""
     org_id = org_id_for(current_user)
-    r = db.query(AutomationRule).filter(
-        AutomationRule.id == rule_id,
-        AutomationRule.org_id == org_id,
-    ).first()
+    r = (
+        db.query(AutomationRule)
+        .filter(
+            AutomationRule.id == rule_id,
+            AutomationRule.org_id == org_id,
+        )
+        .first()
+    )
     if not r:
         raise HTTPException(404, "Rule not found.")
     if r.is_system and payload.status == AutomationRuleStatus.archived:
         raise HTTPException(409, "System rules cannot be archived.")
 
     data = payload.model_dump(exclude_none=True)
-    if "condition_groups" in data:
-        data["condition_groups"] = [g for g in data["condition_groups"]]
-    if "actions" in data:
-        data["actions"] = [a for a in data["actions"]]
-
+    status_changed = "status" in data and data["status"] != r.status.value
     for k, v in data.items():
-        if k == "status":
-            setattr(r, k, v)
-        elif k in ("condition_groups", "actions"):
-            setattr(r, k, v)
-        else:
-            setattr(r, k, v)
+        setattr(r, k, v)
 
     db.commit()
     db.refresh(r)
+
+    next_version = (
+        db.query(AutomationRuleVersion)
+        .filter(AutomationRuleVersion.rule_id == r.id)
+        .count()
+        + 1
+    )
+    _snapshot_version(
+        db,
+        r,
+        version_number=next_version,
+        change_summary=f"Updated fields: {', '.join(data.keys())}",
+        changed_by=current_user.id,
+    )
+    db.add(
+        AuditLog(
+            org_id=org_id,
+            event_type=AuditEventType.rule_status_changed
+            if status_changed
+            else AuditEventType.rule_modified,
+            actor_id=current_user.id,
+            action=f"Automation rule '{r.name}' updated",
+            object_type="AutomationRule",
+            object_id=r.id,
+            new_value=data,
+        )
+    )
+    db.commit()
     return _rule_dict(r)
 
 
@@ -407,14 +535,30 @@ def delete_rule(
 ):
     """Delete a custom rule. System rules (is_system=True) cannot be deleted."""
     org_id = org_id_for(current_user)
-    r = db.query(AutomationRule).filter(
-        AutomationRule.id == rule_id,
-        AutomationRule.org_id == org_id,
-    ).first()
+    r = (
+        db.query(AutomationRule)
+        .filter(
+            AutomationRule.id == rule_id,
+            AutomationRule.org_id == org_id,
+        )
+        .first()
+    )
     if not r:
         raise HTTPException(404, "Rule not found.")
     if r.is_system:
-        raise HTTPException(409, "System rules cannot be deleted. Set status=inactive to disable.")
+        raise HTTPException(
+            409, "System rules cannot be deleted. Set status=inactive to disable."
+        )
+    db.add(
+        AuditLog(
+            org_id=org_id,
+            event_type=AuditEventType.rule_deleted,
+            actor_id=current_user.id,
+            action=f"Automation rule '{r.name}' deleted",
+            object_type="AutomationRule",
+            object_id=r.id,
+        )
+    )
     db.delete(r)
     db.commit()
 
@@ -455,7 +599,81 @@ def rule_executions(
     ]
 
 
+@router.get("/rules/{rule_id}/versions")
+def rule_versions(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """Immutable version history for a rule — one snapshot per create/update."""
+    org_id = org_id_for(current_user)
+    versions = (
+        db.query(AutomationRuleVersion)
+        .filter(
+            AutomationRuleVersion.rule_id == rule_id,
+            AutomationRuleVersion.org_id == org_id,
+        )
+        .order_by(AutomationRuleVersion.version_number.desc())
+        .all()
+    )
+    return [
+        {
+            "id": v.id,
+            "version_number": v.version_number,
+            "name": v.name,
+            "status": v.status,
+            "condition_groups": v.condition_groups or [],
+            "actions": v.actions or [],
+            "change_summary": v.change_summary,
+            "changed_by": v.changed_by,
+            "created_at": v.created_at,
+        }
+        for v in versions
+    ]
+
+
+class RuleTestRequest(BaseModel):
+    context: dict = Field(
+        ...,
+        description="Sample event context to test the rule's conditions against, e.g. {'customer': {'risk_level': 'high'}}",
+    )
+
+
+@router.post("/rules/{rule_id}/test")
+def test_rule(
+    rule_id: str,
+    payload: RuleTestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Dry-run a rule's conditions against a sample context.
+
+    Never executes actions and never writes an AutomationRuleExecution row —
+    this is a pure evaluation test for building/debugging rules in the UI,
+    distinct from real (shadow-mode) execution which is logged.
+    """
+    org_id = org_id_for(current_user)
+    r = (
+        db.query(AutomationRule)
+        .filter(AutomationRule.id == rule_id, AutomationRule.org_id == org_id)
+        .first()
+    )
+    if not r:
+        raise HTTPException(404, "Rule not found.")
+
+    matched_index = evaluate_condition_groups(payload.context, r.condition_groups or [])
+    return {
+        "rule_id": r.id,
+        "matched": matched_index is not None,
+        "matched_group_index": matched_index,
+        "would_execute_actions": (r.actions or []) if matched_index is not None else [],
+        "disclaimer": DISCLAIMER,
+    }
+
+
 # ── Decision Support Panel ────────────────────────────────────────────────────
+
 
 @router.post("/decision-support", status_code=201)
 def create_decision_panel(
@@ -475,23 +693,30 @@ def create_decision_panel(
     The system never automatically approves compliance decisions.
     """
     from app.models.customer import Customer
-    from app.models.monitoring import TransactionAlert, AlertStatus
-    from app.models.regulatory_recommendation import RegulatoryRecommendation, RecommendationStatus
-    from app.models.risk_matrix import TransactionQuestionResponse
+    from app.models.monitoring import TransactionAlert
+    from app.models.regulatory_recommendation import (
+        RecommendationStatus,
+        RegulatoryRecommendation,
+    )
 
     org_id = org_id_for(current_user)
 
-    customer = db.query(Customer).filter(
-        Customer.id == customer_id,
-        Customer.org_id == org_id,
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(
+            Customer.id == customer_id,
+            Customer.org_id == org_id,
+        )
+        .first()
+    )
     if not customer:
         raise HTTPException(404, "Customer not found.")
 
     # Pull latest alert data for this transaction
     customer_risk_score = getattr(customer, "risk_score", 0) or 0
     customer_risk_level = (
-        customer.risk_level.value if hasattr(customer.risk_level, "value")
+        customer.risk_level.value
+        if hasattr(customer.risk_level, "value")
         else str(getattr(customer, "risk_level", "low"))
     )
 
@@ -530,7 +755,12 @@ def create_decision_panel(
     is_near_threshold = False
     if transaction_id:
         from app.models.transaction import Transaction
-        txn = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+
+        txn = (
+            db.query(Transaction)
+            .filter(Transaction.id == transaction_id, Transaction.org_id == org_id)
+            .first()
+        )
         if txn:
             amount_aud = txn.amount_aud or txn.amount or 0.0
             is_cross_border = getattr(txn, "is_cross_border", False)
@@ -539,16 +769,16 @@ def create_decision_panel(
 
     potential_ttr = amount_aud >= 10_000.0
     potential_ifti = is_cross_border and amount_aud >= 10_000.0
-    potential_smr = (
-        is_structuring or
-        alert_score >= 70.0 or
-        customer_is_pep(customer)
-    )
+    potential_smr = is_structuring or alert_score >= 70.0 or customer_is_pep(customer)
     reporting_rationale = {}
     if potential_ttr:
-        reporting_rationale["ttr"] = f"Transaction amount AUD{amount_aud:,.0f} meets TTR threshold"
+        reporting_rationale["ttr"] = (
+            f"Transaction amount AUD{amount_aud:,.0f} meets TTR threshold"
+        )
     if potential_ifti:
-        reporting_rationale["ifti"] = "Cross-border transaction ≥ AUD 10,000 may require IFTI"
+        reporting_rationale["ifti"] = (
+            "Cross-border transaction ≥ AUD 10,000 may require IFTI"
+        )
     if potential_smr:
         reporting_rationale["smr"] = (
             "Structuring indicators, high alert score, or PEP involvement"
@@ -558,11 +788,15 @@ def create_decision_panel(
     required_actions = []
     recommended_actions = []
     if transaction_id:
-        recs = db.query(RegulatoryRecommendation).filter(
-            RegulatoryRecommendation.transaction_id == transaction_id,
-            RegulatoryRecommendation.org_id == org_id,
-            RegulatoryRecommendation.status == RecommendationStatus.pending,
-        ).all()
+        recs = (
+            db.query(RegulatoryRecommendation)
+            .filter(
+                RegulatoryRecommendation.transaction_id == transaction_id,
+                RegulatoryRecommendation.org_id == org_id,
+                RegulatoryRecommendation.status == RecommendationStatus.pending,
+            )
+            .all()
+        )
         for rec in recs:
             action = {"text": rec.title, "regulatory_basis": rec.regulatory_basis}
             if rec.priority and rec.priority.value in ("urgent", "high"):
@@ -621,10 +855,14 @@ def get_decision_panel(
     current_user: User = Depends(require_analyst_or_above),
 ):
     org_id = org_id_for(current_user)
-    p = db.query(DecisionSupportPanel).filter(
-        DecisionSupportPanel.id == panel_id,
-        DecisionSupportPanel.org_id == org_id,
-    ).first()
+    p = (
+        db.query(DecisionSupportPanel)
+        .filter(
+            DecisionSupportPanel.id == panel_id,
+            DecisionSupportPanel.org_id == org_id,
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(404, "Decision support panel not found.")
     return _panel_dict(p)
@@ -653,6 +891,7 @@ def list_decision_panels(
 
 # ── Approval Workflow ─────────────────────────────────────────────────────────
 
+
 @router.post("/decision-support/{panel_id}/review")
 def submit_review_step(
     panel_id: str,
@@ -678,10 +917,14 @@ def submit_review_step(
     The system never automatically approves compliance decisions.
     """
     org_id = org_id_for(current_user)
-    p = db.query(DecisionSupportPanel).filter(
-        DecisionSupportPanel.id == panel_id,
-        DecisionSupportPanel.org_id == org_id,
-    ).first()
+    p = (
+        db.query(DecisionSupportPanel)
+        .filter(
+            DecisionSupportPanel.id == panel_id,
+            DecisionSupportPanel.org_id == org_id,
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(404, "Decision support panel not found.")
     if p.is_complete:

@@ -8,9 +8,12 @@ Jobs:
 
 Scheduler is started in the FastAPI lifespan and shut down cleanly on exit.
 """
-import logging
-from datetime import datetime
 
+import logging
+import time
+from typing import Callable
+
+import sentry_sdk
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -18,52 +21,138 @@ log = logging.getLogger("tvg.scheduler")
 
 _scheduler: BackgroundScheduler | None = None
 
+# Cron jobs only get one natural retry per scheduled period (next day/week),
+# so a transient failure (DB hiccup, brief Redis blip) shouldn't be allowed
+# to silently swallow a whole run when a couple of short retries would
+# likely succeed.
+_RETRY_DELAYS_SECONDS = (5, 30, 120)
+
+
+def _run_with_retry(name: str, fn: Callable[[], None]) -> None:
+    last_exc: Exception | None = None
+    for attempt, delay in enumerate((0, *_RETRY_DELAYS_SECONDS)):
+        if delay:
+            time.sleep(delay)
+        try:
+            fn()
+            return
+        except Exception as exc:
+            last_exc = exc
+            log.warning(
+                "%s attempt %d/%d failed: %s",
+                name,
+                attempt + 1,
+                len(_RETRY_DELAYS_SECONDS) + 1,
+                exc,
+            )
+    log.exception("%s job failed after retries", name, exc_info=last_exc)
+
 
 # ── Job implementations ───────────────────────────────────────────────────────
 
 
+@sentry_sdk.crons.monitor(
+    monitor_slug="deadline-check",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": "0 2 * * *"},
+        "timezone": "Australia/Sydney",
+        "checkin_margin": 10,
+        "max_runtime": 30,
+        "failure_issue_threshold": 1,
+    },
+)
 def _job_deadline_check():
-    try:
-        from app.db.database import SessionLocal
-        from app.services.notification_scheduler import run_all_deadline_checks
+    from app.services.distributed_lock import job_lock
 
-        db = SessionLocal()
-        try:
-            result = run_all_deadline_checks(db)
-            log.info("Deadline check complete: %s", result)
-        finally:
-            db.close()
+    try:
+        with job_lock("deadline_check", ttl_seconds=1800) as acquired:
+            if not acquired:
+                log.info("deadline_check skipped — lock held by another worker")
+                return
+
+            def _run():
+                from app.db.database import SessionLocal
+                from app.services.notification_scheduler import run_all_deadline_checks
+
+                db = SessionLocal()
+                try:
+                    result = run_all_deadline_checks(db)
+                    log.info("Deadline check complete: %s", result)
+                finally:
+                    db.close()
+
+            _run_with_retry("deadline_check", _run)
     except Exception:
         log.exception("deadline_check job failed")
 
 
+@sentry_sdk.crons.monitor(
+    monitor_slug="snapshot-capture",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": "0 1 * * 0"},
+        "timezone": "Australia/Sydney",
+        "checkin_margin": 10,
+        "max_runtime": 30,
+        "failure_issue_threshold": 1,
+    },
+)
 def _job_capture_snapshots():
-    try:
-        from app.db.database import SessionLocal
-        from app.services import benchmark_service as svc
-        from app.models.benchmark import SnapshotPeriod
+    from app.services.distributed_lock import job_lock
 
-        db = SessionLocal()
-        try:
-            result = svc.capture_all_org_snapshots(db, SnapshotPeriod.weekly)
-            log.info("Snapshot capture complete: %s", result)
-        finally:
-            db.close()
+    try:
+        with job_lock("snapshot_capture", ttl_seconds=1800) as acquired:
+            if not acquired:
+                log.info("snapshot_capture skipped — lock held by another worker")
+                return
+
+            def _run():
+                from app.db.database import SessionLocal
+                from app.models.benchmark import SnapshotPeriod
+                from app.services import benchmark_service as svc
+
+                db = SessionLocal()
+                try:
+                    result = svc.capture_all_org_snapshots(db, SnapshotPeriod.weekly)
+                    log.info("Snapshot capture complete: %s", result)
+                finally:
+                    db.close()
+
+            _run_with_retry("snapshot_capture", _run)
     except Exception:
         log.exception("capture_snapshots job failed")
 
 
+@sentry_sdk.crons.monitor(
+    monitor_slug="benchmark-compute",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": "30 1 * * 0"},
+        "timezone": "Australia/Sydney",
+        "checkin_margin": 10,
+        "max_runtime": 30,
+        "failure_issue_threshold": 1,
+    },
+)
 def _job_compute_benchmarks():
-    try:
-        from app.db.database import SessionLocal
-        from app.services import benchmark_service as svc
+    from app.services.distributed_lock import job_lock
 
-        db = SessionLocal()
-        try:
-            result = svc.compute_industry_benchmarks(db)
-            log.info("Benchmark compute complete: %s", result)
-        finally:
-            db.close()
+    try:
+        with job_lock("benchmark_compute", ttl_seconds=1800) as acquired:
+            if not acquired:
+                log.info("benchmark_compute skipped — lock held by another worker")
+                return
+
+            def _run():
+                from app.db.database import SessionLocal
+                from app.services import benchmark_service as svc
+
+                db = SessionLocal()
+                try:
+                    result = svc.compute_industry_benchmarks(db)
+                    log.info("Benchmark compute complete: %s", result)
+                finally:
+                    db.close()
+
+            _run_with_retry("benchmark_compute", _run)
     except Exception:
         log.exception("compute_benchmarks job failed")
 

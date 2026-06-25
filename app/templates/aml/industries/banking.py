@@ -2,8 +2,10 @@
 Banking / ADI (Authorised Deposit-taking Institution) AML template.
 Tranche 1 — IFTI ✓  TTR ✓  Travel Rule ✓  Full obligations.
 """
-from app.templates.aml.base import AMLTemplateBase, BASE_CONTROLS, BASE_POLICIES
+
 import copy
+
+from app.templates.aml.base import BASE_CONTROLS, BASE_POLICIES, AMLTemplateBase
 
 
 def get_template(risk_level: str = "medium") -> AMLTemplateBase:
@@ -64,20 +66,39 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     )
 
     extra_controls = [
-        {"control_ref": "CTL-010", "title": "IFTI Reporting — International Transfers",
-         "control_type": "detective", "risk_area": "ifti_reporting"},
-        {"control_ref": "CTL-011", "title": "Travel Rule — Funds Transfer Information",
-         "control_type": "preventive", "risk_area": "travel_rule"},
-        {"control_ref": "CTL-012", "title": "Correspondent Banking Due Diligence",
-         "control_type": "preventive", "risk_area": "correspondent_banking"},
-        {"control_ref": "CTL-013", "title": "Cash Threshold Reporting (TTR)",
-         "control_type": "detective", "risk_area": "ttr_reporting"},
+        {
+            "control_ref": "CTL-010",
+            "title": "IFTI Reporting — International Transfers",
+            "control_type": "detective",
+            "risk_area": "ifti_reporting",
+        },
+        {
+            "control_ref": "CTL-011",
+            "title": "Travel Rule — Funds Transfer Information",
+            "control_type": "preventive",
+            "risk_area": "travel_rule",
+        },
+        {
+            "control_ref": "CTL-012",
+            "title": "Correspondent Banking Due Diligence",
+            "control_type": "preventive",
+            "risk_area": "correspondent_banking",
+        },
+        {
+            "control_ref": "CTL-013",
+            "title": "Cash Threshold Reporting (TTR)",
+            "control_type": "detective",
+            "risk_area": "ttr_reporting",
+        },
     ]
 
     t._policies = copy.deepcopy(BASE_POLICIES) + [
-        {"title": "IFTI Reporting Policy",               "policy_type": "ifti"},
-        {"title": "Travel Rule Compliance Policy",       "policy_type": "travel_rule"},
-        {"title": "Correspondent Banking AML Policy",    "policy_type": "correspondent_banking"},
+        {"title": "IFTI Reporting Policy", "policy_type": "ifti"},
+        {"title": "Travel Rule Compliance Policy", "policy_type": "travel_rule"},
+        {
+            "title": "Correspondent Banking AML Policy",
+            "policy_type": "correspondent_banking",
+        },
     ]
     t._controls = copy.deepcopy(BASE_CONTROLS) + extra_controls
 

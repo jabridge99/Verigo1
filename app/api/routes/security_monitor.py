@@ -8,18 +8,31 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import _require_roles
+from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
 from app.models.security_event import SecurityEvent
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/security", tags=["Security Monitor"])
 
-_PRIV = _require_roles(UserRole.admin, UserRole.mlro)
+_ROLE_GATE = _require_roles(UserRole.admin, UserRole.mlro)
+
+
+def _require_super_admin(current_user: User = Depends(_ROLE_GATE)) -> User:
+    # SecurityEvent has no org_id column — this data is platform-wide, not
+    # tenant-scoped. Org-scoped admin/mlro accounts must not see other
+    # orgs' security events, so only the global is_super_admin may access
+    # this dashboard until SecurityEvent gains proper per-tenant scoping.
+    if not current_user.is_super_admin:
+        raise HTTPException(403, "Requires global super-admin access")
+    return current_user
+
+
+_PRIV = _require_super_admin
 
 
 def _since(days: int) -> datetime:

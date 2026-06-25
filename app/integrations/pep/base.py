@@ -1,4 +1,5 @@
 """Abstract interface for PEP (Politically Exposed Person) screening."""
+
 from __future__ import annotations
 
 import abc
@@ -10,7 +11,9 @@ from typing import Any
 class PEPMatch:
     match_name: str
     match_score: float
-    pep_tier: str | None = None      # Tier 1 (head of state), Tier 2 (senior official), Tier 3 (associate)
+    pep_tier: str | None = (
+        None  # Tier 1 (head of state), Tier 2 (senior official), Tier 3 (associate)
+    )
     position: str | None = None
     country: str | None = None
     active: bool = True
@@ -26,7 +29,6 @@ class PEPResult:
 
 
 class PEPProvider(abc.ABC):
-
     @abc.abstractmethod
     async def screen(
         self,

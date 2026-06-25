@@ -5,9 +5,10 @@ All industry templates inherit from AMLTemplateBase. Fields map 1:1
 to AMLProgram model columns. Industry subclasses override only what differs.
 Risk overlays are applied on top to adjust language for low/medium/high risk appetite.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -22,7 +23,7 @@ class AMLTemplateBase:
 
     # ── Meta ──────────────────────────────────────────────────────────────────
     industry: str = "other"
-    risk_level: str = "medium"   # low | medium | high
+    risk_level: str = "medium"  # low | medium | high
 
     # Tranche flags — controls which reporting sections are active
     has_ifti_obligation: bool = False
@@ -453,34 +454,73 @@ class AMLTemplateBase:
 # ── Default policies seeded per industry ─────────────────────────────────────
 
 BASE_POLICIES = [
-    {"title": "AML/CTF Risk Assessment Policy",     "policy_type": "risk_assessment"},
-    {"title": "Customer Due Diligence Policy",       "policy_type": "kyc"},
-    {"title": "Ongoing CDD & Monitoring Policy",     "policy_type": "transaction_monitoring"},
-    {"title": "Suspicious Matter Reporting Policy",  "policy_type": "reporting"},
-    {"title": "Record Keeping Policy",               "policy_type": "record_keeping"},
-    {"title": "Staff Training Policy",               "policy_type": "staff_training"},
-    {"title": "Sanctions Screening Policy",          "policy_type": "sanctions"},
-    {"title": "PEP Policy",                          "policy_type": "pep"},
-    {"title": "Independent Review Policy",           "policy_type": "independent_review"},
+    {"title": "AML/CTF Risk Assessment Policy", "policy_type": "risk_assessment"},
+    {"title": "Customer Due Diligence Policy", "policy_type": "kyc"},
+    {
+        "title": "Ongoing CDD & Monitoring Policy",
+        "policy_type": "transaction_monitoring",
+    },
+    {"title": "Suspicious Matter Reporting Policy", "policy_type": "reporting"},
+    {"title": "Record Keeping Policy", "policy_type": "record_keeping"},
+    {"title": "Staff Training Policy", "policy_type": "staff_training"},
+    {"title": "Sanctions Screening Policy", "policy_type": "sanctions"},
+    {"title": "PEP Policy", "policy_type": "pep"},
+    {"title": "Independent Review Policy", "policy_type": "independent_review"},
 ]
 
 BASE_CONTROLS = [
-    {"control_ref": "CTL-001", "title": "Customer Identity Verification",
-     "control_type": "preventive", "risk_area": "customer_identity"},
-    {"control_ref": "CTL-002", "title": "Sanctions Screening at Onboarding",
-     "control_type": "preventive", "risk_area": "sanctions"},
-    {"control_ref": "CTL-003", "title": "PEP Screening at Onboarding",
-     "control_type": "preventive", "risk_area": "pep"},
-    {"control_ref": "CTL-004", "title": "Ongoing Transaction Monitoring",
-     "control_type": "detective", "risk_area": "transaction_monitoring"},
-    {"control_ref": "CTL-005", "title": "SMR Review and Submission Process",
-     "control_type": "detective", "risk_area": "reporting"},
-    {"control_ref": "CTL-006", "title": "Annual Staff AML/CTF Training",
-     "control_type": "preventive", "risk_area": "staff_training"},
-    {"control_ref": "CTL-007", "title": "Customer Risk Rating Assignment",
-     "control_type": "preventive", "risk_area": "customer_risk"},
-    {"control_ref": "CTL-008", "title": "Record Retention and Security",
-     "control_type": "preventive", "risk_area": "record_keeping"},
-    {"control_ref": "CTL-009", "title": "Independent Program Review",
-     "control_type": "detective", "risk_area": "governance"},
+    {
+        "control_ref": "CTL-001",
+        "title": "Customer Identity Verification",
+        "control_type": "preventive",
+        "risk_area": "customer_identity",
+    },
+    {
+        "control_ref": "CTL-002",
+        "title": "Sanctions Screening at Onboarding",
+        "control_type": "preventive",
+        "risk_area": "sanctions",
+    },
+    {
+        "control_ref": "CTL-003",
+        "title": "PEP Screening at Onboarding",
+        "control_type": "preventive",
+        "risk_area": "pep",
+    },
+    {
+        "control_ref": "CTL-004",
+        "title": "Ongoing Transaction Monitoring",
+        "control_type": "detective",
+        "risk_area": "transaction_monitoring",
+    },
+    {
+        "control_ref": "CTL-005",
+        "title": "SMR Review and Submission Process",
+        "control_type": "detective",
+        "risk_area": "reporting",
+    },
+    {
+        "control_ref": "CTL-006",
+        "title": "Annual Staff AML/CTF Training",
+        "control_type": "preventive",
+        "risk_area": "staff_training",
+    },
+    {
+        "control_ref": "CTL-007",
+        "title": "Customer Risk Rating Assignment",
+        "control_type": "preventive",
+        "risk_area": "customer_risk",
+    },
+    {
+        "control_ref": "CTL-008",
+        "title": "Record Retention and Security",
+        "control_type": "preventive",
+        "risk_area": "record_keeping",
+    },
+    {
+        "control_ref": "CTL-009",
+        "title": "Independent Program Review",
+        "control_type": "detective",
+        "risk_area": "governance",
+    },
 ]

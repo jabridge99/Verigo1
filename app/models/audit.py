@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -8,6 +8,7 @@ class LegacyAuditLog(Base):
     """Legacy simple audit log — superseded by app.models.audit_log.AuditLog.
     Kept only for existing analytics_service/audit_service/routes.audit consumers;
     table and class renamed to avoid colliding with the canonical AuditLog."""
+
     __tablename__ = "legacy_audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -18,6 +19,9 @@ class LegacyAuditLog(Base):
     actor = Column(String(200))
     actor_role = Column(String(50))
     industry_id = Column(String(100))
+    organisation_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
+    )
     before_state = Column(JSON)
     after_state = Column(JSON)
     notes = Column(Text)

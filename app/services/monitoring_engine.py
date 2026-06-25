@@ -10,6 +10,7 @@ Pipeline for each transaction:
 DISCLAIMER: The engine flags transactions for human review only.
 No match constitutes a determination of suspicious activity or criminal conduct.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.customer import Customer
@@ -39,23 +41,45 @@ from app.models.transaction import (
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 FATF_BLACKLIST = frozenset({"KP", "IR", "MM"})
-FATF_GREYLIST = frozenset({
-    "AF", "BB", "BF", "CM", "CD", "HT", "JM", "ML", "MZ", "NI",
-    "NG", "PK", "PA", "PH", "SN", "SS", "SY", "TZ", "TT", "UG",
-    "AE", "VN", "YE",
-})
+FATF_GREYLIST = frozenset(
+    {
+        "AF",
+        "BB",
+        "BF",
+        "CM",
+        "CD",
+        "HT",
+        "JM",
+        "ML",
+        "MZ",
+        "NI",
+        "NG",
+        "PK",
+        "PA",
+        "PH",
+        "SN",
+        "SS",
+        "SY",
+        "TZ",
+        "TT",
+        "UG",
+        "AE",
+        "VN",
+        "YE",
+    }
+)
 SANCTIONED_COUNTRIES = frozenset({"IR", "KP", "RU", "BY", "SY", "CU", "SD"})
 
 TTR_THRESHOLD_AUD = 10_000.0
-NEAR_THRESHOLD_PCT = 0.10     # within 10% of reporting threshold
+NEAR_THRESHOLD_PCT = 0.10  # within 10% of reporting threshold
 
 DEFAULT_SIGNAL_WEIGHTS: dict[str, float] = {
     "frequency": 0.15,
-    "velocity":  0.20,
-    "value":     0.20,
+    "velocity": 0.20,
+    "value": 0.20,
     "geographic": 0.20,
     "behaviour": 0.15,
-    "crypto":    0.10,
+    "crypto": 0.10,
 }
 
 # Score → severity thresholds
@@ -63,6 +87,7 @@ SCORE_THRESHOLDS = {"critical": 80.0, "high": 60.0, "medium": 40.0}
 
 
 # ── Behaviour Signal Dataclass ─────────────────────────────────────────────────
+
 
 @dataclass
 class BehaviourSignals:
@@ -115,7 +140,8 @@ class BehaviourSignals:
     def to_dict(self) -> dict[str, Any]:
         return {
             "frequency": {
-                "score": self.frequency_score, "txn_per_day": self.txn_per_day,
+                "score": self.frequency_score,
+                "txn_per_day": self.txn_per_day,
                 "rapid_repeat": self.rapid_repeat,
                 "dormant_reactivated": self.dormant_reactivated,
                 "factors": self.freq_factors,
@@ -127,7 +153,8 @@ class BehaviourSignals:
                 "factors": self.velocity_factors,
             },
             "value": {
-                "score": self.value_score, "is_large": self.is_large,
+                "score": self.value_score,
+                "is_large": self.is_large,
                 "is_near_threshold": self.is_near_threshold,
                 "is_round_number": self.is_round_number,
                 "sudden_increase": self.sudden_increase,
@@ -160,6 +187,7 @@ class BehaviourSignals:
 
 # ── Dimension Scorers ──────────────────────────────────────────────────────────
 
+
 def _score_frequency(
     txn: Transaction,
     profile: Optional[CustomerBehaviourProfile],
@@ -167,7 +195,9 @@ def _score_frequency(
 ) -> tuple[float, dict]:
     score = 0.0
     signals: dict[str, Any] = {
-        "rapid_repeat": False, "dormant_reactivated": False, "factors": [],
+        "rapid_repeat": False,
+        "dormant_reactivated": False,
+        "factors": [],
     }
 
     count_24h = len(recent_24h)
@@ -182,7 +212,9 @@ def _score_frequency(
         if count_24h > daily_avg * 3:
             score += 30.0
             signals["rapid_repeat"] = True
-            signals["factors"].append(f"txn_count_24h={count_24h}_vs_avg={daily_avg:.1f}")
+            signals["factors"].append(
+                f"txn_count_24h={count_24h}_vs_avg={daily_avg:.1f}"
+            )
 
     if count_24h >= 10:
         score += 20.0
@@ -200,7 +232,9 @@ def _score_velocity(
 ) -> tuple[float, dict]:
     score = 0.0
     signals: dict[str, Any] = {
-        "high_speed_movement": False, "burst_activity": False, "factors": [],
+        "high_speed_movement": False,
+        "burst_activity": False,
+        "factors": [],
     }
 
     volume_1h = sum(t.amount_aud or t.amount for t in recent_1h)
@@ -209,7 +243,7 @@ def _score_velocity(
     if len(recent_1h) >= 5:
         score += 30.0
         signals["burst_activity"] = True
-        signals["factors"].append(f"burst_5+_txns_in_1h")
+        signals["factors"].append("burst_5+_txns_in_1h")
 
     if volume_1h >= 50_000:
         score += 40.0
@@ -217,10 +251,12 @@ def _score_velocity(
         signals["factors"].append(f"volume_1h=AUD${volume_1h:,.0f}")
 
     if profile:
-        monthly_avg = profile.total_volume_30d_aud / 30 if profile.total_volume_30d_aud else 1.0
+        monthly_avg = (
+            profile.total_volume_30d_aud / 30 if profile.total_volume_30d_aud else 1.0
+        )
         if volume_24h > monthly_avg * 5:
             score += 25.0
-            signals["factors"].append(f"velocity_24h_5x_daily_avg")
+            signals["factors"].append("velocity_24h_5x_daily_avg")
 
     return min(score, 100.0), signals
 
@@ -232,8 +268,11 @@ def _score_value(
     score = 0.0
     amount = txn.amount_aud or txn.amount
     signals: dict[str, Any] = {
-        "is_large": False, "is_near_threshold": False,
-        "is_round_number": False, "sudden_increase": False, "factors": [],
+        "is_large": False,
+        "is_near_threshold": False,
+        "is_round_number": False,
+        "sudden_increase": False,
+        "factors": [],
     }
 
     if amount >= TTR_THRESHOLD_AUD:
@@ -256,7 +295,9 @@ def _score_value(
         if amount > profile.avg_txn_amount_aud * 5:
             score += 25.0
             signals["sudden_increase"] = True
-            signals["factors"].append(f"amount_5x_avg={profile.avg_txn_amount_aud:,.0f}")
+            signals["factors"].append(
+                f"amount_5x_avg={profile.avg_txn_amount_aud:,.0f}"
+            )
 
     return min(score, 100.0), signals
 
@@ -271,10 +312,14 @@ def _score_geographic(txn: Transaction) -> tuple[float, dict]:
     }
 
     countries = {
-        c for c in [
-            txn.source_country, txn.destination_country,
-            txn.country_origin, txn.country_destination,
-        ] if c
+        c
+        for c in [
+            txn.source_country,
+            txn.destination_country,
+            txn.country_origin,
+            txn.country_destination,
+        ]
+        if c
     }
 
     for country in countries:
@@ -300,17 +345,39 @@ def _score_geographic(txn: Transaction) -> tuple[float, dict]:
 
 
 # Occupations that are inconsistent with high-value / cross-border / crypto activity
-_LOW_INCOME_OCCUPATIONS = frozenset({
-    "student", "retiree", "retired", "pensioner", "unemployed", "homemaker",
-    "home maker", "cleaner", "labourer", "laborer", "driver", "tradesperson",
-    "apprentice", "volunteer", "carer", "caretaker", "part time", "casual",
-})
+_LOW_INCOME_OCCUPATIONS = frozenset(
+    {
+        "student",
+        "retiree",
+        "retired",
+        "pensioner",
+        "unemployed",
+        "homemaker",
+        "home maker",
+        "cleaner",
+        "labourer",
+        "laborer",
+        "driver",
+        "tradesperson",
+        "apprentice",
+        "volunteer",
+        "carer",
+        "caretaker",
+        "part time",
+        "casual",
+    }
+)
 
 # Transaction types that are high-risk when paired with a low-income occupation profile
-_HIGH_RISK_TXN_TYPES = frozenset({
-    "remittance", "crypto_transfer", "crypto_purchase", "real_estate_settlement",
-    "cross_border_transfer",
-})
+_HIGH_RISK_TXN_TYPES = frozenset(
+    {
+        "remittance",
+        "crypto_transfer",
+        "crypto_purchase",
+        "real_estate_settlement",
+        "cross_border_transfer",
+    }
+)
 
 _OCCUPATION_MISMATCH_AMOUNT_AUD = 5_000.0
 
@@ -322,8 +389,10 @@ def _score_behaviour(
 ) -> tuple[float, dict]:
     score = 0.0
     signals: dict[str, Any] = {
-        "profile_deviation": False, "occupation_mismatch": False,
-        "unusual_channel": False, "factors": [],
+        "profile_deviation": False,
+        "occupation_mismatch": False,
+        "unusual_channel": False,
+        "factors": [],
     }
 
     if customer.is_pep:
@@ -352,10 +421,14 @@ def _score_behaviour(
         if usual_methods and txn.payment_method.value not in usual_methods:
             score += 15.0
             signals["unusual_channel"] = True
-            signals["factors"].append(f"unusual_payment_method:{txn.payment_method.value}")
+            signals["factors"].append(
+                f"unusual_payment_method:{txn.payment_method.value}"
+            )
 
-        usual_countries = set((profile.usual_destination_countries or []) +
-                               (profile.usual_source_countries or []))
+        usual_countries = set(
+            (profile.usual_destination_countries or [])
+            + (profile.usual_source_countries or [])
+        )
         countries = {txn.source_country, txn.destination_country} - {None}
         if countries and not countries.intersection(usual_countries):
             score += 20.0
@@ -368,8 +441,10 @@ def _score_behaviour(
 def _score_crypto(txn: Transaction, db: Session) -> tuple[float, dict]:
     score = 0.0
     signals: dict[str, Any] = {
-        "mixer_exposure": False, "darknet_exposure": False,
-        "sanctioned_wallet": False, "factors": [],
+        "mixer_exposure": False,
+        "darknet_exposure": False,
+        "sanctioned_wallet": False,
+        "factors": [],
     }
 
     detail: Optional[TransactionCryptoDetail] = (
@@ -388,17 +463,22 @@ def _score_crypto(txn: Transaction, db: Session) -> tuple[float, dict]:
     if (detail.darknet_exposure_pct or 0) > 5:
         score += 60.0
         signals["darknet_exposure"] = True
-        signals["factors"].append(f"darknet_exposure={detail.darknet_exposure_pct:.1f}%")
+        signals["factors"].append(
+            f"darknet_exposure={detail.darknet_exposure_pct:.1f}%"
+        )
 
     if (detail.sanctioned_exposure_pct or 0) > 0:
         score += 70.0
         signals["sanctioned_wallet"] = True
-        signals["factors"].append(f"sanctioned_exposure={detail.sanctioned_exposure_pct:.1f}%")
+        signals["factors"].append(
+            f"sanctioned_exposure={detail.sanctioned_exposure_pct:.1f}%"
+        )
 
     return min(score, 100.0), signals
 
 
 # ── Main Signal Evaluator ──────────────────────────────────────────────────────
+
 
 def evaluate_behaviour_signals(
     transaction: Transaction,
@@ -410,8 +490,12 @@ def evaluate_behaviour_signals(
     w = weights or DEFAULT_SIGNAL_WEIGHTS
     now = datetime.now(timezone.utc)
 
-    recent_1h = _recent_transactions(db, transaction.customer_id, transaction.org_id, now, hours=1)
-    recent_24h = _recent_transactions(db, transaction.customer_id, transaction.org_id, now, hours=24)
+    recent_1h = _recent_transactions(
+        db, transaction.customer_id, transaction.org_id, now, hours=1
+    )
+    recent_24h = _recent_transactions(
+        db, transaction.customer_id, transaction.org_id, now, hours=24
+    )
 
     freq_score, freq_sigs = _score_frequency(transaction, profile, recent_24h)
     vel_score, vel_sigs = _score_velocity(transaction, profile, recent_1h, recent_24h)
@@ -421,12 +505,12 @@ def evaluate_behaviour_signals(
     cry_score, cry_sigs = _score_crypto(transaction, db)
 
     combined = (
-        freq_score * w["frequency"] +
-        vel_score  * w["velocity"] +
-        val_score  * w["value"] +
-        geo_score  * w["geographic"] +
-        beh_score  * w["behaviour"] +
-        cry_score  * w["crypto"]
+        freq_score * w["frequency"]
+        + vel_score * w["velocity"]
+        + val_score * w["value"]
+        + geo_score * w["geographic"]
+        + beh_score * w["behaviour"]
+        + cry_score * w["crypto"]
     )
 
     return BehaviourSignals(
@@ -435,43 +519,38 @@ def evaluate_behaviour_signals(
         rapid_repeat=freq_sigs.get("rapid_repeat", False),
         dormant_reactivated=freq_sigs.get("dormant_reactivated", False),
         freq_factors=freq_sigs.get("factors", []),
-
         velocity_score=vel_score,
         high_speed_movement=vel_sigs.get("high_speed_movement", False),
         burst_activity=vel_sigs.get("burst_activity", False),
         velocity_factors=vel_sigs.get("factors", []),
-
         value_score=val_score,
         is_large=val_sigs.get("is_large", False),
         is_near_threshold=val_sigs.get("is_near_threshold", False),
         is_round_number=val_sigs.get("is_round_number", False),
         sudden_increase=val_sigs.get("sudden_increase", False),
         value_factors=val_sigs.get("factors", []),
-
         geographic_score=geo_score,
         fatf_blacklist_country=geo_sigs.get("fatf_blacklist_country", False),
         sanctioned_country=geo_sigs.get("sanctioned_country", False),
         fatf_greylist_country=geo_sigs.get("fatf_greylist_country", False),
         geo_factors=geo_sigs.get("factors", []),
-
         behaviour_score=beh_score,
         profile_deviation=beh_sigs.get("profile_deviation", False),
         occupation_mismatch=beh_sigs.get("occupation_mismatch", False),
         unusual_channel=beh_sigs.get("unusual_channel", False),
         behaviour_factors=beh_sigs.get("factors", []),
-
         crypto_score=cry_score,
         mixer_exposure=cry_sigs.get("mixer_exposure", False),
         darknet_exposure=cry_sigs.get("darknet_exposure", False),
         sanctioned_wallet=cry_sigs.get("sanctioned_wallet", False),
         crypto_factors=cry_sigs.get("factors", []),
-
         combined_score=min(combined, 100.0),
         signal_weights=w,
     )
 
 
 # ── Rule Engine ────────────────────────────────────────────────────────────────
+
 
 def _resolve_field(obj: Any, path: str) -> Any:
     """Resolve dot-notation field path on a transaction context dict."""
@@ -490,6 +569,7 @@ def _resolve_field(obj: Any, path: str) -> Any:
 def _evaluate_condition(context: dict, condition) -> bool:
     """Evaluate a single RuleCondition against a transaction context dict."""
     from app.models.monitoring import RuleConditionOperator
+
     val = _resolve_field(context, condition.field_path)
     cv = condition.value
     op = condition.operator
@@ -556,7 +636,9 @@ def _build_txn_context(
             "risk_level": getattr(customer, "risk_level", None),
             "risk_score": getattr(customer, "risk_score", 0),
             "is_pep": getattr(customer, "is_pep", False),
-            "cdd_level": getattr(customer.cdd_level, "value", None) if hasattr(customer, "cdd_level") else None,
+            "cdd_level": getattr(customer.cdd_level, "value", None)
+            if hasattr(customer, "cdd_level")
+            else None,
             "country_of_residence": getattr(customer, "country_of_residence", None),
             "nationality": getattr(customer, "nationality", None),
         },
@@ -618,19 +700,22 @@ def evaluate_rules(
         db.add(exec_log)
 
         if did_match:
-            matched_rules.append({
-                "rule_id": rule.id,
-                "rule_name": rule.name,
-                "category": rule.category,
-                "alert_severity": rule.alert_severity,
-                "alert_score": rule.alert_score,
-                "alert_title_template": rule.alert_title_template,
-            })
+            matched_rules.append(
+                {
+                    "rule_id": rule.id,
+                    "rule_name": rule.name,
+                    "category": rule.category,
+                    "alert_severity": rule.alert_severity,
+                    "alert_score": rule.alert_score,
+                    "alert_title_template": rule.alert_title_template,
+                }
+            )
 
     return matched_rules
 
 
 # ── Alert Score Calculator ─────────────────────────────────────────────────────
+
 
 def calculate_alert_score(
     signals: BehaviourSignals,
@@ -659,7 +744,9 @@ def calculate_alert_score(
     rule_contrib = rule_score * w.get("rule", 0.25)
     customer_contrib = min(customer_risk_score, 100.0) * w.get("customer_risk", 0.10)
     matrix_contrib = min(risk_matrix_score, 100.0) * w.get("risk_matrix", 0.35)
-    total = min(behaviour_contrib + rule_contrib + customer_contrib + matrix_contrib, 100.0)
+    total = min(
+        behaviour_contrib + rule_contrib + customer_contrib + matrix_contrib, 100.0
+    )
 
     breakdown = {
         "behaviour": round(behaviour_contrib, 2),
@@ -682,7 +769,9 @@ def alert_severity_from_score(score: float) -> AlertSeverity:
     return AlertSeverity.low
 
 
-def _alert_category_from_signals(signals: BehaviourSignals, rule_category: Optional[AlertCategory] = None) -> AlertCategory:
+def _alert_category_from_signals(
+    signals: BehaviourSignals, rule_category: Optional[AlertCategory] = None
+) -> AlertCategory:
     if rule_category:
         return rule_category
     if signals.sanctioned_country or signals.sanctioned_wallet:
@@ -709,6 +798,7 @@ def _alert_category_from_signals(signals: BehaviourSignals, rule_category: Optio
 
 
 # ── Behaviour Profile Updater ──────────────────────────────────────────────────
+
 
 def update_behaviour_profile(
     transaction: Transaction,
@@ -751,8 +841,12 @@ def update_behaviour_profile(
     recent_30d = [t for t in recent_90d if t.transaction_date >= cutoff_30d]
 
     # Include the current transaction in rolling counts
-    all_30d_amounts = [t.amount_aud or t.amount for t in recent_30d] + [transaction.amount_aud or transaction.amount]
-    all_90d_amounts = [t.amount_aud or t.amount for t in recent_90d] + [transaction.amount_aud or transaction.amount]
+    all_30d_amounts = [t.amount_aud or t.amount for t in recent_30d] + [
+        transaction.amount_aud or transaction.amount
+    ]
+    all_90d_amounts = [t.amount_aud or t.amount for t in recent_90d] + [
+        transaction.amount_aud or transaction.amount
+    ]
 
     volume_30d = sum(all_30d_amounts)
     volume_90d = sum(all_90d_amounts)
@@ -766,8 +860,12 @@ def update_behaviour_profile(
 
     # Aggregate countries and channels
     all_txns_sample = recent_30d + [transaction]
-    dest_countries = list({t.destination_country for t in all_txns_sample if t.destination_country})
-    src_countries = list({t.source_country for t in all_txns_sample if t.source_country})
+    dest_countries = list(
+        {t.destination_country for t in all_txns_sample if t.destination_country}
+    )
+    src_countries = list(
+        {t.source_country for t in all_txns_sample if t.source_country}
+    )
     channels = list({t.payment_method.value for t in all_txns_sample})
 
     # Dormancy: was previously dormant if last_transaction_date > 90 days ago
@@ -804,7 +902,7 @@ def update_behaviour_profile(
     profile.usual_payment_methods = channels
     profile.last_transaction_date = now
     profile.dormancy_reactivated = was_dormant
-    profile.is_dormant = False   # receiving a transaction ends dormancy
+    profile.is_dormant = False  # receiving a transaction ends dormancy
     profile.txn_count_total = (profile.txn_count_total or 0) + 1
     profile.last_calculated_at = now
 
@@ -812,6 +910,7 @@ def update_behaviour_profile(
 
 
 # ── Main Entry Point ───────────────────────────────────────────────────────────
+
 
 def run_monitoring(
     transaction: Transaction,
@@ -838,6 +937,7 @@ def run_monitoring(
     # 2. Load active rules for this org, filtered by applicable_industries
     from app.models.organisation import Organisation
     from app.models.risk_matrix import OrgMonitoringConfig
+
     org = db.query(Organisation).filter(Organisation.id == transaction.org_id).first()
     org_industry = org.industry_type.value if org and org.industry_type else None
 
@@ -848,16 +948,30 @@ def run_monitoring(
         .first()
     )
     score_weights = {
-        "behaviour":     getattr(org_config, "behaviour_weight",     0.30) if org_config else 0.30,
-        "rule":          getattr(org_config, "rule_weight",          0.25) if org_config else 0.25,
-        "customer_risk": getattr(org_config, "customer_risk_weight", 0.10) if org_config else 0.10,
-        "risk_matrix":   getattr(org_config, "risk_matrix_weight",   0.35) if org_config else 0.35,
+        "behaviour": getattr(org_config, "behaviour_weight", 0.30)
+        if org_config
+        else 0.30,
+        "rule": getattr(org_config, "rule_weight", 0.25) if org_config else 0.25,
+        "customer_risk": getattr(org_config, "customer_risk_weight", 0.10)
+        if org_config
+        else 0.10,
+        "risk_matrix": getattr(org_config, "risk_matrix_weight", 0.35)
+        if org_config
+        else 0.35,
     }
     matrix_weights = {
-        "customer":    getattr(org_config, "matrix_customer_weight",   0.30) if org_config else 0.30,
-        "geographic":  getattr(org_config, "matrix_geographic_weight", 0.25) if org_config else 0.25,
-        "product":     getattr(org_config, "matrix_product_weight",    0.20) if org_config else 0.20,
-        "transaction": getattr(org_config, "matrix_transaction_weight",0.25) if org_config else 0.25,
+        "customer": getattr(org_config, "matrix_customer_weight", 0.30)
+        if org_config
+        else 0.30,
+        "geographic": getattr(org_config, "matrix_geographic_weight", 0.25)
+        if org_config
+        else 0.25,
+        "product": getattr(org_config, "matrix_product_weight", 0.20)
+        if org_config
+        else 0.20,
+        "transaction": getattr(org_config, "matrix_transaction_weight", 0.25)
+        if org_config
+        else 0.25,
     }
 
     all_active_rules = (
@@ -870,18 +984,24 @@ def run_monitoring(
     )
     # A rule with an empty applicable_industries list applies to all industries
     active_rules = [
-        r for r in all_active_rules
+        r
+        for r in all_active_rules
         if not (r.applicable_industries or [])
         or org_industry in (r.applicable_industries or [])
     ]
 
     # 3. Evaluate rules — logs RuleExecution immutably
-    matched_rules = evaluate_rules(transaction, customer, profile, signals, active_rules, db)
+    matched_rules = evaluate_rules(
+        transaction, customer, profile, signals, active_rules, db
+    )
 
     # 3b. Compute AUSTRAC/FATF risk matrix
     from app.services.risk_matrix_service import compute_risk_matrix
+
     matrix_result = compute_risk_matrix(
-        transaction, customer, db,
+        transaction,
+        customer,
+        db,
         customer_weight=matrix_weights["customer"],
         geographic_weight=matrix_weights["geographic"],
         product_weight=matrix_weights["product"],
@@ -893,10 +1013,16 @@ def run_monitoring(
     customer_risk_score = getattr(customer, "risk_score", 0) or 0
 
     # Always emit if behaviour signals are non-trivial OR risk matrix is elevated
-    if signals.combined_score >= 20.0 or matched_rules or matrix_result.overall_score >= 30.0:
+    if (
+        signals.combined_score >= 20.0
+        or matched_rules
+        or matrix_result.overall_score >= 30.0
+    ):
         rule_score = max((r["alert_score"] for r in matched_rules), default=0.0)
         alert_score, score_breakdown = calculate_alert_score(
-            signals, rule_score, customer_risk_score,
+            signals,
+            rule_score,
+            customer_risk_score,
             risk_matrix_score=matrix_result.overall_score,
             weights=score_weights,
         )
@@ -910,45 +1036,67 @@ def run_monitoring(
 
         title = _build_alert_title(transaction, signals, primary_rule)
 
-        alert_id = f"alrt_{uuid4().hex[:10]}"
-        alert_ref = f"{alert_ref_prefix}-{uuid4().hex[:8].upper()}"
-
-        alert = TransactionAlert(
-            id=alert_id,
-            alert_ref=alert_ref,
-            org_id=transaction.org_id,
-            transaction_id=transaction.id,
-            customer_id=transaction.customer_id,
-            alert_type=AlertType.rule_triggered if matched_rules else AlertType.behaviour_anomaly,
-            category=category,
-            severity=severity,
-            status=AlertStatus.generated,
-            rule_id=primary_rule["rule_id"] if primary_rule else None,
-            rule_name=primary_rule["rule_name"] if primary_rule else None,
-            rules_matched=[r["rule_id"] for r in matched_rules],
-            alert_score=alert_score,
-            score_breakdown=score_breakdown,
-            title=title,
-            behaviour_signals=signals.to_dict(),
-            is_smr_candidate=False,
-            risk_matrix_score=matrix_result.overall_score,
-            risk_matrix_level=matrix_result.risk_level,
-            risk_matrix_detail=matrix_result.to_dict(),
+        # Re-evaluation (manual re-run, backfill, retried webhook) must not
+        # spawn a second alert for the same transaction while an existing
+        # one is still open — that pollutes the analyst queue and lets the
+        # same suspicious activity get buried in duplicate noise.
+        existing_open_alert = (
+            db.query(TransactionAlert)
+            .filter(
+                TransactionAlert.transaction_id == transaction.id,
+                TransactionAlert.status.notin_(
+                    [AlertStatus.dismissed, AlertStatus.resolved]
+                ),
+            )
+            .first()
         )
-        db.add(alert)
-        alerts.append(alert)
 
-        # Update transaction counters
-        transaction.alerts_generated = (transaction.alerts_generated or 0) + 1
-        transaction.behaviour_signals = signals.to_dict()
-        transaction.behaviour_score = signals.combined_score
+        if existing_open_alert is None:
+            alert_id = f"alrt_{uuid4().hex[:10]}"
+            alert_ref = f"{alert_ref_prefix}-{uuid4().hex[:8].upper()}"
 
-        # Update rule statistics
-        for rule_match in matched_rules:
-            rule_obj = next((r for r in active_rules if r.id == rule_match["rule_id"]), None)
-            if rule_obj:
-                rule_obj.total_alerts_generated = (rule_obj.total_alerts_generated or 0) + 1
-                rule_obj.last_triggered_at = datetime.now(timezone.utc)
+            alert = TransactionAlert(
+                id=alert_id,
+                alert_ref=alert_ref,
+                org_id=transaction.org_id,
+                transaction_id=transaction.id,
+                customer_id=transaction.customer_id,
+                alert_type=AlertType.rule_triggered
+                if matched_rules
+                else AlertType.behaviour_anomaly,
+                category=category,
+                severity=severity,
+                status=AlertStatus.generated,
+                rule_id=primary_rule["rule_id"] if primary_rule else None,
+                rule_name=primary_rule["rule_name"] if primary_rule else None,
+                rules_matched=[r["rule_id"] for r in matched_rules],
+                alert_score=alert_score,
+                score_breakdown=score_breakdown,
+                title=title,
+                behaviour_signals=signals.to_dict(),
+                is_smr_candidate=False,
+                risk_matrix_score=matrix_result.overall_score,
+                risk_matrix_level=matrix_result.risk_level,
+                risk_matrix_detail=matrix_result.to_dict(),
+            )
+            db.add(alert)
+            alerts.append(alert)
+
+            # Update transaction counters
+            transaction.alerts_generated = (transaction.alerts_generated or 0) + 1
+            transaction.behaviour_signals = signals.to_dict()
+            transaction.behaviour_score = signals.combined_score
+
+            # Update rule statistics
+            for rule_match in matched_rules:
+                rule_obj = next(
+                    (r for r in active_rules if r.id == rule_match["rule_id"]), None
+                )
+                if rule_obj:
+                    rule_obj.total_alerts_generated = (
+                        rule_obj.total_alerts_generated or 0
+                    ) + 1
+                    rule_obj.last_triggered_at = datetime.now(timezone.utc)
 
     # 5. Update (or create) the customer behaviour profile with this transaction's data
     update_behaviour_profile(transaction, customer, db)
@@ -956,6 +1104,7 @@ def run_monitoring(
     # 6. Generate regulatory recommendations based on transaction signals + alerts
     if alerts:
         from app.services.recommendation_engine import generate_recommendations
+
         recommendations = generate_recommendations(transaction, customer, alerts, db)
         for rec in recommendations:
             db.add(rec)
@@ -972,8 +1121,7 @@ def _build_alert_title(
         template = primary_rule["alert_title_template"]
         amount = transaction.amount_aud or transaction.amount
         return (
-            template
-            .replace("{amount}", f"AUD ${amount:,.2f}")
+            template.replace("{amount}", f"AUD ${amount:,.2f}")
             .replace("{country}", transaction.destination_country or "")
             .replace("{rule}", primary_rule.get("rule_name", ""))
         )
@@ -994,6 +1142,7 @@ def _build_alert_title(
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
+
 
 def _recent_transactions(
     db: Session,

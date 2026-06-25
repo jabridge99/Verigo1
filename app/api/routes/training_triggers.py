@@ -9,31 +9,44 @@ Two sub-systems:
 AUSTRAC obligation basis: AML/CTF Act s.36 — reporting entities must ensure
 staff have appropriate AML/CTF knowledge and training.
 """
+
 from datetime import date
-from typing import Optional, List
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_current_user, require_mlro_or_above, require_compliance_or_above,
-    require_analyst_or_above, get_db,
+    get_db,
+    require_analyst_or_above,
+    require_compliance_or_above,
+    require_mlro_or_above,
 )
-from app.models.user import User, UserRole
 from app.models.training_trigger import (
-    TrainingTriggerRule, TrainingTriggerLog, RegulatoryUpdateEvent,
+    AssessmentFlagStatus,
     AssessmentOutcomeFlag,
-    TriggerEventType, TriggerTargetType, TriggerStatus,
-    RegulatoryUpdateStatus, IssuingBody, AssessmentFlagStatus,
+    IssuingBody,
+    RegulatoryUpdateEvent,
+    RegulatoryUpdateStatus,
+    TrainingTriggerLog,
+    TrainingTriggerRule,
+    TriggerEventType,
+    TriggerStatus,
+    TriggerTargetType,
 )
+from app.models.user import User
 from app.services import risk_triggered_training_service
 
-router = APIRouter(prefix="/training-triggers", tags=["Training — Risk Triggers & Regulatory Events"])
+router = APIRouter(
+    prefix="/training-triggers", tags=["Training — Risk Triggers & Regulatory Events"]
+)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SCHEMAS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class CreateTriggerRuleRequest(BaseModel):
     name: str
@@ -111,6 +124,7 @@ class ReviewAssessmentFlagRequest(BaseModel):
 # TRIGGER RULES
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @router.post("/rules", summary="Create a training trigger rule")
 def create_rule(
     body: CreateTriggerRuleRequest,
@@ -118,7 +132,12 @@ def create_rule(
     current_user: User = Depends(require_mlro_or_above),
 ):
     from app.models.governance_training import TrainingCourse
-    course = db.query(TrainingCourse).filter_by(id=body.course_id, org_id=current_user.org_id).first()
+
+    course = (
+        db.query(TrainingCourse)
+        .filter_by(id=body.course_id, org_id=current_user.org_id)
+        .first()
+    )
     if not course:
         raise HTTPException(404, "Training course not found in your organisation")
 
@@ -199,7 +218,9 @@ def update_rule(
 ):
     rule = _get_rule(db, rule_id, current_user.org_id)
     if rule.is_system and rule.org_id is None:
-        raise HTTPException(422, "Cannot edit system rules — create an org-level override instead")
+        raise HTTPException(
+            422, "Cannot edit system rules — create an org-level override instead"
+        )
 
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(rule, field, value)
@@ -250,7 +271,10 @@ def manual_fire(
 # TRIGGER LOGS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/logs", summary="Audit log of all training triggers that fired for this org")
+
+@router.get(
+    "/logs", summary="Audit log of all training triggers that fired for this org"
+)
 def list_trigger_logs(
     event_type: Optional[TriggerEventType] = None,
     entity_type: Optional[str] = None,
@@ -285,13 +309,19 @@ def list_trigger_logs(
 # REGULATORY UPDATE EVENTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.post("/regulatory-updates", summary="Create a regulatory update event (platform admin or MLRO)")
+
+@router.post(
+    "/regulatory-updates",
+    summary="Create a regulatory update event (platform admin or MLRO)",
+)
 def create_regulatory_update(
     body: CreateRegulatoryUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_mlro_or_above),
 ):
-    existing = db.query(RegulatoryUpdateEvent).filter_by(event_ref=body.event_ref).first()
+    existing = (
+        db.query(RegulatoryUpdateEvent).filter_by(event_ref=body.event_ref).first()
+    )
     if existing:
         raise HTTPException(409, f"Event ref '{body.event_ref}' already exists")
 
@@ -345,16 +375,22 @@ def get_regulatory_update(
         raise HTTPException(404, "Regulatory update not found")
     result = _update_to_dict(update)
     # Show how many orgs from this org's group were affected (if any)
-    logs = db.query(TrainingTriggerLog).filter_by(
-        org_id=current_user.org_id,
-        regulatory_update_id=update_id,
-    ).all()
+    logs = (
+        db.query(TrainingTriggerLog)
+        .filter_by(
+            org_id=current_user.org_id,
+            regulatory_update_id=update_id,
+        )
+        .all()
+    )
     result["org_training_triggered"] = len(logs) > 0
     result["org_assignments_created"] = sum(l.assignments_created for l in logs)
     return result
 
 
-@router.patch("/regulatory-updates/{update_id}", summary="Update a draft regulatory event")
+@router.patch(
+    "/regulatory-updates/{update_id}", summary="Update a draft regulatory event"
+)
 def update_regulatory_update(
     update_id: str,
     body: UpdateRegulatoryUpdateRequest,
@@ -374,8 +410,10 @@ def update_regulatory_update(
     return _update_to_dict(update)
 
 
-@router.post("/regulatory-updates/{update_id}/publish",
-             summary="Publish a regulatory update — broadcasts training to all affected organisations")
+@router.post(
+    "/regulatory-updates/{update_id}/publish",
+    summary="Publish a regulatory update — broadcasts training to all affected organisations",
+)
 def publish_regulatory_update(
     update_id: str,
     db: Session = Depends(get_db),
@@ -388,7 +426,10 @@ def publish_regulatory_update(
     )
 
 
-@router.post("/regulatory-updates/{update_id}/archive", summary="Archive a regulatory update event")
+@router.post(
+    "/regulatory-updates/{update_id}/archive",
+    summary="Archive a regulatory update event",
+)
 def archive_regulatory_update(
     update_id: str,
     db: Session = Depends(get_db),
@@ -406,7 +447,10 @@ def archive_regulatory_update(
 # ASSESSMENT OUTCOME FLAGS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/assessment-flags", summary="List open assessment outcome flags for this org")
+
+@router.get(
+    "/assessment-flags", summary="List open assessment outcome flags for this org"
+)
 def list_assessment_flags(
     status: Optional[AssessmentFlagStatus] = None,
     user_id: Optional[str] = None,
@@ -428,16 +472,20 @@ def get_assessment_flag(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    flag = db.query(AssessmentOutcomeFlag).filter_by(
-        id=flag_id, org_id=current_user.org_id
-    ).first()
+    flag = (
+        db.query(AssessmentOutcomeFlag)
+        .filter_by(id=flag_id, org_id=current_user.org_id)
+        .first()
+    )
     if not flag:
         raise HTTPException(404, "Assessment flag not found")
     return _flag_to_dict(flag)
 
 
-@router.post("/assessment-flags/{flag_id}/review",
-             summary="MLRO reviews an assessment outcome flag")
+@router.post(
+    "/assessment-flags/{flag_id}/review",
+    summary="MLRO reviews an assessment outcome flag",
+)
 def review_assessment_flag(
     flag_id: str,
     body: ReviewAssessmentFlagRequest,
@@ -445,9 +493,12 @@ def review_assessment_flag(
     current_user: User = Depends(require_mlro_or_above),
 ):
     from datetime import datetime, timezone
-    flag = db.query(AssessmentOutcomeFlag).filter_by(
-        id=flag_id, org_id=current_user.org_id
-    ).first()
+
+    flag = (
+        db.query(AssessmentOutcomeFlag)
+        .filter_by(id=flag_id, org_id=current_user.org_id)
+        .first()
+    )
     if not flag:
         raise HTTPException(404, "Assessment flag not found")
 
@@ -462,17 +513,22 @@ def review_assessment_flag(
     return _flag_to_dict(flag)
 
 
-@router.post("/assessment-flags/{flag_id}/clear",
-             summary="Clear an assessment flag once training is completed satisfactorily")
+@router.post(
+    "/assessment-flags/{flag_id}/clear",
+    summary="Clear an assessment flag once training is completed satisfactorily",
+)
 def clear_assessment_flag(
     flag_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_mlro_or_above),
 ):
     from datetime import datetime, timezone
-    flag = db.query(AssessmentOutcomeFlag).filter_by(
-        id=flag_id, org_id=current_user.org_id
-    ).first()
+
+    flag = (
+        db.query(AssessmentOutcomeFlag)
+        .filter_by(id=flag_id, org_id=current_user.org_id)
+        .first()
+    )
     if not flag:
         raise HTTPException(404, "Assessment flag not found")
     flag.status = AssessmentFlagStatus.cleared
@@ -486,12 +542,18 @@ def clear_assessment_flag(
 # TRAINING GAP REPORT & ANALYTICS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/gap-report", summary="Training gap report — mandatory training vs risk decision activity")
+
+@router.get(
+    "/gap-report",
+    summary="Training gap report — mandatory training vs risk decision activity",
+)
 def training_gap_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    return risk_triggered_training_service.get_training_gap_report(db, current_user.org_id)
+    return risk_triggered_training_service.get_training_gap_report(
+        db, current_user.org_id
+    )
 
 
 @router.get("/enums/values", summary="Enum values for dropdowns")
@@ -510,11 +572,16 @@ def get_enums():
 # HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _get_rule(db: Session, rule_id: str, org_id: str) -> TrainingTriggerRule:
-    rule = db.query(TrainingTriggerRule).filter(
-        TrainingTriggerRule.id == rule_id,
-        TrainingTriggerRule.org_id.in_([org_id, None]),
-    ).first()
+    rule = (
+        db.query(TrainingTriggerRule)
+        .filter(
+            TrainingTriggerRule.id == rule_id,
+            TrainingTriggerRule.org_id.in_([org_id, None]),
+        )
+        .first()
+    )
     if not rule:
         raise HTTPException(404, "Trigger rule not found")
     return rule
@@ -552,15 +619,21 @@ def _update_to_dict(update: RegulatoryUpdateEvent) -> dict:
         "summary": update.summary,
         "key_changes": update.key_changes,
         "full_text_url": update.full_text_url,
-        "effective_date": update.effective_date.isoformat() if update.effective_date else None,
-        "compliance_deadline": update.compliance_deadline.isoformat() if update.compliance_deadline else None,
+        "effective_date": update.effective_date.isoformat()
+        if update.effective_date
+        else None,
+        "compliance_deadline": update.compliance_deadline.isoformat()
+        if update.compliance_deadline
+        else None,
         "affected_industries": update.affected_industries,
         "affected_roles": update.affected_roles,
         "linked_course_id": update.linked_course_id,
         "auto_assign_training": update.auto_assign_training,
         "is_urgent": update.is_urgent,
         "status": update.status,
-        "published_at": update.published_at.isoformat() if update.published_at else None,
+        "published_at": update.published_at.isoformat()
+        if update.published_at
+        else None,
         "orgs_notified": update.orgs_notified,
         "assignments_created": update.assignments_created,
         "tags": update.tags,

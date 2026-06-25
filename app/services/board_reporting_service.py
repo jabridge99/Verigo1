@@ -13,11 +13,11 @@ Each report type draws from:
 
 All data is a point-in-time snapshot at generation time.
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -26,21 +26,26 @@ log = logging.getLogger("tvg.board_reporting")
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
-def _cases_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
-    from app.models.case import Case, CaseStatus, CaseSeverity
-    from sqlalchemy import func
+
+def _cases_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+
+    from app.models.case import Case, CaseSeverity, CaseStatus
 
     all_open = (
         db.query(Case)
         .filter(
             Case.org_id == org_id,
-            Case.status.notin_([
-                CaseStatus.closed_no_action,
-                CaseStatus.closed_smr_filed,
-                CaseStatus.closed_referred,
-                CaseStatus.closed_exited,
-                CaseStatus.closed_no_smr,
-            ])
+            Case.status.notin_(
+                [
+                    CaseStatus.closed_no_action,
+                    CaseStatus.closed_smr_filed,
+                    CaseStatus.closed_referred,
+                    CaseStatus.closed_exited,
+                    CaseStatus.closed_no_smr,
+                ]
+            ),
         )
         .all()
     )
@@ -49,8 +54,14 @@ def _cases_section(db: Session, org_id: str, period_start: date, period_end: dat
         db.query(Case)
         .filter(
             Case.org_id == org_id,
-            Case.created_at >= datetime.combine(period_start, datetime.min.time()).replace(tzinfo=timezone.utc),
-            Case.created_at <= datetime.combine(period_end, datetime.max.time()).replace(tzinfo=timezone.utc),
+            Case.created_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            Case.created_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
         )
         .all()
     )
@@ -59,8 +70,14 @@ def _cases_section(db: Session, org_id: str, period_start: date, period_end: dat
         db.query(Case)
         .filter(
             Case.org_id == org_id,
-            Case.closed_at >= datetime.combine(period_start, datetime.min.time()).replace(tzinfo=timezone.utc),
-            Case.closed_at <= datetime.combine(period_end, datetime.max.time()).replace(tzinfo=timezone.utc),
+            Case.closed_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            Case.closed_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
         )
         .all()
     )
@@ -85,13 +102,21 @@ def _cases_section(db: Session, org_id: str, period_start: date, period_end: dat
     }
 
 
-def _smr_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
-    from app.models.report import SMRReport, ReportStatus
+def _smr_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.report import ReportStatus, SMRReport
 
     def _in_period(q, model):
         return q.filter(
-            model.created_at >= datetime.combine(period_start, datetime.min.time()).replace(tzinfo=timezone.utc),
-            model.created_at <= datetime.combine(period_end, datetime.max.time()).replace(tzinfo=timezone.utc),
+            model.created_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            model.created_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
         )
 
     base = db.query(SMRReport).filter_by(org_id=org_id)
@@ -99,7 +124,9 @@ def _smr_section(db: Session, org_id: str, period_start: date, period_end: date)
     all_smrs = base.all()
 
     lodged = [s for s in period_smrs if s.smr_lodged]
-    pending_mlro = [s for s in all_smrs if not s.smr_lodged and s.status == ReportStatus.draft]
+    pending_mlro = [
+        s for s in all_smrs if not s.smr_lodged and s.status == ReportStatus.draft
+    ]
     submitted = [s for s in all_smrs if s.status == ReportStatus.submitted]
 
     return {
@@ -107,7 +134,9 @@ def _smr_section(db: Session, org_id: str, period_start: date, period_end: date)
         "total_lodged_all_time": sum(1 for s in all_smrs if s.smr_lodged),
         "pending_mlro_sign_off": len(pending_mlro),
         "submitted_to_austrac": len(submitted),
-        "is_terrorism_related_period": sum(1 for s in period_smrs if s.is_terrorism_related),
+        "is_terrorism_related_period": sum(
+            1 for s in period_smrs if s.is_terrorism_related
+        ),
         "draft_smrs": sum(1 for s in all_smrs if s.status == ReportStatus.draft),
         "disclaimer": (
             "SMR lodgement decisions are made exclusively by the reporting entity's MLRO. "
@@ -116,21 +145,33 @@ def _smr_section(db: Session, org_id: str, period_start: date, period_end: date)
     }
 
 
-def _customers_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
-    from app.models.customer import Customer, CustomerStatus, RiskLevel, CDDLevel
+def _customers_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.customer import CDDLevel, Customer, CustomerStatus, RiskLevel
 
-    all_active = db.query(Customer).filter_by(org_id=org_id, status=CustomerStatus.active).all()
+    all_active = (
+        db.query(Customer).filter_by(org_id=org_id, status=CustomerStatus.active).all()
+    )
     new_period = (
         db.query(Customer)
         .filter(
             Customer.org_id == org_id,
-            Customer.created_at >= datetime.combine(period_start, datetime.min.time()).replace(tzinfo=timezone.utc),
-            Customer.created_at <= datetime.combine(period_end, datetime.max.time()).replace(tzinfo=timezone.utc),
+            Customer.created_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            Customer.created_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
         )
         .all()
     )
 
-    high_risk = [c for c in all_active if c.risk_level in (RiskLevel.high, RiskLevel.critical)]
+    high_risk = [
+        c for c in all_active if c.risk_level in (RiskLevel.high, RiskLevel.critical)
+    ]
     pep_active = [c for c in all_active if c.is_pep]
     sanctioned = [c for c in all_active if c.is_sanctions_match]
     edd_customers = [c for c in all_active if c.cdd_level == CDDLevel.edd]
@@ -139,7 +180,9 @@ def _customers_section(db: Session, org_id: str, period_start: date, period_end:
         "total_active": len(all_active),
         "new_this_period": len(new_period),
         "by_risk_level": {
-            "critical": sum(1 for c in all_active if c.risk_level == RiskLevel.critical),
+            "critical": sum(
+                1 for c in all_active if c.risk_level == RiskLevel.critical
+            ),
             "high": sum(1 for c in all_active if c.risk_level == RiskLevel.high),
             "medium": sum(1 for c in all_active if c.risk_level == RiskLevel.medium),
             "low": sum(1 for c in all_active if c.risk_level == RiskLevel.low),
@@ -148,31 +191,47 @@ def _customers_section(db: Session, org_id: str, period_start: date, period_end:
         "pep_customers": len(pep_active),
         "sanctions_matches_active": len(sanctioned),
         "edd_customers": len(edd_customers),
-        "high_risk_percentage": round(len(high_risk) / max(len(all_active), 1) * 100, 1),
+        "high_risk_percentage": round(
+            len(high_risk) / max(len(all_active), 1) * 100, 1
+        ),
     }
 
 
-def _alerts_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
-    from app.models.monitoring import TransactionAlert, AlertStatus, AlertSeverity
+def _alerts_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.monitoring import AlertSeverity, AlertStatus, TransactionAlert
 
     period_alerts = (
         db.query(TransactionAlert)
         .filter(
             TransactionAlert.org_id == org_id,
-            TransactionAlert.created_at >= datetime.combine(period_start, datetime.min.time()).replace(tzinfo=timezone.utc),
-            TransactionAlert.created_at <= datetime.combine(period_end, datetime.max.time()).replace(tzinfo=timezone.utc),
+            TransactionAlert.created_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            TransactionAlert.created_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
         )
         .all()
     )
 
-    open_alerts = db.query(TransactionAlert).filter(
-        TransactionAlert.org_id == org_id,
-        TransactionAlert.status == AlertStatus.open,
-    ).all()
+    open_alerts = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.org_id == org_id,
+            TransactionAlert.status == AlertStatus.open,
+        )
+        .all()
+    )
 
     escalated = [a for a in period_alerts if a.status == AlertStatus.escalated]
     cleared = [a for a in period_alerts if a.status == AlertStatus.cleared]
-    false_positive = [a for a in period_alerts if a.status == AlertStatus.false_positive]
+    false_positive = [
+        a for a in period_alerts if a.status == AlertStatus.false_positive
+    ]
 
     return {
         "alerts_raised_period": len(period_alerts),
@@ -180,41 +239,48 @@ def _alerts_section(db: Session, org_id: str, period_start: date, period_end: da
         "escalated_to_case_period": len(escalated),
         "cleared_period": len(cleared),
         "false_positives_period": len(false_positive),
-        "escalation_rate_pct": round(len(escalated) / max(len(period_alerts), 1) * 100, 1),
-        "false_positive_rate_pct": round(len(false_positive) / max(len(period_alerts), 1) * 100, 1),
+        "escalation_rate_pct": round(
+            len(escalated) / max(len(period_alerts), 1) * 100, 1
+        ),
+        "false_positive_rate_pct": round(
+            len(false_positive) / max(len(period_alerts), 1) * 100, 1
+        ),
         "by_severity": {
-            "critical": sum(1 for a in period_alerts if a.severity == AlertSeverity.critical),
+            "critical": sum(
+                1 for a in period_alerts if a.severity == AlertSeverity.critical
+            ),
             "high": sum(1 for a in period_alerts if a.severity == AlertSeverity.high),
-            "medium": sum(1 for a in period_alerts if a.severity == AlertSeverity.medium),
+            "medium": sum(
+                1 for a in period_alerts if a.severity == AlertSeverity.medium
+            ),
             "low": sum(1 for a in period_alerts if a.severity == AlertSeverity.low),
         },
     }
 
 
-def _training_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
-    from app.models.governance_training import GovernanceTrainingRecord, TrainingAssignment
+def _training_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.governance_training import (
+        GovernanceTrainingRecord,
+        TrainingAssignment,
+    )
     from app.models.governance_training import TrainingStatus as GovTrainingStatus
 
-    assignments = (
-        db.query(TrainingAssignment)
-        .filter_by(org_id=org_id)
-        .all()
-    )
+    assignments = db.query(TrainingAssignment).filter_by(org_id=org_id).all()
 
-    records = (
-        db.query(GovernanceTrainingRecord)
-        .filter_by(org_id=org_id)
-        .all()
-    )
+    records = db.query(GovernanceTrainingRecord).filter_by(org_id=org_id).all()
 
     completed = [r for r in records if r.status == GovTrainingStatus.completed]
     overdue_assignments = [
-        a for a in assignments
+        a
+        for a in assignments
         if a.due_date and a.due_date < date.today() and a.status != "completed"
     ]
 
     period_completions = [
-        r for r in completed
+        r
+        for r in completed
         if r.completion_date and period_start <= r.completion_date <= period_end
     ]
 
@@ -231,7 +297,9 @@ def _training_section(db: Session, org_id: str, period_start: date, period_end: 
     }
 
 
-def _policies_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
+def _policies_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
     from app.models.governance import Policy, PolicyLifecycleStatus
 
     policies = db.query(Policy).filter_by(org_id=org_id).all()
@@ -239,18 +307,24 @@ def _policies_section(db: Session, org_id: str, period_start: date, period_end: 
 
     active = [p for p in policies if p.status == PolicyLifecycleStatus.approved]
     overdue_review = [
-        p for p in active
-        if p.review_due_date and p.review_due_date < today
+        p for p in active if p.review_due_date and p.review_due_date < today
     ]
     due_next_30 = [
-        p for p in active
-        if p.review_due_date and today <= p.review_due_date <= date(today.year, today.month + 1 if today.month < 12 else 1, today.day)
+        p
+        for p in active
+        if p.review_due_date
+        and today
+        <= p.review_due_date
+        <= date(today.year, today.month + 1 if today.month < 12 else 1, today.day)
     ]
-    under_review = [p for p in policies if p.status == PolicyLifecycleStatus.under_review]
+    under_review = [
+        p for p in policies if p.status == PolicyLifecycleStatus.under_review
+    ]
     draft = [p for p in policies if p.status == PolicyLifecycleStatus.draft]
 
     period_updated = [
-        p for p in policies
+        p
+        for p in policies
         if p.updated_at and period_start <= p.updated_at.date() <= period_end
     ]
 
@@ -269,9 +343,13 @@ def _policies_section(db: Session, org_id: str, period_start: date, period_end: 
     }
 
 
-def _controls_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
+def _controls_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
     from app.models.governance_controls import (
-        GovernanceControl, ControlTest, ControlEffectiveness,
+        ControlEffectiveness,
+        ControlTest,
+        GovernanceControl,
     )
 
     controls = db.query(GovernanceControl).filter_by(org_id=org_id).all()
@@ -283,8 +361,14 @@ def _controls_section(db: Session, org_id: str, period_start: date, period_end: 
             db.query(ControlTest)
             .filter(
                 ControlTest.control_id.in_(control_ids),
-                ControlTest.tested_at >= datetime.combine(period_start, datetime.min.time()).replace(tzinfo=timezone.utc),
-                ControlTest.tested_at <= datetime.combine(period_end, datetime.max.time()).replace(tzinfo=timezone.utc),
+                ControlTest.tested_at
+                >= datetime.combine(period_start, datetime.min.time()).replace(
+                    tzinfo=timezone.utc
+                ),
+                ControlTest.tested_at
+                <= datetime.combine(period_end, datetime.max.time()).replace(
+                    tzinfo=timezone.utc
+                ),
             )
             .all()
         )
@@ -300,14 +384,17 @@ def _controls_section(db: Session, org_id: str, period_start: date, period_end: 
             effectiveness_map[c.effectiveness] += 1
 
     avg_score = None
-    scored = [c for c in controls if hasattr(c, "effectiveness_score") and c.effectiveness_score is not None]
+    scored = [
+        c
+        for c in controls
+        if hasattr(c, "effectiveness_score") and c.effectiveness_score is not None
+    ]
     if scored:
         avg_score = round(sum(c.effectiveness_score for c in scored) / len(scored), 1)
 
     key_controls = [c for c in controls if c.is_key_control]
     ineffective_key = [
-        c for c in key_controls
-        if c.effectiveness == ControlEffectiveness.ineffective
+        c for c in key_controls if c.effectiveness == ControlEffectiveness.ineffective
     ]
 
     return {
@@ -316,8 +403,12 @@ def _controls_section(db: Session, org_id: str, period_start: date, period_end: 
         "tests_conducted_period": len(tests_period),
         "effectiveness_breakdown": {
             "effective": effectiveness_map.get(ControlEffectiveness.effective, 0),
-            "largely_effective": effectiveness_map.get(ControlEffectiveness.largely_effective, 0),
-            "partially_effective": effectiveness_map.get(ControlEffectiveness.partially_effective, 0),
+            "largely_effective": effectiveness_map.get(
+                ControlEffectiveness.largely_effective, 0
+            ),
+            "partially_effective": effectiveness_map.get(
+                ControlEffectiveness.partially_effective, 0
+            ),
             "ineffective": effectiveness_map.get(ControlEffectiveness.ineffective, 0),
         },
         "average_effectiveness_score": avg_score,
@@ -329,10 +420,16 @@ def _controls_section(db: Session, org_id: str, period_start: date, period_end: 
     }
 
 
-def _independent_review_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
+def _independent_review_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
     from app.models.independent_review import (
-        IndependentReview, ReviewFinding, ReviewAction,
-        ReviewStatus, FindingStatus, ActionStatus,
+        ActionStatus,
+        FindingStatus,
+        IndependentReview,
+        ReviewAction,
+        ReviewFinding,
+        ReviewStatus,
     )
 
     reviews = db.query(IndependentReview).filter_by(org_id=org_id).all()
@@ -340,16 +437,20 @@ def _independent_review_section(db: Session, org_id: str, period_start: date, pe
 
     findings = db.query(ReviewFinding).filter_by(org_id=org_id).all()
     open_findings = [
-        f for f in findings
+        f
+        for f in findings
         if f.status not in (FindingStatus.closed, FindingStatus.accepted_risk)
     ]
 
     actions = db.query(ReviewAction).filter_by(org_id=org_id).all()
     today = date.today()
     overdue_actions = [
-        a for a in actions
-        if a.due_date and a.due_date < today
-        and a.status not in (ActionStatus.completed, ActionStatus.verified, ActionStatus.cancelled)
+        a
+        for a in actions
+        if a.due_date
+        and a.due_date < today
+        and a.status
+        not in (ActionStatus.completed, ActionStatus.verified, ActionStatus.cancelled)
     ]
     pending_verification = [a for a in actions if a.status == ActionStatus.completed]
 
@@ -368,17 +469,25 @@ def _independent_review_section(db: Session, org_id: str, period_start: date, pe
     }
 
 
-def _regulatory_reporting_section(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
-    from app.models.report import IFTIReport, TTRReport, ReportStatus
-    from app.models.ifti_e import IFTIERecord, IFTIEStatus
+def _regulatory_reporting_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.ifti_e import IFTIERecord
+    from app.models.report import IFTIReport, ReportStatus, TTRReport
 
     def _period_count(model, status_field="status"):
         return (
             db.query(model)
             .filter(
                 model.org_id == org_id,
-                model.created_at >= datetime.combine(period_start, datetime.min.time()).replace(tzinfo=timezone.utc),
-                model.created_at <= datetime.combine(period_end, datetime.max.time()).replace(tzinfo=timezone.utc),
+                model.created_at
+                >= datetime.combine(period_start, datetime.min.time()).replace(
+                    tzinfo=timezone.utc
+                ),
+                model.created_at
+                <= datetime.combine(period_end, datetime.max.time()).replace(
+                    tzinfo=timezone.utc
+                ),
             )
             .count()
         )
@@ -409,7 +518,10 @@ def _regulatory_reporting_section(db: Session, org_id: str, period_start: date, 
 
 # ── Main generators ───────────────────────────────────────────────────────────
 
-def _base_snapshot(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
+
+def _base_snapshot(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
     """Shared data sections used across all report types."""
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -422,12 +534,18 @@ def _base_snapshot(db: Session, org_id: str, period_start: date, period_end: dat
         "training": _training_section(db, org_id, period_start, period_end),
         "policies": _policies_section(db, org_id, period_start, period_end),
         "controls": _controls_section(db, org_id, period_start, period_end),
-        "independent_reviews": _independent_review_section(db, org_id, period_start, period_end),
-        "regulatory_reporting": _regulatory_reporting_section(db, org_id, period_start, period_end),
+        "independent_reviews": _independent_review_section(
+            db, org_id, period_start, period_end
+        ),
+        "regulatory_reporting": _regulatory_reporting_section(
+            db, org_id, period_start, period_end
+        ),
     }
 
 
-def generate_board_aml_snapshot(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
+def generate_board_aml_snapshot(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
     """
     Board AML Report — quarterly executive-level view.
     Focuses on headline metrics, risks, and board-action items.
@@ -442,17 +560,29 @@ def generate_board_aml_snapshot(db: Session, org_id: str, period_start: date, pe
 
     attention_items = []
     if cases["overdue_cases"] > 0:
-        attention_items.append(f"{cases['overdue_cases']} overdue investigation case(s) requiring management attention")
+        attention_items.append(
+            f"{cases['overdue_cases']} overdue investigation case(s) requiring management attention"
+        )
     if cases["smr_candidates_open"] > 0:
-        attention_items.append(f"{cases['smr_candidates_open']} open SMR candidate case(s) pending MLRO decision")
+        attention_items.append(
+            f"{cases['smr_candidates_open']} open SMR candidate case(s) pending MLRO decision"
+        )
     if customers["sanctions_matches_active"] > 0:
-        attention_items.append(f"{customers['sanctions_matches_active']} active customer(s) with sanctions match — EDD required")
+        attention_items.append(
+            f"{customers['sanctions_matches_active']} active customer(s) with sanctions match — EDD required"
+        )
     if controls["ineffective_key_controls"] > 0:
-        attention_items.append(f"{controls['ineffective_key_controls']} key control(s) rated Ineffective")
+        attention_items.append(
+            f"{controls['ineffective_key_controls']} key control(s) rated Ineffective"
+        )
     if reviews["open_findings_by_risk"]["critical"] > 0:
-        attention_items.append(f"{reviews['open_findings_by_risk']['critical']} critical independent review finding(s) unresolved")
+        attention_items.append(
+            f"{reviews['open_findings_by_risk']['critical']} critical independent review finding(s) unresolved"
+        )
     if snap["policies"]["overdue_review"] > 0:
-        attention_items.append(f"{snap['policies']['overdue_review']} AML/CTF polic(ies) overdue for review")
+        attention_items.append(
+            f"{snap['policies']['overdue_review']} AML/CTF polic(ies) overdue for review"
+        )
 
     snap["board_attention_items"] = attention_items
     snap["report_type"] = "board_aml"
@@ -464,7 +594,9 @@ def generate_board_aml_snapshot(db: Session, org_id: str, period_start: date, pe
     return snap
 
 
-def generate_quarterly_compliance_snapshot(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
+def generate_quarterly_compliance_snapshot(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
     """
     Quarterly Compliance Report — detailed operational view for compliance committee.
     """
@@ -477,7 +609,9 @@ def generate_quarterly_compliance_snapshot(db: Session, org_id: str, period_star
     return snap
 
 
-def generate_risk_committee_snapshot(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
+def generate_risk_committee_snapshot(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
     """
     Risk Committee Report — control gaps, emerging risks, risk appetite analysis.
     """
@@ -491,37 +625,45 @@ def generate_risk_committee_snapshot(db: Session, org_id: str, period_start: dat
     risk_indicators = []
     high_risk_pct = customers.get("high_risk_percentage", 0)
     if high_risk_pct > 20:
-        risk_indicators.append({
-            "indicator": "High-risk customer concentration",
-            "value": f"{high_risk_pct}% of active customers rated high/critical risk",
-            "threshold": "20%",
-            "status": "above_threshold",
-        })
+        risk_indicators.append(
+            {
+                "indicator": "High-risk customer concentration",
+                "value": f"{high_risk_pct}% of active customers rated high/critical risk",
+                "threshold": "20%",
+                "status": "above_threshold",
+            }
+        )
 
     if controls.get("ineffective_key_controls", 0) > 0:
-        risk_indicators.append({
-            "indicator": "Key control failures",
-            "value": f"{controls['ineffective_key_controls']} key control(s) ineffective",
-            "threshold": "0",
-            "status": "breach",
-        })
+        risk_indicators.append(
+            {
+                "indicator": "Key control failures",
+                "value": f"{controls['ineffective_key_controls']} key control(s) ineffective",
+                "threshold": "0",
+                "status": "breach",
+            }
+        )
 
     avg_score = controls.get("average_effectiveness_score")
     if avg_score and avg_score < 70:
-        risk_indicators.append({
-            "indicator": "Control portfolio effectiveness",
-            "value": f"Average effectiveness score {avg_score}/100",
-            "threshold": "70",
-            "status": "below_threshold",
-        })
+        risk_indicators.append(
+            {
+                "indicator": "Control portfolio effectiveness",
+                "value": f"Average effectiveness score {avg_score}/100",
+                "threshold": "70",
+                "status": "below_threshold",
+            }
+        )
 
     if reviews.get("overdue_remediation_actions", 0) > 0:
-        risk_indicators.append({
-            "indicator": "Overdue remediation actions",
-            "value": f"{reviews['overdue_remediation_actions']} independent review action(s) overdue",
-            "threshold": "0",
-            "status": "above_threshold",
-        })
+        risk_indicators.append(
+            {
+                "indicator": "Overdue remediation actions",
+                "value": f"{reviews['overdue_remediation_actions']} independent review action(s) overdue",
+                "threshold": "0",
+                "status": "above_threshold",
+            }
+        )
 
     snap["risk_indicators"] = risk_indicators
     snap["control_gaps"] = [
@@ -536,7 +678,9 @@ def generate_risk_committee_snapshot(db: Session, org_id: str, period_start: dat
     return snap
 
 
-def generate_annual_aml_snapshot(db: Session, org_id: str, period_start: date, period_end: date) -> dict:
+def generate_annual_aml_snapshot(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
     """
     Annual AML/CTF Program Report — comprehensive year-end review.
     Required for MLRO annual certification under AML/CTF Rules.
@@ -573,10 +717,10 @@ def generate_annual_aml_snapshot(db: Session, org_id: str, period_start: date, p
 
 
 SNAPSHOT_GENERATORS = {
-    "board_aml":            generate_board_aml_snapshot,
+    "board_aml": generate_board_aml_snapshot,
     "quarterly_compliance": generate_quarterly_compliance_snapshot,
-    "risk_committee":       generate_risk_committee_snapshot,
-    "annual_aml":           generate_annual_aml_snapshot,
+    "risk_committee": generate_risk_committee_snapshot,
+    "annual_aml": generate_annual_aml_snapshot,
 }
 
 

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Shield, ArrowRight, Loader2, AlertCircle, Mail } from 'lucide-react'
-import { loginWithPassword, requestMagicLink, verifyMagicLink } from '@/lib/auth'
+import { loginWithPassword, requestMagicLink, verifyMagicLink, oauthLoginUrl } from '@/lib/auth'
 
 type Mode = 'password' | 'magic-request' | 'magic-verify'
 
@@ -164,6 +164,18 @@ export default function LoginPage() {
               </button>
             </form>
           )}
+
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="text-xs text-white/30">or continue with</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <a href={oauthLoginUrl('google')}
+              className="btn-secondary justify-center py-2.5 text-sm">Google</a>
+            <a href={oauthLoginUrl('microsoft')}
+              className="btn-secondary justify-center py-2.5 text-sm">Microsoft</a>
+          </div>
         </div>
 
         <p className="text-center text-white/40 text-sm mt-6">

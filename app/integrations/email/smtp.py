@@ -1,4 +1,5 @@
 """SMTP email provider. Works with any SMTP relay (SendGrid, Postmark, SES, etc.)."""
+
 from __future__ import annotations
 
 import logging
@@ -7,7 +8,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.config import settings
-from .base import EmailProvider, EmailMessage
+
+from .base import EmailMessage, EmailProvider
 
 log = logging.getLogger("verigo.integrations.email.smtp")
 

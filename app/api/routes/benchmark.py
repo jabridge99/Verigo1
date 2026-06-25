@@ -13,19 +13,28 @@ have contributed data for that metric/period (MIN_ORG_COUNT_FOR_BENCHMARK).
 Network effect: every org that joins VeriGo improves benchmark accuracy
 for all other orgs in the same industry.
 """
-from typing import Optional, List
+
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_current_user, require_admin, require_mlro_or_above,
-    require_compliance_or_above, require_analyst_or_above, get_db,
+    get_db,
+    require_admin,
+    require_analyst_or_above,
+    require_compliance_or_above,
+    require_mlro_or_above,
+)
+from app.models.benchmark import (
+    METRIC_META,
+    MIN_ORG_COUNT_FOR_BENCHMARK,
+    BenchmarkMetric,
+    IndustryBenchmark,
+    OrgMetricsSnapshot,
+    SnapshotPeriod,
 )
 from app.models.user import User
-from app.models.benchmark import (
-    BenchmarkMetric, SnapshotPeriod, METRIC_META,
-    MIN_ORG_COUNT_FOR_BENCHMARK, OrgMetricsSnapshot, IndustryBenchmark,
-)
 from app.services import benchmark_service as svc
 
 router = APIRouter(prefix="/benchmarks", tags=["Analytics & Benchmarking"])
@@ -35,8 +44,11 @@ router = APIRouter(prefix="/benchmarks", tags=["Analytics & Benchmarking"])
 # ORG BENCHMARK DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/dashboard",
-            summary="Your organisation's metrics vs industry benchmarks with percentile position")
+
+@router.get(
+    "/dashboard",
+    summary="Your organisation's metrics vs industry benchmarks with percentile position",
+)
 def get_dashboard(
     period_label: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -61,8 +73,10 @@ def get_dashboard(
         raise HTTPException(404, str(exc))
 
 
-@router.get("/dashboard/history/{metric}",
-            summary="Your metric trend over time — chart data for a single metric")
+@router.get(
+    "/dashboard/history/{metric}",
+    summary="Your metric trend over time — chart data for a single metric",
+)
 def get_metric_history(
     metric: str,
     periods: int = 12,
@@ -75,20 +89,27 @@ def get_metric_history(
     Also returns trend direction: improving | worsening | stable | insufficient_data
     """
     if metric not in METRIC_META:
-        raise HTTPException(422, f"Unknown metric '{metric}'. Valid metrics: {list(METRIC_META.keys())}")
+        raise HTTPException(
+            422, f"Unknown metric '{metric}'. Valid metrics: {list(METRIC_META.keys())}"
+        )
     return svc.get_org_metric_history(db, current_user.org_id, metric, min(periods, 52))
 
 
-@router.get("/dashboard/snapshots",
-            summary="List all metric snapshots captured for your org")
+@router.get(
+    "/dashboard/snapshots", summary="List all metric snapshots captured for your org"
+)
 def list_snapshots(
     limit: int = 20,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    snaps = db.query(OrgMetricsSnapshot).filter_by(
-        org_id=current_user.org_id
-    ).order_by(OrgMetricsSnapshot.captured_at.desc()).limit(limit).all()
+    snaps = (
+        db.query(OrgMetricsSnapshot)
+        .filter_by(org_id=current_user.org_id)
+        .order_by(OrgMetricsSnapshot.captured_at.desc())
+        .limit(limit)
+        .all()
+    )
     return [
         {
             "id": s.id,
@@ -110,8 +131,11 @@ def list_snapshots(
 # INDUSTRY BENCHMARKS (anonymised)
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/industry/{industry}",
-            summary="Industry-wide benchmark data — anonymised aggregate stats only")
+
+@router.get(
+    "/industry/{industry}",
+    summary="Industry-wide benchmark data — anonymised aggregate stats only",
+)
 def get_industry_benchmark(
     industry: str,
     period_label: Optional[str] = None,
@@ -131,40 +155,53 @@ def get_industry_benchmark(
     return svc.get_industry_overview(db, industry, period_label)
 
 
-@router.get("/industry",
-            summary="List all industries with available benchmark data")
+@router.get("/industry", summary="List all industries with available benchmark data")
 def list_industries_with_benchmarks(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    industries = db.query(IndustryBenchmark.industry).filter_by(
-        is_published=True
-    ).distinct().all()
+    industries = (
+        db.query(IndustryBenchmark.industry)
+        .filter_by(is_published=True)
+        .distinct()
+        .all()
+    )
     return {
         "industries": [r[0] for r in industries],
         "note": f"Benchmarks require a minimum of {MIN_ORG_COUNT_FOR_BENCHMARK} organisations per industry.",
     }
 
 
-@router.get("/industry/{industry}/periods",
-            summary="List available benchmark periods for an industry")
+@router.get(
+    "/industry/{industry}/periods",
+    summary="List available benchmark periods for an industry",
+)
 def list_benchmark_periods(
     industry: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    periods = db.query(
-        IndustryBenchmark.period_label,
-        IndustryBenchmark.period_start,
-        IndustryBenchmark.period_end,
-    ).filter_by(industry=industry, is_published=True).distinct(
-        IndustryBenchmark.period_label
-    ).order_by(IndustryBenchmark.period_start.desc()).limit(52).all()
+    periods = (
+        db.query(
+            IndustryBenchmark.period_label,
+            IndustryBenchmark.period_start,
+            IndustryBenchmark.period_end,
+        )
+        .filter_by(industry=industry, is_published=True)
+        .distinct(IndustryBenchmark.period_label)
+        .order_by(IndustryBenchmark.period_start.desc())
+        .limit(52)
+        .all()
+    )
 
     return {
         "industry": industry,
         "periods": [
-            {"period_label": p[0], "period_start": p[1].isoformat(), "period_end": p[2].isoformat()}
+            {
+                "period_label": p[0],
+                "period_start": p[1].isoformat(),
+                "period_end": p[2].isoformat(),
+            }
             for p in periods
         ],
     }
@@ -174,8 +211,11 @@ def list_benchmark_periods(
 # SNAPSHOT CAPTURE & BENCHMARK COMPUTATION (admin / scheduler)
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.post("/capture-snapshot",
-             summary="Capture a metrics snapshot for this org (also called by scheduler)")
+
+@router.post(
+    "/capture-snapshot",
+    summary="Capture a metrics snapshot for this org (also called by scheduler)",
+)
 def capture_snapshot(
     period: SnapshotPeriod = SnapshotPeriod.weekly,
     db: Session = Depends(get_db),
@@ -200,8 +240,10 @@ def capture_snapshot(
     }
 
 
-@router.post("/capture-all-snapshots",
-             summary="Capture snapshots for ALL active organisations (admin — run from scheduler)")
+@router.post(
+    "/capture-all-snapshots",
+    summary="Capture snapshots for ALL active organisations (admin — run from scheduler)",
+)
 def capture_all_snapshots(
     period: SnapshotPeriod = SnapshotPeriod.weekly,
     db: Session = Depends(get_db),
@@ -215,8 +257,10 @@ def capture_all_snapshots(
     return svc.capture_all_org_snapshots(db, period)
 
 
-@router.post("/compute-benchmarks",
-             summary="Compute industry benchmark distributions from captured snapshots (admin — run after capture)")
+@router.post(
+    "/compute-benchmarks",
+    summary="Compute industry benchmark distributions from captured snapshots (admin — run after capture)",
+)
 def compute_benchmarks(
     period_label: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -235,8 +279,11 @@ def compute_benchmarks(
 # METADATA
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/metrics",
-            summary="List all benchmark metrics with labels, units, and interpretation")
+
+@router.get(
+    "/metrics",
+    summary="List all benchmark metrics with labels, units, and interpretation",
+)
 def list_metrics():
     return {
         "metrics": [

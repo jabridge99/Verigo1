@@ -18,7 +18,7 @@ class AuditLogCreate(BaseModel):
 
 
 class AuditLogResponse(BaseModel):
-    id: int
+    id: Any
     log_id: str
     action: str
     entity_type: str

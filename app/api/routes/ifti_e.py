@@ -42,25 +42,26 @@ _SUBMITTER = _require_roles(UserRole.admin, UserRole.mlro)
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+
 class IFTIECreate(BaseModel):
     direction: IFTIEDirection
     mode: IFTIEMode = IFTIEMode.structured
-    date_received: str   # DD/MM/YYYY
+    date_received: str  # DD/MM/YYYY
     date_available: str  # DD/MM/YYYY
     currency_code: str = "AUD"
     total_amount: float
     transaction_reference: Optional[str] = None
-    details_of_payment: Optional[str] = None       # max 140 chars
+    details_of_payment: Optional[str] = None  # max 140 chars
     sender_to_receiver_info: Optional[str] = None
 
     # Swift mode
     swift_msg: Optional[str] = None
-    payer_same_as_swift_ord_cust: Optional[str] = None   # Yes/No
+    payer_same_as_swift_ord_cust: Optional[str] = None  # Yes/No
 
     # Payer
     payer_full_name: Optional[str] = None
     payer_other_name: Optional[str] = None
-    payer_dob: Optional[str] = None   # DD/MM/YYYY
+    payer_dob: Optional[str] = None  # DD/MM/YYYY
     payer_address: Optional[str] = None
     payer_city: Optional[str] = None
     payer_state: Optional[str] = None
@@ -89,7 +90,7 @@ class IFTIECreate(BaseModel):
 
     # Payer institution
     payer_instn_name: Optional[str] = None
-    payer_instn_code: Optional[str] = None   # SWIFT BIC
+    payer_instn_code: Optional[str] = None  # SWIFT BIC
     payer_instn_address: Optional[str] = None
     payer_instn_city: Optional[str] = None
     payer_instn_country: Optional[str] = None
@@ -99,14 +100,14 @@ class IFTIECreate(BaseModel):
 
     # Payee institution (MANDATORY in structured mode)
     payee_instn_name: Optional[str] = None
-    payee_instn_code: Optional[str] = None   # SWIFT BIC
+    payee_instn_code: Optional[str] = None  # SWIFT BIC
     payee_instn_address: Optional[str] = None
     payee_instn_city: Optional[str] = None
     payee_instn_country: Optional[str] = None  # MANDATORY
 
     # Payee
     payee_full_name: Optional[str] = None
-    payee_dob: Optional[str] = None   # DD/MM/YYYY
+    payee_dob: Optional[str] = None  # DD/MM/YYYY
     payee_business_name: Optional[str] = None
     payee_address: Optional[str] = None
     payee_city: Optional[str] = None
@@ -204,6 +205,7 @@ class IFTIEUpdate(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _parse_date(s: Optional[str]) -> Optional[_date_type]:
     if not s:
@@ -313,6 +315,7 @@ def _apply_create(payload: IFTIECreate, record: IFTIERecord) -> None:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @router.get("", response_model=list[dict])
 def list_records(
     direction: Optional[IFTIEDirection] = Query(None),
@@ -320,9 +323,12 @@ def list_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    records = list_ifti_e(db, current_user.organisation_id,
-                          direction=direction,
-                          status=status.value if status else None)
+    records = list_ifti_e(
+        db,
+        current_user.organisation_id,
+        direction=direction,
+        status=status.value if status else None,
+    )
     return [_record_dict(r) for r in records]
 
 
@@ -343,7 +349,9 @@ def create_record(
         if not payload.payee_instn_name:
             raise HTTPException(422, "payee_instn_name is required in structured mode.")
         if not payload.payee_instn_country:
-            raise HTTPException(422, "payee_instn_country is required in structured mode.")
+            raise HTTPException(
+                422, "payee_instn_country is required in structured mode."
+            )
 
     record = IFTIERecord(
         ifti_e_id=f"IFTIE-{uuid.uuid4().hex[:12].upper()}",
@@ -460,9 +468,12 @@ def export_excel_bulk(
     current_user: User = Depends(_WRITER),
 ):
     """Export all matching records into a single AUSTRAC IFTI-E Excel workbook."""
-    records = list_ifti_e(db, current_user.organisation_id,
-                          direction=direction,
-                          status=status.value if status else None)
+    records = list_ifti_e(
+        db,
+        current_user.organisation_id,
+        direction=direction,
+        status=status.value if status else None,
+    )
     if not records:
         raise HTTPException(404, "No IFTI-E records found for the given filters.")
 
@@ -510,7 +521,9 @@ def austrac_payload(
         "swiftMode": {
             "swiftMsg": r.swift_msg,
             "payerSameAsSwiftOrdCust": r.payer_same_as_swift_ord_cust,
-        } if r.mode == IFTIEMode.swift else None,
+        }
+        if r.mode == IFTIEMode.swift
+        else None,
         "payer": {
             "fullName": r.payer_full_name,
             "otherName": r.payer_other_name,
@@ -533,10 +546,20 @@ def austrac_payload(
             "arbn": r.payer_arbn,
             "accountNumber": r.payer_account_number,
             "businessStructure": r.payer_business_structure,
-            "id1": {"type": r.payer_id1_type, "number": r.payer_id1_number,
-                    "issuer": r.payer_id1_issuer} if r.payer_id1_type else None,
-            "id2": {"type": r.payer_id2_type, "number": r.payer_id2_number,
-                    "issuer": r.payer_id2_issuer} if r.payer_id2_type else None,
+            "id1": {
+                "type": r.payer_id1_type,
+                "number": r.payer_id1_number,
+                "issuer": r.payer_id1_issuer,
+            }
+            if r.payer_id1_type
+            else None,
+            "id2": {
+                "type": r.payer_id2_type,
+                "number": r.payer_id2_number,
+                "issuer": r.payer_id2_issuer,
+            }
+            if r.payer_id2_type
+            else None,
             "electronicSource": r.payer_electronic_source,
         },
         "payerInstn": {

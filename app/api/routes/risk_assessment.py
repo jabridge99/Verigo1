@@ -17,6 +17,7 @@ Scoring formula:
 
 Governance disclaimer is displayed on every response and acknowledged on approval.
 """
+
 import logging
 from datetime import date, datetime, timezone
 from typing import List, Optional
@@ -25,19 +26,35 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    Pagination, get_current_user, org_id_for,
-    require_analyst_or_above, require_compliance_or_above, require_mlro_or_above,
+    Pagination,
+    get_current_user,
+    org_id_for,
+    require_analyst_or_above,
+    require_compliance_or_above,
+    require_mlro_or_above,
 )
 from app.db.database import get_db
 from app.models.audit_log import AuditEventType, AuditLog
+from app.models.governance_controls import GovernanceControl
+from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.risk_engine import (
-    AssessmentStatus, MitigationStatus, RiskAssessmentRun, RiskCategory,
-    RiskCategoryType, RiskControl, RiskFactor, RiskFramework,
-    RiskMitigation, RiskRating, RiskScoreHistory, RiskFactorScore,
+    AssessmentStatus,
+    MitigationStatus,
+    RiskAssessmentRun,
+    RiskCategory,
+    RiskCategoryType,
+    RiskFactor,
+    RiskFactorScore,
+    RiskFramework,
+    RiskMitigation,
+    RiskScoreHistory,
 )
 from app.models.user import User
+from app.services.control_effectiveness import governance_rating_to_score
 from app.services.risk_engine import (
-    control_effectiveness_factor, inherent_risk, residual_risk, risk_rating,
+    inherent_risk,
+    residual_risk,
+    risk_rating,
 )
 
 log = logging.getLogger("verigo.api.risk_assessment")
@@ -53,6 +70,7 @@ DISCLAIMER = (
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _get_framework(org_id: str, db: Session) -> RiskFramework:
     fw = db.query(RiskFramework).filter(RiskFramework.org_id == org_id).first()
     if not fw:
@@ -61,10 +79,14 @@ def _get_framework(org_id: str, db: Session) -> RiskFramework:
 
 
 def _get_run(run_id: str, org_id: str, db: Session) -> RiskAssessmentRun:
-    run = db.query(RiskAssessmentRun).filter(
-        RiskAssessmentRun.id == run_id,
-        RiskAssessmentRun.org_id == org_id,
-    ).first()
+    run = (
+        db.query(RiskAssessmentRun)
+        .filter(
+            RiskAssessmentRun.id == run_id,
+            RiskAssessmentRun.org_id == org_id,
+        )
+        .first()
+    )
     if not run:
         raise HTTPException(404, "Assessment run not found")
     return run
@@ -75,9 +97,9 @@ def _calculate_run_scores(run: RiskAssessmentRun, db: Session) -> dict:
     Calculate inherent/residual scores for all categories and overall.
     Returns category_scores dict and overall scores.
     """
-    factor_scores = db.query(RiskFactorScore).filter(
-        RiskFactorScore.assessment_id == run.id
-    ).all()
+    factor_scores = (
+        db.query(RiskFactorScore).filter(RiskFactorScore.assessment_id == run.id).all()
+    )
 
     # Group by category
     category_map: dict[str, list[RiskFactorScore]] = {}
@@ -88,22 +110,31 @@ def _calculate_run_scores(run: RiskAssessmentRun, db: Session) -> dict:
         cat_id = factor.category_id
         category_map.setdefault(cat_id, []).append(fs)
 
-    categories = db.query(RiskCategory).filter(
-        RiskCategory.framework_id == run.framework_id,
-        RiskCategory.is_active == True,
-    ).all()
+    categories = (
+        db.query(RiskCategory)
+        .filter(
+            RiskCategory.framework_id == run.framework_id,
+            RiskCategory.is_active == True,
+        )
+        .all()
+    )
 
     category_weights = run.framework.category_weights or {}
     category_scores: dict[str, dict] = {}
-    total_weight = sum(category_weights.get(c.category_type.value, c.weight) for c in categories)
+    total_weight = sum(
+        category_weights.get(c.category_type.value, c.weight) for c in categories
+    )
 
     for cat in categories:
         cat_weight = category_weights.get(cat.category_type.value, cat.weight)
         scores = category_map.get(cat.id, [])
         if not scores:
             category_scores[cat.category_type.value] = {
-                "inherent": 0.0, "residual": 0.0, "rating": "low",
-                "scored_factors": 0, "total_factors": 0,
+                "inherent": 0.0,
+                "residual": 0.0,
+                "rating": "low",
+                "scored_factors": 0,
+                "total_factors": 0,
             }
             continue
 
@@ -113,7 +144,11 @@ def _calculate_run_scores(run: RiskAssessmentRun, db: Session) -> dict:
             for fs in scores
         ) / max(total_factor_weight, 1)
         cat_residual = sum(
-            (fs.override_residual_score if fs.score_override else fs.residual_risk_score or 0)
+            (
+                fs.override_residual_score
+                if fs.score_override
+                else fs.residual_risk_score or 0
+            )
             * (fs.factor_weight_override or 1.0)
             for fs in scores
         ) / max(total_factor_weight, 1)
@@ -122,26 +157,38 @@ def _calculate_run_scores(run: RiskAssessmentRun, db: Session) -> dict:
             "inherent": round(cat_inherent, 2),
             "residual": round(cat_residual, 2),
             "rating": risk_rating(cat_residual),
-            "scored_factors": sum(1 for fs in scores if fs.likelihood and fs.consequence),
+            "scored_factors": sum(
+                1 for fs in scores if fs.likelihood and fs.consequence
+            ),
             "total_factors": len(scores),
             "weight": cat_weight,
         }
 
     # Overall weighted
     if total_weight == 0:
-        return {"category_scores": category_scores, "overall_inherent": 0.0, "overall_residual": 0.0}
+        return {
+            "category_scores": category_scores,
+            "overall_inherent": 0.0,
+            "overall_residual": 0.0,
+        }
 
-    overall_inherent = sum(
-        category_scores.get(cat.category_type.value, {}).get("inherent", 0.0)
-        * category_weights.get(cat.category_type.value, cat.weight)
-        for cat in categories
-    ) / total_weight
+    overall_inherent = (
+        sum(
+            category_scores.get(cat.category_type.value, {}).get("inherent", 0.0)
+            * category_weights.get(cat.category_type.value, cat.weight)
+            for cat in categories
+        )
+        / total_weight
+    )
 
-    overall_residual = sum(
-        category_scores.get(cat.category_type.value, {}).get("residual", 0.0)
-        * category_weights.get(cat.category_type.value, cat.weight)
-        for cat in categories
-    ) / total_weight
+    overall_residual = (
+        sum(
+            category_scores.get(cat.category_type.value, {}).get("residual", 0.0)
+            * category_weights.get(cat.category_type.value, cat.weight)
+            for cat in categories
+        )
+        / total_weight
+    )
 
     return {
         "category_scores": category_scores,
@@ -152,16 +199,22 @@ def _calculate_run_scores(run: RiskAssessmentRun, db: Session) -> dict:
 
 # ── Framework ─────────────────────────────────────────────────────────────────
 
+
 @router.get("/framework")
 def get_framework(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     fw = _get_framework(org_id_for(current_user), db)
-    categories = db.query(RiskCategory).filter(
-        RiskCategory.framework_id == fw.id,
-        RiskCategory.is_active == True,
-    ).order_by(RiskCategory.sort_order).all()
+    categories = (
+        db.query(RiskCategory)
+        .filter(
+            RiskCategory.framework_id == fw.id,
+            RiskCategory.is_active == True,
+        )
+        .order_by(RiskCategory.sort_order)
+        .all()
+    )
 
     return {
         "id": fw.id,
@@ -176,10 +229,12 @@ def get_framework(
                 "name": c.name,
                 "description": c.description,
                 "weight": fw.category_weights.get(c.category_type.value, c.weight),
-                "factor_count": db.query(RiskFactor).filter(
+                "factor_count": db.query(RiskFactor)
+                .filter(
                     RiskFactor.category_id == c.id,
                     RiskFactor.is_active == True,
-                ).count(),
+                )
+                .count(),
             }
             for c in categories
         ],
@@ -214,6 +269,7 @@ def update_category_weights(
 
 # ── Risk Factors ──────────────────────────────────────────────────────────────
 
+
 @router.get("/framework/categories/{category_id}/factors")
 def list_factors(
     category_id: str,
@@ -222,17 +278,26 @@ def list_factors(
 ):
     oid = org_id_for(current_user)
     fw = _get_framework(oid, db)
-    cat = db.query(RiskCategory).filter(
-        RiskCategory.id == category_id,
-        RiskCategory.framework_id == fw.id,
-    ).first()
+    cat = (
+        db.query(RiskCategory)
+        .filter(
+            RiskCategory.id == category_id,
+            RiskCategory.framework_id == fw.id,
+        )
+        .first()
+    )
     if not cat:
         raise HTTPException(404, "Category not found")
 
-    factors = db.query(RiskFactor).filter(
-        RiskFactor.category_id == category_id,
-        RiskFactor.is_active == True,
-    ).order_by(RiskFactor.sort_order).all()
+    factors = (
+        db.query(RiskFactor)
+        .filter(
+            RiskFactor.category_id == category_id,
+            RiskFactor.is_active == True,
+        )
+        .order_by(RiskFactor.sort_order)
+        .all()
+    )
 
     return [
         {
@@ -263,10 +328,14 @@ def add_custom_factor(
 ):
     oid = org_id_for(current_user)
     fw = _get_framework(oid, db)
-    cat = db.query(RiskCategory).filter(
-        RiskCategory.id == category_id,
-        RiskCategory.framework_id == fw.id,
-    ).first()
+    cat = (
+        db.query(RiskCategory)
+        .filter(
+            RiskCategory.id == category_id,
+            RiskCategory.framework_id == fw.id,
+        )
+        .first()
+    )
     if not cat:
         raise HTTPException(404, "Category not found")
 
@@ -287,6 +356,7 @@ def add_custom_factor(
 
 
 # ── Assessment Runs ───────────────────────────────────────────────────────────
+
 
 @router.post("/assessments", status_code=201)
 def create_assessment(
@@ -316,35 +386,52 @@ def create_assessment(
     db.flush()
 
     # Pre-populate blank factor score records for all active factors
-    categories = db.query(RiskCategory).filter(
-        RiskCategory.framework_id == fw.id,
-        RiskCategory.is_active == True,
-    ).all()
+    categories = (
+        db.query(RiskCategory)
+        .filter(
+            RiskCategory.framework_id == fw.id,
+            RiskCategory.is_active == True,
+        )
+        .all()
+    )
     for cat in categories:
-        factors = db.query(RiskFactor).filter(
-            RiskFactor.category_id == cat.id,
-            RiskFactor.is_active == True,
-        ).all()
+        factors = (
+            db.query(RiskFactor)
+            .filter(
+                RiskFactor.category_id == cat.id,
+                RiskFactor.is_active == True,
+            )
+            .all()
+        )
         for factor in factors:
-            db.add(RiskFactorScore(
-                assessment_id=run.id,
-                factor_id=factor.id,
-                org_id=oid,
-            ))
+            db.add(
+                RiskFactorScore(
+                    assessment_id=run.id,
+                    factor_id=factor.id,
+                    org_id=oid,
+                )
+            )
 
-    db.add(AuditLog(
-        event_type=AuditEventType.risk_score_changed,
-        org_id=oid,
-        actor_id=current_user.id,
-        action="risk.assessment.create",
-        object_type="RiskAssessmentRun",
-        object_id=run.id,
-        new_value={"title": title, "trigger": trigger},
-    ))
+    db.add(
+        AuditLog(
+            event_type=AuditEventType.risk_score_changed,
+            org_id=oid,
+            actor_id=current_user.id,
+            action="risk.assessment.create",
+            object_type="RiskAssessmentRun",
+            object_id=run.id,
+            new_value={"title": title, "trigger": trigger},
+        )
+    )
     db.commit()
     db.refresh(run)
     log.info("Assessment run created: %s org=%s", run.id, oid)
-    return {"id": run.id, "title": run.title, "status": run.status, "disclaimer": DISCLAIMER}
+    return {
+        "id": run.id,
+        "title": run.title,
+        "status": run.status,
+        "disclaimer": DISCLAIMER,
+    }
 
 
 @router.get("/assessments")
@@ -361,11 +448,15 @@ def list_assessments(
     runs = pagination.apply(q.order_by(RiskAssessmentRun.assessment_date.desc())).all()
     return [
         {
-            "id": r.id, "title": r.title, "status": r.status,
-            "assessment_date": r.assessment_date, "trigger": r.trigger,
+            "id": r.id,
+            "title": r.title,
+            "status": r.status,
+            "assessment_date": r.assessment_date,
+            "trigger": r.trigger,
             "overall_residual_rating": r.overall_residual_rating,
             "overall_residual_risk_score": r.overall_residual_risk_score,
-            "approved_by": r.approved_by, "approved_at": r.approved_at,
+            "approved_by": r.approved_by,
+            "approved_at": r.approved_at,
         }
         for r in runs
     ]
@@ -405,6 +496,7 @@ def get_assessment(
 
 # ── Factor Scoring ─────────────────────────────────────────────────────────────
 
+
 @router.get("/assessments/{run_id}/factors")
 def list_factor_scores(
     run_id: str,
@@ -420,10 +512,15 @@ def list_factor_scores(
         factor_ids = [fs.factor_id for fs in q.all()]
         factor_q = db.query(RiskFactor).filter(RiskFactor.id.in_(factor_ids))
         if category_type:
-            cat_ids = [c.id for c in db.query(RiskCategory).filter(
-                RiskCategory.framework_id == run.framework_id,
-                RiskCategory.category_type == category_type,
-            ).all()]
+            cat_ids = [
+                c.id
+                for c in db.query(RiskCategory)
+                .filter(
+                    RiskCategory.framework_id == run.framework_id,
+                    RiskCategory.category_type == category_type,
+                )
+                .all()
+            ]
             factor_q = factor_q.filter(RiskFactor.category_id.in_(cat_ids))
         valid_factor_ids = {f.id for f in factor_q.all()}
         q = q.filter(RiskFactorScore.factor_id.in_(valid_factor_ids))
@@ -435,32 +532,42 @@ def list_factor_scores(
     result = []
     for fs in scores:
         factor = db.query(RiskFactor).filter(RiskFactor.id == fs.factor_id).first()
-        cat = db.query(RiskCategory).filter(RiskCategory.id == factor.category_id).first() if factor else None
-        result.append({
-            "factor_score_id": fs.id,
-            "factor_id": fs.factor_id,
-            "factor_ref": factor.factor_ref if factor else None,
-            "factor_name": factor.name if factor else None,
-            "category": cat.category_type.value if cat else None,
-            "category_name": cat.name if cat else None,
-            "is_mandatory": factor.is_mandatory if factor else False,
-            "suggested_likelihood": factor.suggested_likelihood if factor else None,
-            "suggested_consequence": factor.suggested_consequence if factor else None,
-            "suggested_control_effectiveness": factor.suggested_control_effectiveness if factor else None,
-            "likelihood": fs.likelihood,
-            "consequence": fs.consequence,
-            "control_effectiveness": fs.control_effectiveness,
-            "inherent_risk_score": fs.inherent_risk_score,
-            "residual_risk_score": fs.residual_risk_score,
-            "inherent_rating": fs.inherent_rating,
-            "residual_rating": fs.residual_rating,
-            "score_override": fs.score_override,
-            "override_residual_score": fs.override_residual_score,
-            "override_justification": fs.override_justification,
-            "comments": fs.comments,
-            "scored_by": fs.scored_by,
-            "scored_at": fs.scored_at,
-        })
+        cat = (
+            db.query(RiskCategory).filter(RiskCategory.id == factor.category_id).first()
+            if factor
+            else None
+        )
+        result.append(
+            {
+                "factor_score_id": fs.id,
+                "factor_id": fs.factor_id,
+                "factor_ref": factor.factor_ref if factor else None,
+                "factor_name": factor.name if factor else None,
+                "category": cat.category_type.value if cat else None,
+                "category_name": cat.name if cat else None,
+                "is_mandatory": factor.is_mandatory if factor else False,
+                "suggested_likelihood": factor.suggested_likelihood if factor else None,
+                "suggested_consequence": factor.suggested_consequence
+                if factor
+                else None,
+                "suggested_control_effectiveness": factor.suggested_control_effectiveness
+                if factor
+                else None,
+                "likelihood": fs.likelihood,
+                "consequence": fs.consequence,
+                "control_effectiveness": fs.control_effectiveness,
+                "inherent_risk_score": fs.inherent_risk_score,
+                "residual_risk_score": fs.residual_risk_score,
+                "inherent_rating": fs.inherent_rating,
+                "residual_rating": fs.residual_rating,
+                "score_override": fs.score_override,
+                "override_residual_score": fs.override_residual_score,
+                "override_justification": fs.override_justification,
+                "comments": fs.comments,
+                "scored_by": fs.scored_by,
+                "scored_at": fs.scored_at,
+            }
+        )
     return result
 
 
@@ -471,6 +578,10 @@ def score_factor(
     likelihood: Optional[int] = Query(None, ge=1, le=5),
     consequence: Optional[int] = Query(None, ge=1, le=5),
     control_effectiveness: Optional[int] = Query(None, ge=1, le=5),
+    source_control_id: Optional[str] = Query(
+        None,
+        description="Link to a tested GovernanceControl; derives control_effectiveness from it",
+    ),
     comments: Optional[str] = None,
     override_residual_score: Optional[float] = Query(None, ge=0, le=25),
     override_justification: Optional[str] = None,
@@ -484,18 +595,25 @@ def score_factor(
     """
     run = _get_run(run_id, org_id_for(current_user), db)
     if run.status not in (AssessmentStatus.draft, AssessmentStatus.in_progress):
-        raise HTTPException(422, f"Cannot score factors on a '{run.status.value}' assessment")
+        raise HTTPException(
+            422, f"Cannot score factors on a '{run.status.value}' assessment"
+        )
 
-    fs = db.query(RiskFactorScore).filter(
-        RiskFactorScore.id == factor_score_id,
-        RiskFactorScore.assessment_id == run_id,
-    ).first()
+    fs = (
+        db.query(RiskFactorScore)
+        .filter(
+            RiskFactorScore.id == factor_score_id,
+            RiskFactorScore.assessment_id == run_id,
+        )
+        .first()
+    )
     if not fs:
         raise HTTPException(404, "Factor score record not found")
 
     # Capture previous for history
     prev = {
-        "likelihood": fs.likelihood, "consequence": fs.consequence,
+        "likelihood": fs.likelihood,
+        "consequence": fs.consequence,
         "control_effectiveness": fs.control_effectiveness,
         "residual_risk_score": fs.residual_risk_score,
     }
@@ -504,8 +622,24 @@ def score_factor(
         fs.likelihood = likelihood
     if consequence is not None:
         fs.consequence = consequence
-    if control_effectiveness is not None:
+
+    if source_control_id is not None:
+        control = (
+            db.query(GovernanceControl)
+            .filter(
+                GovernanceControl.id == source_control_id,
+                GovernanceControl.org_id == run.org_id,
+            )
+            .first()
+        )
+        if not control:
+            raise HTTPException(404, "Governance control not found")
+        fs.source_control_id = control.id
+        fs.control_effectiveness = governance_rating_to_score(control.effectiveness)
+    elif control_effectiveness is not None:
+        fs.source_control_id = None
         fs.control_effectiveness = control_effectiveness
+
     if comments is not None:
         fs.comments = comments
 
@@ -523,7 +657,9 @@ def score_factor(
     # Handle override
     if override_residual_score is not None:
         if not override_justification:
-            raise HTTPException(422, "override_justification is required when overriding residual score")
+            raise HTTPException(
+                422, "override_justification is required when overriding residual score"
+            )
         fs.score_override = True
         fs.override_residual_score = override_residual_score
         fs.override_justification = override_justification
@@ -533,27 +669,33 @@ def score_factor(
     fs.scored_at = datetime.now(timezone.utc)
 
     # Immutable history record
-    if any(v != prev.get(k) for k, v in {
-        "likelihood": fs.likelihood, "consequence": fs.consequence,
-        "control_effectiveness": fs.control_effectiveness,
-        "residual_risk_score": fs.residual_risk_score,
-    }.items()):
-        db.add(RiskScoreHistory(
-            factor_score_id=fs.id,
-            org_id=run.org_id,
-            assessment_id=run_id,
-            factor_id=fs.factor_id,
-            previous_likelihood=prev["likelihood"],
-            previous_consequence=prev["consequence"],
-            previous_control_effectiveness=prev["control_effectiveness"],
-            previous_residual_score=prev["residual_risk_score"],
-            new_likelihood=fs.likelihood,
-            new_consequence=fs.consequence,
-            new_control_effectiveness=fs.control_effectiveness,
-            new_residual_score=fs.residual_risk_score,
-            change_reason=comments,
-            changed_by=current_user.id,
-        ))
+    if any(
+        v != prev.get(k)
+        for k, v in {
+            "likelihood": fs.likelihood,
+            "consequence": fs.consequence,
+            "control_effectiveness": fs.control_effectiveness,
+            "residual_risk_score": fs.residual_risk_score,
+        }.items()
+    ):
+        db.add(
+            RiskScoreHistory(
+                factor_score_id=fs.id,
+                org_id=run.org_id,
+                assessment_id=run_id,
+                factor_id=fs.factor_id,
+                previous_likelihood=prev["likelihood"],
+                previous_consequence=prev["consequence"],
+                previous_control_effectiveness=prev["control_effectiveness"],
+                previous_residual_score=prev["residual_risk_score"],
+                new_likelihood=fs.likelihood,
+                new_consequence=fs.consequence,
+                new_control_effectiveness=fs.control_effectiveness,
+                new_residual_score=fs.residual_risk_score,
+                change_reason=comments,
+                changed_by=current_user.id,
+            )
+        )
 
     if run.status == AssessmentStatus.draft:
         run.status = AssessmentStatus.in_progress
@@ -567,7 +709,9 @@ def score_factor(
         "control_effectiveness": fs.control_effectiveness,
         "inherent_risk_score": fs.inherent_risk_score,
         "inherent_rating": fs.inherent_rating,
-        "residual_risk_score": fs.override_residual_score if fs.score_override else fs.residual_risk_score,
+        "residual_risk_score": fs.override_residual_score
+        if fs.score_override
+        else fs.residual_risk_score,
         "residual_rating": fs.residual_rating,
         "score_override": fs.score_override,
         "disclaimer": DISCLAIMER,
@@ -575,6 +719,7 @@ def score_factor(
 
 
 # ── Recalculate ────────────────────────────────────────────────────────────────
+
 
 @router.post("/assessments/{run_id}/calculate")
 def recalculate_scores(
@@ -605,6 +750,7 @@ def recalculate_scores(
 
 # ── Narrative ──────────────────────────────────────────────────────────────────
 
+
 @router.patch("/assessments/{run_id}/narrative")
 def update_narrative(
     run_id: str,
@@ -617,7 +763,9 @@ def update_narrative(
 ):
     run = _get_run(run_id, org_id_for(current_user), db)
     if run.status not in (AssessmentStatus.draft, AssessmentStatus.in_progress):
-        raise HTTPException(422, f"Cannot edit narrative on a '{run.status.value}' assessment")
+        raise HTTPException(
+            422, f"Cannot edit narrative on a '{run.status.value}' assessment"
+        )
     if executive_summary is not None:
         run.executive_summary = executive_summary
     if key_findings is not None:
@@ -632,6 +780,7 @@ def update_narrative(
 
 # ── Mitigations ────────────────────────────────────────────────────────────────
 
+
 @router.post("/assessments/{run_id}/mitigations", status_code=201)
 def add_mitigation(
     run_id: str,
@@ -640,6 +789,9 @@ def add_mitigation(
     owner_id: str,
     due_date: date,
     factor_score_id: Optional[str] = None,
+    library_item_id: Optional[str] = Query(
+        None, description="Optional link to a MitigationLibraryItem catalogue entry"
+    ),
     current_user: User = Depends(require_compliance_or_above),
     db: Session = Depends(get_db),
 ):
@@ -647,6 +799,7 @@ def add_mitigation(
     mit = RiskMitigation(
         assessment_id=run_id,
         factor_score_id=factor_score_id,
+        library_item_id=library_item_id,
         org_id=run.org_id,
         risk_description=risk_description,
         mitigation_action=mitigation_action,
@@ -681,10 +834,14 @@ def update_mitigation(
     db: Session = Depends(get_db),
 ):
     run = _get_run(run_id, org_id_for(current_user), db)
-    mit = db.query(RiskMitigation).filter(
-        RiskMitigation.id == mit_id,
-        RiskMitigation.assessment_id == run_id,
-    ).first()
+    mit = (
+        db.query(RiskMitigation)
+        .filter(
+            RiskMitigation.id == mit_id,
+            RiskMitigation.assessment_id == run_id,
+        )
+        .first()
+    )
     if not mit:
         raise HTTPException(404, "Mitigation not found")
     if status:
@@ -700,6 +857,7 @@ def update_mitigation(
 
 # ── Workflow ───────────────────────────────────────────────────────────────────
 
+
 @router.post("/assessments/{run_id}/submit")
 def submit_assessment(
     run_id: str,
@@ -709,7 +867,10 @@ def submit_assessment(
     """Submit completed assessment for MLRO review."""
     run = _get_run(run_id, org_id_for(current_user), db)
     if run.status != AssessmentStatus.in_progress:
-        raise HTTPException(422, f"Assessment must be 'in_progress' to submit; current: '{run.status.value}'")
+        raise HTTPException(
+            422,
+            f"Assessment must be 'in_progress' to submit; current: '{run.status.value}'",
+        )
 
     # Validate all mandatory factors are scored
     fw = run.framework
@@ -717,10 +878,14 @@ def submit_assessment(
     for cat in fw.categories:
         for factor in cat.factors:
             if factor.is_mandatory and factor.is_active:
-                fs = db.query(RiskFactorScore).filter(
-                    RiskFactorScore.assessment_id == run_id,
-                    RiskFactorScore.factor_id == factor.id,
-                ).first()
+                fs = (
+                    db.query(RiskFactorScore)
+                    .filter(
+                        RiskFactorScore.assessment_id == run_id,
+                        RiskFactorScore.factor_id == factor.id,
+                    )
+                    .first()
+                )
                 if not fs or fs.likelihood is None or fs.consequence is None:
                     unscored_mandatory.append(f"{factor.factor_ref} — {factor.name}")
 
@@ -729,7 +894,7 @@ def submit_assessment(
             422,
             f"Cannot submit: {len(unscored_mandatory)} mandatory factor(s) not scored: "
             f"{', '.join(unscored_mandatory[:5])}"
-            + (" (and more)" if len(unscored_mandatory) > 5 else "")
+            + (" (and more)" if len(unscored_mandatory) > 5 else ""),
         )
 
     # Final calculation before submit
@@ -742,18 +907,20 @@ def submit_assessment(
     run.status = AssessmentStatus.completed
     run.reviewed_by = current_user.id
 
-    db.add(AuditLog(
-        event_type=AuditEventType.risk_score_changed,
-        org_id=run.org_id,
-        actor_id=current_user.id,
-        action="risk.assessment.submit",
-        object_type="RiskAssessmentRun",
-        object_id=run_id,
-        new_value={
-            "overall_residual": run.overall_residual_risk_score,
-            "rating": run.overall_residual_rating,
-        },
-    ))
+    db.add(
+        AuditLog(
+            event_type=AuditEventType.risk_score_changed,
+            org_id=run.org_id,
+            actor_id=current_user.id,
+            action="risk.assessment.submit",
+            object_type="RiskAssessmentRun",
+            object_id=run_id,
+            new_value={
+                "overall_residual": run.overall_residual_risk_score,
+                "rating": run.overall_residual_rating,
+            },
+        )
+    )
     db.commit()
     return {
         "status": run.status,
@@ -774,11 +941,14 @@ def approve_assessment(
     """MLRO/Admin approves the assessment. Disclaimer must be explicitly acknowledged."""
     run = _get_run(run_id, org_id_for(current_user), db)
     if run.status != AssessmentStatus.completed:
-        raise HTTPException(422, f"Assessment must be 'completed' to approve; current: '{run.status.value}'")
+        raise HTTPException(
+            422,
+            f"Assessment must be 'completed' to approve; current: '{run.status.value}'",
+        )
     if not disclaimer_acknowledged:
         raise HTTPException(
             422,
-            "Approver must explicitly acknowledge the governance disclaimer before approving"
+            "Approver must explicitly acknowledge the governance disclaimer before approving",
         )
 
     run.status = AssessmentStatus.approved
@@ -790,15 +960,17 @@ def approve_assessment(
     if next_review_date:
         run.next_review_date = next_review_date
 
-    db.add(AuditLog(
-        event_type=AuditEventType.risk_score_changed,
-        org_id=run.org_id,
-        actor_id=current_user.id,
-        action="risk.assessment.approve",
-        object_type="RiskAssessmentRun",
-        object_id=run_id,
-        new_value={"approved_by": current_user.id, "disclaimer_acknowledged": True},
-    ))
+    db.add(
+        AuditLog(
+            event_type=AuditEventType.risk_score_changed,
+            org_id=run.org_id,
+            actor_id=current_user.id,
+            action="risk.assessment.approve",
+            object_type="RiskAssessmentRun",
+            object_id=run_id,
+            new_value={"approved_by": current_user.id, "disclaimer_acknowledged": True},
+        )
+    )
     db.commit()
     return {
         "status": run.status,
@@ -812,6 +984,7 @@ def approve_assessment(
 
 # ── Score history (immutable audit) ───────────────────────────────────────────
 
+
 @router.get("/assessments/{run_id}/factors/{factor_score_id}/history")
 def get_score_history(
     run_id: str,
@@ -820,13 +993,20 @@ def get_score_history(
     db: Session = Depends(get_db),
 ):
     _get_run(run_id, org_id_for(current_user), db)
-    history = db.query(RiskScoreHistory).filter(
-        RiskScoreHistory.factor_score_id == factor_score_id
-    ).order_by(RiskScoreHistory.changed_at.asc()).all()
+    history = (
+        db.query(RiskScoreHistory)
+        .filter(
+            RiskScoreHistory.factor_score_id == factor_score_id,
+            RiskScoreHistory.org_id == org_id_for(current_user),
+        )
+        .order_by(RiskScoreHistory.changed_at.asc())
+        .all()
+    )
     return history
 
 
 # ── Library (read-only templates) ─────────────────────────────────────────────
+
 
 @router.get("/library")
 def list_library_factors(
@@ -836,9 +1016,104 @@ def list_library_factors(
     db: Session = Depends(get_db),
 ):
     from app.models.risk_engine import RiskLibraryFactor
+
     q = db.query(RiskLibraryFactor)
     if industry:
         q = q.filter(RiskLibraryFactor.industry.in_([industry, "all"]))
     if category_type:
         q = q.filter(RiskLibraryFactor.category_type == category_type)
-    return q.order_by(RiskLibraryFactor.category_type, RiskLibraryFactor.sort_order).all()
+    return q.order_by(
+        RiskLibraryFactor.category_type, RiskLibraryFactor.sort_order
+    ).all()
+
+
+# ── Mitigation Library (reusable catalogue) ────────────────────────────────────
+
+
+@router.get("/mitigation-library")
+def list_mitigation_library(
+    category: Optional[MitigationCategory] = Query(None),
+    industry: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """System-seeded items (org_id null) plus this org's custom additions."""
+    org_id = org_id_for(current_user)
+    q = db.query(MitigationLibraryItem).filter(
+        (MitigationLibraryItem.org_id.is_(None))
+        | (MitigationLibraryItem.org_id == org_id),
+        MitigationLibraryItem.is_active.is_(True),
+    )
+    if category:
+        q = q.filter(MitigationLibraryItem.category == category)
+    items = q.order_by(MitigationLibraryItem.name).all()
+    if industry:
+        items = [
+            i
+            for i in items
+            if not i.applicable_industries or industry in i.applicable_industries
+        ]
+    return items
+
+
+@router.post("/mitigation-library")
+def create_mitigation_library_item(
+    name: str = Query(...),
+    description: Optional[str] = Query(None),
+    category: MitigationCategory = Query(MitigationCategory.other),
+    control_weighting: float = Query(0.1, ge=0.0, le=1.0),
+    applicable_industries: Optional[List[str]] = Query(None),
+    risk_categories: Optional[List[str]] = Query(None),
+    current_user: User = Depends(require_mlro_or_above),
+    db: Session = Depends(get_db),
+):
+    """Director/MLRO/Compliance only — org-scoped custom mitigation catalogue entry."""
+    item = MitigationLibraryItem(
+        org_id=org_id_for(current_user),
+        name=name,
+        description=description,
+        category=category,
+        control_weighting=control_weighting,
+        applicable_industries=applicable_industries or [],
+        risk_categories=risk_categories or [],
+        created_by=current_user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.patch("/mitigation-library/{item_id}")
+def update_mitigation_library_item(
+    item_id: str,
+    name: Optional[str] = Query(None),
+    description: Optional[str] = Query(None),
+    control_weighting: Optional[float] = Query(None, ge=0.0, le=1.0),
+    is_active: Optional[bool] = Query(None),
+    current_user: User = Depends(require_mlro_or_above),
+    db: Session = Depends(get_db),
+):
+    item = (
+        db.query(MitigationLibraryItem)
+        .filter(
+            MitigationLibraryItem.id == item_id,
+            MitigationLibraryItem.org_id == org_id_for(current_user),
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(
+            404, "Mitigation library item not found (system-seeded items are read-only)"
+        )
+    if name is not None:
+        item.name = name
+    if description is not None:
+        item.description = description
+    if control_weighting is not None:
+        item.control_weighting = control_weighting
+    if is_active is not None:
+        item.is_active = is_active
+    db.commit()
+    db.refresh(item)
+    return item

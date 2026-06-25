@@ -1,5 +1,5 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 from alembic import context
 import os, sys
 
@@ -17,7 +17,21 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Override sqlalchemy.url from app settings (respects .env / env vars)
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# configparser treats % as interpolation syntax, so escape literal % chars
+# (e.g. from a URL-encoded password like %40) before handing off the URL.
+# Use the direct (non-pooled) connection for migrations when configured —
+# see migration_database_url in app/config.py for why.
+_migration_url = settings.migration_database_url or settings.database_url
+config.set_main_option("sqlalchemy.url", _migration_url.replace("%", "%%"))
+
+from urllib.parse import urlsplit  # noqa: E402
+
+_parsed = urlsplit(_migration_url)
+print(
+    f"alembic: connecting to {_parsed.hostname}:{_parsed.port} "
+    f"(using {'MIGRATION_DATABASE_URL' if settings.migration_database_url else 'DATABASE_URL'})",
+    flush=True,
+)
 target_metadata = Base.metadata
 
 
@@ -35,12 +49,24 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    # connect_timeout prevents an indefinite hang if the DB is briefly
+    # unreachable (TCP/SSL handshake has no default timeout otherwise).
+    connectable = create_engine(
+        config.get_main_option("sqlalchemy.url"),
         poolclass=pool.NullPool,
+        connect_args={"connect_timeout": 10},
     )
     with connectable.connect() as connection:
+        # Diagnostic: confirm the connection itself is alive (vs. PgBouncer
+        # accepting a socket but never handing off a real backend) before
+        # Alembic's own migration logic runs.
+        connection.exec_driver_sql("SELECT 1")
+        print("alembic: SELECT 1 succeeded — connection is live", flush=True)
+        # exec_driver_sql() autobegins a transaction on the connection; without
+        # ending it here, context.begin_transaction() below sees a transaction
+        # already in progress, assumes an external caller owns it, and never
+        # commits — migrations silently appear to succeed but nothing persists.
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

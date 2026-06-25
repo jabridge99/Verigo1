@@ -5,6 +5,14 @@ Uses an in-memory SQLite database — no external dependencies required.
 Each test gets a fresh, isolated database via transaction rollback.
 """
 
+import os
+
+# Must be set before app.main is imported — the in-process rate limiter is
+# registered as middleware at import time and its token buckets are shared
+# across the whole pytest session (single app instance), so a full test run
+# can otherwise trip it well before any individual test misbehaves.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -51,6 +59,14 @@ TEST_DB_URL = "sqlite:///./test_tvg.db"
 engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
 TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# NOTE: SQLite ignores FK constraints by default (PRAGMA foreign_keys=ON
+# is not enabled here), so missing/incorrect ondelete= clauses on models
+# never surface as test failures even though they'd misbehave on
+# production Postgres. Enabling the pragma was tried and reverted — 28
+# unrelated tests fail because most of the 144 FKs missing ondelete= are
+# out of scope for the current fix (customers.id/users.id), plus several
+# fixtures insert rows out of FK order. Re-enable once all FKs are fixed.
+
 
 @pytest.fixture(scope="session", autouse=True)
 def create_tables():
@@ -92,16 +108,17 @@ def _make_org(db) -> Organisation:
     return org
 
 
-def _make_user(db, role: UserRole, org_id: str = None) -> User:
-    if org_id is None:
-        org_id = _make_org(db).id
+def _make_user(db, role: UserRole, industry_id: str = None) -> User:
+    if industry_id is None:
+        industry_id = _make_org(db).id
     user = User(
         email=f"{role.value}-{uuid.uuid4().hex[:6]}@test.com",
         full_name=f"Test {role.value.title()}",
         hashed_password=hash_password("TestPassword123!"),
         role=role,
         status=UserStatus.active,
-        org_id=org_id,
+        org_id=industry_id,
+        industry_id=industry_id,
     )
     db.add(user)
     db.commit()
@@ -120,6 +137,20 @@ def _auth(user: User) -> dict:
 @pytest.fixture
 def admin_user(db):
     return _make_user(db, UserRole.admin)
+
+
+@pytest.fixture
+def super_admin_user(db):
+    user = _make_user(db, UserRole.admin)
+    user.is_super_admin = True
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def super_admin_headers(super_admin_user):
+    return _auth(super_admin_user)
 
 
 @pytest.fixture

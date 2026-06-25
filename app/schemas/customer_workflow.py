@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.models.customer_workflow import EDDTrigger, WorkflowAction, WorkflowState
+from app.models.customer_workflow import WorkflowAction, WorkflowState
 
 
 class WorkflowActionRequest(BaseModel):
@@ -60,6 +60,7 @@ class WorkflowAssignRequest(BaseModel):
 
 class RiskAssessmentRequest(BaseModel):
     """Input for the 5-dimension risk assessment engine."""
+
     # Product
     involves_remittance: bool = False
     involves_fx: bool = False
@@ -76,7 +77,7 @@ class RiskAssessmentRequest(BaseModel):
     # Transaction
     expected_monthly_volume_aud: Optional[float] = Field(None, ge=0)
     expected_max_transaction_aud: Optional[float] = Field(None, ge=0)
-    expected_frequency: Optional[str] = None   # daily | weekly | monthly | occasional
+    expected_frequency: Optional[str] = None  # daily | weekly | monthly | occasional
     crosses_border: bool = False
     # Override
     assessment_notes: Optional[str] = None
@@ -96,11 +97,11 @@ class RiskAssessmentResponse(BaseModel):
     transaction_risk: RiskDimensionResponse
     overall_score: float
     overall_level: str
-    gateway_decision: str       # "cdd" | "edd"
+    gateway_decision: str  # "cdd" | "edd"
     edd_triggers: List[str]
     weights: Dict[str, float]
     cdd_level: str
-    workflow_state_after: str   # state the workflow moved to
+    workflow_state_after: str  # state the workflow moved to
 
 
 class RiskProfileResponse(BaseModel):
@@ -130,11 +131,13 @@ class RiskProfileResponse(BaseModel):
 class EDDApprovalRequest(BaseModel):
     approved: bool
     notes: str = Field(..., min_length=5)
-    return_reason: Optional[str] = None   # if approved=False, why sending back
+    return_reason: Optional[str] = None  # if approved=False, why sending back
 
 
 class RFIRequest(BaseModel):
-    rfi_notes: str = Field(..., min_length=10, description="What additional information is required")
+    rfi_notes: str = Field(
+        ..., min_length=10, description="What additional information is required"
+    )
 
 
 class ApprovalRequest(BaseModel):

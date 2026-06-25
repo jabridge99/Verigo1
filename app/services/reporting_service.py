@@ -16,6 +16,7 @@ Example: PSPE-IFTI-I-20260615-0001
 DISCLAIMER: This service populates draft reports as a compliance workflow tool only.
 All decisions to lodge reports with AUSTRAC remain with the reporting entity.
 """
+
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
@@ -37,9 +38,9 @@ from app.models.report import (
 )
 from app.models.transaction import Transaction
 
-TTR_DEADLINE_DAYS = 14       # 10 business ≈ 14 calendar
+TTR_DEADLINE_DAYS = 14  # 10 business ≈ 14 calendar
 IFTI_DEADLINE_DAYS = 14
-SMR_DEADLINE_DAYS = 4        # 3 business ≈ 4 calendar
+SMR_DEADLINE_DAYS = 4  # 3 business ≈ 4 calendar
 SMR_TERRORISM_DEADLINE_HOURS = 24
 TTR_THRESHOLD_AUD = 10_000.0
 _FALLBACK_ENTITY_CODE = "PSPE"
@@ -65,7 +66,9 @@ def _customer_abn(customer: Customer) -> Optional[str]:
     return None
 
 
-def _next_report_ref(db: Session, org_code: str, report_type: str, direction: str = "") -> str:
+def _next_report_ref(
+    db: Session, org_code: str, report_type: str, direction: str = ""
+) -> str:
     """
     Generate ENTITY-REPORTTYPE-DIRECTION-YYYYMMDD-SEQUENCE reference.
     Uses uuid suffix for collision safety — no DB lock required.
@@ -94,6 +97,7 @@ def _priority_from_due(due: date, is_terrorism: bool = False) -> ReportPriority:
 
 
 # ── IFTI generation ──────────────────────────────────────────────────────────
+
 
 def generate_ifti_from_transaction(
     txn: Transaction,
@@ -126,13 +130,14 @@ def generate_ifti_from_transaction(
         direction=direction,
         status=ReportStatus.draft,
         priority=_priority_from_due(due),
-        date_received=txn.transaction_date.date() if isinstance(txn.transaction_date, datetime) else txn.transaction_date,
+        date_received=txn.transaction_date.date()
+        if isinstance(txn.transaction_date, datetime)
+        else txn.transaction_date,
         total_amount=txn.amount,
         currency=txn.currency,
         amount_aud=amount_aud,
         exchange_rate=txn.exchange_rate,
         transfer_reference=txn.reference,
-
         # Ordering Customer from customer record
         oc_name=customer.full_name,
         oc_dob=getattr(customer, "date_of_birth", None),
@@ -146,7 +151,6 @@ def generate_ifti_from_transaction(
         oc_occupation=getattr(customer, "occupation", None),
         oc_abn=_customer_abn(customer),
         oc_account_number=txn.source_account_number,
-
         # Beneficiary from transaction destination fields
         bc_name=txn.destination_account_name,
         bc_account_number=txn.destination_account_number,
@@ -155,7 +159,6 @@ def generate_ifti_from_transaction(
         bc_swift_bic=txn.destination_bank_bic,
         bc_iban=txn.destination_iban,
         bc_country=txn.destination_country,
-
         reason_for_transfer=txn.purpose,
         due_date=due,
         prepared_by=prepared_by,
@@ -164,6 +167,7 @@ def generate_ifti_from_transaction(
 
 
 # ── TTR generation ───────────────────────────────────────────────────────────
+
 
 def generate_ttr_from_transaction(
     txn: Transaction,
@@ -180,7 +184,11 @@ def generate_ttr_from_transaction(
     due = _due_date_from_today(TTR_DEADLINE_DAYS)
     amount_aud = txn.amount_aud or txn.amount
 
-    txn_date = txn.transaction_date.date() if isinstance(txn.transaction_date, datetime) else txn.transaction_date
+    txn_date = (
+        txn.transaction_date.date()
+        if isinstance(txn.transaction_date, datetime)
+        else txn.transaction_date
+    )
 
     report = TTRReport(
         org_id=txn.org_id,
@@ -193,18 +201,15 @@ def generate_ttr_from_transaction(
         total_amount=amount_aud,
         currency="AUD",
         transaction_type=txn.payment_method.value,
-
         customer_name=customer.full_name,
         customer_dob=getattr(customer, "date_of_birth", None),
         customer_address=getattr(customer, "address_line1", None),
         customer_occupation=getattr(customer, "occupation", None),
         customer_abn=_customer_abn(customer),
-
         account_name=txn.source_account_name or txn.destination_account_name,
         account_number=txn.source_account_number or txn.destination_account_number,
         account_bsb=txn.source_bsb or txn.destination_bsb,
         branch_name=txn.source_bank_name,
-
         due_date=due,
         prepared_by=prepared_by,
     )
@@ -212,6 +217,7 @@ def generate_ttr_from_transaction(
 
 
 # ── SMR generation ───────────────────────────────────────────────────────────
+
 
 def generate_smr_from_case(
     case: Case,
@@ -232,7 +238,9 @@ def generate_smr_from_case(
     report_ref = _next_report_ref(db, org_code or _org_code(db, case.org_id), "SMR")
     deadline_days = 1 if is_terrorism_related else SMR_DEADLINE_DAYS
     due = _due_date_from_today(deadline_days)
-    priority = ReportPriority.urgent if is_terrorism_related else _priority_from_due(due)
+    priority = (
+        ReportPriority.urgent if is_terrorism_related else _priority_from_due(due)
+    )
 
     # Bug fix: Case model has created_at, not opened_at
     case_date = getattr(case, "created_at", None) or datetime.now(timezone.utc)
@@ -248,13 +256,11 @@ def generate_smr_from_case(
         matter_date=matter_date,
         suspicion_grounds=suspicion_grounds,
         is_terrorism_related=is_terrorism_related,
-
         subject_name=customer.full_name,
         subject_dob=getattr(customer, "date_of_birth", None),
         subject_address=getattr(customer, "address_line1", None),
         subject_occupation=getattr(customer, "occupation", None),
         subject_abn=_customer_abn(customer),
-
         due_date=due,
         prepared_by=prepared_by,
     )
@@ -262,6 +268,7 @@ def generate_smr_from_case(
 
 
 # ── Filing register ──────────────────────────────────────────────────────────
+
 
 def register_submission(
     db: Session,
@@ -275,7 +282,12 @@ def register_submission(
     notes: Optional[str] = None,
 ) -> FilingRegisterEntry:
     """
-    Create an immutable FilingRegisterEntry after successful AUSTRAC submission.
+    Create an immutable FilingRegisterEntry recording that this org marked a
+    report as submitted in its local compliance register. This does NOT
+    transmit anything to AUSTRAC — no real AUSTRAC provider is wired into the
+    submit endpoints (see app/integrations/austrac/, currently unused beyond
+    a stub). Callers must treat austrac_submission_ref as self-reported, not
+    as confirmation of receipt by AUSTRAC.
     """
     entry = FilingRegisterEntry(
         org_id=org_id,
@@ -296,6 +308,7 @@ def register_submission(
 
 
 # ── Summary ──────────────────────────────────────────────────────────────────
+
 
 def reporting_summary(db: Session, org_id: str) -> dict:
     """Aggregate counts for the reports dashboard."""
@@ -322,7 +335,9 @@ def reporting_summary(db: Session, org_id: str) -> dict:
             .filter(
                 model.org_id == org_id,
                 model.due_date < today,
-                model.status.notin_([ReportStatus.submitted, ReportStatus.acknowledged]),
+                model.status.notin_(
+                    [ReportStatus.submitted, ReportStatus.acknowledged]
+                ),
             )
             .scalar()
         )

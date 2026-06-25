@@ -35,9 +35,12 @@ ENV DOCUMENT_STORE_PATH=/data/uploads \
 
 EXPOSE 8000
 
-# Healthcheck for Docker / orchestrators
+# Healthcheck for Docker / orchestrators. Must probe the actual runtime
+# $PORT (Railway injects its own PORT at deploy time, overriding the ENV
+# default above) — a hardcoded port here would fail forever if the platform
+# assigns anything other than 8000, even though the app is healthy.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+  CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"8000\")}/health')" || exit 1
 
 # Entrypoint: run migrations then start server
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers ${WORKERS:-2} --log-level warning"]

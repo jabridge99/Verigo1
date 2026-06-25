@@ -24,6 +24,7 @@ log = logging.getLogger("tvg.worker")
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
+
 def add_background_task(
     background_tasks: BackgroundTasks,
     fn: Callable,
@@ -39,11 +40,12 @@ def add_background_task(
 
 # ── Audit helper (internal) ───────────────────────────────────────────────────
 
+
 def _write_audit_log(org_id: str, action: str, detail: dict) -> None:
     """Write a simple audit log entry; errors are swallowed to avoid crashing workers."""
     try:
         from app.db.database import SessionLocal
-        from app.models.audit_log import AuditLog, AuditEventType
+        from app.models.audit_log import AuditEventType, AuditLog
 
         db = SessionLocal()
         try:
@@ -63,6 +65,7 @@ def _write_audit_log(org_id: str, action: str, detail: dict) -> None:
 
 # ── Task: compliance calendar reminders ──────────────────────────────────────
 
+
 async def send_reminder_emails(org_id: str, item_ids: List[str]) -> None:
     """
     Process compliance calendar reminders for the given items and send
@@ -79,20 +82,28 @@ async def send_reminder_emails(org_id: str, item_ids: List[str]) -> None:
 
         db = SessionLocal()
         try:
-            from app.models.compliance_calendar import ComplianceCalendar  # type: ignore
+            from app.models.compliance_calendar import (
+                ComplianceCalendar,  # type: ignore
+            )
 
             for item_id in item_ids:
-                item = db.query(ComplianceCalendar).filter(
-                    ComplianceCalendar.id == item_id,
-                    ComplianceCalendar.org_id == org_id,
-                ).first()
+                item = (
+                    db.query(ComplianceCalendar)
+                    .filter(
+                        ComplianceCalendar.id == item_id,
+                        ComplianceCalendar.org_id == org_id,
+                    )
+                    .first()
+                )
                 if item is None:
                     log.debug("[worker] reminder item not found: %s", item_id)
                     continue
 
                 try:
                     await send_email(
-                        to=item.assigned_to_email if hasattr(item, "assigned_to_email") else "",
+                        to=item.assigned_to_email
+                        if hasattr(item, "assigned_to_email")
+                        else "",
                         subject=f"[Verigo] Compliance reminder: {getattr(item, 'title', item_id)}",
                         body=(
                             f"This is a reminder that the following compliance item is due:\n\n"
@@ -117,6 +128,7 @@ async def send_reminder_emails(org_id: str, item_ids: List[str]) -> None:
 
 
 # ── Task: automation rule processing ─────────────────────────────────────────
+
 
 async def process_monitoring_rules(org_id: str, transaction_id: str) -> None:
     """
@@ -167,6 +179,7 @@ async def process_monitoring_rules(org_id: str, transaction_id: str) -> None:
 
 
 # ── Task: report export ───────────────────────────────────────────────────────
+
 
 async def generate_report_export(
     report_type: str,
@@ -230,6 +243,7 @@ async def generate_report_export(
 
 # ── Task: scheduled screening refresh ────────────────────────────────────────
 
+
 async def run_scheduled_screening(org_id: str, customer_id: str) -> None:
     """
     Trigger a background sanctions / PEP screening refresh for a customer.
@@ -250,7 +264,9 @@ async def run_scheduled_screening(org_id: str, customer_id: str) -> None:
                     refresh_customer_screening,
                 )
 
-                await refresh_customer_screening(db, org_id=org_id, customer_id=customer_id)
+                await refresh_customer_screening(
+                    db, org_id=org_id, customer_id=customer_id
+                )
             except ImportError:
                 log.debug(
                     "[worker] sanctions_screening.refresh_customer_screening not available"
@@ -273,5 +289,7 @@ async def run_scheduled_screening(org_id: str, customer_id: str) -> None:
         {"customer_id": customer_id},
     )
     log.info(
-        "[worker] run_scheduled_screening done — org=%s customer=%s", org_id, customer_id
+        "[worker] run_scheduled_screening done — org=%s customer=%s",
+        org_id,
+        customer_id,
     )

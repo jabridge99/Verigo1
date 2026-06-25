@@ -15,6 +15,7 @@ also 0–100, mapped to a risk level (low / medium / high / critical).
 DISCLAIMER: Risk matrix scores support compliance workflow only.
 All regulatory decisions remain with the reporting entity.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -22,17 +23,39 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.customer import Customer, RiskLevel
+from app.models.customer import Customer
 from app.models.transaction import Transaction
 
 # ── Country Lists (FATF / AUSTRAC) ────────────────────────────────────────────
 
 FATF_BLACKLIST = frozenset({"KP", "IR", "MM"})  # FATF call-to-action jurisdictions
-FATF_GREYLIST = frozenset({
-    "AF", "BB", "BF", "CM", "CD", "HT", "JM", "ML", "MZ", "NI",
-    "NG", "PK", "PA", "PH", "SN", "SS", "SY", "TZ", "TT", "UG",
-    "AE", "VN", "YE",
-})
+FATF_GREYLIST = frozenset(
+    {
+        "AF",
+        "BB",
+        "BF",
+        "CM",
+        "CD",
+        "HT",
+        "JM",
+        "ML",
+        "MZ",
+        "NI",
+        "NG",
+        "PK",
+        "PA",
+        "PH",
+        "SN",
+        "SS",
+        "SY",
+        "TZ",
+        "TT",
+        "UG",
+        "AE",
+        "VN",
+        "YE",
+    }
+)
 SANCTIONED_COUNTRIES = frozenset({"IR", "KP", "RU", "BY", "SY", "CU", "SD"})
 
 # High-risk jurisdictions not on FATF list but with elevated AUSTRAC concern
@@ -48,12 +71,22 @@ _WIRE_TYPES = frozenset({"wire_transfer", "swift_transfer"})
 _GAMBLING_TYPES = frozenset({"gambling_payout", "gambling_deposit"})
 
 # High-risk payment methods per AUSTRAC guidance
-_HIGH_RISK_PAYMENT_METHODS = frozenset({
-    "cryptocurrency", "cash", "prepaid_card", "money_order", "hawala",
-})
-_MEDIUM_RISK_PAYMENT_METHODS = frozenset({
-    "wire_transfer", "international_wire", "bank_transfer",
-})
+_HIGH_RISK_PAYMENT_METHODS = frozenset(
+    {
+        "cryptocurrency",
+        "cash",
+        "prepaid_card",
+        "money_order",
+        "hawala",
+    }
+)
+_MEDIUM_RISK_PAYMENT_METHODS = frozenset(
+    {
+        "wire_transfer",
+        "international_wire",
+        "bank_transfer",
+    }
+)
 
 TTR_THRESHOLD = 10_000.0
 NEAR_THRESHOLD_MIN = 9_000.0
@@ -63,20 +96,21 @@ HIGH_VALUE_2 = 100_000.0
 
 # ── Result Types ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class RiskDimension:
     name: str
-    score: float                        # 0–100
-    weight: float                       # contribution weight (0.0–1.0)
-    risk_level: str                     # low | medium | high | critical
+    score: float  # 0–100
+    weight: float  # contribution weight (0.0–1.0)
+    risk_level: str  # low | medium | high | critical
     factors: list[str] = field(default_factory=list)
-    max_factor: str = ""                # single most significant factor
+    max_factor: str = ""  # single most significant factor
 
 
 @dataclass
 class RiskMatrixResult:
-    overall_score: float                # 0–100 weighted composite
-    risk_level: str                     # low | medium | high | critical
+    overall_score: float  # 0–100 weighted composite
+    risk_level: str  # low | medium | high | critical
     customer_dimension: RiskDimension
     geographic_dimension: RiskDimension
     product_dimension: RiskDimension
@@ -91,13 +125,14 @@ class RiskMatrixResult:
                 "factors": d.factors,
                 "primary_factor": d.max_factor,
             }
+
         return {
             "overall_score": round(self.overall_score, 1),
             "risk_level": self.risk_level,
             "dimensions": {
-                "customer":    _dim(self.customer_dimension),
-                "geographic":  _dim(self.geographic_dimension),
-                "product":     _dim(self.product_dimension),
+                "customer": _dim(self.customer_dimension),
+                "geographic": _dim(self.geographic_dimension),
+                "product": _dim(self.product_dimension),
                 "transaction": _dim(self.transaction_dimension),
             },
             "methodology": "AUSTRAC Risk Management Guidance / FATF Recommendation 1 (RBA)",
@@ -119,6 +154,7 @@ def _risk_level_from_score(score: float) -> str:
 
 
 # ── Dimension 1: Customer Risk ─────────────────────────────────────────────────
+
 
 def _score_customer_risk(customer: Customer, weight: float) -> RiskDimension:
     """
@@ -149,7 +185,9 @@ def _score_customer_risk(customer: Customer, weight: float) -> RiskDimension:
 
     # Existing AML risk profile
     risk_level = getattr(customer, "risk_level", None)
-    risk_val = risk_level.value if hasattr(risk_level, "value") else str(risk_level or "low")
+    risk_val = (
+        risk_level.value if hasattr(risk_level, "value") else str(risk_level or "low")
+    )
     if risk_val == "critical":
         score += 40.0
         factors.append("customer_risk_level:critical")
@@ -171,7 +209,11 @@ def _score_customer_risk(customer: Customer, weight: float) -> RiskDimension:
 
     # Business customer — higher ML risk than individual (FATF)
     customer_type = getattr(customer, "customer_type", None)
-    ctype = customer_type.value if hasattr(customer_type, "value") else str(customer_type or "")
+    ctype = (
+        customer_type.value
+        if hasattr(customer_type, "value")
+        else str(customer_type or "")
+    )
     if ctype in ("company", "trust", "partnership", "association"):
         score += 10.0
         factors.append(f"business_entity:{ctype}")
@@ -204,7 +246,10 @@ def _score_customer_risk(customer: Customer, weight: float) -> RiskDimension:
 
 # ── Dimension 2: Geographic Risk ──────────────────────────────────────────────
 
-def _score_geographic_risk(txn: Transaction, customer: Customer, weight: float) -> RiskDimension:
+
+def _score_geographic_risk(
+    txn: Transaction, customer: Customer, weight: float
+) -> RiskDimension:
     """
     FATF Recommendation 19 — Higher-risk countries:
       - FATF public statement (call to action / blacklist)
@@ -249,12 +294,21 @@ def _score_geographic_risk(txn: Transaction, customer: Customer, weight: float) 
         factors.append("third_country_routing")
 
     score = min(score, 100.0)
-    primary = max(factors, key=lambda f: (
-        60 if "blacklist" in f else
-        50 if "sanctioned" in f else
-        30 if "greylist" in f else
-        15 if "austrac" in f else 10
-    ), default="no_elevated_countries")
+    primary = max(
+        factors,
+        key=lambda f: (
+            60
+            if "blacklist" in f
+            else 50
+            if "sanctioned" in f
+            else 30
+            if "greylist" in f
+            else 15
+            if "austrac" in f
+            else 10
+        ),
+        default="no_elevated_countries",
+    )
     return RiskDimension(
         name="geographic",
         score=score,
@@ -266,6 +320,7 @@ def _score_geographic_risk(txn: Transaction, customer: Customer, weight: float) 
 
 
 # ── Dimension 3: Product / Service Risk ───────────────────────────────────────
+
 
 def _score_product_risk(txn: Transaction, weight: float) -> RiskDimension:
     """
@@ -329,6 +384,7 @@ def _score_product_risk(txn: Transaction, weight: float) -> RiskDimension:
 
 # ── Dimension 4: Transaction Risk ─────────────────────────────────────────────
 
+
 def _score_transaction_risk(txn: Transaction, weight: float) -> RiskDimension:
     """
     AUSTRAC TTR/structuring indicators + FATF high-value transaction risk.
@@ -370,7 +426,9 @@ def _score_transaction_risk(txn: Transaction, weight: float) -> RiskDimension:
         factors.append("cash_intensive")
 
     # Near-threshold flag already set by scoring engine
-    if getattr(txn, "is_near_threshold", False) and "near_ttr_threshold" not in " ".join(factors):
+    if getattr(
+        txn, "is_near_threshold", False
+    ) and "near_ttr_threshold" not in " ".join(factors):
         score += 20.0
         factors.append("near_threshold_flag")
 
@@ -387,6 +445,7 @@ def _score_transaction_risk(txn: Transaction, weight: float) -> RiskDimension:
 
 
 # ── Main Entry Point ───────────────────────────────────────────────────────────
+
 
 def compute_risk_matrix(
     txn: Transaction,
@@ -410,10 +469,10 @@ def compute_risk_matrix(
     t_dim = _score_transaction_risk(txn, transaction_weight)
 
     overall = (
-        c_dim.score * customer_weight +
-        g_dim.score * geographic_weight +
-        p_dim.score * product_weight +
-        t_dim.score * transaction_weight
+        c_dim.score * customer_weight
+        + g_dim.score * geographic_weight
+        + p_dim.score * product_weight
+        + t_dim.score * transaction_weight
     )
     overall = min(round(overall, 2), 100.0)
 
@@ -429,6 +488,7 @@ def compute_risk_matrix(
 
 # ── Approval Score Calculator ──────────────────────────────────────────────────
 
+
 def compute_question_score(responses: list) -> Optional[float]:
     """
     Given a list of TransactionQuestionResponse ORM objects, compute 0–100.
@@ -436,13 +496,11 @@ def compute_question_score(responses: list) -> Optional[float]:
     Returns None if no responses are answered (not_applicable).
     """
     from app.models.risk_matrix import QuestionAnswer
+
     answered = [r for r in responses if r.answer != QuestionAnswer.not_applicable]
     if not answered:
         return None
-    compliant = sum(
-        1 for r in answered
-        if r.answer == QuestionAnswer.yes
-    )
+    compliant = sum(1 for r in answered if r.answer == QuestionAnswer.yes)
     return round(compliant / len(answered) * 100.0, 2)
 
 

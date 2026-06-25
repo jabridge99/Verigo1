@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import and_, desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.notification import Notification, NotificationPriority, NotificationType
@@ -19,8 +20,28 @@ def _notif_id() -> str:
 
 
 def create_notification(
-    db: Session, data: NotificationCreate, send_email: bool = False
+    db: Session,
+    data: NotificationCreate,
+    send_email: bool = False,
+    dedupe_key: Optional[str] = None,
 ) -> Notification:
+    """
+    Create a notification. Pass dedupe_key for anything that might run more
+    than once for the same logical event (deadline reminders, training
+    overdue checks, etc. — e.g. f"report_due:{report_id}:{date.today()}").
+    If a notification with that key already exists, it's returned as-is
+    instead of creating a duplicate (and no second email is sent). The
+    notifications.dedupe_key column has a unique constraint, so concurrent
+    callers racing on the same key are also covered by the IntegrityError
+    fallback below, not just the upfront SELECT.
+    """
+    if dedupe_key:
+        existing = (
+            db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
+        )
+        if existing:
+            return existing
+
     notif = Notification(
         notif_id=_notif_id(),
         user_id=data.user_id,
@@ -31,10 +52,20 @@ def create_notification(
         link=data.link,
         entity_type=data.entity_type,
         entity_id=data.entity_id,
+        dedupe_key=dedupe_key,
         emailed=False,
     )
     db.add(notif)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = (
+            db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
+        )
+        if existing:
+            return existing
+        raise
     db.refresh(notif)
 
     if send_email and data.user_id:

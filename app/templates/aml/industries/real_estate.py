@@ -3,8 +3,10 @@ Real Estate AML template — Tranche 2 (new 2026 reform).
 NO IFTI obligation.  NO TTR (no cash handling obligation as remittance dealer).
 Key risks: property transactions, trust accounts, opacity of beneficial ownership.
 """
-from app.templates.aml.base import AMLTemplateBase, BASE_CONTROLS, BASE_POLICIES
+
 import copy
+
+from app.templates.aml.base import BASE_CONTROLS, BASE_POLICIES, AMLTemplateBase
 
 
 def get_template(risk_level: str = "medium") -> AMLTemplateBase:
@@ -111,20 +113,42 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     )
 
     extra_controls = [
-        {"control_ref": "CTL-010", "title": "Source of Funds Verification — High-Value Property",
-         "control_type": "preventive", "risk_area": "source_of_funds"},
-        {"control_ref": "CTL-011", "title": "Beneficial Ownership — Property Purchasers",
-         "control_type": "preventive", "risk_area": "beneficial_ownership"},
-        {"control_ref": "CTL-012", "title": "Cash Payment Prohibition",
-         "control_type": "preventive", "risk_area": "transaction_monitoring"},
-        {"control_ref": "CTL-013", "title": "Trust Account Monitoring",
-         "control_type": "detective", "risk_area": "trust_accounts"},
+        {
+            "control_ref": "CTL-010",
+            "title": "Source of Funds Verification — High-Value Property",
+            "control_type": "preventive",
+            "risk_area": "source_of_funds",
+        },
+        {
+            "control_ref": "CTL-011",
+            "title": "Beneficial Ownership — Property Purchasers",
+            "control_type": "preventive",
+            "risk_area": "beneficial_ownership",
+        },
+        {
+            "control_ref": "CTL-012",
+            "title": "Cash Payment Prohibition",
+            "control_type": "preventive",
+            "risk_area": "transaction_monitoring",
+        },
+        {
+            "control_ref": "CTL-013",
+            "title": "Trust Account Monitoring",
+            "control_type": "detective",
+            "risk_area": "trust_accounts",
+        },
     ]
 
     t._policies = copy.deepcopy(BASE_POLICIES) + [
-        {"title": "Source of Funds Policy — Property Transactions", "policy_type": "source_of_funds"},
-        {"title": "Cash Payment Prohibition Policy",                "policy_type": "transaction_monitoring"},
-        {"title": "Trust Account AML Policy",                       "policy_type": "trust_accounts"},
+        {
+            "title": "Source of Funds Policy — Property Transactions",
+            "policy_type": "source_of_funds",
+        },
+        {
+            "title": "Cash Payment Prohibition Policy",
+            "policy_type": "transaction_monitoring",
+        },
+        {"title": "Trust Account AML Policy", "policy_type": "trust_accounts"},
     ]
     t._controls = copy.deepcopy(BASE_CONTROLS) + extra_controls
 

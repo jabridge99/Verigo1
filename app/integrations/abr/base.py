@@ -1,4 +1,5 @@
 """Abstract interface for Australian Business Register (ABR) lookups."""
+
 from __future__ import annotations
 
 import abc
@@ -10,8 +11,8 @@ from typing import Any
 class ABNRecord:
     abn: str
     entity_name: str
-    entity_type: str               # Company, Individual/Sole Trader, Trust, etc.
-    status: str                    # Active, Cancelled
+    entity_type: str  # Company, Individual/Sole Trader, Trust, etc.
+    status: str  # Active, Cancelled
     gst_registered: bool
     state: str | None = None
     postcode: str | None = None
@@ -21,7 +22,6 @@ class ABNRecord:
 
 
 class ABRProvider(abc.ABC):
-
     @abc.abstractmethod
     async def lookup_abn(self, abn: str) -> ABNRecord | None:
         """Look up entity by ABN. Returns None if not found."""
@@ -31,5 +31,7 @@ class ABRProvider(abc.ABC):
         """Look up entity by ACN (company number)."""
 
     @abc.abstractmethod
-    async def search_by_name(self, name: str, state: str | None = None) -> list[ABNRecord]:
+    async def search_by_name(
+        self, name: str, state: str | None = None
+    ) -> list[ABNRecord]:
         """Search businesses by name."""

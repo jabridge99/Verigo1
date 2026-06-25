@@ -8,12 +8,21 @@ supersedes_id referencing the original.
 SHA-256 audit_hash is computed over canonical JSON content fields
 to support integrity verification.
 """
+
 import enum
 from uuid import uuid4
 
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, Enum, Float,
-    ForeignKey, Index, String, Text, func,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    func,
 )
 from sqlalchemy.orm import relationship
 
@@ -22,7 +31,7 @@ from app.db.database import Base
 
 class ReceiptStatus(str, enum.Enum):
     active = "active"
-    voided = "voided"       # replaced by a corrected receipt (supersedes chain)
+    voided = "voided"  # replaced by a corrected receipt (supersedes chain)
     superseded = "superseded"
 
 
@@ -31,21 +40,35 @@ class IFTIReceipt(Base):
     Immutable customer receipt for IFTI transactions.
     One receipt per IFTI instruction — correction creates a new row.
     """
+
     __tablename__ = "ifti_receipts"
 
     id = Column(String, primary_key=True, default=lambda: f"rcpt_{uuid4().hex[:12]}")
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
-    ifti_report_id = Column(String, ForeignKey("ifti_reports.id"), nullable=True, index=True)
-    transaction_id = Column(String, ForeignKey("transactions.id"), nullable=True, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    ifti_report_id = Column(
+        String, ForeignKey("ifti_reports.id"), nullable=True, index=True
+    )
+    transaction_id = Column(
+        String, ForeignKey("transactions.id"), nullable=True, index=True
+    )
 
-    receipt_ref = Column(String(80), unique=True, index=True)   # e.g. PSPE-RCPT-20260615-0001
+    receipt_ref = Column(
+        String(80), unique=True, index=True
+    )  # e.g. PSPE-RCPT-20260615-0001
     version = Column(String(10), default="1.0")
-    status = Column(Enum(ReceiptStatus), default=ReceiptStatus.active, nullable=False, index=True)
+    status = Column(
+        Enum(ReceiptStatus), default=ReceiptStatus.active, nullable=False, index=True
+    )
     supersedes_id = Column(String, ForeignKey("ifti_receipts.id"), nullable=True)
 
     # Transfer core
     transfer_date = Column(Date, nullable=False)
-    direction = Column(String(10), nullable=False)              # incoming | outgoing
+    direction = Column(String(10), nullable=False)  # incoming | outgoing
     total_amount = Column(Float, nullable=False)
     currency = Column(String(3), nullable=False)
     amount_aud = Column(Float)
@@ -85,9 +108,9 @@ class IFTIReceipt(Base):
     risk_disclaimer = Column(Text)
 
     # Integrity
-    audit_hash = Column(String(64))         # SHA-256 hex digest of canonical content
-    generated_by = Column(String)           # user_id
-    pdf_storage_ref = Column(String(500))   # cloud storage key for PDF
+    audit_hash = Column(String(64))  # SHA-256 hex digest of canonical content
+    generated_by = Column(String)  # user_id
+    pdf_storage_ref = Column(String(500))  # cloud storage key for PDF
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     voided_at = Column(DateTime(timezone=True))
@@ -96,8 +119,8 @@ class IFTIReceipt(Base):
     # Intentionally NO updated_at — immutable record
 
     organisation = relationship("Organisation")
-    superseded_by = relationship("IFTIReceipt", foreign_keys=[supersedes_id], remote_side="IFTIReceipt.id")
-
-    __table_args__ = (
-        Index("ix_ifti_receipt_org_date", "org_id", "transfer_date"),
+    superseded_by = relationship(
+        "IFTIReceipt", foreign_keys=[supersedes_id], remote_side="IFTIReceipt.id"
     )
+
+    __table_args__ = (Index("ix_ifti_receipt_org_date", "org_id", "transfer_date"),)

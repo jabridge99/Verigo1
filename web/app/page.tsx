@@ -50,8 +50,8 @@ function Hero() {
           <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors shadow-lg">
             Start Free Trial <ArrowRight className="w-5 h-5" />
           </Link>
-          <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-            Book Demo
+          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+            Start Free Trial
           </Link>
         </div>
 
@@ -228,25 +228,23 @@ function AMLReformTimeline() {
 // ─────────────────────────────────────────────────────────────────────────────
 function WhoWeHelp() {
   const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-    'digital-currency-exchange': Coins,
-    'remittance-provider': Globe,
-    'foreign-exchange': ArrowLeftRight,
-    'payment-service-provider': CreditCard,
-    'real-estate': Home,
-    'conveyancer': FileCheck,
-    'law-firm': Scale,
-    'accounting-firm': Calculator,
-    'precious-metals': Gem,
-    'reporting-group': Network,
-    'mortgage-broker': Landmark,
+    'vasp': Coins,
+    'remittance': Globe,
+    'bullion_dealers': Gem,
+    'real_estate': Home,
+    'conveyancers': FileCheck,
+    'legal_professionals': Scale,
+    'accountants': Calculator,
+    'precious_metals': Gem,
+    'pubs_clubs': Building2,
+    'reporting_group': Network,
   }
 
   const allIndustries = industries.filter(i =>
     [
-      'digital-currency-exchange', 'remittance-provider', 'foreign-exchange',
-      'law-firm', 'accounting-firm', 'conveyancer', 'real-estate',
-      'precious-metals', 'reporting-group', 'payment-service-provider',
-      'mortgage-broker',
+      'vasp', 'remittance', 'bullion_dealers',
+      'real_estate', 'conveyancers', 'legal_professionals', 'accountants',
+      'precious_metals', 'pubs_clubs', 'reporting_group',
     ].includes(i.id)
   )
 
@@ -267,7 +265,7 @@ function WhoWeHelp() {
           {allIndustries.map(ind => (
             <Link
               key={ind.id}
-              href={`/solutions/${ind.id}`}
+              href={`/solutions/${ind.slug}`}
               className="pub-card-hover group flex flex-col gap-4"
             >
               <div className={`w-12 h-12 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}>
@@ -459,7 +457,7 @@ function WhyVerigo() {
               <Link href="/start-trial" className="pub-btn-primary">
                 Start Free Trial <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link href="/live-demo" className="pub-btn-secondary">Book a Demo</Link>
+              <Link href="/start-trial" className="pub-btn-secondary">Start Free Trial</Link>
             </div>
           </div>
 
@@ -573,7 +571,7 @@ function PricingPreview({ prices }: { prices: Record<string, PlanPrice> }) {
       desc: 'For reporting groups, financial institutions, and SaaS resellers.',
       features: ['Everything in Professional', 'All compliance packs', 'Reporting groups (multi-entity)', 'White label branding', 'Dedicated compliance support', 'SLA guarantee'],
       cta: 'Contact Sales',
-      href: '/live-demo',
+      href: '/contact',
       highlight: false,
     },
   ]
@@ -664,8 +662,8 @@ function FinalCTA() {
           <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors shadow-lg">
             Start Free Trial <ArrowRight className="w-5 h-5" />
           </Link>
-          <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-            Book Demo
+          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+            Start Free Trial
           </Link>
         </div>
         <div className="flex flex-wrap justify-center gap-6 text-sm text-slate-500">

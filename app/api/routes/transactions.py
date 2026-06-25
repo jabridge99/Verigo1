@@ -10,6 +10,7 @@ Roles:
   GET  /transactions/{id}/receipt — analyst+  (full receipt for reporting)
   GET  /transactions/{id}/summary — analyst+  (lightweight summary)
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -20,7 +21,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     Pagination,
-    get_current_user,
     org_id_for,
     require_analyst_or_above,
     require_compliance_or_above,
@@ -29,6 +29,16 @@ from app.db.database import get_db
 from app.models.case import Case, CaseAlert
 from app.models.customer import Customer
 from app.models.monitoring import TransactionAlert
+from app.models.regulatory_recommendation import (
+    RecommendationStatus,
+    RegulatoryRecommendation,
+)
+from app.models.risk_matrix import (
+    OrgApprovalQuestion,
+    OrgMonitoringConfig,
+    QuestionAnswer,
+    TransactionQuestionResponse,
+)
 from app.models.transaction import (
     Transaction,
     TransactionCryptoDetail,
@@ -41,20 +51,25 @@ from app.schemas.transaction import (
     TransactionOut,
     TransactionUpdate,
 )
-from app.models.regulatory_recommendation import RegulatoryRecommendation, RecommendationStatus
-from app.models.risk_matrix import OrgApprovalQuestion, OrgMonitoringConfig, QuestionAnswer, TransactionQuestionResponse
 from app.schemas.transaction_receipt import TransactionReceipt, build_receipt
 from app.services.monitoring_engine import run_monitoring
-from app.services.risk_matrix_service import compute_final_approval_score, compute_question_score
+from app.services.risk_matrix_service import (
+    compute_final_approval_score,
+    compute_question_score,
+)
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 
 def _get_transaction_or_404(txn_id: str, org_id: str, db: Session) -> Transaction:
-    txn = db.query(Transaction).filter(
-        Transaction.id == txn_id,
-        Transaction.org_id == org_id,
-    ).first()
+    txn = (
+        db.query(Transaction)
+        .filter(
+            Transaction.id == txn_id,
+            Transaction.org_id == org_id,
+        )
+        .first()
+    )
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found.")
     return txn
@@ -70,20 +85,30 @@ def create_transaction(
     org_id = org_id_for(current_user)
 
     # Verify customer belongs to org
-    customer = db.query(Customer).filter(
-        Customer.id == payload.customer_id,
-        Customer.org_id == org_id,
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(
+            Customer.id == payload.customer_id,
+            Customer.org_id == org_id,
+        )
+        .first()
+    )
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found.")
 
     # Check for duplicate ref
-    existing = db.query(Transaction).filter(
-        Transaction.transaction_ref == payload.transaction_ref,
-        Transaction.org_id == org_id,
-    ).first()
+    existing = (
+        db.query(Transaction)
+        .filter(
+            Transaction.transaction_ref == payload.transaction_ref,
+            Transaction.org_id == org_id,
+        )
+        .first()
+    )
     if existing:
-        raise HTTPException(status_code=409, detail="Transaction reference already exists.")
+        raise HTTPException(
+            status_code=409, detail="Transaction reference already exists."
+        )
 
     txn = Transaction(
         id=f"txn_{uuid4().hex[:12]}",
@@ -104,6 +129,23 @@ def create_transaction(
 
     db.commit()
     db.refresh(txn)
+
+    from app.models.automation_rule import RuleEventType
+    from app.services.automation_engine import (
+        evaluate_automation_rules,
+        transaction_context,
+    )
+
+    evaluate_automation_rules(
+        db,
+        RuleEventType.transaction_created,
+        org_id,
+        "transaction",
+        txn.id,
+        transaction_context(txn),
+        triggered_by=current_user.id,
+    )
+
     return txn
 
 
@@ -189,10 +231,14 @@ def run_monitoring_on_transaction(
     org_id = org_id_for(current_user)
     txn = _get_transaction_or_404(txn_id, org_id, db)
 
-    customer = db.query(Customer).filter(
-        Customer.id == txn.customer_id,
-        Customer.org_id == org_id,
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(
+            Customer.id == txn.customer_id,
+            Customer.org_id == org_id,
+        )
+        .first()
+    )
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found.")
 
@@ -231,39 +277,62 @@ def get_transaction_receipt(
     org_id = org_id_for(current_user)
     txn = _get_transaction_or_404(txn_id, org_id, db)
 
-    customer = db.query(Customer).filter(
-        Customer.id == txn.customer_id,
-        Customer.org_id == org_id,
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(
+            Customer.id == txn.customer_id,
+            Customer.org_id == org_id,
+        )
+        .first()
+    )
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found.")
 
     # Load all alerts linked to this transaction
-    alerts = db.query(TransactionAlert).filter(
-        TransactionAlert.transaction_id == txn_id,
-        TransactionAlert.org_id == org_id,
-    ).order_by(TransactionAlert.trigger_date.desc()).all()
+    alerts = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.transaction_id == txn_id,
+            TransactionAlert.org_id == org_id,
+        )
+        .order_by(TransactionAlert.trigger_date.desc())
+        .all()
+    )
 
     # Load all cases linked via CaseAlert
-    case_ids = db.query(CaseAlert.case_id).filter(
-        CaseAlert.transaction_id == txn_id,
-    ).distinct().all()
+    case_ids = (
+        db.query(CaseAlert.case_id)
+        .filter(
+            CaseAlert.transaction_id == txn_id,
+        )
+        .distinct()
+        .all()
+    )
     case_ids_list = [r[0] for r in case_ids]
 
     # Also get cases linked via alert
     alert_ids = [a.id for a in alerts]
     if alert_ids:
-        alert_case_ids = db.query(CaseAlert.case_id).filter(
-            CaseAlert.alert_id.in_(alert_ids),
-        ).distinct().all()
+        alert_case_ids = (
+            db.query(CaseAlert.case_id)
+            .filter(
+                CaseAlert.alert_id.in_(alert_ids),
+            )
+            .distinct()
+            .all()
+        )
         case_ids_list = list(set(case_ids_list + [r[0] for r in alert_case_ids]))
 
     cases = []
     if case_ids_list:
-        cases = db.query(Case).filter(
-            Case.id.in_(case_ids_list),
-            Case.org_id == org_id,
-        ).all()
+        cases = (
+            db.query(Case)
+            .filter(
+                Case.id.in_(case_ids_list),
+                Case.org_id == org_id,
+            )
+            .all()
+        )
 
     return build_receipt(txn, customer, alerts, cases, generated_by=current_user.id)
 
@@ -281,22 +350,34 @@ def get_transaction_summary(
     org_id = org_id_for(current_user)
     txn = _get_transaction_or_404(txn_id, org_id, db)
 
-    alert_count = db.query(TransactionAlert).filter(
-        TransactionAlert.transaction_id == txn_id,
-        TransactionAlert.org_id == org_id,
-    ).count()
+    alert_count = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.transaction_id == txn_id,
+            TransactionAlert.org_id == org_id,
+        )
+        .count()
+    )
 
-    open_alert_count = db.query(TransactionAlert).filter(
-        TransactionAlert.transaction_id == txn_id,
-        TransactionAlert.org_id == org_id,
-        TransactionAlert.status.notin_(["dismissed", "resolved"]),
-    ).count()
+    open_alert_count = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.transaction_id == txn_id,
+            TransactionAlert.org_id == org_id,
+            TransactionAlert.status.notin_(["dismissed", "resolved"]),
+        )
+        .count()
+    )
 
-    smr_candidate_count = db.query(TransactionAlert).filter(
-        TransactionAlert.transaction_id == txn_id,
-        TransactionAlert.org_id == org_id,
-        TransactionAlert.is_smr_candidate == True,
-    ).count()
+    smr_candidate_count = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.transaction_id == txn_id,
+            TransactionAlert.org_id == org_id,
+            TransactionAlert.is_smr_candidate == True,
+        )
+        .count()
+    )
 
     amount_aud = txn.amount_aud or txn.amount
     TTR_THRESHOLD = 10_000.0
@@ -368,7 +449,9 @@ def get_transaction_recommendations(
     return {
         "transaction_id": txn_id,
         "recommendation_count": len(recs),
-        "pending_count": sum(1 for r in recs if r.status == RecommendationStatus.pending),
+        "pending_count": sum(
+            1 for r in recs if r.status == RecommendationStatus.pending
+        ),
         "recommendations": [
             {
                 "id": r.id,
@@ -394,6 +477,7 @@ def get_transaction_recommendations(
 
 
 # ── Pre-Approval Question Checklist ───────────────────────────────────────────
+
 
 class QuestionAnswerItem(BaseModel):
     question_id: str
@@ -444,13 +528,16 @@ def get_approval_checklist(
     )
     response_map = {r.question_id: r for r in responses}
 
-    config = db.query(OrgMonitoringConfig).filter(
-        OrgMonitoringConfig.org_id == org_id
-    ).first()
+    config = (
+        db.query(OrgMonitoringConfig)
+        .filter(OrgMonitoringConfig.org_id == org_id)
+        .first()
+    )
     q_weight = getattr(config, "custom_question_weight", 0.20) if config else 0.20
 
     # Get the latest alert score for this transaction
-    from app.models.monitoring import TransactionAlert, AlertStatus
+    from app.models.monitoring import TransactionAlert
+
     latest_alert = (
         db.query(TransactionAlert)
         .filter(
@@ -461,8 +548,12 @@ def get_approval_checklist(
         .first()
     )
     base_alert_score = (latest_alert.alert_score if latest_alert else 0.0) or 0.0
-    risk_matrix_score = getattr(latest_alert, "risk_matrix_score", None) if latest_alert else None
-    risk_matrix_level = getattr(latest_alert, "risk_matrix_level", None) if latest_alert else None
+    risk_matrix_score = (
+        getattr(latest_alert, "risk_matrix_score", None) if latest_alert else None
+    )
+    risk_matrix_level = (
+        getattr(latest_alert, "risk_matrix_level", None) if latest_alert else None
+    )
 
     question_score = compute_question_score(responses) if responses else None
     final_score, score_detail = compute_final_approval_score(
@@ -472,27 +563,30 @@ def get_approval_checklist(
     items = []
     for q in questions:
         r = response_map.get(q.id)
-        items.append({
-            "question_id": q.id,
-            "question_order": q.question_order,
-            "question_text": q.question_text,
-            "help_text": q.help_text,
-            "industry_context": q.industry_context,
-            "is_required": q.is_required,
-            "compliant_answer": q.compliant_answer.value if q.compliant_answer else "yes",
-            "answer": r.answer.value if r else None,
-            "notes": r.notes if r else None,
-            "answered_by": r.answered_by if r else None,
-            "answered_at": r.answered_at if r else None,
-        })
+        items.append(
+            {
+                "question_id": q.id,
+                "question_order": q.question_order,
+                "question_text": q.question_text,
+                "help_text": q.help_text,
+                "industry_context": q.industry_context,
+                "is_required": q.is_required,
+                "compliant_answer": q.compliant_answer.value
+                if q.compliant_answer
+                else "yes",
+                "answer": r.answer.value if r else None,
+                "notes": r.notes if r else None,
+                "answered_by": r.answered_by if r else None,
+                "answered_at": r.answered_at if r else None,
+            }
+        )
 
     return {
         "transaction_id": txn_id,
         "questions_configured": len(questions),
         "questions_answered": len([i for i in items if i["answer"] is not None]),
-        "checklist_complete": len(questions) > 0 and all(
-            i["answer"] is not None for i in items if i["is_required"]
-        ),
+        "checklist_complete": len(questions) > 0
+        and all(i["answer"] is not None for i in items if i["is_required"]),
         "base_alert_score": base_alert_score,
         "risk_matrix_score": risk_matrix_score,
         "risk_matrix_level": risk_matrix_level,
@@ -590,12 +684,15 @@ def answer_approval_questions(
         )
         .all()
     )
-    config = db.query(OrgMonitoringConfig).filter(
-        OrgMonitoringConfig.org_id == org_id
-    ).first()
+    config = (
+        db.query(OrgMonitoringConfig)
+        .filter(OrgMonitoringConfig.org_id == org_id)
+        .first()
+    )
     q_weight = getattr(config, "custom_question_weight", 0.20) if config else 0.20
 
     from app.models.monitoring import TransactionAlert
+
     latest_alert = (
         db.query(TransactionAlert)
         .filter(
@@ -608,7 +705,9 @@ def answer_approval_questions(
 
     question_score = compute_question_score(all_responses)
     base_alert_score = (latest_alert.alert_score if latest_alert else 0.0) or 0.0
-    final_score, score_detail = compute_final_approval_score(base_alert_score, question_score, q_weight)
+    final_score, score_detail = compute_final_approval_score(
+        base_alert_score, question_score, q_weight
+    )
 
     if latest_alert:
         latest_alert.question_score = question_score
@@ -632,6 +731,7 @@ def answer_approval_questions(
 
 
 # ── Live Decision Support Panel ───────────────────────────────────────────────
+
 
 @router.get("/{txn_id}/live-panel")
 def get_live_decision_panel(
@@ -662,9 +762,9 @@ def get_live_decision_panel(
     DISCLAIMER: This panel is decision support guidance only.
     All compliance decisions remain with the reporting entity.
     """
-    from app.services.decision_support_service import build_live_panel
-    from app.models.transaction import CustomerBehaviourProfile
     from app.models.organisation import Organisation
+    from app.models.transaction import CustomerBehaviourProfile
+    from app.services.decision_support_service import build_live_panel
 
     org_id = org_id_for(current_user)
     txn = _get_transaction_or_404(txn_id, org_id, db)
@@ -675,10 +775,14 @@ def get_live_decision_panel(
 
     org = db.query(Organisation).filter_by(id=org_id).first()
 
-    crypto_detail = db.query(TransactionCryptoDetail).filter_by(transaction_id=txn_id).first()
-    behaviour_profile = db.query(CustomerBehaviourProfile).filter_by(
-        customer_id=txn.customer_id, org_id=org_id
-    ).first()
+    crypto_detail = (
+        db.query(TransactionCryptoDetail).filter_by(transaction_id=txn_id).first()
+    )
+    behaviour_profile = (
+        db.query(CustomerBehaviourProfile)
+        .filter_by(customer_id=txn.customer_id, org_id=org_id)
+        .first()
+    )
 
     # Get latest alert score for this transaction
     latest_alert = (
@@ -708,7 +812,9 @@ def get_live_decision_panel(
         "amount": txn.amount,
         "amount_aud": txn.amount_aud,
         "currency": txn.currency,
-        "transaction_type": txn.transaction_type.value if txn.transaction_type else None,
+        "transaction_type": txn.transaction_type.value
+        if txn.transaction_type
+        else None,
         "payment_method": txn.payment_method.value if txn.payment_method else None,
         "direction": txn.direction.value if txn.direction else None,
         "source_country": txn.source_country,
@@ -716,7 +822,9 @@ def get_live_decision_panel(
         "is_cross_border": txn.is_cross_border,
         "is_near_threshold": txn.is_near_threshold,
         "is_structuring_suspect": txn.is_structuring_suspect,
-        "transaction_date": txn.transaction_date.isoformat() if txn.transaction_date else None,
+        "transaction_date": txn.transaction_date.isoformat()
+        if txn.transaction_date
+        else None,
     }
     panel["customer_context"] = {
         "customer_id": customer.id,
@@ -738,6 +846,7 @@ def get_live_decision_panel(
 
 
 # ── Draft Report Prefill ──────────────────────────────────────────────────────
+
 
 @router.get("/{txn_id}/draft-report-prefill/{report_type}")
 def get_draft_report_prefill(
@@ -763,11 +872,13 @@ def get_draft_report_prefill(
     all reports lodged with AUSTRAC. This system does not make
     regulatory determinations.
     """
-    from app.services.regulatory_decision_service import (
-        prefill_ifti_data, prefill_ttr_data, prefill_smr_data, evaluate_transaction
-    )
-    from app.models.transaction import CustomerBehaviourProfile
     from app.models.organisation import Organisation
+    from app.services.regulatory_decision_service import (
+        evaluate_transaction,
+        prefill_ifti_data,
+        prefill_smr_data,
+        prefill_ttr_data,
+    )
 
     if report_type not in ("ifti", "ttr", "smr"):
         raise HTTPException(422, "report_type must be one of: ifti, ttr, smr")
@@ -780,7 +891,9 @@ def get_draft_report_prefill(
         raise HTTPException(404, "Customer not found")
 
     org = db.query(Organisation).filter_by(id=org_id).first()
-    crypto_detail = db.query(TransactionCryptoDetail).filter_by(transaction_id=txn_id).first()
+    crypto_detail = (
+        db.query(TransactionCryptoDetail).filter_by(transaction_id=txn_id).first()
+    )
 
     latest_alert = (
         db.query(TransactionAlert)
@@ -797,8 +910,11 @@ def get_draft_report_prefill(
     else:
         # SMR — include indicator analysis
         reg_result = evaluate_transaction(
-            transaction=txn, customer=customer, org=org,
-            alert_score=alert_score, crypto_detail=crypto_detail,
+            transaction=txn,
+            customer=customer,
+            org=org,
+            alert_score=alert_score,
+            crypto_detail=crypto_detail,
         )
         prefill = prefill_smr_data(txn, customer, org, reg_result.indicators)
 
@@ -806,12 +922,15 @@ def get_draft_report_prefill(
     prefill["transaction_ref"] = txn.transaction_ref
     prefill["customer_id"] = str(customer.id)
     prefill["report_type"] = report_type
-    prefill["next_step"] = f"Create a draft {report_type.upper()} report and link this transaction"
+    prefill["next_step"] = (
+        f"Create a draft {report_type.upper()} report and link this transaction"
+    )
 
     return prefill
 
 
 # ── Questionnaire template management ─────────────────────────────────────────
+
 
 @router.post("/questionnaire/seed-industry-template")
 def seed_industry_questionnaire(
@@ -840,7 +959,8 @@ def seed_industry_questionnaire(
     All decisions remain with the reporting entity.
     """
     from app.services.questionnaire_seed_service import (
-        seed_questionnaire_for_org, get_available_templates
+        get_available_templates,
+        seed_questionnaire_for_org,
     )
 
     org_id = org_id_for(current_user)
@@ -871,14 +991,15 @@ def list_questionnaire_templates(
     List all available FATF-based questionnaire templates with question counts and categories.
     """
     from app.services.questionnaire_seed_service import get_available_templates
+
     return {
         "templates": get_available_templates(),
         "industry_template_map": {
-            "remittance":               ["fatf_general_v1", "remittance_v1"],
-            "cryptocurrency":           ["fatf_general_v1", "crypto_v1"],
+            "remittance": ["fatf_general_v1", "remittance_v1"],
+            "cryptocurrency": ["fatf_general_v1", "crypto_v1"],
             "payment_service_provider": ["fatf_general_v1", "psp_v1"],
-            "legal":                    ["fatf_general_v1", "legal_trust_v1"],
-            "real_estate":              ["fatf_general_v1", "real_estate_v1"],
-            "general":                  ["fatf_general_v1"],
+            "legal": ["fatf_general_v1", "legal_trust_v1"],
+            "real_estate": ["fatf_general_v1", "real_estate_v1"],
+            "general": ["fatf_general_v1"],
         },
     }

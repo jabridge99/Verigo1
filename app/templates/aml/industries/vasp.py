@@ -4,14 +4,16 @@ Tranche 1 — IFTI ✓  Travel Rule ✓  TTR (cash only) ✓
 Updated for AML/CTF Amendment Act 2024 — new VASP definition includes
 stablecoins, NFTs, and the broader 'virtual asset' definition.
 """
-from app.templates.aml.base import AMLTemplateBase, BASE_CONTROLS, BASE_POLICIES
+
 import copy
+
+from app.templates.aml.base import BASE_CONTROLS, BASE_POLICIES, AMLTemplateBase
 
 
 def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     t = AMLTemplateBase(industry="cryptocurrency", risk_level=risk_level)
     t.has_ifti_obligation = True
-    t.has_ttr_obligation = True   # cash on/off ramps
+    t.has_ttr_obligation = True  # cash on/off ramps
     t.has_travel_rule = True
     t.is_tranche_2 = False
 
@@ -105,21 +107,40 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     )
 
     extra_controls = [
-        {"control_ref": "CTL-010", "title": "Blockchain Analytics Wallet Screening",
-         "control_type": "detective", "risk_area": "transaction_monitoring"},
-        {"control_ref": "CTL-011", "title": "Self-Hosted Wallet Risk Assessment",
-         "control_type": "detective", "risk_area": "customer_risk"},
-        {"control_ref": "CTL-012", "title": "Travel Rule — Virtual Asset Transfers",
-         "control_type": "preventive", "risk_area": "travel_rule"},
-        {"control_ref": "CTL-013", "title": "IFTI Reporting — Virtual Asset Transfers",
-         "control_type": "detective", "risk_area": "ifti_reporting"},
+        {
+            "control_ref": "CTL-010",
+            "title": "Blockchain Analytics Wallet Screening",
+            "control_type": "detective",
+            "risk_area": "transaction_monitoring",
+        },
+        {
+            "control_ref": "CTL-011",
+            "title": "Self-Hosted Wallet Risk Assessment",
+            "control_type": "detective",
+            "risk_area": "customer_risk",
+        },
+        {
+            "control_ref": "CTL-012",
+            "title": "Travel Rule — Virtual Asset Transfers",
+            "control_type": "preventive",
+            "risk_area": "travel_rule",
+        },
+        {
+            "control_ref": "CTL-013",
+            "title": "IFTI Reporting — Virtual Asset Transfers",
+            "control_type": "detective",
+            "risk_area": "ifti_reporting",
+        },
     ]
 
     t._policies = copy.deepcopy(BASE_POLICIES) + [
-        {"title": "Virtual Asset Risk Policy",        "policy_type": "virtual_asset"},
-        {"title": "Travel Rule Compliance Policy",    "policy_type": "travel_rule"},
-        {"title": "Blockchain Analytics Policy",      "policy_type": "transaction_monitoring"},
-        {"title": "Self-Hosted Wallet Policy",        "policy_type": "kyc"},
+        {"title": "Virtual Asset Risk Policy", "policy_type": "virtual_asset"},
+        {"title": "Travel Rule Compliance Policy", "policy_type": "travel_rule"},
+        {
+            "title": "Blockchain Analytics Policy",
+            "policy_type": "transaction_monitoring",
+        },
+        {"title": "Self-Hosted Wallet Policy", "policy_type": "kyc"},
     ]
     t._controls = copy.deepcopy(BASE_CONTROLS) + extra_controls
 

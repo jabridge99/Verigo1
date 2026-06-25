@@ -9,6 +9,7 @@ Roles:
   DELETE /monitoring/rules/{id} — admin only (non-system rules only)
   PATCH /monitoring/rules/{id}/status — compliance+
 """
+
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -17,7 +18,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     Pagination,
-    get_current_user,
     org_id_for,
     require_admin,
     require_analyst_or_above,
@@ -43,10 +43,14 @@ router = APIRouter(prefix="/monitoring", tags=["Monitoring Rules"])
 
 
 def _get_rule_or_404(rule_id: str, org_id: str, db: Session) -> MonitoringRule:
-    rule = db.query(MonitoringRule).filter(
-        MonitoringRule.id == rule_id,
-        MonitoringRule.org_id == org_id,
-    ).first()
+    rule = (
+        db.query(MonitoringRule)
+        .filter(
+            MonitoringRule.id == rule_id,
+            MonitoringRule.org_id == org_id,
+        )
+        .first()
+    )
     if not rule:
         raise HTTPException(status_code=404, detail="Monitoring rule not found.")
     return rule
@@ -70,7 +74,9 @@ def list_rules(
     return pagination.apply(q).all()
 
 
-@router.post("/rules", response_model=MonitoringRuleOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/rules", response_model=MonitoringRuleOut, status_code=status.HTTP_201_CREATED
+)
 def create_rule(
     payload: MonitoringRuleCreate,
     db: Session = Depends(get_db),
@@ -148,6 +154,7 @@ def update_rule(
 
     if rule.is_system_rule:
         from app.models.user import UserRole
+
         if current_user.role != UserRole.admin:
             raise HTTPException(
                 status_code=403,

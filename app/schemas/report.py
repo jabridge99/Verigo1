@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.models.customer_workflow import EDDTrigger
 from app.models.report import ReportPriority, ReportType
 
 
@@ -87,9 +88,10 @@ class ReportingSummary(BaseModel):
 
 
 class ECDDCreate(BaseModel):
-    customer_id: int
+    customer_id: str
     industry_id: Optional[str] = None
-    trigger_reason: str
+    trigger_reason: EDDTrigger
+    trigger_reason_other: Optional[str] = None
     pep_status: int = 0
     adverse_media_found: int = 0
     adverse_media_details: Optional[str] = None
@@ -97,22 +99,44 @@ class ECDDCreate(BaseModel):
     beneficial_owner_details: Optional[str] = None
     source_of_wealth_verified: int = 0
     source_of_wealth_details: Optional[str] = None
+    source_of_funds: Optional[str] = None
+    source_of_wealth_notes: Optional[str] = None
+    purpose_of_transaction: Optional[str] = None
+    high_tax_risk: int = 0
+    tax_risk_notes: Optional[str] = None
+    investment_legitimacy_notes: Optional[str] = None
     analyst_notes: Optional[str] = None
 
 
+class ECDDDecisionRequest(BaseModel):
+    status: str  # pending | completed | rejected
+    decision_notes: str
+
+
 class ECDDResponse(BaseModel):
-    id: int
+    id: str
     ecdd_id: str
-    customer_id: int
+    customer_id: str
     trigger_reason: str
+    trigger_reason_other: Optional[str] = None
     pep_status: int
     adverse_media_found: int
     beneficial_owner_verified: int
     source_of_wealth_verified: int
+    source_of_funds: Optional[str] = None
+    source_of_wealth_notes: Optional[str] = None
+    purpose_of_transaction: Optional[str] = None
+    high_tax_risk: int = 0
+    tax_risk_notes: Optional[str] = None
+    investment_legitimacy_notes: Optional[str] = None
     enhanced_risk_score: float
     recommendation: Optional[str]
     analyst_notes: Optional[str]
     status: str
+    decision_notes: Optional[str] = None
+    decided_by: Optional[str] = None
+    decided_at: Optional[datetime] = None
+    last_revised_at: Optional[datetime] = None
     created_at: Optional[datetime]
 
     class Config:

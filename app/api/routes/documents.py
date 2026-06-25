@@ -24,6 +24,9 @@ from app.models.user import User, UserRole
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.services import document_service as svc
 from app.services.document_service import ALLOWED_MIME, MAX_SIZE
+from app.services.storage.factory import get_storage_provider
+from app.services.storage.local import LocalStorageProvider
+from app.services.tenant_scope import assert_tenant
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -74,16 +77,22 @@ def _verify_magic(content: bytes, declared_mime: str) -> bool:
 
 
 def _assert_tenant(current_user: User, doc_industry_id: Optional[str]):
-    """Explicit check — admin sees all, non-admin must match their industry_id."""
-    if current_user.role == UserRole.admin:
-        return  # admin has cross-tenant read access by design
+    """Explicit check — global super-admin sees all, everyone else (including
+    UserRole.admin, which is per-organisation, not global) must match their
+    industry_id."""
+    if current_user.is_super_admin:
+        return  # global super-admin has cross-tenant read access by design
     if doc_industry_id and doc_industry_id != current_user.org_id:
         raise HTTPException(403, "Cross-tenant document access denied")
 
 
 def _industry_scope(current_user: User) -> Optional[str]:
-    """Return the industry_id to filter on, or None for admin (no filter)."""
-    return None if current_user.role == UserRole.admin else current_user.org_id
+    """Return the industry_id to filter on, or None for global super-admin."""
+    return None if current_user.is_super_admin else current_user.org_id
+
+
+def _org_scope(current_user: User) -> Optional[str]:
+    return None if current_user.is_super_admin else current_user.primary_organisation_id
 
 
 @router.post("", response_model=DocumentResponse, status_code=201)
@@ -98,6 +107,7 @@ async def upload_document(
     current_user: User = Depends(_current_user),
 ):
     import hashlib
+
     content = await file.read()
     if len(content) > MAX_SIZE:
         raise HTTPException(413, f"File exceeds {MAX_SIZE // (1024 * 1024)} MB limit")
@@ -127,7 +137,8 @@ async def upload_document(
         content=content,
         mime_type=mime,
         uploaded_by=current_user.id,
-        industry_id=current_user.org_id,
+        industry_id=_industry_scope(current_user),
+        organisation_id=_org_scope(current_user),
         category=category,
         description=description,
         entity_type=entity_type,
@@ -150,6 +161,7 @@ def list_documents(
     return svc.list_documents(
         db,
         industry_id=_industry_scope(current_user),
+        organisation_id=_org_scope(current_user),
         category=category,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -163,7 +175,9 @@ def document_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.document_stats(db, _industry_scope(current_user))
+    return svc.document_stats(
+        db, _industry_scope(current_user), _org_scope(current_user)
+    )
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)
@@ -192,11 +206,39 @@ async def download_document(
     if not await svc.file_exists(doc):
         raise HTTPException(404, "File not found on storage")
     content = await svc.get_file_bytes(doc)
+
+    # KYC/AML documents are sensitive; downloads need an access trail just
+    # like other compliance-relevant actions in this codebase.
+    from app.services.audit_service import log_action
+
+    log_action(
+        db,
+        action="document.download",
+        entity_type="Document",
+        entity_id=doc.doc_id,
+        actor=current_user.id,
+        actor_role=current_user.role.value
+        if hasattr(current_user.role, "value")
+        else str(current_user.role),
+        industry_id=doc.industry_id,
+        organisation_id=doc.organisation_id,
+    )
+
+    from urllib.parse import quote
+
+    # doc.filename is client-controlled at upload time. A raw quote or CRLF
+    # in it could break out of the quoted Content-Disposition value, so
+    # sanitize the fallback ASCII name and RFC 5987-encode the real one.
+    safe_ascii = (doc.filename or "download").replace('"', "").replace("\\", "")
+    safe_ascii = safe_ascii.encode("ascii", "ignore").decode("ascii") or "download"
+    encoded = quote(doc.filename or "download")
     return Response(
         content=content,
         media_type=doc.mime_type or "application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{doc.filename}"',
+            "Content-Disposition": (
+                f"attachment; filename=\"{safe_ascii}\"; filename*=UTF-8''{encoded}"
+            ),
             "X-Content-Type-Options": "nosniff",
         },
     )
@@ -209,7 +251,9 @@ def update_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    doc = svc.update_document(db, doc_id, data, _industry_scope(current_user))
+    doc = svc.update_document(
+        db, doc_id, data, _industry_scope(current_user), _org_scope(current_user)
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc
@@ -223,7 +267,9 @@ def archive_document(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    doc = svc.archive_document(db, doc_id, _industry_scope(current_user))
+    doc = svc.archive_document(
+        db, doc_id, _industry_scope(current_user), _org_scope(current_user)
+    )
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc
@@ -238,6 +284,7 @@ async def delete_document(
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
+    _assert_tenant(current_user, doc.industry_id)
     if doc.legal_hold:
         raise HTTPException(409, "Document is under legal hold and cannot be deleted.")
     if not await svc.delete_document(db, doc_id, _industry_scope(current_user)):
@@ -245,6 +292,7 @@ async def delete_document(
 
 
 # ── Legal hold ────────────────────────────────────────────────────────────────
+
 
 class LegalHoldPayload(BaseModel):
     reason: str
@@ -261,6 +309,7 @@ def place_legal_hold(
 ):
     """Place a legal hold on a document — blocks deletion and archival."""
     from datetime import datetime, timezone
+
     doc = svc.get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
@@ -300,6 +349,7 @@ def release_legal_hold(
 
 # ── Versioning ────────────────────────────────────────────────────────────────
 
+
 @router.get("/{doc_id}/versions")
 def get_versions(
     doc_id: str,
@@ -320,9 +370,11 @@ def get_versions(
     while current:
         chain.append(current)
         if current.previous_version_id:
-            current = db.query(Document).filter(
-                Document.id == current.previous_version_id
-            ).first()
+            current = (
+                db.query(Document)
+                .filter(Document.id == current.previous_version_id)
+                .first()
+            )
         else:
             break
     chain.reverse()
@@ -357,7 +409,6 @@ async def upload_new_version(
     The old version is retained (never deleted).
     """
     import hashlib
-    from app.models.document import Document
 
     existing = svc.get_document(db, doc_id)
     if not existing:

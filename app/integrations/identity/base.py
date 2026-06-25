@@ -1,4 +1,5 @@
 """Abstract interface for identity verification (KYC/KYB) providers."""
+
 from __future__ import annotations
 
 import abc
@@ -10,6 +11,7 @@ from typing import Any
 class ApplicantToken:
     """Short-lived credential the frontend uses to launch the provider's
     hosted verification flow (SDK or WebSDK link) for a given customer."""
+
     token: str
     applicant_id: str
     provider: str
@@ -20,9 +22,11 @@ class ApplicantToken:
 @dataclass
 class VerificationStatus:
     applicant_id: str
-    review_status: str           # provider-native status string (init/pending/completed/...)
-    review_result: str | None    # normalised to "pass" / "fail" / None (still pending)
-    external_user_id: str | None = None   # our own correlation id (Customer.id), if present
+    review_status: str  # provider-native status string (init/pending/completed/...)
+    review_result: str | None  # normalised to "pass" / "fail" / None (still pending)
+    external_user_id: str | None = (
+        None  # our own correlation id (Customer.id), if present
+    )
     rejection_labels: list[str] = field(default_factory=list)
     raw: Any = None
 

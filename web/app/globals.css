@@ -3,6 +3,60 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * shadcn/ui-style semantic tokens. `:root` is light mode, `.dark` matches
+   * Verigo's existing navy/brand palette so dark mode (the current default)
+   * looks unchanged. Toggled by ThemeProvider adding/removing `.dark` on <html>.
+   * Existing pages still use hardcoded bg-navy-900/text-white and are
+   * unaffected — these vars only back new components built against
+   * bg-background/text-foreground etc.
+   */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 53% 8%;
+    --foreground: 0 0% 100%;
+    --card: 220 45% 10%;
+    --card-foreground: 0 0% 100%;
+    --popover: 220 45% 10%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 35% 16%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 35% 16%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 220 35% 16%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.1;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+  }
+
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {

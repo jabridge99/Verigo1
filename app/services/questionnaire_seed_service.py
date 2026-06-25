@@ -15,6 +15,7 @@ Questionnaires are:
 DISCLAIMER: Questionnaire templates are compliance workflow prompts.
 All compliance decisions remain with the reporting entity.
 """
+
 from __future__ import annotations
 
 import logging
@@ -162,7 +163,11 @@ CRYPTO_QUESTIONS = [
         "compliant_answer": QuestionAnswer.no,
         "risk_weight": 2.0,
         "template_ref": "crypto_v1",
-        "applicable_industries": ["cryptocurrency", "digital_currency_exchange", "vasp"],
+        "applicable_industries": [
+            "cryptocurrency",
+            "digital_currency_exchange",
+            "vasp",
+        ],
     },
     {
         "category": QuestionCategory.crypto_risk,
@@ -171,7 +176,11 @@ CRYPTO_QUESTIONS = [
         "compliant_answer": QuestionAnswer.yes,
         "risk_weight": 2.5,
         "template_ref": "crypto_v1",
-        "applicable_industries": ["cryptocurrency", "digital_currency_exchange", "vasp"],
+        "applicable_industries": [
+            "cryptocurrency",
+            "digital_currency_exchange",
+            "vasp",
+        ],
     },
     {
         "category": QuestionCategory.crypto_risk,
@@ -180,7 +189,11 @@ CRYPTO_QUESTIONS = [
         "compliant_answer": QuestionAnswer.no,
         "risk_weight": 3.0,
         "template_ref": "crypto_v1",
-        "applicable_industries": ["cryptocurrency", "digital_currency_exchange", "vasp"],
+        "applicable_industries": [
+            "cryptocurrency",
+            "digital_currency_exchange",
+            "vasp",
+        ],
     },
     {
         "category": QuestionCategory.crypto_risk,
@@ -189,7 +202,11 @@ CRYPTO_QUESTIONS = [
         "compliant_answer": QuestionAnswer.no,
         "risk_weight": 3.0,
         "template_ref": "crypto_v1",
-        "applicable_industries": ["cryptocurrency", "digital_currency_exchange", "vasp"],
+        "applicable_industries": [
+            "cryptocurrency",
+            "digital_currency_exchange",
+            "vasp",
+        ],
     },
     {
         "category": QuestionCategory.transaction_risk,
@@ -198,7 +215,11 @@ CRYPTO_QUESTIONS = [
         "compliant_answer": QuestionAnswer.yes,
         "risk_weight": 1.5,
         "template_ref": "crypto_v1",
-        "applicable_industries": ["cryptocurrency", "digital_currency_exchange", "vasp"],
+        "applicable_industries": [
+            "cryptocurrency",
+            "digital_currency_exchange",
+            "vasp",
+        ],
     },
 ]
 
@@ -297,7 +318,11 @@ PSP_QUESTIONS = [
         "compliant_answer": QuestionAnswer.yes,
         "risk_weight": 2.0,
         "template_ref": "psp_v1",
-        "applicable_industries": ["payment_service_provider", "psp", "merchant_services"],
+        "applicable_industries": [
+            "payment_service_provider",
+            "psp",
+            "merchant_services",
+        ],
     },
     {
         "category": QuestionCategory.geographic_risk,
@@ -306,7 +331,11 @@ PSP_QUESTIONS = [
         "compliant_answer": QuestionAnswer.no,
         "risk_weight": 2.0,
         "template_ref": "psp_v1",
-        "applicable_industries": ["payment_service_provider", "psp", "merchant_services"],
+        "applicable_industries": [
+            "payment_service_provider",
+            "psp",
+            "merchant_services",
+        ],
     },
     {
         "category": QuestionCategory.transaction_risk,
@@ -315,33 +344,37 @@ PSP_QUESTIONS = [
         "compliant_answer": QuestionAnswer.yes,
         "risk_weight": 1.5,
         "template_ref": "psp_v1",
-        "applicable_industries": ["payment_service_provider", "psp", "merchant_services"],
+        "applicable_industries": [
+            "payment_service_provider",
+            "psp",
+            "merchant_services",
+        ],
     },
 ]
 
 
 ALL_TEMPLATES = {
-    "fatf_general_v1":   FATF_GENERAL_QUESTIONS,
-    "remittance_v1":     REMITTANCE_QUESTIONS,
-    "crypto_v1":         CRYPTO_QUESTIONS,
-    "legal_trust_v1":    LEGAL_TRUST_QUESTIONS,
-    "real_estate_v1":    REAL_ESTATE_QUESTIONS,
-    "psp_v1":            PSP_QUESTIONS,
+    "fatf_general_v1": FATF_GENERAL_QUESTIONS,
+    "remittance_v1": REMITTANCE_QUESTIONS,
+    "crypto_v1": CRYPTO_QUESTIONS,
+    "legal_trust_v1": LEGAL_TRUST_QUESTIONS,
+    "real_estate_v1": REAL_ESTATE_QUESTIONS,
+    "psp_v1": PSP_QUESTIONS,
 }
 
 INDUSTRY_TEMPLATE_MAP = {
-    "remittance":                  ["fatf_general_v1", "remittance_v1"],
-    "money_service_business":      ["fatf_general_v1", "remittance_v1"],
-    "cryptocurrency":              ["fatf_general_v1", "crypto_v1"],
-    "digital_currency_exchange":   ["fatf_general_v1", "crypto_v1"],
-    "vasp":                        ["fatf_general_v1", "crypto_v1"],
-    "payment_service_provider":    ["fatf_general_v1", "psp_v1"],
-    "psp":                         ["fatf_general_v1", "psp_v1"],
-    "legal":                       ["fatf_general_v1", "legal_trust_v1"],
-    "conveyancing":                ["fatf_general_v1", "legal_trust_v1"],
-    "law_firm":                    ["fatf_general_v1", "legal_trust_v1"],
-    "real_estate":                 ["fatf_general_v1", "real_estate_v1"],
-    "property":                    ["fatf_general_v1", "real_estate_v1"],
+    "remittance": ["fatf_general_v1", "remittance_v1"],
+    "money_service_business": ["fatf_general_v1", "remittance_v1"],
+    "cryptocurrency": ["fatf_general_v1", "crypto_v1"],
+    "digital_currency_exchange": ["fatf_general_v1", "crypto_v1"],
+    "vasp": ["fatf_general_v1", "crypto_v1"],
+    "payment_service_provider": ["fatf_general_v1", "psp_v1"],
+    "psp": ["fatf_general_v1", "psp_v1"],
+    "legal": ["fatf_general_v1", "legal_trust_v1"],
+    "conveyancing": ["fatf_general_v1", "legal_trust_v1"],
+    "law_firm": ["fatf_general_v1", "legal_trust_v1"],
+    "real_estate": ["fatf_general_v1", "real_estate_v1"],
+    "property": ["fatf_general_v1", "real_estate_v1"],
 }
 
 
@@ -368,11 +401,15 @@ def seed_questionnaire_for_org(
         {"seeded": int, "skipped": int, "templates_applied": list}
     """
     if skip_if_exists:
-        existing = db.query(OrgApprovalQuestion).filter_by(
-            org_id=org_id, is_system=True
-        ).first()
+        existing = (
+            db.query(OrgApprovalQuestion)
+            .filter_by(org_id=org_id, is_system=True)
+            .first()
+        )
         if existing:
-            log.info("questionnaire.skip_seed org=%s already_has_system_questions", org_id)
+            log.info(
+                "questionnaire.skip_seed org=%s already_has_system_questions", org_id
+            )
             return {"seeded": 0, "skipped": 1, "templates_applied": []}
 
     industry_lower = industry.lower()
@@ -388,11 +425,15 @@ def seed_questionnaire_for_org(
         questions = ALL_TEMPLATES.get(tpl_key, [])
         for q_def in questions:
             # Skip if this exact template_ref + org_id + question_text already exists
-            exists = db.query(OrgApprovalQuestion).filter_by(
-                org_id=org_id,
-                template_ref=q_def["template_ref"],
-                question_text=q_def["question_text"],
-            ).first()
+            exists = (
+                db.query(OrgApprovalQuestion)
+                .filter_by(
+                    org_id=org_id,
+                    template_ref=q_def["template_ref"],
+                    question_text=q_def["question_text"],
+                )
+                .first()
+            )
             if exists:
                 continue
 
@@ -420,8 +461,13 @@ def seed_questionnaire_for_org(
             applied.append(tpl_key)
 
     db.commit()
-    log.info("questionnaire.seeded org=%s industry=%s seeded=%d templates=%s",
-             org_id, industry, seeded, applied)
+    log.info(
+        "questionnaire.seeded org=%s industry=%s seeded=%d templates=%s",
+        org_id,
+        industry,
+        seeded,
+        applied,
+    )
     return {"seeded": seeded, "skipped": 0, "templates_applied": applied}
 
 
@@ -431,9 +477,9 @@ def get_available_templates() -> dict:
         tpl_key: {
             "question_count": len(questions),
             "categories": list({q["category"].value for q in questions}),
-            "applicable_industries": list({
-                ind for q in questions for ind in q.get("applicable_industries", [])
-            }),
+            "applicable_industries": list(
+                {ind for q in questions for ind in q.get("applicable_industries", [])}
+            ),
         }
         for tpl_key, questions in ALL_TEMPLATES.items()
     }

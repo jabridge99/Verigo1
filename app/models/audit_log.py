@@ -2,6 +2,7 @@
 Immutable audit log — one row per system event.
 Records are NEVER modified after creation.
 """
+
 import enum
 from uuid import uuid4
 
@@ -77,6 +78,7 @@ class AuditEventType(str, enum.Enum):
     rule_modified = "rule_modified"
     rule_status_changed = "rule_status_changed"
     rule_deleted = "rule_deleted"
+    automation_rule_triggered = "automation_rule_triggered"
 
     # Compliance calendar
     calendar_item_created = "calendar_item_created"
@@ -109,29 +111,35 @@ class AuditLog(Base):
     Immutable compliance audit trail.
     One row per event — never updated or deleted.
     """
+
     __tablename__ = "audit_logs"
 
     id = Column(String, primary_key=True, default=lambda: f"aud_{uuid4().hex[:14]}")
-    org_id = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     event_type = Column(Enum(AuditEventType), nullable=False, index=True)
-    actor_id = Column(String, index=True)           # user_id; None for system events
-    actor_role = Column(String(50))                 # role at time of event
-    action = Column(String(200), nullable=False)    # human-readable summary
+    actor_id = Column(String, index=True)  # user_id; None for system events
+    actor_role = Column(String(50))  # role at time of event
+    action = Column(String(200), nullable=False)  # human-readable summary
 
-    object_type = Column(String(100), index=True)   # e.g. "IFTIReport", "Case"
-    object_id = Column(String, index=True)          # PK of the affected object
+    object_type = Column(String(100), index=True)  # e.g. "IFTIReport", "Case"
+    object_id = Column(String, index=True)  # PK of the affected object
 
-    old_value = Column(JSON)                        # snapshot before change
-    new_value = Column(JSON)                        # snapshot after change
+    old_value = Column(JSON)  # snapshot before change
+    new_value = Column(JSON)  # snapshot after change
 
-    ip_address = Column(String(45))                 # IPv4 or IPv6
+    ip_address = Column(String(45))  # IPv4 or IPv6
     user_agent = Column(String(500))
     session_id = Column(String(100))
     request_id = Column(String(100))
 
-    reason = Column(String(1000))                   # operator-supplied justification
-    log_metadata = Column(JSON)                     # arbitrary extra context
+    reason = Column(String(1000))  # operator-supplied justification
+    log_metadata = Column(JSON)  # arbitrary extra context
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     # Intentionally NO updated_at — immutable record

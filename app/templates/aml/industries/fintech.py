@@ -3,8 +3,10 @@ Fintech / Payment Services AML template.
 Tranche 1 — IFTI ✓  TTR ✓ (if cash handling)  Travel Rule ✓
 Covers: payment platforms, BNPL, digital wallets, neobanks, payment facilitators.
 """
-from app.templates.aml.base import AMLTemplateBase, BASE_CONTROLS, BASE_POLICIES
+
 import copy
+
+from app.templates.aml.base import BASE_CONTROLS, BASE_POLICIES, AMLTemplateBase
 
 
 def get_template(risk_level: str = "medium") -> AMLTemplateBase:
@@ -65,21 +67,37 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     )
 
     extra_controls = [
-        {"control_ref": "CTL-010", "title": "Digital Onboarding Identity Verification",
-         "control_type": "preventive", "risk_area": "kyc"},
-        {"control_ref": "CTL-011", "title": "IFTI Reporting — Cross-Border Payments",
-         "control_type": "detective", "risk_area": "ifti_reporting"},
-        {"control_ref": "CTL-012", "title": "Travel Rule — Payment Instructions",
-         "control_type": "preventive", "risk_area": "travel_rule"},
-        {"control_ref": "CTL-013", "title": "API/Third-Party Payment Risk Controls",
-         "control_type": "preventive", "risk_area": "third_party"},
+        {
+            "control_ref": "CTL-010",
+            "title": "Digital Onboarding Identity Verification",
+            "control_type": "preventive",
+            "risk_area": "kyc",
+        },
+        {
+            "control_ref": "CTL-011",
+            "title": "IFTI Reporting — Cross-Border Payments",
+            "control_type": "detective",
+            "risk_area": "ifti_reporting",
+        },
+        {
+            "control_ref": "CTL-012",
+            "title": "Travel Rule — Payment Instructions",
+            "control_type": "preventive",
+            "risk_area": "travel_rule",
+        },
+        {
+            "control_ref": "CTL-013",
+            "title": "API/Third-Party Payment Risk Controls",
+            "control_type": "preventive",
+            "risk_area": "third_party",
+        },
     ]
 
     t._policies = copy.deepcopy(BASE_POLICIES) + [
-        {"title": "Digital Onboarding AML Policy",    "policy_type": "kyc"},
-        {"title": "IFTI Reporting Policy",            "policy_type": "ifti"},
-        {"title": "Travel Rule Policy",               "policy_type": "travel_rule"},
-        {"title": "Third-Party/API Risk Policy",      "policy_type": "third_party"},
+        {"title": "Digital Onboarding AML Policy", "policy_type": "kyc"},
+        {"title": "IFTI Reporting Policy", "policy_type": "ifti"},
+        {"title": "Travel Rule Policy", "policy_type": "travel_rule"},
+        {"title": "Third-Party/API Risk Policy", "policy_type": "third_party"},
     ]
     t._controls = copy.deepcopy(BASE_CONTROLS) + extra_controls
 

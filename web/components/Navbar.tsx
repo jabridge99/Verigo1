@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark, BookOpen, HelpCircle } from 'lucide-react'
-import { getStoredUser, getToken, clearUser } from '@/lib/auth'
+import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark, BookOpen, HelpCircle, Building2 } from 'lucide-react'
+import { getStoredUser, clearUser } from '@/lib/auth'
 import { useRouter, usePathname } from 'next/navigation'
+import ThemeToggle from '@/components/ThemeToggle'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -14,21 +15,20 @@ const solutionItems = [
   { label: 'Transaction Monitoring', href: '/solutions/transaction-monitoring', desc: 'Automated AML transaction surveillance' },
   { label: 'Case Management', href: '/solutions/case-management', desc: 'Alert-to-case investigation workflows' },
   { label: 'Regulatory Reporting', href: '/solutions/regulatory-reporting', desc: 'AUSTRAC-ready report generation' },
-  { label: 'Reporting Groups', href: '/solutions/reporting-groups', desc: 'Multi-entity group compliance' },
+  { label: 'Reporting Groups', href: '/solutions/reporting-group', desc: 'Multi-entity group compliance' },
   { label: 'Workflow Automation', href: '/solutions/workflow-automation', desc: 'No-code compliance automation' },
 ]
 
 const industryItems = [
-  { label: 'VASPs / Digital Currency Exchanges (DCEs)', href: '/solutions/digital-currency-exchange', icon: Coins },
-  { label: 'Remittance Providers', href: '/solutions/remittance-provider', icon: Globe },
-  { label: 'Foreign Exchange', href: '/solutions/foreign-exchange', icon: ArrowLeftRight },
-  { label: 'Payment Service Providers', href: '/solutions/payment-service-provider', icon: CreditCard },
-  { label: 'Mortgage Brokers', href: '/solutions/mortgage-broker', icon: Landmark },
-  { label: 'Real Estate Professionals', href: '/solutions/real-estate', icon: Home },
-  { label: 'Conveyancers', href: '/solutions/conveyancer', icon: FileCheck },
-  { label: 'Law Firms', href: '/solutions/law-firm', icon: Scale },
-  { label: 'Accounting Firms', href: '/solutions/accounting-firm', icon: Calculator },
-  { label: 'Precious Metal Dealers', href: '/solutions/precious-metals', icon: Gem },
+  { label: 'VASPs / Digital Currency Exchanges', href: '/solutions/vasp', icon: Coins },
+  { label: 'Remittance Service Providers', href: '/solutions/remittance', icon: Globe },
+  { label: 'Bullion Dealers', href: '/solutions/bullion-dealers', icon: Gem },
+  { label: 'Real Estate Agents', href: '/solutions/real-estate', icon: Home },
+  { label: 'Conveyancers', href: '/solutions/conveyancers', icon: FileCheck },
+  { label: 'Legal Professionals', href: '/solutions/legal-professionals', icon: Scale },
+  { label: 'Accountants', href: '/solutions/accountants', icon: Calculator },
+  { label: 'Precious Metals Dealers', href: '/solutions/precious-metals', icon: Gem },
+  { label: 'Pubs, Clubs & Hotels', href: '/solutions/pubs-clubs', icon: Building2 },
 ]
 
 export default function Navbar() {
@@ -68,9 +68,8 @@ export default function Navbar() {
     if (!user) return
     const load = async () => {
       try {
-        const token = getToken()
         const res = await fetch(`${API}/api/v1/notifications/summary`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         })
         if (res.ok) {
           const data = await res.json()
@@ -120,15 +119,19 @@ export default function Navbar() {
               <Link href="/" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Home</Link>
 
               {/* Solutions dropdown */}
-              <div className="relative">
+              <div className="relative flex items-center">
+                <Link href="/solutions" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                  Solutions
+                </Link>
                 <button
                   onClick={() => toggleDropdown('solutions')}
-                  className={`flex items-center gap-1 ${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}
+                  aria-label="Toggle solutions menu"
+                  className="p-2 rounded-lg hover:bg-slate-50"
                 >
-                  Solutions <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'solutions' ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'solutions' ? 'rotate-180' : ''}`} />
                 </button>
                 {activeDropdown === 'solutions' && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[560px] bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-5 grid grid-cols-2 gap-1 z-50">
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[560px] max-h-[70vh] overflow-y-auto bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-5 grid grid-cols-2 gap-1 z-50">
                     <div className="col-span-2 pb-2 mb-2 border-b border-slate-100">
                       <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Platform Capabilities</p>
                     </div>
@@ -153,15 +156,19 @@ export default function Navbar() {
               </div>
 
               {/* Industries dropdown */}
-              <div className="relative">
+              <div className="relative flex items-center">
+                <Link href="/industries" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                  Industries
+                </Link>
                 <button
                   onClick={() => toggleDropdown('industries')}
-                  className={`flex items-center gap-1 ${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}
+                  aria-label="Toggle industries menu"
+                  className="p-2 rounded-lg hover:bg-slate-50"
                 >
-                  Industries <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'industries' ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'industries' ? 'rotate-180' : ''}`} />
                 </button>
                 {activeDropdown === 'industries' && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 max-h-[70vh] overflow-y-auto bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 pb-2 mb-1 border-b border-slate-100">Industries We Serve</p>
                     {industryItems.map(item => (
                       <Link
@@ -198,7 +205,7 @@ export default function Navbar() {
                   Resources <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'resources' ? 'rotate-180' : ''}`} />
                 </button>
                 {activeDropdown === 'resources' && (
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
+                  <div className="absolute top-full right-0 mt-2 w-56 max-h-[70vh] overflow-y-auto bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 pb-2 mb-1 border-b border-slate-100">Subscriber Resources</p>
                     <Link href="/learn" onClick={() => setActiveDropdown(null)} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors">
                       <BookOpen className="w-4 h-4 text-slate-500 flex-shrink-0" />
@@ -225,7 +232,7 @@ export default function Navbar() {
                   Resources <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'resources' ? 'rotate-180' : ''}`} />
                 </button>
                 {activeDropdown === 'resources' && (
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
+                  <div className="absolute top-full right-0 mt-2 w-56 max-h-[70vh] overflow-y-auto bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 p-3 z-50">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 pb-2 mb-1 border-b border-slate-100">Subscriber Resources</p>
                     <Link href="/learn" onClick={() => setActiveDropdown(null)} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors">
                       <BookOpen className="w-4 h-4 text-slate-500 flex-shrink-0" />
@@ -253,13 +260,13 @@ export default function Navbar() {
                     </span>
                   )}
                 </Link>
+                <ThemeToggle />
                 <Link href="/dashboard" className="pub-btn-primary text-sm py-2 px-4">Dashboard</Link>
                 <button onClick={handleSignOut} className="text-sm text-slate-500 hover:text-slate-700 transition-colors">Sign out</button>
               </>
             ) : (
               <>
                 <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Sign in</Link>
-                <Link href="/live-demo" className="pub-btn-secondary text-sm py-2 px-4">Book Demo</Link>
                 <Link href="/start-trial" className="pub-btn-primary text-sm py-2 px-4">Start Free Trial</Link>
               </>
             )}
@@ -277,7 +284,7 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className={`lg:hidden border-t ${isPublicPage ? 'bg-white border-slate-200' : 'bg-navy-800 border-white/10'} px-4 py-5 space-y-1`}>
+        <div className={`lg:hidden border-t ${isPublicPage ? 'bg-white border-slate-200' : 'bg-navy-800 border-white/10'} px-4 py-5 space-y-1 max-h-[calc(100vh-4rem)] overflow-y-auto`}>
           <Link href="/" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Home</Link>
 
           <div>
@@ -320,7 +327,6 @@ export default function Navbar() {
             ) : (
               <>
                 <Link href="/login" onClick={() => setMobileOpen(false)} className="pub-btn-secondary justify-center">Sign in</Link>
-                <Link href="/live-demo" onClick={() => setMobileOpen(false)} className="pub-btn-secondary justify-center">Book Demo</Link>
                 <Link href="/start-trial" onClick={() => setMobileOpen(false)} className="pub-btn-primary justify-center">Start Free Trial</Link>
               </>
             )}

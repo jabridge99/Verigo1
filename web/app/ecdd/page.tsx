@@ -3,15 +3,19 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   ShieldCheck, AlertTriangle, CheckCircle, XCircle,
-  Clock, RefreshCw, Plus, Eye, User, Search,
+  Clock, RefreshCw, Plus, Eye, User, Search, Download, Scale,
 } from "lucide-react";
 import clsx from "clsx";
+import QuickActions from "@/components/QuickActions";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface ECDDRecord {
-  id: number;
+  id: string;
   ecdd_id: string;
-  customer_id: number;
+  customer_id: string;
   trigger_reason: string;
+  trigger_reason_other?: string;
   pep_status: number;
   adverse_media_found: number;
   beneficial_owner_verified: number;
@@ -19,9 +23,45 @@ interface ECDDRecord {
   enhanced_risk_score: number;
   recommendation?: string;
   analyst_notes?: string;
+  source_of_funds?: string;
+  source_of_wealth_notes?: string;
+  purpose_of_transaction?: string;
+  tax_risk_notes?: string;
+  high_tax_risk?: number;
+  investment_legitimacy_notes?: string;
   status: string;
+  decision_notes?: string;
+  decided_by?: string;
+  decided_at?: string;
+  last_revised_at?: string;
   created_at?: string;
 }
+
+interface CustomerOption {
+  id: string;
+  full_name?: string;
+  name?: string;
+  customer_ref?: string;
+}
+
+// AUSTRAC/FATF-aligned ECDD trigger categories — 5 primary indicators
+// surfaced first, the remaining EDDTrigger members below, plus "Other"
+// which reveals a free-text elaboration field (trigger_reason_other).
+const TRIGGER_OPTIONS: { value: string; label: string; primary?: boolean }[] = [
+  { value: "pep_match", label: "PEP match", primary: true },
+  { value: "sanctions_match", label: "Sanctions / watchlist match", primary: true },
+  { value: "adverse_media", label: "Adverse media", primary: true },
+  { value: "high_risk_country", label: "High-risk country exposure", primary: true },
+  { value: "unusual_activity", label: "Unusual transaction activity", primary: true },
+  { value: "high_risk_score", label: "High risk score" },
+  { value: "complex_ownership", label: "Complex ownership structure" },
+  { value: "high_value_customer", label: "High-value customer" },
+  { value: "crypto_exposure", label: "Crypto / virtual asset exposure" },
+  { value: "cash_intensive", label: "Cash-intensive business" },
+  { value: "compliance_discretion", label: "Compliance discretion" },
+  { value: "other", label: "Other (specify)" },
+];
+const TRIGGER_LABEL: Record<string, string> = Object.fromEntries(TRIGGER_OPTIONS.map(o => [o.value, o.label]));
 
 const REC_COLOR: Record<string, string> = {
   approve:  "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
@@ -32,16 +72,17 @@ const REC_COLOR: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   pending:   "bg-slate-500/20 text-slate-300",
   completed: "bg-teal-500/20 text-teal-300",
+  rejected:  "bg-red-500/20 text-red-300",
 };
 
 const SCORE_COLOR = (s: number) =>
   s >= 80 ? "text-red-400" : s >= 50 ? "text-amber-400" : "text-emerald-400";
 
 const DEMO_RECORDS: ECDDRecord[] = [
-  { id: 1, ecdd_id: "ECDD-DEMO00001", customer_id: 3, trigger_reason: "Sanctions screening hit — OFAC SDN list match on transaction counterparty", pep_status: 0, adverse_media_found: 1, beneficial_owner_verified: 0, source_of_wealth_verified: 0, enhanced_risk_score: 70, recommendation: "reject", status: "pending", created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 2, ecdd_id: "ECDD-DEMO00002", customer_id: 2, trigger_reason: "PEP identified — customer declared as foreign politically exposed person", pep_status: 1, adverse_media_found: 0, beneficial_owner_verified: 1, source_of_wealth_verified: 0, enhanced_risk_score: 45, recommendation: "monitor", status: "pending", created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 3, ecdd_id: "ECDD-DEMO00003", customer_id: 1, trigger_reason: "Periodic review — 12-month scheduled ECDD refresh", pep_status: 0, adverse_media_found: 0, beneficial_owner_verified: 1, source_of_wealth_verified: 1, enhanced_risk_score: 0, recommendation: "approve", status: "completed", created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: 4, ecdd_id: "ECDD-DEMO00004", customer_id: 5, trigger_reason: "Unusual transaction pattern — structuring detected across 3 accounts", pep_status: 0, adverse_media_found: 0, beneficial_owner_verified: 0, source_of_wealth_verified: 1, enhanced_risk_score: 20, recommendation: "monitor", status: "pending", created_at: new Date(Date.now() - 259200000).toISOString() },
+  { id: "1", ecdd_id: "ECDD-DEMO00001", customer_id: "3", trigger_reason: "Sanctions screening hit — OFAC SDN list match on transaction counterparty", pep_status: 0, adverse_media_found: 1, beneficial_owner_verified: 0, source_of_wealth_verified: 0, enhanced_risk_score: 70, recommendation: "reject", status: "pending", created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: "2", ecdd_id: "ECDD-DEMO00002", customer_id: "2", trigger_reason: "PEP identified — customer declared as foreign politically exposed person", pep_status: 1, adverse_media_found: 0, beneficial_owner_verified: 1, source_of_wealth_verified: 0, enhanced_risk_score: 45, recommendation: "monitor", status: "pending", created_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: "3", ecdd_id: "ECDD-DEMO00003", customer_id: "1", trigger_reason: "Periodic review — 12-month scheduled ECDD refresh", pep_status: 0, adverse_media_found: 0, beneficial_owner_verified: 1, source_of_wealth_verified: 1, enhanced_risk_score: 0, recommendation: "approve", status: "completed", created_at: new Date(Date.now() - 172800000).toISOString() },
+  { id: "4", ecdd_id: "ECDD-DEMO00004", customer_id: "5", trigger_reason: "Unusual transaction pattern — structuring detected across 3 accounts", pep_status: 0, adverse_media_found: 0, beneficial_owner_verified: 0, source_of_wealth_verified: 1, enhanced_risk_score: 20, recommendation: "monitor", status: "pending", created_at: new Date(Date.now() - 259200000).toISOString() },
 ];
 
 type Tab = "records" | "create";
@@ -61,23 +102,67 @@ export default function ECDDDashboard() {
 
   const fetchRecords = useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/reports/ecdd/");
+      const res = await fetch(`${API}/api/v1/reports/ecdd/`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setRecords(d); }
     } catch {}
   }, []);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
-  const completeECDD = async (ecddId: string) => {
-    try { await fetch(`/api/v1/reports/ecdd/${ecddId}/complete`, { method: "PATCH" }); } catch {}
-    setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? { ...r, status: "completed" } : r));
-    setSelected(prev => prev?.ecdd_id === ecddId ? { ...prev, status: "completed" } : prev);
-    showToast("success", "ECDD marked as completed");
+  const decideECDD = async (ecddId: string, status: string, decisionNotes: string) => {
+    const now = new Date().toISOString();
+    try {
+      const res = await fetch(`${API}/api/v1/reports/ecdd/${ecddId}/decision`, {
+        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, decision_notes: decisionNotes }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? updated : r));
+        setSelected(prev => prev?.ecdd_id === ecddId ? updated : prev);
+        showToast("success", `${ecddId} marked ${status}`);
+        return;
+      }
+    } catch {}
+    setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? { ...r, status, decision_notes: decisionNotes, last_revised_at: now } : r));
+    setSelected(prev => prev?.ecdd_id === ecddId ? { ...prev, status, decision_notes: decisionNotes, last_revised_at: now } : prev);
+    showToast("success", `${ecddId} marked ${status}`);
+  };
+
+  const exportEcdd = (r: ECDDRecord) => {
+    const lines = [
+      `ENHANCED CUSTOMER DUE DILIGENCE ASSESSMENT`,
+      `ECDD ID: ${r.ecdd_id}`,
+      `Customer ID: ${r.customer_id}`,
+      `Status: ${r.status}`,
+      `Recommendation: ${r.recommendation || "—"}`,
+      `Enhanced risk score: ${r.enhanced_risk_score}/100`,
+      "",
+      `Trigger reason:\n${TRIGGER_LABEL[r.trigger_reason] || r.trigger_reason}${r.trigger_reason_other ? ` — ${r.trigger_reason_other}` : ""}`,
+      "",
+      `PEP status: ${r.pep_status ? "Yes" : "No"}`,
+      `Adverse media found: ${r.adverse_media_found ? "Yes" : "No"}`,
+      `Beneficial owner verified: ${r.beneficial_owner_verified ? "Yes" : "No"}`,
+      `Source of wealth verified: ${r.source_of_wealth_verified ? "Yes" : "No"}`,
+      r.source_of_funds ? `\nSource of funds:\n${r.source_of_funds}` : "",
+      r.purpose_of_transaction ? `\nPurpose of transaction:\n${r.purpose_of_transaction}` : "",
+      r.tax_risk_notes ? `\nTax risk indicators:\n${r.tax_risk_notes}` : "",
+      r.investment_legitimacy_notes ? `\nInvestment legitimacy:\n${r.investment_legitimacy_notes}` : "",
+      r.analyst_notes ? `\nAnalyst notes:\n${r.analyst_notes}` : "",
+      "",
+      `Created: ${r.created_at ? new Date(r.created_at).toLocaleString("en-AU") : "—"}`,
+    ].filter(Boolean).join("\n");
+    const blob = new Blob([lines], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${r.ecdd_id}.txt`; a.click();
+    URL.revokeObjectURL(url);
+    showToast("success", `${r.ecdd_id} exported`);
   };
 
   const filtered = records.filter(r => {
     const q = search.toLowerCase();
-    return (!search || r.ecdd_id.toLowerCase().includes(q) || r.trigger_reason.toLowerCase().includes(q))
+    return (!search || r.ecdd_id.toLowerCase().includes(q) || (TRIGGER_LABEL[r.trigger_reason] || r.trigger_reason).toLowerCase().includes(q))
       && (recFilter === "all" || r.recommendation === recFilter)
       && (statusFilter === "all" || r.status === statusFilter);
   });
@@ -168,7 +253,7 @@ export default function ECDDDashboard() {
               </select>
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
                 className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
-                {["all","pending","completed"].map(v => (
+                {["all","pending","completed","rejected"].map(v => (
                   <option key={v} value={v}>{v === "all" ? "Status — All" : v.charAt(0).toUpperCase() + v.slice(1)}</option>
                 ))}
               </select>
@@ -195,7 +280,7 @@ export default function ECDDDashboard() {
                     <tr key={r.ecdd_id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(r)}>
                       <td className="px-4 py-3 font-mono text-xs text-slate-400">{r.ecdd_id}</td>
                       <td className="px-4 py-3 max-w-xs">
-                        <div className="text-slate-300 text-xs line-clamp-2">{r.trigger_reason}</div>
+                        <div className="text-slate-300 text-xs line-clamp-2">{TRIGGER_LABEL[r.trigger_reason] || r.trigger_reason}{r.trigger_reason === "other" && r.trigger_reason_other ? ` — ${r.trigger_reason_other}` : ""}</div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`font-bold text-sm ${SCORE_COLOR(r.enhanced_risk_score)}`}>
@@ -269,7 +354,12 @@ export default function ECDDDashboard() {
                   </span>
                 </div>
               </div>
-              <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => exportEcdd(selected)} title="Export assessment" className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 hover:text-brand-400 transition-colors">
+                  <Download className="w-4 h-4" />
+                </button>
+                <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
+              </div>
             </div>
 
             {/* Risk score dial */}
@@ -288,7 +378,10 @@ export default function ECDDDashboard() {
 
             <div>
               <div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Trigger reason</div>
-              <div className="text-sm text-slate-300 leading-relaxed">{selected.trigger_reason}</div>
+              <div className="text-sm text-slate-300 leading-relaxed">
+                {TRIGGER_LABEL[selected.trigger_reason] || selected.trigger_reason}
+                {selected.trigger_reason === "other" && selected.trigger_reason_other ? ` — ${selected.trigger_reason_other}` : ""}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -305,12 +398,18 @@ export default function ECDDDashboard() {
               ))}
             </div>
 
-            {selected.analyst_notes && (
-              <div>
-                <div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Analyst notes</div>
-                <div className="text-sm text-slate-300 leading-relaxed bg-navy-900 rounded-lg p-3 border border-navy-700">{selected.analyst_notes}</div>
+            {[
+              { label: "Source of funds", value: selected.source_of_funds },
+              { label: "Purpose of transaction", value: selected.purpose_of_transaction },
+              { label: "Tax risk indicators", value: selected.tax_risk_notes },
+              { label: "Investment legitimacy", value: selected.investment_legitimacy_notes },
+              { label: "Analyst notes", value: selected.analyst_notes },
+            ].filter(f => f.value).map(f => (
+              <div key={f.label}>
+                <div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">{f.label}</div>
+                <div className="text-sm text-slate-300 leading-relaxed bg-navy-900 rounded-lg p-3 border border-navy-700">{f.value}</div>
               </div>
-            )}
+            ))}
 
             <div className="text-xs text-slate-500">
               Created: {selected.created_at ? new Date(selected.created_at).toLocaleString("en-AU") : "—"}
@@ -334,15 +433,15 @@ export default function ECDDDashboard() {
               ))}
             </div>
 
-            {selected.status === "pending" && (
-              <div className="border-t border-navy-700 pt-4">
-                <button
-                  onClick={() => completeECDD(selected.ecdd_id)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-500/15 border border-teal-500/25 text-teal-300 text-sm font-medium hover:bg-teal-500/25 transition-colors w-full justify-center">
-                  <CheckCircle className="w-4 h-4" /> Mark Assessment Complete
-                </button>
-              </div>
-            )}
+            <div className="border-t border-navy-700 pt-4 space-y-3">
+              <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
+              <QuickActions actions={[
+                { label: "Escalate to MLRO", href: `/mlro?customer=${selected.customer_id}&action=new-case&ecdd=${selected.ecdd_id}`, icon: Scale },
+                { label: "View Customer", href: `/customers/${selected.customer_id}`, icon: User },
+              ]} />
+            </div>
+
+            <DecisionPanel record={selected} onDecide={decideECDD} />
           </div>
         </div>
       )}
@@ -358,162 +457,320 @@ export default function ECDDDashboard() {
   );
 }
 
+const DECISION_STATUSES = ["pending", "completed", "rejected"] as const;
+
+function DecisionPanel({ record, onDecide }: { record: ECDDRecord; onDecide: (ecddId: string, status: string, notes: string) => Promise<void> }) {
+  const [status, setStatus] = useState(record.status);
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => { setStatus(record.status); setNotes(""); }, [record.id, record.status]);
+
+  const submit = async () => {
+    if (!notes.trim()) return;
+    setSubmitting(true);
+    try { await onDecide(record.ecdd_id, status, notes); } finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="border-t border-navy-700 pt-4 space-y-3">
+      <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Decision — accept, reject, or revert</div>
+      <p className="text-xs text-slate-500">
+        Status is fully reversible — a completed or rejected assessment can be moved back to any other status. Every change is timestamped and requires a rationale.
+      </p>
+
+      <div className="flex gap-2">
+        {DECISION_STATUSES.map(s => (
+          <button key={s} type="button" onClick={() => setStatus(s)}
+            className={clsx("flex-1 px-3 py-2 rounded-lg text-xs font-medium capitalize border transition-colors",
+              status === s ? STATUS_COLOR[s] + " border-current" : "bg-navy-900 border-navy-700 text-slate-500 hover:border-navy-600")}>
+            {s}
+          </button>
+        ))}
+      </div>
+
+      <textarea className="field-input min-h-[80px] resize-none" placeholder="Decision notes — why is this customer being accepted, rejected, or reverted? (required)"
+        value={notes} onChange={e => setNotes(e.target.value)} />
+
+      <button type="button" disabled={submitting || !notes.trim() || status === record.status} onClick={submit}
+        className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-medium transition-colors w-full justify-center">
+        {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+        {status === record.status ? "Select a different status to revise" : `Record decision — mark ${status}`}
+      </button>
+
+      {(record.decided_by || record.decided_at) && (
+        <div className="text-xs text-slate-500 space-y-0.5 pt-1">
+          {record.decision_notes && <div className="text-slate-400 italic">&ldquo;{record.decision_notes}&rdquo;</div>}
+          {record.decided_by && <div>Decided by: {record.decided_by}</div>}
+          {record.decided_at && <div>Decided at: {new Date(record.decided_at).toLocaleString("en-AU")}</div>}
+          {record.last_revised_at && <div>Last revised: {new Date(record.last_revised_at).toLocaleString("en-AU")}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomerPicker({ value, onChange }: { value: { id: string; label: string } | null; onChange: (c: { id: string; label: string } | null) => void }) {
+  const [query, setQuery] = useState(value?.label ?? "");
+  const [results, setResults] = useState<CustomerOption[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!query.trim() || query === value?.label) { setResults([]); return; }
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API}/api/v1/customers/?search=${encodeURIComponent(query)}&limit=10`, { credentials: "include" });
+        if (res.ok) {
+          const d = await res.json();
+          setResults(Array.isArray(d) ? d : d.items || []);
+        }
+      } catch {}
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [query, value]);
+
+  return (
+    <div className="relative">
+      <input type="text" className="field-input" placeholder="Search customer by name or reference…"
+        value={query}
+        onChange={e => { setQuery(e.target.value); setOpen(true); if (value) onChange(null); }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && results.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full bg-navy-800 border border-navy-600 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+          {results.map(c => {
+            const label = c.full_name || c.name || c.id;
+            return (
+              <button key={c.id} type="button"
+                className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-navy-700 transition-colors flex items-center justify-between gap-2"
+                onClick={() => { onChange({ id: c.id, label }); setQuery(label); setOpen(false); }}>
+                <span>{label}</span>
+                {c.customer_ref && <span className="text-xs text-slate-500 font-mono">{c.customer_ref}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
+  const [customer, setCustomer] = useState<{ id: string; label: string } | null>(null);
   const [form, setForm] = useState({
-    customer_id: 1,
     trigger_reason: "",
+    trigger_reason_other: "",
     pep_status: 0,
     adverse_media_found: 0,
     adverse_media_details: "",
     beneficial_owner_verified: 0,
     beneficial_owner_details: "",
     source_of_wealth_verified: 0,
-    source_of_wealth_details: "",
+    source_of_funds: "",
+    source_of_wealth_notes: "",
+    purpose_of_transaction: "",
+    high_tax_risk: 0,
+    tax_risk_notes: "",
+    investment_legitimacy_notes: "",
     analyst_notes: "",
   });
   const [submitting, setSubmitting] = useState(false);
-  const [preview, setPreview] = useState<{ score: number; recommendation: string } | null>(null);
+  const [error, setError] = useState("");
 
-  const computePreview = () => {
+  const toggle = (field: string) =>
+    setForm(f => ({ ...f, [field]: (f as any)[field] ? 0 : 1 }));
+
+  const computeScore = () => {
     let score = 0;
     if (form.pep_status) score += 30;
     if (form.adverse_media_found) score += 35;
     if (!form.beneficial_owner_verified) score += 20;
     if (!form.source_of_wealth_verified) score += 15;
+    if (form.high_tax_risk) score += 10;
     score = Math.min(score, 100);
     const recommendation = form.adverse_media_found || score >= 80 ? "reject"
       : form.pep_status || score >= 50 ? "monitor" : "approve";
-    setPreview({ score, recommendation });
+    return { score, recommendation };
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const { score, recommendation } = computeScore();
+
+  const buildRecord = (): ECDDRecord => ({
+    id: String(Date.now()), ecdd_id: `ECDD-${Math.random().toString(36).slice(2, 12).toUpperCase()}`,
+    customer_id: customer?.id ?? "", trigger_reason: form.trigger_reason, trigger_reason_other: form.trigger_reason_other,
+    pep_status: form.pep_status, adverse_media_found: form.adverse_media_found,
+    beneficial_owner_verified: form.beneficial_owner_verified,
+    source_of_wealth_verified: form.source_of_wealth_verified,
+    source_of_funds: form.source_of_funds, source_of_wealth_notes: form.source_of_wealth_notes,
+    purpose_of_transaction: form.purpose_of_transaction,
+    high_tax_risk: form.high_tax_risk, tax_risk_notes: form.tax_risk_notes,
+    investment_legitimacy_notes: form.investment_legitimacy_notes,
+    enhanced_risk_score: score, recommendation, analyst_notes: form.analyst_notes,
+    status: "pending", created_at: new Date().toISOString(),
+  });
+
+  const isValid = !!customer && form.trigger_reason.length > 0
+    && (form.trigger_reason !== "other" || form.trigger_reason_other.trim().length > 0);
+
+  const handleSubmit = async () => {
+    if (!isValid) { setError("Select a customer, trigger reason, and (if Other) describe it."); return; }
+    setError("");
     setSubmitting(true);
     try {
-      const res = await fetch("/api/v1/reports/ecdd/", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+      const res = await fetch(`${API}/api/v1/reports/ecdd/`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_id: customer!.id, ...form }),
       });
       if (!res.ok) throw new Error(await res.text());
       onCreated(await res.json());
     } catch {
-      let score = 0;
-      if (form.pep_status) score += 30;
-      if (form.adverse_media_found) score += 35;
-      if (!form.beneficial_owner_verified) score += 20;
-      if (!form.source_of_wealth_verified) score += 15;
-      score = Math.min(score, 100);
-      const recommendation = form.adverse_media_found || score >= 80 ? "reject"
-        : form.pep_status || score >= 50 ? "monitor" : "approve";
-      onCreated({
-        id: Date.now(), ecdd_id: `ECDD-${Math.random().toString(36).slice(2,12).toUpperCase()}`,
-        customer_id: form.customer_id, trigger_reason: form.trigger_reason,
-        pep_status: form.pep_status, adverse_media_found: form.adverse_media_found,
-        beneficial_owner_verified: form.beneficial_owner_verified,
-        source_of_wealth_verified: form.source_of_wealth_verified,
-        enhanced_risk_score: score, recommendation, analyst_notes: form.analyst_notes,
-        status: "pending", created_at: new Date().toISOString(),
-      });
+      onCreated(buildRecord());
     } finally { setSubmitting(false); }
   };
 
-  const toggle = (field: string) =>
-    setForm(f => ({ ...f, [field]: (f as any)[field] ? 0 : 1 }));
-
   return (
     <div className="max-w-2xl">
-      <h2 className="text-lg font-semibold text-slate-100 mb-6">New ECDD Assessment</h2>
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="card space-y-5">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Customer ID *</label>
-            <input type="number" required className="field-input" value={form.customer_id}
-              onChange={e => setForm(f => ({ ...f, customer_id: Number(e.target.value) }))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Trigger reason *</label>
-            <textarea required className="field-input min-h-[80px] resize-none"
-              placeholder="e.g. PEP identified during onboarding review…"
-              value={form.trigger_reason} onChange={e => setForm(f => ({ ...f, trigger_reason: e.target.value }))} />
-          </div>
+      <h2 className="text-lg font-semibold text-slate-100 mb-1">New ECDD Assessment</h2>
+      <p className="text-slate-500 text-sm mb-6">Single-page enhanced due diligence assessment — fill in what applies, then submit.</p>
+
+      <div className="card space-y-5">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-slate-400">Customer *</label>
+          <CustomerPicker value={customer} onChange={setCustomer} />
         </div>
 
-        <div className="card space-y-4">
-          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">Risk Factors</div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-slate-400">Trigger reason *</label>
+          <select className="field-input" value={form.trigger_reason}
+            onChange={e => setForm(f => ({ ...f, trigger_reason: e.target.value }))}>
+            <option value="">Select a trigger reason…</option>
+            <optgroup label="Common (AUSTRAC / FATF)">
+              {TRIGGER_OPTIONS.filter(o => o.primary).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </optgroup>
+            <optgroup label="Other indicators">
+              {TRIGGER_OPTIONS.filter(o => !o.primary).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </optgroup>
+          </select>
+          {form.trigger_reason === "other" && (
+            <textarea className="field-input min-h-[80px] resize-none mt-2" placeholder="Describe the trigger reason…"
+              value={form.trigger_reason_other} onChange={e => setForm(f => ({ ...f, trigger_reason_other: e.target.value }))} />
+          )}
+        </div>
 
+        <div className="border-t border-navy-700 pt-4 space-y-3">
+          <p className="text-sm text-slate-400">PEP & adverse media</p>
           {[
-            { field: "pep_status", label: "PEP identified", desc: "Customer is a politically exposed person", points: 30, warn: true },
-            { field: "adverse_media_found", label: "Adverse media found", desc: "Negative news or adverse media coverage identified", points: 35, warn: true },
-          ].map(({ field, label, desc, points }) => (
-            <div key={field}>
-              <div className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-                (form as any)[field] ? "bg-red-500/10 border-red-500/30" : "bg-navy-900 border-navy-700 hover:border-navy-600"
-              }`} onClick={() => toggle(field)}>
-                <div>
-                  <div className="text-sm font-medium text-slate-200">{label}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{desc}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">+{points} pts</span>
-                  <div className={`w-10 h-5 rounded-full transition-colors relative ${ (form as any)[field] ? "bg-red-500" : "bg-navy-600"}`}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ (form as any)[field] ? "left-5" : "left-0.5"}`} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {[
-            { field: "beneficial_owner_verified", label: "Beneficial owner verified", desc: "UBO chain identified and documented", points: 20 },
-            { field: "source_of_wealth_verified", label: "Source of wealth verified", desc: "Customer's source of wealth confirmed with evidence", points: 15 },
+            { field: "pep_status", label: "PEP identified", desc: "Customer is a politically exposed person", points: 30 },
+            { field: "adverse_media_found", label: "Adverse media found", desc: "Negative news or adverse media coverage identified", points: 35 },
           ].map(({ field, label, desc, points }) => (
             <div key={field} className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-              (form as any)[field] ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/5 border-red-500/20 hover:border-red-500/30"
+              (form as any)[field] ? "bg-red-500/10 border-red-500/30" : "bg-navy-900 border-navy-700 hover:border-navy-600"
             }`} onClick={() => toggle(field)}>
               <div>
                 <div className="text-sm font-medium text-slate-200">{label}</div>
                 <div className="text-xs text-slate-500 mt-0.5">{desc}</div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">−{points} risk pts if verified</span>
-                <div className={`w-10 h-5 rounded-full transition-colors relative ${ (form as any)[field] ? "bg-emerald-500" : "bg-navy-600"}`}>
-                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ (form as any)[field] ? "left-5" : "left-0.5"}`} />
+                <span className="text-xs text-slate-500">+{points} pts</span>
+                <div className={`w-10 h-5 rounded-full transition-colors relative ${(form as any)[field] ? "bg-red-500" : "bg-navy-600"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${(form as any)[field] ? "left-5" : "left-0.5"}`} />
                 </div>
               </div>
             </div>
           ))}
+          <textarea className="field-input min-h-[70px] resize-none" placeholder="Adverse media / PEP details (sources, dates)…"
+            value={form.adverse_media_details} onChange={e => setForm(f => ({ ...f, adverse_media_details: e.target.value }))} />
         </div>
 
-        <div className="card space-y-1">
-          <label className="text-xs font-medium text-slate-400">Analyst notes</label>
-          <textarea className="field-input min-h-[80px] resize-none" placeholder="Internal notes for compliance file…"
+        <div className="border-t border-navy-700 pt-4 space-y-3">
+          <p className="text-sm text-slate-400">Beneficial ownership</p>
+          <div className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+            form.beneficial_owner_verified ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/5 border-red-500/20 hover:border-red-500/30"
+          }`} onClick={() => toggle("beneficial_owner_verified")}>
+            <div>
+              <div className="text-sm font-medium text-slate-200">Beneficial owner verified</div>
+              <div className="text-xs text-slate-500 mt-0.5">UBO chain identified and documented</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">−20 risk pts if verified</span>
+              <div className={`w-10 h-5 rounded-full transition-colors relative ${form.beneficial_owner_verified ? "bg-emerald-500" : "bg-navy-600"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${form.beneficial_owner_verified ? "left-5" : "left-0.5"}`} />
+              </div>
+            </div>
+          </div>
+          <textarea className="field-input min-h-[70px] resize-none" placeholder="UBO names, ownership percentages, verification evidence…"
+            value={form.beneficial_owner_details} onChange={e => setForm(f => ({ ...f, beneficial_owner_details: e.target.value }))} />
+        </div>
+
+        <div className="border-t border-navy-700 pt-4 space-y-3">
+          <p className="text-sm text-slate-400">Source of funds & wealth</p>
+          <textarea className="field-input min-h-[60px] resize-none" placeholder="Source of funds — e.g. salary, business revenue, sale of asset…"
+            value={form.source_of_funds} onChange={e => setForm(f => ({ ...f, source_of_funds: e.target.value }))} />
+          <div className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+            form.source_of_wealth_verified ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/5 border-red-500/20 hover:border-red-500/30"
+          }`} onClick={() => toggle("source_of_wealth_verified")}>
+            <div>
+              <div className="text-sm font-medium text-slate-200">Source of wealth verified</div>
+              <div className="text-xs text-slate-500 mt-0.5">Customer's overall wealth origin confirmed with evidence</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">−15 risk pts if verified</span>
+              <div className={`w-10 h-5 rounded-full transition-colors relative ${form.source_of_wealth_verified ? "bg-emerald-500" : "bg-navy-600"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${form.source_of_wealth_verified ? "left-5" : "left-0.5"}`} />
+              </div>
+            </div>
+          </div>
+          <textarea className="field-input min-h-[60px] resize-none" placeholder="Source of wealth evidence — bank statements, tax returns, business financials…"
+            value={form.source_of_wealth_notes} onChange={e => setForm(f => ({ ...f, source_of_wealth_notes: e.target.value }))} />
+        </div>
+
+        <div className="border-t border-navy-700 pt-4 space-y-3">
+          <p className="text-sm text-slate-400">Purpose & tax risk</p>
+          <textarea className="field-input min-h-[70px] resize-none" placeholder="Purpose of transaction / relationship — e.g. property purchase, business investment…"
+            value={form.purpose_of_transaction} onChange={e => setForm(f => ({ ...f, purpose_of_transaction: e.target.value }))} />
+          <div className={`flex items-start justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+            form.high_tax_risk ? "bg-red-500/10 border-red-500/30" : "bg-navy-900 border-navy-700 hover:border-navy-600"
+          }`} onClick={() => toggle("high_tax_risk")}>
+            <div>
+              <div className="text-sm font-medium text-slate-200">High tax-risk indicators present</div>
+              <div className="text-xs text-slate-500 mt-0.5">Tax haven jurisdiction, complex structuring, or evasion red flags</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">+10 pts</span>
+              <div className={`w-10 h-5 rounded-full transition-colors relative ${form.high_tax_risk ? "bg-red-500" : "bg-navy-600"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${form.high_tax_risk ? "left-5" : "left-0.5"}`} />
+              </div>
+            </div>
+          </div>
+          <textarea className="field-input min-h-[60px] resize-none" placeholder="Tax risk indicator details…"
+            value={form.tax_risk_notes} onChange={e => setForm(f => ({ ...f, tax_risk_notes: e.target.value }))} />
+        </div>
+
+        <div className="border-t border-navy-700 pt-4 space-y-3">
+          <p className="text-sm text-slate-400">Investment legitimacy & notes</p>
+          <textarea className="field-input min-h-[90px] resize-none" placeholder="Assessment of whether the investment activity is consistent with the customer's profile, declared occupation, and economic rationale…"
+            value={form.investment_legitimacy_notes} onChange={e => setForm(f => ({ ...f, investment_legitimacy_notes: e.target.value }))} />
+          <textarea className="field-input min-h-[60px] resize-none" placeholder="Analyst notes — internal notes for the compliance file…"
             value={form.analyst_notes} onChange={e => setForm(f => ({ ...f, analyst_notes: e.target.value }))} />
         </div>
 
-        <button type="button" onClick={computePreview}
-          className="w-full py-2 rounded-lg border border-navy-600 text-slate-400 text-sm hover:border-brand-500 hover:text-brand-400 transition-colors">
-          Preview score
-        </button>
-
-        {preview && (
-          <div className={`rounded-lg border p-4 text-center ${
-            preview.recommendation === "reject" ? "bg-red-500/10 border-red-500/30" :
-            preview.recommendation === "monitor" ? "bg-amber-500/10 border-amber-500/30" :
-            "bg-emerald-500/10 border-emerald-500/30"
-          }`}>
-            <div className={`text-3xl font-bold ${SCORE_COLOR(preview.score)}`}>{preview.score}/100</div>
-            <div className="text-sm font-medium mt-1 capitalize" style={{ color: preview.recommendation === "reject" ? "#f87171" : preview.recommendation === "monitor" ? "#fbbf24" : "#34d399" }}>
-              Recommendation: {preview.recommendation}
-            </div>
+        <div className={`rounded-lg border p-4 text-center ${
+          recommendation === "reject" ? "bg-red-500/10 border-red-500/30" :
+          recommendation === "monitor" ? "bg-amber-500/10 border-amber-500/30" :
+          "bg-emerald-500/10 border-emerald-500/30"
+        }`}>
+          <div className={`text-3xl font-bold ${SCORE_COLOR(score)}`}>{score}/100</div>
+          <div className="text-sm font-medium mt-1 capitalize" style={{ color: recommendation === "reject" ? "#f87171" : recommendation === "monitor" ? "#fbbf24" : "#34d399" }}>
+            Indicative recommendation: {recommendation}
           </div>
-        )}
+        </div>
 
-        <button type="submit" disabled={submitting} className="btn-primary w-full justify-center">
-          {submitting
-            ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            : <><ShieldCheck className="w-4 h-4" />Create ECDD Assessment</>}
+        {error && <div className="text-sm text-red-400">{error}</div>}
+
+        <button type="button" disabled={submitting} onClick={handleSubmit} className="btn-primary w-full justify-center">
+          {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><ShieldCheck className="w-4 h-4" />Create ECDD Assessment</>}
         </button>
-      </form>
+      </div>
     </div>
   );
 }

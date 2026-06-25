@@ -3,6 +3,7 @@ Shared base types for all integrations.
 Each integration module defines its own abstract provider; this module
 provides the common result envelope and error hierarchy.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -12,6 +13,7 @@ from typing import Any
 
 class IntegrationError(Exception):
     """Base error for all integration failures."""
+
     def __init__(self, provider: str, message: str, raw: Any = None):
         self.provider = provider
         self.raw = raw
@@ -38,6 +40,6 @@ class IntegrationStatus(str, Enum):
 class IntegrationResult:
     status: IntegrationStatus
     provider: str
-    raw: Any = None                  # full provider response for audit trail
+    raw: Any = None  # full provider response for audit trail
     error: str | None = None
     metadata: dict = field(default_factory=dict)

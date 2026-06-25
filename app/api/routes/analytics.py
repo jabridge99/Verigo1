@@ -21,13 +21,23 @@ def _industry(current_user: User, override: Optional[str]) -> Optional[str]:
     return current_user.org_id
 
 
+def _organisation(current_user: User, override: Optional[str]) -> Optional[int]:
+    if current_user.role == "admin" and override:
+        return None
+    return getattr(current_user, "primary_organisation_id", None)
+
+
 @router.get("/summary")
 def summary(
     industry_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.dashboard_summary(db, _industry(current_user, industry_id))
+    return svc.dashboard_summary(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
 
 
 @router.get("/customers/risk-breakdown")
@@ -36,7 +46,11 @@ def customer_risk(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.customer_risk_breakdown(db, _industry(current_user, industry_id))
+    return svc.customer_risk_breakdown(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
 
 
 @router.get("/customers/onboarding-trend")
@@ -46,7 +60,12 @@ def onboarding_trend(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.customer_onboarding_trend(db, days, _industry(current_user, industry_id))
+    return svc.customer_onboarding_trend(
+        db,
+        days,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
 
 
 @router.get("/transactions/volume-trend")
@@ -56,7 +75,12 @@ def volume_trend(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.transaction_volume_trend(db, days, _industry(current_user, industry_id))
+    return svc.transaction_volume_trend(
+        db,
+        days,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
 
 
 @router.get("/transactions/flagged-stats")
@@ -65,7 +89,11 @@ def flagged_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.flagged_transaction_stats(db, _industry(current_user, industry_id))
+    return svc.flagged_transaction_stats(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
 
 
 @router.get("/kyc/status-breakdown")
@@ -74,7 +102,11 @@ def kyc_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.kyc_status_breakdown(db, _industry(current_user, industry_id))
+    return svc.kyc_status_breakdown(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
 
 
 @router.get("/reports/stats")
@@ -83,7 +115,11 @@ def report_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.report_stats(db, _industry(current_user, industry_id))
+    return svc.report_stats(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
 
 
 @router.get("/reports/submission-trend")
@@ -93,7 +129,12 @@ def submission_trend(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.report_submission_trend(db, days, _industry(current_user, industry_id))
+    return svc.report_submission_trend(
+        db,
+        days,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
 
 
 @router.get("/audit/activity-trend")
@@ -103,4 +144,61 @@ def audit_trend(
     db: Session = Depends(get_db),
     current_user: User = Depends(_current_user),
 ):
-    return svc.audit_activity_trend(db, days, _industry(current_user, industry_id))
+    return svc.audit_activity_trend(
+        db,
+        days,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
+
+
+@router.get("/customers/pending-reviews")
+def pending_reviews(
+    industry_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.pending_customer_reviews(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
+
+
+@router.get("/cases/open-stats")
+def open_cases(
+    industry_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.open_case_stats(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
+
+
+@router.get("/training/status-breakdown")
+def training_status(
+    industry_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.training_status_breakdown(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )
+
+
+@router.get("/governance/overview")
+def governance_overview(
+    industry_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_current_user),
+):
+    return svc.governance_overview(
+        db,
+        _industry(current_user, industry_id),
+        _organisation(current_user, industry_id),
+    )

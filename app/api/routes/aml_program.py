@@ -25,6 +25,7 @@ The platform does not draft or approve AML/CTF Programs on behalf of the
 reporting entity. All program content, assessments, and approvals remain the
 sole responsibility of the reporting entity and its AML/CTF Compliance Officer.
 """
+
 from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -85,6 +86,7 @@ REQUIRED_SECTIONS = [
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class ProgramCreate(BaseModel):
     version: str = Field(..., min_length=1, max_length=20, description="e.g. 1.0, 2.1")
@@ -174,22 +176,27 @@ class RiskAssessmentUpdate(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _get_solution(org_id: str, db: Session) -> AMLSolution:
     solution = db.query(AMLSolution).filter(AMLSolution.org_id == org_id).first()
     if not solution:
         raise HTTPException(
             404,
             "No AML/CTF Solution found for this organisation. "
-            "Complete onboarding and industry selection first."
+            "Complete onboarding and industry selection first.",
         )
     return solution
 
 
 def _get_program(program_id: str, org_id: str, db: Session) -> AMLProgram:
-    program = db.query(AMLProgram).filter(
-        AMLProgram.id == program_id,
-        AMLProgram.org_id == org_id,
-    ).first()
+    program = (
+        db.query(AMLProgram)
+        .filter(
+            AMLProgram.id == program_id,
+            AMLProgram.org_id == org_id,
+        )
+        .first()
+    )
     if not program:
         raise HTTPException(404, "AML Program not found.")
     return program
@@ -319,6 +326,7 @@ def _assessment_dict(a: RiskAssessment) -> dict:
 
 # ── Program CRUD ──────────────────────────────────────────────────────────────
 
+
 @router.get("")
 def get_active_program(
     include_sections: bool = Query(False),
@@ -334,10 +342,15 @@ def get_active_program(
     DISCLAIMER: The platform provides program document management only.
     """
     org_id = org_id_for(current_user)
-    program = db.query(AMLProgram).filter(
-        AMLProgram.org_id == org_id,
-        AMLProgram.status == ProgramStatus.active,
-    ).order_by(desc(AMLProgram.created_at)).first()
+    program = (
+        db.query(AMLProgram)
+        .filter(
+            AMLProgram.org_id == org_id,
+            AMLProgram.status == ProgramStatus.active,
+        )
+        .order_by(desc(AMLProgram.created_at))
+        .first()
+    )
 
     if not program:
         return {
@@ -362,9 +375,16 @@ def list_program_versions(
 ):
     """List all program versions for audit trail."""
     org_id = org_id_for(current_user)
-    programs = db.query(AMLProgram).filter(
-        AMLProgram.org_id == org_id,
-    ).order_by(desc(AMLProgram.created_at)).offset(page.offset).limit(page.limit).all()
+    programs = (
+        db.query(AMLProgram)
+        .filter(
+            AMLProgram.org_id == org_id,
+        )
+        .order_by(desc(AMLProgram.created_at))
+        .offset(page.offset)
+        .limit(page.limit)
+        .all()
+    )
     return {"versions": [_program_dict(p) for p in programs], "count": len(programs)}
 
 
@@ -385,10 +405,14 @@ def create_program(
     org_id = org_id_for(current_user)
     solution = _get_solution(org_id, db)
 
-    existing = db.query(AMLProgram).filter(
-        AMLProgram.org_id == org_id,
-        AMLProgram.version == payload.version,
-    ).first()
+    existing = (
+        db.query(AMLProgram)
+        .filter(
+            AMLProgram.org_id == org_id,
+            AMLProgram.version == payload.version,
+        )
+        .first()
+    )
     if existing:
         raise HTTPException(409, f"Program version '{payload.version}' already exists.")
 
@@ -455,7 +479,7 @@ def update_program(
         raise HTTPException(
             409,
             f"Program is '{program.status.value}' and cannot be updated. "
-            "Active programs are immutable — create a new version."
+            "Active programs are immutable — create a new version.",
         )
 
     for field, value in payload.model_dump(exclude_none=True).items():
@@ -509,7 +533,9 @@ def activate_program(
     program = _get_program(program_id, org_id, db)
 
     if program.status not in (ProgramStatus.draft, ProgramStatus.under_review):
-        raise HTTPException(409, f"Cannot activate a program with status '{program.status.value}'.")
+        raise HTTPException(
+            409, f"Cannot activate a program with status '{program.status.value}'."
+        )
 
     db.query(AMLProgram).filter(
         AMLProgram.org_id == org_id,
@@ -576,6 +602,7 @@ def record_annual_review(
 
 # ── AUSTRAC Registration ──────────────────────────────────────────────────────
 
+
 class AustracDetails(BaseModel):
     austrac_enrolment_date: Optional[date] = None
     austrac_registration_date: Optional[date] = None
@@ -610,6 +637,7 @@ def update_austrac_details(
 
 # ── Risk Assessments (EWRA) ───────────────────────────────────────────────────
 
+
 @router.get("/risk-assessments")
 def list_risk_assessments(
     status: Optional[AssessmentStatus] = Query(None),
@@ -622,7 +650,12 @@ def list_risk_assessments(
     q = db.query(RiskAssessment).filter(RiskAssessment.org_id == org_id)
     if status:
         q = q.filter(RiskAssessment.status == status)
-    assessments = q.order_by(desc(RiskAssessment.assessment_date)).offset(page.offset).limit(page.limit).all()
+    assessments = (
+        q.order_by(desc(RiskAssessment.assessment_date))
+        .offset(page.offset)
+        .limit(page.limit)
+        .all()
+    )
     return {
         "assessments": [_assessment_dict(a) for a in assessments],
         "count": len(assessments),
@@ -682,10 +715,14 @@ def get_risk_assessment(
 ):
     """Get a specific EWRA."""
     org_id = org_id_for(current_user)
-    assessment = db.query(RiskAssessment).filter(
-        RiskAssessment.id == assessment_id,
-        RiskAssessment.org_id == org_id,
-    ).first()
+    assessment = (
+        db.query(RiskAssessment)
+        .filter(
+            RiskAssessment.id == assessment_id,
+            RiskAssessment.org_id == org_id,
+        )
+        .first()
+    )
     if not assessment:
         raise HTTPException(404, "Risk assessment not found.")
     return {"assessment": _assessment_dict(assessment), "disclaimer": DISCLAIMER}
@@ -700,10 +737,14 @@ def update_risk_assessment(
 ):
     """Update a risk assessment (draft or in_progress only)."""
     org_id = org_id_for(current_user)
-    assessment = db.query(RiskAssessment).filter(
-        RiskAssessment.id == assessment_id,
-        RiskAssessment.org_id == org_id,
-    ).first()
+    assessment = (
+        db.query(RiskAssessment)
+        .filter(
+            RiskAssessment.id == assessment_id,
+            RiskAssessment.org_id == org_id,
+        )
+        .first()
+    )
     if not assessment:
         raise HTTPException(404, "Risk assessment not found.")
     if assessment.status == AssessmentStatus.approved:
@@ -727,10 +768,14 @@ def complete_risk_assessment(
 ):
     """Mark an EWRA as completed — ready for MLRO approval."""
     org_id = org_id_for(current_user)
-    assessment = db.query(RiskAssessment).filter(
-        RiskAssessment.id == assessment_id,
-        RiskAssessment.org_id == org_id,
-    ).first()
+    assessment = (
+        db.query(RiskAssessment)
+        .filter(
+            RiskAssessment.id == assessment_id,
+            RiskAssessment.org_id == org_id,
+        )
+        .first()
+    )
     if not assessment:
         raise HTTPException(404, "Risk assessment not found.")
     if assessment.status == AssessmentStatus.approved:
@@ -757,10 +802,14 @@ def approve_risk_assessment(
     The platform does not validate whether risk ratings are appropriate.
     """
     org_id = org_id_for(current_user)
-    assessment = db.query(RiskAssessment).filter(
-        RiskAssessment.id == assessment_id,
-        RiskAssessment.org_id == org_id,
-    ).first()
+    assessment = (
+        db.query(RiskAssessment)
+        .filter(
+            RiskAssessment.id == assessment_id,
+            RiskAssessment.org_id == org_id,
+        )
+        .first()
+    )
     if not assessment:
         raise HTTPException(404, "Risk assessment not found.")
     if assessment.status != AssessmentStatus.completed:
@@ -777,6 +826,7 @@ def approve_risk_assessment(
 
 # ── Program Compliance Status ─────────────────────────────────────────────────
 
+
 @router.get("/compliance-status")
 def program_compliance_status(
     db: Session = Depends(get_db),
@@ -791,20 +841,36 @@ def program_compliance_status(
     now = datetime.now(timezone.utc)
     today = now.date()
 
-    active_program = db.query(AMLProgram).filter(
-        AMLProgram.org_id == org_id,
-        AMLProgram.status == ProgramStatus.active,
-    ).order_by(desc(AMLProgram.created_at)).first()
+    active_program = (
+        db.query(AMLProgram)
+        .filter(
+            AMLProgram.org_id == org_id,
+            AMLProgram.status == ProgramStatus.active,
+        )
+        .order_by(desc(AMLProgram.created_at))
+        .first()
+    )
 
-    latest_ewra = db.query(RiskAssessment).filter(
-        RiskAssessment.org_id == org_id,
-        RiskAssessment.status == AssessmentStatus.approved,
-    ).order_by(desc(RiskAssessment.assessment_date)).first()
+    latest_ewra = (
+        db.query(RiskAssessment)
+        .filter(
+            RiskAssessment.org_id == org_id,
+            RiskAssessment.status == AssessmentStatus.approved,
+        )
+        .order_by(desc(RiskAssessment.assessment_date))
+        .first()
+    )
 
-    pending_ewra_count = db.query(RiskAssessment).filter(
-        RiskAssessment.org_id == org_id,
-        RiskAssessment.status.in_([AssessmentStatus.draft, AssessmentStatus.in_progress]),
-    ).count()
+    pending_ewra_count = (
+        db.query(RiskAssessment)
+        .filter(
+            RiskAssessment.org_id == org_id,
+            RiskAssessment.status.in_(
+                [AssessmentStatus.draft, AssessmentStatus.in_progress]
+            ),
+        )
+        .count()
+    )
 
     def _light(bad, warn=False):
         if bad:
@@ -842,7 +908,9 @@ def program_compliance_status(
             "exists": active_program is not None,
             "version": active_program.version if active_program else None,
             "approved_at": active_program.approved_at if active_program else None,
-            "review_due_date": active_program.review_due_date if active_program else None,
+            "review_due_date": active_program.review_due_date
+            if active_program
+            else None,
             "review_days_remaining": review_days_remaining,
             "review_overdue": review_overdue,
             "section_completion": completion,
@@ -852,7 +920,9 @@ def program_compliance_status(
             ),
         },
         "ewra": {
-            "latest_approved_date": latest_ewra.assessment_date if latest_ewra else None,
+            "latest_approved_date": latest_ewra.assessment_date
+            if latest_ewra
+            else None,
             "age_days": ewra_age_days,
             "overdue": ewra_overdue,
             "pending_count": pending_ewra_count,
@@ -862,7 +932,9 @@ def program_compliance_status(
             ),
         },
         "austrac_registration": {
-            "expiry_date": active_program.austrac_registration_expiry if active_program else None,
+            "expiry_date": active_program.austrac_registration_expiry
+            if active_program
+            else None,
             "expiry_days_remaining": reg_expiry_days,
             "expired": reg_expired,
             "traffic_light": _light(

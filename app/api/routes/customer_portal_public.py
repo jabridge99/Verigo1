@@ -10,8 +10,8 @@ Security:
   - Submitted sessions return 410 Gone
   - IP address logged on every access
 """
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ router = APIRouter(prefix="/portal", tags=["Customer Portal (Public)"])
 
 # ── Token dependency ──────────────────────────────────────────────────────────
 
+
 def get_portal_session(
     token: str,
     request: Request,
@@ -35,6 +36,7 @@ def get_portal_session(
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class QuestionnaireResponseRequest(BaseModel):
     responses: dict
     mark_complete: bool = False
@@ -42,7 +44,10 @@ class QuestionnaireResponseRequest(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.get("/{token}", summary="Get portal state — documents needed, progress, sections")
+
+@router.get(
+    "/{token}", summary="Get portal state — documents needed, progress, sections"
+)
 def get_portal_state(
     session: CustomerPortalSession = Depends(get_portal_session),
     db: Session = Depends(get_db),
@@ -50,7 +55,10 @@ def get_portal_state(
     return customer_portal_service.get_portal_state(db, session)
 
 
-@router.post("/{token}/documents", summary="Upload a document (passport, licence, SOF, SOW, trust deed)")
+@router.post(
+    "/{token}/documents",
+    summary="Upload a document (passport, licence, SOF, SOW, trust deed)",
+)
 async def upload_document(
     token: str,
     category: str,
@@ -62,12 +70,18 @@ async def upload_document(
     session = customer_portal_service.validate_portal_token(db, token, client_ip)
 
     allowed_mime_types = {
-        "image/jpeg", "image/png", "image/webp",
+        "image/jpeg",
+        "image/png",
+        "image/webp",
         "application/pdf",
-        "image/heic", "image/heif",
+        "image/heic",
+        "image/heif",
     }
     if file.content_type not in allowed_mime_types:
-        raise HTTPException(415, f"File type '{file.content_type}' is not accepted. Please upload a PDF or image.")
+        raise HTTPException(
+            415,
+            f"File type '{file.content_type}' is not accepted. Please upload a PDF or image.",
+        )
 
     max_size_bytes = 10 * 1024 * 1024  # 10 MB
     content = await file.read()
@@ -91,12 +105,15 @@ async def upload_document(
     }
 
 
-@router.get("/{token}/documents", summary="List documents uploaded in this portal session")
+@router.get(
+    "/{token}/documents", summary="List documents uploaded in this portal session"
+)
 def list_documents(
     session: CustomerPortalSession = Depends(get_portal_session),
     db: Session = Depends(get_db),
 ):
     from app.models.customer_portal import CustomerPortalDocument
+
     docs = db.query(CustomerPortalDocument).filter_by(session_id=session.id).all()
     return [
         {
@@ -110,7 +127,10 @@ def list_documents(
     ]
 
 
-@router.post("/{token}/questionnaire/{section_key}", summary="Submit or update a questionnaire section")
+@router.post(
+    "/{token}/questionnaire/{section_key}",
+    summary="Submit or update a questionnaire section",
+)
 def submit_questionnaire_section(
     token: str,
     section_key: str,
@@ -122,7 +142,9 @@ def submit_questionnaire_section(
     session = customer_portal_service.validate_portal_token(db, token, client_ip)
 
     if section_key not in (session.required_questionnaire_sections or []):
-        raise HTTPException(422, f"Section '{section_key}' is not required for this portal session")
+        raise HTTPException(
+            422, f"Section '{section_key}' is not required for this portal session"
+        )
 
     response = customer_portal_service.save_questionnaire_response(
         db=db,
@@ -135,17 +157,26 @@ def submit_questionnaire_section(
         "id": response.id,
         "section_key": response.section_key,
         "completed": response.completed,
-        "submitted_at": response.submitted_at.isoformat() if response.submitted_at else None,
+        "submitted_at": response.submitted_at.isoformat()
+        if response.submitted_at
+        else None,
     }
 
 
-@router.get("/{token}/questionnaire", summary="Get questionnaire sections and completion status")
+@router.get(
+    "/{token}/questionnaire", summary="Get questionnaire sections and completion status"
+)
 def get_questionnaire(
     session: CustomerPortalSession = Depends(get_portal_session),
     db: Session = Depends(get_db),
 ):
     from app.models.customer_portal import CustomerPortalQuestionnaireResponse
-    responses = db.query(CustomerPortalQuestionnaireResponse).filter_by(session_id=session.id).all()
+
+    responses = (
+        db.query(CustomerPortalQuestionnaireResponse)
+        .filter_by(session_id=session.id)
+        .all()
+    )
     required = session.required_questionnaire_sections or []
     completed_keys = {r.section_key for r in responses if r.completed}
     return {

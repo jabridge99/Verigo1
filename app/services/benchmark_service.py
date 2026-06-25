@@ -14,19 +14,23 @@ Data flow:
   MLRO calls GET /benchmarks/dashboard
     → get_org_benchmark_dashboard() returns own metrics + industry position
 """
+
 from __future__ import annotations
 
 import logging
 import statistics
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.models.benchmark import (
-    OrgMetricsSnapshot, IndustryBenchmark,
-    SnapshotPeriod, BenchmarkMetric, METRIC_META,
+    METRIC_META,
     MIN_ORG_COUNT_FOR_BENCHMARK,
+    BenchmarkMetric,
+    IndustryBenchmark,
+    OrgMetricsSnapshot,
+    SnapshotPeriod,
 )
 from app.models.organisation import Organisation
 
@@ -36,6 +40,7 @@ log = logging.getLogger("tvg.benchmark")
 # ══════════════════════════════════════════════════════════════════════════════
 # SNAPSHOT CAPTURE
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def capture_org_snapshot(
     db: Session,
@@ -51,9 +56,11 @@ def capture_org_snapshot(
     period_start, period_end, period_label = _period_bounds(today, period)
 
     # Upsert — replace snapshot for same org/period if it already exists
-    existing = db.query(OrgMetricsSnapshot).filter_by(
-        org_id=org_id, period_label=period_label
-    ).first()
+    existing = (
+        db.query(OrgMetricsSnapshot)
+        .filter_by(org_id=org_id, period_label=period_label)
+        .first()
+    )
     if existing:
         db.delete(existing)
         db.flush()
@@ -97,6 +104,7 @@ def capture_all_org_snapshots(
 # BENCHMARK COMPUTATION
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def compute_industry_benchmarks(
     db: Session,
     period_label: Optional[str] = None,
@@ -136,12 +144,16 @@ def compute_industry_benchmarks(
             def pct(p: float) -> float:
                 idx = (p / 100) * (n - 1)
                 lo, hi = int(idx), min(int(idx) + 1, n - 1)
-                return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (idx - lo)
+                return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (
+                    idx - lo
+                )
 
             # Upsert
-            existing = db.query(IndustryBenchmark).filter_by(
-                industry=industry, metric=metric, period_label=period_label
-            ).first()
+            existing = (
+                db.query(IndustryBenchmark)
+                .filter_by(industry=industry, metric=metric, period_label=period_label)
+                .first()
+            )
             if existing:
                 db.delete(existing)
                 db.flush()
@@ -166,13 +178,17 @@ def compute_industry_benchmarks(
             total += 1
 
     db.commit()
-    return {"period_label": period_label, "benchmarks_computed": total,
-            "industries": list(by_industry.keys())}
+    return {
+        "period_label": period_label,
+        "benchmarks_computed": total,
+        "industries": list(by_industry.keys()),
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ORG BENCHMARK DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def get_org_benchmark_dashboard(
     db: Session,
@@ -208,36 +224,52 @@ def get_org_benchmark_dashboard(
         today = date.today()
         _, _, period_label = _period_bounds(today, SnapshotPeriod.weekly)
 
-    snap = db.query(OrgMetricsSnapshot).filter_by(
-        org_id=org_id, period_label=period_label
-    ).first()
+    snap = (
+        db.query(OrgMetricsSnapshot)
+        .filter_by(org_id=org_id, period_label=period_label)
+        .first()
+    )
 
     # Fall back to most recent snapshot if current period not yet captured
     if not snap:
-        snap = db.query(OrgMetricsSnapshot).filter_by(org_id=org_id).order_by(
-            OrgMetricsSnapshot.captured_at.desc()
-        ).first()
+        snap = (
+            db.query(OrgMetricsSnapshot)
+            .filter_by(org_id=org_id)
+            .order_by(OrgMetricsSnapshot.captured_at.desc())
+            .first()
+        )
 
     own_metrics = _snapshot_to_metrics_dict(snap) if snap else {}
 
     # Load industry benchmarks for this period (or nearest)
-    benchmarks = db.query(IndustryBenchmark).filter_by(
-        industry=industry,
-        period_label=period_label,
-        is_published=True,
-    ).all()
+    benchmarks = (
+        db.query(IndustryBenchmark)
+        .filter_by(
+            industry=industry,
+            period_label=period_label,
+            is_published=True,
+        )
+        .all()
+    )
 
     # Fall back to most recent benchmarks if current period not computed
     if not benchmarks:
-        latest_bm = db.query(IndustryBenchmark).filter_by(
-            industry=industry, is_published=True
-        ).order_by(IndustryBenchmark.computed_at.desc()).first()
+        latest_bm = (
+            db.query(IndustryBenchmark)
+            .filter_by(industry=industry, is_published=True)
+            .order_by(IndustryBenchmark.computed_at.desc())
+            .first()
+        )
         if latest_bm:
-            benchmarks = db.query(IndustryBenchmark).filter_by(
-                industry=industry,
-                period_label=latest_bm.period_label,
-                is_published=True,
-            ).all()
+            benchmarks = (
+                db.query(IndustryBenchmark)
+                .filter_by(
+                    industry=industry,
+                    period_label=latest_bm.period_label,
+                    is_published=True,
+                )
+                .all()
+            )
 
     bm_by_metric = {bm.metric.value: bm for bm in benchmarks}
 
@@ -261,38 +293,51 @@ def get_org_benchmark_dashboard(
             vs_median = own_val - bm.median if bm.median is not None else None
             rating = _percentile_to_rating(percentile, higher_is_better)
 
-            entry.update({
-                "industry_median": bm.median,
-                "industry_p25": bm.p25,
-                "industry_p75": bm.p75,
-                "industry_mean": bm.mean,
-                "industry_min": bm.minimum,
-                "industry_max": bm.maximum,
-                "industry_std_dev": bm.std_dev,
-                "your_percentile": percentile,
-                "vs_median": round(vs_median, 2) if vs_median is not None else None,
-                "vs_median_pct": (
-                    f"+{vs_median:.1f}" if vs_median and vs_median > 0
-                    else f"{vs_median:.1f}" if vs_median is not None else None
-                ),
-                "rating": rating,
-                "org_count": bm.org_count,
-            })
+            entry.update(
+                {
+                    "industry_median": bm.median,
+                    "industry_p25": bm.p25,
+                    "industry_p75": bm.p75,
+                    "industry_mean": bm.mean,
+                    "industry_min": bm.minimum,
+                    "industry_max": bm.maximum,
+                    "industry_std_dev": bm.std_dev,
+                    "your_percentile": percentile,
+                    "vs_median": round(vs_median, 2) if vs_median is not None else None,
+                    "vs_median_pct": (
+                        f"+{vs_median:.1f}"
+                        if vs_median and vs_median > 0
+                        else f"{vs_median:.1f}"
+                        if vs_median is not None
+                        else None
+                    ),
+                    "rating": rating,
+                    "org_count": bm.org_count,
+                }
+            )
         else:
-            entry.update({
-                "industry_median": None,
-                "your_percentile": None,
-                "rating": "no_benchmark",
-                "org_count": bm.org_count if bm else 0,
-            })
+            entry.update(
+                {
+                    "industry_median": None,
+                    "your_percentile": None,
+                    "rating": "no_benchmark",
+                    "org_count": bm.org_count if bm else 0,
+                }
+            )
 
         comparisons.append(entry)
 
     # Headline scores
     top_quartile = [c for c in comparisons if c.get("rating") == "top_quartile"]
-    below_median = [c for c in comparisons if c.get("rating") in ("below_median", "bottom_quartile")]
-    needs_attention = [c for c in comparisons if c.get("rating") in ("below_median", "bottom_quartile")
-                       and c["higher_is_better"] is not False]
+    below_median = [
+        c for c in comparisons if c.get("rating") in ("below_median", "bottom_quartile")
+    ]
+    needs_attention = [
+        c
+        for c in comparisons
+        if c.get("rating") in ("below_median", "bottom_quartile")
+        and c["higher_is_better"] is not False
+    ]
 
     return {
         "org_id": org_id,
@@ -307,9 +352,13 @@ def get_org_benchmark_dashboard(
         },
         "metrics": comparisons,
         "attention_items": [
-            {"metric": c["metric"], "label": c["label"],
-             "your_value": c["your_value"], "industry_median": c.get("industry_median"),
-             "rating": c["rating"]}
+            {
+                "metric": c["metric"],
+                "label": c["label"],
+                "your_value": c["your_value"],
+                "industry_median": c.get("industry_median"),
+                "rating": c["rating"],
+            }
             for c in needs_attention
         ],
     }
@@ -328,21 +377,30 @@ def get_industry_overview(
         today = date.today()
         _, _, period_label = _period_bounds(today, SnapshotPeriod.weekly)
 
-    benchmarks = db.query(IndustryBenchmark).filter_by(
-        industry=industry, period_label=period_label, is_published=True
-    ).all()
+    benchmarks = (
+        db.query(IndustryBenchmark)
+        .filter_by(industry=industry, period_label=period_label, is_published=True)
+        .all()
+    )
 
     if not benchmarks:
         # Most recent available
-        latest = db.query(IndustryBenchmark).filter_by(
-            industry=industry, is_published=True
-        ).order_by(IndustryBenchmark.computed_at.desc()).first()
+        latest = (
+            db.query(IndustryBenchmark)
+            .filter_by(industry=industry, is_published=True)
+            .order_by(IndustryBenchmark.computed_at.desc())
+            .first()
+        )
         if latest:
-            benchmarks = db.query(IndustryBenchmark).filter_by(
-                industry=industry,
-                period_label=latest.period_label,
-                is_published=True,
-            ).all()
+            benchmarks = (
+                db.query(IndustryBenchmark)
+                .filter_by(
+                    industry=industry,
+                    period_label=latest.period_label,
+                    is_published=True,
+                )
+                .all()
+            )
 
     org_count = max((b.org_count for b in benchmarks), default=0)
 
@@ -354,7 +412,9 @@ def get_industry_overview(
         "metrics": [
             {
                 "metric": bm.metric.value,
-                "label": METRIC_META.get(bm.metric.value, {}).get("label", bm.metric.value),
+                "label": METRIC_META.get(bm.metric.value, {}).get(
+                    "label", bm.metric.value
+                ),
                 "unit": METRIC_META.get(bm.metric.value, {}).get("unit", ""),
                 "org_count": bm.org_count,
                 "mean": bm.mean,
@@ -378,19 +438,25 @@ def get_org_metric_history(
     periods: int = 12,
 ) -> dict:
     """Returns an org's own metric history over time — trend line data."""
-    snaps = db.query(OrgMetricsSnapshot).filter_by(org_id=org_id).order_by(
-        OrgMetricsSnapshot.period_start.desc()
-    ).limit(periods).all()
+    snaps = (
+        db.query(OrgMetricsSnapshot)
+        .filter_by(org_id=org_id)
+        .order_by(OrgMetricsSnapshot.period_start.desc())
+        .limit(periods)
+        .all()
+    )
 
     meta = METRIC_META.get(metric, {})
     points = []
     for s in reversed(snaps):
         val = getattr(s, metric, None)
-        points.append({
-            "period_label": s.period_label,
-            "period_start": s.period_start.isoformat(),
-            "value": val,
-        })
+        points.append(
+            {
+                "period_label": s.period_label,
+                "period_start": s.period_start.isoformat(),
+                "value": val,
+            }
+        )
 
     # Trend direction
     values = [p["value"] for p in points if p["value"] is not None]
@@ -424,8 +490,10 @@ def get_org_metric_history(
 # INTERNAL HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _compute_org_metrics(db: Session, org_id: str, start: date, end: date) -> dict:
     from datetime import datetime as dt
+
     start_dt = dt.combine(start, dt.min.time())
     end_dt = dt.combine(end, dt.max.time())
 
@@ -433,77 +501,128 @@ def _compute_org_metrics(db: Session, org_id: str, start: date, end: date) -> di
 
     # ── Customers ─────────────────────────────────────────────────────────────
     try:
-        from app.models.customer import Customer, RiskLevel, CDDLevel
+        from app.models.customer import Customer
+
         customers = db.query(Customer).filter_by(org_id=org_id).all()
         total = len(customers)
         m["total_customers"] = total
         if total > 0:
-            high_risk = sum(1 for c in customers
-                           if c.risk_level and c.risk_level.value in ("high", "critical"))
+            high_risk = sum(
+                1
+                for c in customers
+                if c.risk_level and c.risk_level.value in ("high", "critical")
+            )
             m["high_risk_customer_pct"] = round(high_risk / total * 100, 2)
-            m["pep_customer_pct"] = round(sum(1 for c in customers if getattr(c, "is_pep", False)) / total * 100, 2)
-            m["sanctions_match_pct"] = round(sum(1 for c in customers if getattr(c, "is_sanctions_match", False)) / total * 100, 2)
-            edd = sum(1 for c in customers if c.cdd_level and c.cdd_level.value == "edd")
+            m["pep_customer_pct"] = round(
+                sum(1 for c in customers if getattr(c, "is_pep", False)) / total * 100,
+                2,
+            )
+            m["sanctions_match_pct"] = round(
+                sum(1 for c in customers if getattr(c, "is_sanctions_match", False))
+                / total
+                * 100,
+                2,
+            )
+            edd = sum(
+                1 for c in customers if c.cdd_level and c.cdd_level.value == "edd"
+            )
             m["edd_escalation_pct"] = round(edd / total * 100, 2)
             # CDD completion: customers not in draft/pending = have completed initial CDD
-            cdd_complete = sum(1 for c in customers if c.status and c.status.value not in ("draft", "pending"))
+            cdd_complete = sum(
+                1
+                for c in customers
+                if c.status and c.status.value not in ("draft", "pending")
+            )
             m["cdd_completion_pct"] = round(cdd_complete / total * 100, 2)
     except Exception as exc:
         log.debug("Customer metrics failed: %s", exc)
 
     # ── Reports ───────────────────────────────────────────────────────────────
     try:
-        from app.models.report import SMRReport, IFTIReport, TTRReport
-        smrs = db.query(SMRReport).filter(
-            SMRReport.org_id == org_id,
-            SMRReport.created_at.between(start_dt, end_dt)
-        ).count()
-        iftis = db.query(IFTIReport).filter(
-            IFTIReport.org_id == org_id,
-            IFTIReport.created_at.between(start_dt, end_dt)
-        ).count()
-        ttrs = db.query(TTRReport).filter(
-            TTRReport.org_id == org_id,
-            TTRReport.created_at.between(start_dt, end_dt)
-        ).count()
+        from app.models.report import IFTIReport, SMRReport, TTRReport
+
+        smrs = (
+            db.query(SMRReport)
+            .filter(
+                SMRReport.org_id == org_id,
+                SMRReport.created_at.between(start_dt, end_dt),
+            )
+            .count()
+        )
+        iftis = (
+            db.query(IFTIReport)
+            .filter(
+                IFTIReport.org_id == org_id,
+                IFTIReport.created_at.between(start_dt, end_dt),
+            )
+            .count()
+        )
+        ttrs = (
+            db.query(TTRReport)
+            .filter(
+                TTRReport.org_id == org_id,
+                TTRReport.created_at.between(start_dt, end_dt),
+            )
+            .count()
+        )
         m["smr_count"] = smrs
         m["ifti_count"] = iftis
         m["ttr_count"] = ttrs
         m["ifti_volume"] = float(iftis)
         m["ttr_volume"] = float(ttrs)
         total_customers = m.get("total_customers", 0)
-        m["smr_rate_per_1k"] = round(smrs / total_customers * 1000, 3) if total_customers else 0.0
+        m["smr_rate_per_1k"] = (
+            round(smrs / total_customers * 1000, 3) if total_customers else 0.0
+        )
     except Exception as exc:
         log.debug("Report metrics failed: %s", exc)
 
     # ── Monitoring alerts ─────────────────────────────────────────────────────
     try:
-        from app.models.monitoring import TransactionAlert, AlertStatus
-        alerts_in_period = db.query(TransactionAlert).filter(
-            TransactionAlert.org_id == org_id,
-            TransactionAlert.created_at.between(start_dt, end_dt)
-        ).all()
+        from app.models.monitoring import AlertStatus, TransactionAlert
+
+        alerts_in_period = (
+            db.query(TransactionAlert)
+            .filter(
+                TransactionAlert.org_id == org_id,
+                TransactionAlert.created_at.between(start_dt, end_dt),
+            )
+            .all()
+        )
         total_alerts = len(alerts_in_period)
         m["total_alerts"] = total_alerts
         if total_alerts > 0:
-            open_alerts = sum(1 for a in alerts_in_period if a.status == AlertStatus.open)
+            open_alerts = sum(
+                1 for a in alerts_in_period if a.status == AlertStatus.open
+            )
             m["open_alert_pct"] = round(open_alerts / total_alerts * 100, 2)
             # Alert → SMR conversion: alerts where result = smr_filed / total closed
-            smr_filed_alerts = sum(1 for a in alerts_in_period
-                                   if getattr(a, "result", None) and
-                                   str(getattr(a, "result", "")).lower() in ("smr_filed", "smr filed"))
+            smr_filed_alerts = sum(
+                1
+                for a in alerts_in_period
+                if getattr(a, "result", None)
+                and str(getattr(a, "result", "")).lower() in ("smr_filed", "smr filed")
+            )
             closed = total_alerts - open_alerts
-            m["alert_to_smr_pct"] = round(smr_filed_alerts / closed * 100, 2) if closed else 0.0
+            m["alert_to_smr_pct"] = (
+                round(smr_filed_alerts / closed * 100, 2) if closed else 0.0
+            )
     except Exception as exc:
         log.debug("Alert metrics failed: %s", exc)
 
     # ── Training ──────────────────────────────────────────────────────────────
     try:
-        from app.models.governance_training import GovernanceTrainingRecord, TrainingStatus
+        from app.models.governance_training import (
+            GovernanceTrainingRecord,
+            TrainingStatus,
+        )
+
         records = db.query(GovernanceTrainingRecord).filter_by(org_id=org_id).all()
         non_exempt = [r for r in records if r.status != TrainingStatus.exempt]
         if non_exempt:
-            completed = sum(1 for r in non_exempt if r.status == TrainingStatus.completed)
+            completed = sum(
+                1 for r in non_exempt if r.status == TrainingStatus.completed
+            )
             overdue = sum(1 for r in non_exempt if r.status == TrainingStatus.overdue)
             m["training_completion_pct"] = round(completed / len(non_exempt) * 100, 2)
             m["training_overdue_pct"] = round(overdue / len(non_exempt) * 100, 2)
@@ -512,36 +631,54 @@ def _compute_org_metrics(db: Session, org_id: str, start: date, end: date) -> di
 
     # ── Governance ────────────────────────────────────────────────────────────
     try:
-        from app.models.governance import Policy, PolicyLifecycleStatus
+        from app.models.governance import Policy
+
         today = date.today()
         all_policies = db.query(Policy).filter_by(org_id=org_id).all()
-        policies_with_due = [p for p in all_policies if getattr(p, "review_due_date", None)]
+        policies_with_due = [
+            p for p in all_policies if getattr(p, "review_due_date", None)
+        ]
         if policies_with_due:
             on_time = sum(1 for p in policies_with_due if p.review_due_date >= today)
-            m["policy_review_on_time_pct"] = round(on_time / len(policies_with_due) * 100, 2)
+            m["policy_review_on_time_pct"] = round(
+                on_time / len(policies_with_due) * 100, 2
+            )
     except Exception as exc:
         log.debug("Policy metrics failed: %s", exc)
 
     try:
-        from app.models.governance_controls import GovernanceControl, ControlEffectiveness
-        controls = db.query(GovernanceControl).filter_by(org_id=org_id, is_active=True).all()
+        from app.models.governance_controls import (
+            GovernanceControl,
+        )
+
+        controls = (
+            db.query(GovernanceControl).filter_by(org_id=org_id, is_active=True).all()
+        )
         if controls:
-            effective = sum(1 for c in controls
-                           if getattr(c, "effectiveness", None) and
-                           str(getattr(c, "effectiveness", "")).lower() in
-                           ("effective", "highly_effective", "largely_effective"))
+            effective = sum(
+                1
+                for c in controls
+                if getattr(c, "effectiveness", None)
+                and str(getattr(c, "effectiveness", "")).lower()
+                in ("effective", "highly_effective", "largely_effective")
+            )
             m["control_effectiveness_pct"] = round(effective / len(controls) * 100, 2)
     except Exception as exc:
         log.debug("Control metrics failed: %s", exc)
 
     try:
         from app.models.case import Case, CaseStatus
-        closed_cases = db.query(Case).filter(
-            Case.org_id == org_id,
-            Case.status == CaseStatus.closed,
-            Case.closed_at.isnot(None),
-            Case.created_at.between(start_dt, end_dt),
-        ).all()
+
+        closed_cases = (
+            db.query(Case)
+            .filter(
+                Case.org_id == org_id,
+                Case.status == CaseStatus.closed,
+                Case.closed_at.isnot(None),
+                Case.created_at.between(start_dt, end_dt),
+            )
+            .all()
+        )
         if closed_cases:
             days_list = [
                 (c.closed_at - c.created_at).days
@@ -622,7 +759,11 @@ def _percentile_to_rating(percentile: int, higher_is_better: Optional[bool]) -> 
 
 
 def _overall_rating(comparisons: list) -> str:
-    rated = [c for c in comparisons if c.get("rating") not in ("no_benchmark", "informational")]
+    rated = [
+        c
+        for c in comparisons
+        if c.get("rating") not in ("no_benchmark", "informational")
+    ]
     if not rated:
         return "no_data"
     top = sum(1 for c in rated if c["rating"] == "top_quartile")
@@ -647,8 +788,11 @@ def _period_bounds(ref_date: date, period: SnapshotPeriod) -> tuple[date, date, 
     else:
         # Monthly
         start = ref_date.replace(day=1)
-        next_month = (start.replace(month=start.month % 12 + 1, day=1)
-                     if start.month < 12 else start.replace(year=start.year + 1, month=1, day=1))
+        next_month = (
+            start.replace(month=start.month % 12 + 1, day=1)
+            if start.month < 12
+            else start.replace(year=start.year + 1, month=1, day=1)
+        )
         end = next_month - timedelta(days=1)
         label = start.strftime("%Y-%m")
         return start, end, label

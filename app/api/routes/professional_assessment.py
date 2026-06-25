@@ -15,6 +15,7 @@ DISCLAIMER: This module assists in documenting compliance considerations.
 The platform does not determine legality, tax obligations, or investment
 legitimacy. All decisions remain with the reporting entity.
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -23,14 +24,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import Pagination, org_id_for, require_analyst_or_above, require_compliance_or_above
+from app.api.deps import (
+    Pagination,
+    org_id_for,
+    require_analyst_or_above,
+    require_compliance_or_above,
+)
 from app.db.database import get_db
 from app.models.customer import Customer
 from app.models.professional_assessment import (
+    DEFAULT_CHECKLISTS,
     AssessmentRiskRating,
     AssessmentStatus,
     ChecklistType,
-    DEFAULT_CHECKLISTS,
     InvestmentLegitimacyAssessment,
     OrgProfessionalChecklistTemplate,
     ProfessionalAssessment,
@@ -53,7 +59,9 @@ from app.services.professional_assessment_service import (
     generate_assessment_recommendations,
 )
 
-router = APIRouter(prefix="/professional-assessments", tags=["Professional Assessments"])
+router = APIRouter(
+    prefix="/professional-assessments", tags=["Professional Assessments"]
+)
 
 ORG_CHECKLIST_DISCLAIMER = (
     "Checklists are compliance workflow tools only. "
@@ -64,101 +72,102 @@ ORG_CHECKLIST_DISCLAIMER = (
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class AssessmentCreate(BaseModel):
-    customer_id:                str
-    professional_service_type:  ProfessionalServiceType
-    transaction_id:             Optional[str] = None
-    case_id:                    Optional[str] = None
-    matter_description:         Optional[str] = Field(None, max_length=2000)
-    assigned_to:                Optional[str] = None
+    customer_id: str
+    professional_service_type: ProfessionalServiceType
+    transaction_id: Optional[str] = None
+    case_id: Optional[str] = None
+    matter_description: Optional[str] = Field(None, max_length=2000)
+    assigned_to: Optional[str] = None
 
 
 class AssessmentUpdate(BaseModel):
-    matter_description:     Optional[str] = Field(None, max_length=2000)
-    assigned_to:            Optional[str] = None
-    overall_risk_rating:    Optional[AssessmentRiskRating] = None
-    risk_summary:           Optional[str] = None
+    matter_description: Optional[str] = Field(None, max_length=2000)
+    assigned_to: Optional[str] = None
+    overall_risk_rating: Optional[AssessmentRiskRating] = None
+    risk_summary: Optional[str] = None
     smr_consideration_noted: Optional[bool] = None
 
 
 class SOFUpsert(BaseModel):
-    primary_source_type:        SOFSourceType
-    additional_source_types:    list[str] = Field(default_factory=list)
-    source_description:         Optional[str] = None
-    evidence_uploaded:          bool = False
-    evidence_reviewed:          bool = False
-    evidence_sufficient:        bool = False
-    additional_info_required:   bool = False
-    evidence_refs:              list[str] = Field(default_factory=list)
-    evidence_types:             list[str] = Field(default_factory=list)
-    review_outcome:             ReviewOutcome = ReviewOutcome.not_reviewed
-    review_notes:               Optional[str] = None
+    primary_source_type: SOFSourceType
+    additional_source_types: list[str] = Field(default_factory=list)
+    source_description: Optional[str] = None
+    evidence_uploaded: bool = False
+    evidence_reviewed: bool = False
+    evidence_sufficient: bool = False
+    additional_info_required: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+    evidence_types: list[str] = Field(default_factory=list)
+    review_outcome: ReviewOutcome = ReviewOutcome.not_reviewed
+    review_notes: Optional[str] = None
 
 
 class SOWUpsert(BaseModel):
-    primary_source_type:            SOWSourceType
-    additional_source_types:        list[str] = Field(default_factory=list)
-    wealth_narrative:               Optional[str] = None
-    wealth_explanation_provided:    bool = False
-    evidence_reviewed:              bool = False
-    wealth_profile_consistent:      bool = False
-    additional_review_required:     bool = False
-    evidence_refs:                  list[str] = Field(default_factory=list)
-    review_notes:                   Optional[str] = None
-    risk_assessment:                Optional[str] = None
-    review_outcome:                 ReviewOutcome = ReviewOutcome.not_reviewed
+    primary_source_type: SOWSourceType
+    additional_source_types: list[str] = Field(default_factory=list)
+    wealth_narrative: Optional[str] = None
+    wealth_explanation_provided: bool = False
+    evidence_reviewed: bool = False
+    wealth_profile_consistent: bool = False
+    additional_review_required: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+    review_notes: Optional[str] = None
+    risk_assessment: Optional[str] = None
+    review_outcome: ReviewOutcome = ReviewOutcome.not_reviewed
 
 
 class PurposeUpsert(BaseModel):
-    purpose_type:                       TransactionPurposeType
-    purpose_description:                Optional[str] = None
-    purpose_documented:                 bool = False
-    purpose_verified:                   bool = False
-    supporting_evidence_reviewed:       bool = False
-    purpose_consistent_with_profile:    bool = False
-    evidence_refs:                      list[str] = Field(default_factory=list)
-    review_notes:                       Optional[str] = None
-    review_outcome:                     ReviewOutcome = ReviewOutcome.not_reviewed
+    purpose_type: TransactionPurposeType
+    purpose_description: Optional[str] = None
+    purpose_documented: bool = False
+    purpose_verified: bool = False
+    supporting_evidence_reviewed: bool = False
+    purpose_consistent_with_profile: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+    review_notes: Optional[str] = None
+    review_outcome: ReviewOutcome = ReviewOutcome.not_reviewed
 
 
 class TaxRiskUpsert(BaseModel):
-    indicator_unexplained_cash:         bool = False
-    indicator_complex_ownership:        bool = False
-    indicator_offshore_no_purpose:      bool = False
-    indicator_income_inconsistency:     bool = False
-    indicator_related_party_movements:  bool = False
-    indicator_unusual_trust:            bool = False
-    indicator_unexplained_wealth:       bool = False
-    indicator_artificial_structuring:   bool = False
-    indicator_lack_documentation:       bool = False
-    indicator_reluctance_records:       bool = False
-    custom_indicators:                  list[dict] = Field(default_factory=list)
-    supporting_evidence:                Optional[str] = None
-    reviewer_notes:                     Optional[str] = None
-    risk_rating:                        AssessmentRiskRating = AssessmentRiskRating.not_rated
+    indicator_unexplained_cash: bool = False
+    indicator_complex_ownership: bool = False
+    indicator_offshore_no_purpose: bool = False
+    indicator_income_inconsistency: bool = False
+    indicator_related_party_movements: bool = False
+    indicator_unusual_trust: bool = False
+    indicator_unexplained_wealth: bool = False
+    indicator_artificial_structuring: bool = False
+    indicator_lack_documentation: bool = False
+    indicator_reluctance_records: bool = False
+    custom_indicators: list[dict] = Field(default_factory=list)
+    supporting_evidence: Optional[str] = None
+    reviewer_notes: Optional[str] = None
+    risk_rating: AssessmentRiskRating = AssessmentRiskRating.not_rated
 
 
 class InvestmentUpsert(BaseModel):
-    investment_type:                    Optional[str] = Field(None, max_length=200)
-    investment_purpose:                 Optional[str] = None
-    purpose_documented:                 bool = False
-    counterparty_identified:            bool = False
-    documentation_reviewed:             bool = False
-    funds_destination_verified:         bool = False
-    commercial_rationale_understood:    bool = False
-    regulatory_registration_verified:   bool = False
-    beneficial_ownership_verified:      bool = False
-    high_risk_jurisdiction_involved:    bool = False
-    supporting_documentation:           list[str] = Field(default_factory=list)
-    review_outcome:                     Optional[str] = None
-    review_outcome_status:              ReviewOutcome = ReviewOutcome.not_reviewed
-    review_notes:                       Optional[str] = None
+    investment_type: Optional[str] = Field(None, max_length=200)
+    investment_purpose: Optional[str] = None
+    purpose_documented: bool = False
+    counterparty_identified: bool = False
+    documentation_reviewed: bool = False
+    funds_destination_verified: bool = False
+    commercial_rationale_understood: bool = False
+    regulatory_registration_verified: bool = False
+    beneficial_ownership_verified: bool = False
+    high_risk_jurisdiction_involved: bool = False
+    supporting_documentation: list[str] = Field(default_factory=list)
+    review_outcome: Optional[str] = None
+    review_outcome_status: ReviewOutcome = ReviewOutcome.not_reviewed
+    review_notes: Optional[str] = None
 
 
 class ChecklistItemUpdate(BaseModel):
-    key:        str
-    checked:    bool
-    notes:      Optional[str] = None
+    key: str
+    checked: bool
+    notes: Optional[str] = None
 
 
 class ChecklistSubmit(BaseModel):
@@ -175,26 +184,33 @@ class ChecklistTemplateUpsert(BaseModel):
 
 
 class EscalateRequest(BaseModel):
-    escalated_to:       str
-    escalation_reason:  str = Field(..., min_length=10)
+    escalated_to: str
+    escalation_reason: str = Field(..., min_length=10)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _get_or_404(assessment_id: str, org_id: str, db: Session) -> ProfessionalAssessment:
-    pa = db.query(ProfessionalAssessment).filter(
-        ProfessionalAssessment.id == assessment_id,
-        ProfessionalAssessment.org_id == org_id,
-    ).first()
+    pa = (
+        db.query(ProfessionalAssessment)
+        .filter(
+            ProfessionalAssessment.id == assessment_id,
+            ProfessionalAssessment.org_id == org_id,
+        )
+        .first()
+    )
     if not pa:
         raise HTTPException(404, "Assessment not found.")
     return pa
 
 
 def _assessment_ref(db: Session, org_id: str) -> str:
-    count = db.query(ProfessionalAssessment).filter(
-        ProfessionalAssessment.org_id == org_id
-    ).count()
+    count = (
+        db.query(ProfessionalAssessment)
+        .filter(ProfessionalAssessment.org_id == org_id)
+        .count()
+    )
     return f"PSA-{count + 1:05d}"
 
 
@@ -209,7 +225,9 @@ def _pa_dict(pa: ProfessionalAssessment, include_sections: bool = False) -> dict
         "professional_service_type": pa.professional_service_type.value,
         "matter_description": pa.matter_description,
         "status": pa.status.value,
-        "overall_risk_rating": pa.overall_risk_rating.value if pa.overall_risk_rating else None,
+        "overall_risk_rating": pa.overall_risk_rating.value
+        if pa.overall_risk_rating
+        else None,
         "risk_summary": pa.risk_summary,
         "created_by": pa.created_by,
         "assigned_to": pa.assigned_to,
@@ -229,16 +247,23 @@ def _pa_dict(pa: ProfessionalAssessment, include_sections: bool = False) -> dict
             "purpose": pa.purpose_assessment is not None,
             "tax_risk": pa.tax_risk_assessment is not None,
             "investment": pa.investment_assessment is not None,
-            "checklist": pa.checklist is not None and (pa.checklist.is_complete if pa.checklist else False),
+            "checklist": pa.checklist is not None
+            and (pa.checklist.is_complete if pa.checklist else False),
         },
         "disclaimer": DISCLAIMER,
     }
     if include_sections:
         d["sof"] = _sof_dict(pa.sof_assessment) if pa.sof_assessment else None
         d["sow"] = _sow_dict(pa.sow_assessment) if pa.sow_assessment else None
-        d["purpose"] = _purpose_dict(pa.purpose_assessment) if pa.purpose_assessment else None
-        d["tax_risk"] = _tax_dict(pa.tax_risk_assessment) if pa.tax_risk_assessment else None
-        d["investment"] = _inv_dict(pa.investment_assessment) if pa.investment_assessment else None
+        d["purpose"] = (
+            _purpose_dict(pa.purpose_assessment) if pa.purpose_assessment else None
+        )
+        d["tax_risk"] = (
+            _tax_dict(pa.tax_risk_assessment) if pa.tax_risk_assessment else None
+        )
+        d["investment"] = (
+            _inv_dict(pa.investment_assessment) if pa.investment_assessment else None
+        )
         d["checklist"] = _checklist_dict(pa.checklist) if pa.checklist else None
     return d
 
@@ -300,21 +325,22 @@ def _purpose_dict(p: TransactionPurposeAssessment) -> dict:
 
 def _tax_dict(t: TaxRiskAssessment) -> dict:
     indicators = {
-        "unexplained_cash":         t.indicator_unexplained_cash,
-        "complex_ownership":        t.indicator_complex_ownership,
-        "offshore_no_purpose":      t.indicator_offshore_no_purpose,
-        "income_inconsistency":     t.indicator_income_inconsistency,
-        "related_party_movements":  t.indicator_related_party_movements,
-        "unusual_trust":            t.indicator_unusual_trust,
-        "unexplained_wealth":       t.indicator_unexplained_wealth,
-        "artificial_structuring":   t.indicator_artificial_structuring,
-        "lack_documentation":       t.indicator_lack_documentation,
-        "reluctance_records":       t.indicator_reluctance_records,
+        "unexplained_cash": t.indicator_unexplained_cash,
+        "complex_ownership": t.indicator_complex_ownership,
+        "offshore_no_purpose": t.indicator_offshore_no_purpose,
+        "income_inconsistency": t.indicator_income_inconsistency,
+        "related_party_movements": t.indicator_related_party_movements,
+        "unusual_trust": t.indicator_unusual_trust,
+        "unexplained_wealth": t.indicator_unexplained_wealth,
+        "artificial_structuring": t.indicator_artificial_structuring,
+        "lack_documentation": t.indicator_lack_documentation,
+        "reluctance_records": t.indicator_reluctance_records,
     }
     return {
         "id": t.id,
         "indicators": indicators,
-        "indicator_count": t.indicator_count or sum(1 for v in indicators.values() if v),
+        "indicator_count": t.indicator_count
+        or sum(1 for v in indicators.values() if v),
         "custom_indicators": t.custom_indicators or [],
         "supporting_evidence": t.supporting_evidence,
         "reviewer_notes": t.reviewer_notes,
@@ -334,18 +360,20 @@ def _inv_dict(i: InvestmentLegitimacyAssessment) -> dict:
         "investment_type": i.investment_type,
         "investment_purpose": i.investment_purpose,
         "checklist": {
-            "purpose_documented":               i.purpose_documented,
-            "counterparty_identified":          i.counterparty_identified,
-            "documentation_reviewed":           i.documentation_reviewed,
-            "funds_destination_verified":       i.funds_destination_verified,
-            "commercial_rationale_understood":  i.commercial_rationale_understood,
+            "purpose_documented": i.purpose_documented,
+            "counterparty_identified": i.counterparty_identified,
+            "documentation_reviewed": i.documentation_reviewed,
+            "funds_destination_verified": i.funds_destination_verified,
+            "commercial_rationale_understood": i.commercial_rationale_understood,
             "regulatory_registration_verified": i.regulatory_registration_verified,
-            "beneficial_ownership_verified":    i.beneficial_ownership_verified,
-            "high_risk_jurisdiction_involved":  i.high_risk_jurisdiction_involved,
+            "beneficial_ownership_verified": i.beneficial_ownership_verified,
+            "high_risk_jurisdiction_involved": i.high_risk_jurisdiction_involved,
         },
         "supporting_documentation": i.supporting_documentation or [],
         "review_outcome": i.review_outcome,
-        "review_outcome_status": i.review_outcome_status.value if i.review_outcome_status else None,
+        "review_outcome_status": i.review_outcome_status.value
+        if i.review_outcome_status
+        else None,
         "reviewer_id": i.reviewer_id,
         "review_date": i.review_date,
         "review_notes": i.review_notes,
@@ -375,16 +403,21 @@ def _get_checklist_template(
     db: Session,
 ) -> list[dict]:
     """Return org-custom template or fall back to DEFAULT_CHECKLISTS."""
-    custom = db.query(OrgProfessionalChecklistTemplate).filter(
-        OrgProfessionalChecklistTemplate.org_id == org_id,
-        OrgProfessionalChecklistTemplate.checklist_type == checklist_type,
-    ).first()
+    custom = (
+        db.query(OrgProfessionalChecklistTemplate)
+        .filter(
+            OrgProfessionalChecklistTemplate.org_id == org_id,
+            OrgProfessionalChecklistTemplate.checklist_type == checklist_type,
+        )
+        .first()
+    )
     if custom:
         return custom.items or []
     return DEFAULT_CHECKLISTS.get(checklist_type, [])
 
 
 # ── Assessment CRUD ───────────────────────────────────────────────────────────
+
 
 @router.post("", status_code=201)
 def create_assessment(
@@ -401,18 +434,26 @@ def create_assessment(
     """
     org_id = org_id_for(current_user)
 
-    customer = db.query(Customer).filter(
-        Customer.id == payload.customer_id,
-        Customer.org_id == org_id,
-    ).first()
+    customer = (
+        db.query(Customer)
+        .filter(
+            Customer.id == payload.customer_id,
+            Customer.org_id == org_id,
+        )
+        .first()
+    )
     if not customer:
         raise HTTPException(404, "Customer not found.")
 
     if payload.transaction_id:
-        txn = db.query(Transaction).filter(
-            Transaction.id == payload.transaction_id,
-            Transaction.org_id == org_id,
-        ).first()
+        txn = (
+            db.query(Transaction)
+            .filter(
+                Transaction.id == payload.transaction_id,
+                Transaction.org_id == org_id,
+            )
+            .first()
+        )
         if not txn:
             raise HTTPException(404, "Transaction not found.")
 
@@ -447,13 +488,14 @@ def list_assessments(
     current_user: User = Depends(require_analyst_or_above),
 ):
     org_id = org_id_for(current_user)
-    q = db.query(ProfessionalAssessment).filter(
-        ProfessionalAssessment.org_id == org_id
-    )
+    q = db.query(ProfessionalAssessment).filter(ProfessionalAssessment.org_id == org_id)
     if customer_id:
         q = q.filter(ProfessionalAssessment.customer_id == customer_id)
     if professional_service_type:
-        q = q.filter(ProfessionalAssessment.professional_service_type == professional_service_type)
+        q = q.filter(
+            ProfessionalAssessment.professional_service_type
+            == professional_service_type
+        )
     if status:
         q = q.filter(ProfessionalAssessment.status == status)
     if risk_rating:
@@ -474,9 +516,18 @@ def assessment_dashboard(
     q = db.query(ProfessionalAssessment).filter(ProfessionalAssessment.org_id == org_id)
 
     total = q.count()
-    by_status = {s.value: q.filter(ProfessionalAssessment.status == s).count() for s in AssessmentStatus}
-    by_type = {t.value: q.filter(ProfessionalAssessment.professional_service_type == t).count() for t in ProfessionalServiceType}
-    by_risk = {r.value: q.filter(ProfessionalAssessment.overall_risk_rating == r).count() for r in AssessmentRiskRating}
+    by_status = {
+        s.value: q.filter(ProfessionalAssessment.status == s).count()
+        for s in AssessmentStatus
+    }
+    by_type = {
+        t.value: q.filter(ProfessionalAssessment.professional_service_type == t).count()
+        for t in ProfessionalServiceType
+    }
+    by_risk = {
+        r.value: q.filter(ProfessionalAssessment.overall_risk_rating == r).count()
+        for r in AssessmentRiskRating
+    }
     escalated = q.filter(ProfessionalAssessment.is_escalated == True).count()
 
     return {
@@ -566,6 +617,7 @@ def escalate_assessment(
 
 # ── SOF Section ───────────────────────────────────────────────────────────────
 
+
 @router.put("/{assessment_id}/sof")
 def upsert_sof(
     assessment_id: str,
@@ -616,11 +668,14 @@ def get_sof(
 ):
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     if not pa.sof_assessment:
-        raise HTTPException(404, "SOF assessment not yet completed for this assessment.")
+        raise HTTPException(
+            404, "SOF assessment not yet completed for this assessment."
+        )
     return _sof_dict(pa.sof_assessment)
 
 
 # ── SOW Section ───────────────────────────────────────────────────────────────
+
 
 @router.put("/{assessment_id}/sow")
 def upsert_sow(
@@ -671,11 +726,14 @@ def get_sow(
 ):
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     if not pa.sow_assessment:
-        raise HTTPException(404, "SOW assessment not yet completed for this assessment.")
+        raise HTTPException(
+            404, "SOW assessment not yet completed for this assessment."
+        )
     return _sow_dict(pa.sow_assessment)
 
 
 # ── Purpose of Transaction Section ────────────────────────────────────────────
+
 
 @router.put("/{assessment_id}/purpose")
 def upsert_purpose(
@@ -727,6 +785,7 @@ def get_purpose(
 
 # ── Tax Risk Indicators Section ───────────────────────────────────────────────
 
+
 @router.put("/{assessment_id}/tax-risk")
 def upsert_tax_risk(
     assessment_id: str,
@@ -758,7 +817,9 @@ def upsert_tax_risk(
         data["indicator_lack_documentation"],
         data["indicator_reluctance_records"],
     ]
-    custom_count = sum(1 for c in (data.get("custom_indicators") or []) if c.get("present"))
+    custom_count = sum(
+        1 for c in (data.get("custom_indicators") or []) if c.get("present")
+    )
     indicator_count = sum(1 for v in standard_indicators if v) + custom_count
 
     if pa.tax_risk_assessment:
@@ -801,6 +862,7 @@ def get_tax_risk(
 
 
 # ── Investment Legitimacy Section ─────────────────────────────────────────────
+
 
 @router.put("/{assessment_id}/investment")
 def upsert_investment(
@@ -857,6 +919,7 @@ def get_investment(
 
 # ── Professional Judgment Checklist ───────────────────────────────────────────
 
+
 @router.get("/{assessment_id}/checklist")
 def get_checklist(
     assessment_id: str,
@@ -879,8 +942,14 @@ def get_checklist(
         "id": None,
         "checklist_type": ctype,
         "items": [
-            {"key": it["key"], "label": it["label"], "checked": False,
-             "checked_by": None, "checked_at": None, "notes": None}
+            {
+                "key": it["key"],
+                "label": it["label"],
+                "checked": False,
+                "checked_by": None,
+                "checked_at": None,
+                "notes": None,
+            }
             for it in template_items
         ],
         "total_items": len(template_items),
@@ -923,9 +992,14 @@ def submit_checklist(
         for it in template_items:
             key = it["key"]
             if key not in existing:
-                existing[key] = {"key": key, "label": it["label"],
-                                  "checked": False, "checked_by": None,
-                                  "checked_at": None, "notes": None}
+                existing[key] = {
+                    "key": key,
+                    "label": it["label"],
+                    "checked": False,
+                    "checked_by": None,
+                    "checked_at": None,
+                    "notes": None,
+                }
             if key in update_map:
                 upd = update_map[key]
                 existing[key]["checked"] = upd.checked
@@ -940,14 +1014,16 @@ def submit_checklist(
         for it in template_items:
             key = it["key"]
             upd = update_map.get(key)
-            items_list.append({
-                "key": key,
-                "label": it["label"],
-                "checked": upd.checked if upd else False,
-                "checked_by": current_user.id if (upd and upd.checked) else None,
-                "checked_at": now.isoformat() if (upd and upd.checked) else None,
-                "notes": upd.notes if upd else None,
-            })
+            items_list.append(
+                {
+                    "key": key,
+                    "label": it["label"],
+                    "checked": upd.checked if upd else False,
+                    "checked_by": current_user.id if (upd and upd.checked) else None,
+                    "checked_at": now.isoformat() if (upd and upd.checked) else None,
+                    "notes": upd.notes if upd else None,
+                }
+            )
         c = ProfessionalJudgmentChecklist(
             id=f"pjc_{uuid4().hex[:10]}",
             assessment_id=pa.id,
@@ -977,6 +1053,7 @@ def submit_checklist(
 
 # ── Compliance Assistant Recommendations ──────────────────────────────────────
 
+
 @router.get("/{assessment_id}/recommendations")
 def get_recommendations(
     assessment_id: str,
@@ -1000,9 +1077,9 @@ def get_recommendations(
     customer = db.query(Customer).filter(Customer.id == pa.customer_id).first()
     transaction = None
     if pa.transaction_id:
-        transaction = db.query(Transaction).filter(
-            Transaction.id == pa.transaction_id
-        ).first()
+        transaction = (
+            db.query(Transaction).filter(Transaction.id == pa.transaction_id).first()
+        )
 
     recs = generate_assessment_recommendations(pa, customer, transaction)
     suggested_rating = compute_assessment_risk_rating(pa)
@@ -1028,6 +1105,7 @@ def get_recommendations(
 
 # ── Org Checklist Template Management ────────────────────────────────────────
 
+
 @router.get("/templates/checklists")
 def list_checklist_templates(
     db: Session = Depends(get_db),
@@ -1040,9 +1118,9 @@ def list_checklist_templates(
     org_id = org_id_for(current_user)
     custom = {
         t.checklist_type: t
-        for t in db.query(OrgProfessionalChecklistTemplate).filter(
-            OrgProfessionalChecklistTemplate.org_id == org_id
-        ).all()
+        for t in db.query(OrgProfessionalChecklistTemplate)
+        .filter(OrgProfessionalChecklistTemplate.org_id == org_id)
+        .all()
     }
     result = {}
     for ctype in ChecklistType:
@@ -1052,7 +1130,10 @@ def list_checklist_templates(
         if ctype in custom:
             result[cval] = {"source": "custom", "items": custom[ctype].items}
         else:
-            result[cval] = {"source": "default", "items": DEFAULT_CHECKLISTS.get(cval, [])}
+            result[cval] = {
+                "source": "default",
+                "items": DEFAULT_CHECKLISTS.get(cval, []),
+            }
     return {"templates": result, "disclaimer": ORG_CHECKLIST_DISCLAIMER}
 
 
@@ -1073,10 +1154,14 @@ def upsert_checklist_template(
     Existing completed checklists are not affected.
     """
     org_id = org_id_for(current_user)
-    existing = db.query(OrgProfessionalChecklistTemplate).filter(
-        OrgProfessionalChecklistTemplate.org_id == org_id,
-        OrgProfessionalChecklistTemplate.checklist_type == checklist_type,
-    ).first()
+    existing = (
+        db.query(OrgProfessionalChecklistTemplate)
+        .filter(
+            OrgProfessionalChecklistTemplate.org_id == org_id,
+            OrgProfessionalChecklistTemplate.checklist_type == checklist_type,
+        )
+        .first()
+    )
 
     if existing:
         existing.items = payload.items

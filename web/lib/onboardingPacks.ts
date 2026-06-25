@@ -1012,7 +1012,7 @@ export const onboardingPacks: OnboardingPack[] = [
     },
   },
   {
-    industryId: 'real-estate',
+    industryId: 'real_estate',
     label: 'Real Estate Professional',
     regime: 'expanded',
     icon: '🏠',
@@ -1251,7 +1251,7 @@ export const onboardingPacks: OnboardingPack[] = [
     },
   },
   {
-    industryId: 'conveyancer',
+    industryId: 'conveyancers',
     label: 'Conveyancer',
     regime: 'expanded',
     icon: '📋',
@@ -1475,7 +1475,7 @@ export const onboardingPacks: OnboardingPack[] = [
     },
   },
   {
-    industryId: 'law-firm',
+    industryId: 'legal_professionals',
     label: 'Law Firm',
     regime: 'expanded',
     icon: '⚖️',
@@ -1701,7 +1701,7 @@ export const onboardingPacks: OnboardingPack[] = [
     },
   },
   {
-    industryId: 'accounting-firm',
+    industryId: 'accountants',
     label: 'Accounting Firm',
     regime: 'expanded',
     icon: '📊',
@@ -1937,7 +1937,7 @@ export const onboardingPacks: OnboardingPack[] = [
     },
   },
   {
-    industryId: 'precious-metals',
+    industryId: 'precious_metals',
     label: 'Precious Metal Dealer',
     regime: 'expanded',
     icon: '🥇',
@@ -2174,7 +2174,7 @@ export const onboardingPacks: OnboardingPack[] = [
     },
   },
   {
-    industryId: 'reporting-group',
+    industryId: 'reporting_group',
     label: 'Reporting Group',
     regime: 'current',
     icon: '🏢',

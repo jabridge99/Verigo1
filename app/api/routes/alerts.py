@@ -12,10 +12,11 @@ Roles:
 DISCLAIMER: Alerts are indicators for human review. No alert constitutes a
 determination of suspicious activity or a requirement to lodge an SMR.
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -43,6 +44,7 @@ from app.schemas.monitoring import (
     AlertResultRequest,
     AlertReviewRequest,
 )
+from app.services import audit_service
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
@@ -54,10 +56,14 @@ DISCLAIMER = (
 
 
 def _get_alert_or_404(alert_id: str, org_id: str, db: Session) -> TransactionAlert:
-    alert = db.query(TransactionAlert).filter(
-        TransactionAlert.id == alert_id,
-        TransactionAlert.org_id == org_id,
-    ).first()
+    alert = (
+        db.query(TransactionAlert)
+        .filter(
+            TransactionAlert.id == alert_id,
+            TransactionAlert.org_id == org_id,
+        )
+        .first()
+    )
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found.")
     return alert
@@ -106,11 +112,14 @@ def alert_dashboard(
 
     total = q.count()
     open_alerts = q.filter(
-        TransactionAlert.status.notin_([
-            AlertStatus.dismissed, AlertStatus.resolved,
-        ])
+        TransactionAlert.status.notin_(
+            [
+                AlertStatus.dismissed,
+                AlertStatus.resolved,
+            ]
+        )
     ).count()
-    smr_candidates = q.filter(TransactionAlert.is_smr_candidate == True).count()
+    smr_candidates = q.filter(TransactionAlert.is_smr_candidate.is_(True)).count()
 
     by_severity = {}
     for sev in AlertSeverity:
@@ -157,6 +166,16 @@ def assign_alert(
     alert.status = AlertStatus.assigned
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_assigned",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={"assigned_to": payload.assign_to, "status": alert.status.value},
+    )
     return alert
 
 
@@ -182,6 +201,16 @@ def review_alert(
             status_code=400,
             detail=f"resolution must be one of: {', '.join(valid_resolutions)}",
         )
+    # Dismissing/clearing an AML alert without a recorded reason leaves no
+    # audit trail for why a potentially suspicious transaction was waved
+    # through — require a non-empty explanation for those resolutions.
+    if payload.resolution in ("dismissed", "cleared") and not (
+        payload.review_notes and payload.review_notes.strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="review_notes is required when dismissing or clearing an alert",
+        )
 
     alert.reviewed_by = current_user.id
     alert.reviewed_at = datetime.now(timezone.utc)
@@ -206,6 +235,21 @@ def review_alert(
 
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_reviewed",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={
+            "resolution": alert.resolution,
+            "status": alert.status.value,
+            "is_false_positive": alert.is_false_positive,
+        },
+        notes=payload.review_notes,
+    )
     return alert
 
 
@@ -227,6 +271,17 @@ def escalate_alert(
     alert.status = AlertStatus.escalated
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_escalated",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={"escalated_to": payload.escalate_to, "status": alert.status.value},
+        notes=payload.escalation_reason,
+    )
     return alert
 
 
@@ -248,6 +303,16 @@ def flag_smr_candidate(
     alert.status = AlertStatus.smr_candidate
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_flagged_smr_candidate",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={"is_smr_candidate": True, "status": alert.status.value},
+    )
     return alert
 
 
@@ -297,7 +362,8 @@ def record_result(
         AlertResult.customer_restricted,
     }
     if payload.result in _definitive and alert.status not in (
-        AlertStatus.dismissed, AlertStatus.resolved
+        AlertStatus.dismissed,
+        AlertStatus.resolved,
     ):
         alert.status = AlertStatus.resolved
         alert.resolved_by = current_user.id
@@ -305,6 +371,20 @@ def record_result(
 
     db.commit()
     db.refresh(alert)
+    audit_service.log_action(
+        db,
+        action="alert_result_recorded",
+        entity_type="alert",
+        entity_id=alert.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        after_state={
+            "result": alert.result.value if alert.result else None,
+            "status": alert.status.value,
+        },
+        notes=payload.result_notes,
+    )
     return alert
 
 
@@ -327,7 +407,8 @@ def create_case_from_alert(
     """
     from datetime import datetime, timezone
     from uuid import uuid4
-    from app.models.case import CaseStatus, CaseType, CaseSeverity
+
+    from app.models.case import CaseSeverity, CaseType
 
     org_id = org_id_for(current_user)
     alert = _get_alert_or_404(alert_id, org_id, db)
@@ -345,10 +426,13 @@ def create_case_from_alert(
         case_ref=case_ref,
         org_id=org_id,
         customer_id=alert.customer_id,
-        case_type=CaseType.smr_candidate if alert.is_smr_candidate else CaseType.internal_investigation,
+        case_type=CaseType.smr_candidate
+        if alert.is_smr_candidate
+        else CaseType.internal_investigation,
         severity=case_severity,
         title=title or f"Investigation — {alert.title}",
-        description=description or (
+        description=description
+        or (
             f"Case opened from alert {alert.alert_ref}. "
             f"Alert category: {alert.category.value}. "
             f"Alert score: {alert.alert_score:.1f}/100."
@@ -394,6 +478,7 @@ def get_alert_recommendations(
 ):
     """Regulatory recommendations linked to this alert."""
     from app.models.regulatory_recommendation import RegulatoryRecommendation
+
     org_id = org_id_for(current_user)
     _get_alert_or_404(alert_id, org_id, db)
 

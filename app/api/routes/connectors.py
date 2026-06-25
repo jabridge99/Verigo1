@@ -1,7 +1,10 @@
 """
-Connector Marketplace API.
-Tenant admins manage external provider credentials here.
-Plain credentials are NEVER returned by any GET endpoint — only hints and metadata.
+Connector Marketplace API — DEPRECATED, superseded by the Integrations Hub
+(/api/v1/integrations). Kept read/delete-only so existing credentials keep
+working; new connections must go through the Hub, which has OAuth, health/
+usage monitoring, credential-expiry alerting, and a richer provider catalog.
+Use POST /api/v1/integrations/migrate-legacy-connectors to copy existing
+rows into the Hub.
 """
 
 from datetime import datetime
@@ -16,7 +19,6 @@ from app.db.database import get_db
 from app.models.connector import ConnectorProvider, ConnectorStatus
 from app.models.user import User, UserRole
 from app.services.connector_service import (
-    create_credential,
     delete_credential,
     get_credentials,
     test_credential,
@@ -86,31 +88,16 @@ def list_connectors(
         if current_user.role != UserRole.admin
         else current_user.org_id
     )
-    return get_credentials(db, industry_id, provider)
 
 
-@router.post("/", response_model=ConnectorResponse, status_code=201)
-def add_connector(
-    payload: ConnectorCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
-):
-    if not payload.credentials:
-        raise HTTPException(400, "credentials must not be empty")
-    cred = create_credential(
-        db,
-        industry_id=current_user.org_id,
-        provider=payload.provider,
-        credentials=payload.credentials,
-        label=payload.label,
-        created_by=current_user.id,
+@router.post("/", status_code=410)
+def add_connector(payload: ConnectorCreate):
+    """Deprecated — use POST /api/v1/integrations/{slug}/enable instead."""
+    raise HTTPException(
+        410,
+        "This connector store is deprecated. Configure providers via the "
+        "Integrations Hub: POST /api/v1/integrations/{slug}/enable.",
     )
-    if payload.is_default:
-        from app.services.connector_service import update_credential as uc
-
-        uc(db, cred.credential_id, current_user.org_id, is_default=True)
-        db.refresh(cred)
-    return cred
 
 
 @router.patch("/{credential_id}", response_model=ConnectorResponse)
@@ -128,6 +115,7 @@ def update_connector(
             credentials=payload.credentials,
             label=payload.label,
             is_default=payload.is_default,
+            organisation_id=current_user.primary_organisation_id,
         )
     except ValueError as e:
         raise HTTPException(404, str(e))

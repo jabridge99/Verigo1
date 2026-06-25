@@ -1,4 +1,5 @@
 """Pydantic schemas for Case Management."""
+
 from datetime import date, datetime
 from typing import Optional
 
@@ -13,8 +14,8 @@ from app.models.case import (
     NoteType,
 )
 
-
 # ── Case ──────────────────────────────────────────────────────────────────────
+
 
 class CaseCreate(BaseModel):
     customer_id: Optional[str] = None
@@ -26,7 +27,7 @@ class CaseCreate(BaseModel):
     is_smr_candidate: bool = False
     linked_customer_ids: list[str] = []
     related_case_ids: list[str] = []
-    alert_ids: list[str] = []       # alerts to link on creation
+    alert_ids: list[str] = []  # alerts to link on creation
 
 
 class CaseUpdate(BaseModel):
@@ -123,6 +124,7 @@ class CaseListOut(BaseModel):
 
 # ── Case Note ─────────────────────────────────────────────────────────────────
 
+
 class CaseNoteCreate(BaseModel):
     note_type: NoteType = NoteType.investigation_note
     content: str
@@ -146,6 +148,7 @@ class CaseNoteOut(BaseModel):
 
 
 # ── Case Evidence ─────────────────────────────────────────────────────────────
+
 
 class CaseEvidenceCreate(BaseModel):
     evidence_type: EvidenceType
@@ -177,18 +180,21 @@ class CaseEvidenceOut(BaseModel):
 
 # ── SMR Workflow ──────────────────────────────────────────────────────────────
 
+
 class SMRConsiderRequest(BaseModel):
     smr_notes: str = Field(..., description="MLRO reasoning (confidential)")
-    proceed_to_lodge: bool = False      # if True, also sets smr_lodged
+    proceed_to_lodge: bool = False  # if True, also sets smr_lodged
 
 
 class SMRLodgeRequest(BaseModel):
-    smr_reference: str = Field(..., max_length=100,
-                                description="AUSTRAC SMR confirmation reference")
+    smr_reference: str = Field(
+        ..., max_length=100, description="AUSTRAC SMR confirmation reference"
+    )
     smr_notes: Optional[str] = None
 
 
 # ── Link Alert to Case ─────────────────────────────────────────────────────────
+
 
 class LinkAlertRequest(BaseModel):
     alert_id: str

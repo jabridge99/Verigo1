@@ -14,17 +14,16 @@ export const metadata = {
 }
 
 const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'digital-currency-exchange': Coins,
-  'remittance-provider': Globe,
-  'foreign-exchange': ArrowLeftRight,
-  'payment-service-provider': CreditCard,
-  'real-estate': Home,
-  'conveyancer': FileCheck,
-  'law-firm': Scale,
-  'accounting-firm': Calculator,
-  'precious-metals': Gem,
-  'reporting-group': Network,
-  'mortgage-broker': Landmark,
+  'vasp': Coins,
+  'remittance': Globe,
+  'bullion_dealers': Gem,
+  'real_estate': Home,
+  'conveyancers': FileCheck,
+  'legal_professionals': Scale,
+  'accountants': Calculator,
+  'precious_metals': Gem,
+  'pubs_clubs': Building2,
+  'reporting_group': Network,
 }
 
 const otherSectors: { icon: React.ComponentType<{ className?: string }>; label: string }[] = [
@@ -58,7 +57,7 @@ export default function IndustriesPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/start-trial" className="pub-btn-lg">Start Free Trial <ArrowRight className="w-5 h-5" /></Link>
-            <Link href="/live-demo" className="pub-btn-secondary-lg">Book Demo</Link>
+            <Link href="/start-trial" className="pub-btn-secondary-lg">Start Free Trial</Link>
           </div>
         </div>
       </section>
@@ -77,7 +76,7 @@ export default function IndustriesPage() {
             {current.map(ind => {
               const Icon = industryIconMap[ind.id] ?? Shield
               return (
-                <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
+                <Link key={ind.id} href={`/solutions/${ind.slug}`} className="pub-card-hover group flex flex-col">
                   <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}>
                     <Icon className="w-7 h-7 text-white" />
                   </div>
@@ -115,7 +114,7 @@ export default function IndustriesPage() {
             {expanded.map(ind => {
               const Icon = industryIconMap[ind.id] ?? Shield
               return (
-                <Link key={ind.id} href={`/solutions/${ind.id}`} className="pub-card-hover group flex flex-col">
+                <Link key={ind.id} href={`/solutions/${ind.slug}`} className="pub-card-hover group flex flex-col">
                   <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center mb-5`}>
                     <Icon className="w-7 h-7 text-white" />
                   </div>
@@ -154,7 +153,7 @@ export default function IndustriesPage() {
               <p className="font-semibold text-white mb-1">Operating in one of these sectors?</p>
               <p className="text-slate-400 text-sm">We can tailor a compliance solution to your specific obligations. Contact us to discuss your requirements.</p>
             </div>
-            <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100 transition-colors flex-shrink-0">
+            <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100 transition-colors flex-shrink-0">
               Talk to us <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -170,8 +169,8 @@ export default function IndustriesPage() {
             <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
               Start Free Trial <ArrowRight className="w-5 h-5" />
             </Link>
-            <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
-              Book Demo
+            <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
+              Start Free Trial
             </Link>
           </div>
         </div>

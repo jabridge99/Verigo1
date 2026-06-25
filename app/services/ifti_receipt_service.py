@@ -4,6 +4,7 @@ IFTI Receipt Service — generate, hash, and supersede customer receipts.
 Receipts are immutable. SHA-256 audit_hash is computed over the canonical
 content fields to support integrity verification at any future point.
 """
+
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -86,8 +87,14 @@ def generate_ifti_receipt(
     """
     receipt_ref = _next_receipt_ref(org_code)
 
-    txn_date = txn.transaction_date.date() if isinstance(txn.transaction_date, datetime) else txn.transaction_date
-    direction = txn.direction.value if hasattr(txn.direction, "value") else txn.direction
+    txn_date = (
+        txn.transaction_date.date()
+        if isinstance(txn.transaction_date, datetime)
+        else txn.transaction_date
+    )
+    direction = (
+        txn.direction.value if hasattr(txn.direction, "value") else txn.direction
+    )
 
     receipt = IFTIReceipt(
         org_id=txn.org_id,
@@ -95,7 +102,6 @@ def generate_ifti_receipt(
         transaction_id=txn.id,
         receipt_ref=receipt_ref,
         status=ReceiptStatus.active,
-
         transfer_date=txn_date,
         direction=direction,
         total_amount=txn.amount,
@@ -103,27 +109,23 @@ def generate_ifti_receipt(
         amount_aud=txn.amount_aud,
         exchange_rate=txn.exchange_rate,
         transfer_reference=txn.reference,
-
         sender_name=txn.source_account_name,
         sender_account_number=txn.source_account_number,
         sender_bank_name=txn.source_bank_name,
         sender_swift_bic=txn.source_bank_bic,
         sender_iban=txn.source_iban,
         sender_country=txn.source_country,
-
         beneficiary_name=txn.destination_account_name,
         beneficiary_account_number=txn.destination_account_number,
         beneficiary_bank_name=txn.destination_bank_name,
         beneficiary_swift_bic=txn.destination_bank_bic,
         beneficiary_iban=txn.destination_iban,
         beneficiary_country=txn.destination_country,
-
         processor_name=processor_name,
         processor_abn=processor_abn,
         processor_austrac_id=processor_austrac_id,
         processor_address=processor_address,
         processor_contact=processor_contact,
-
         compliance_footer=COMPLIANCE_FOOTER,
         risk_disclaimer=RISK_DISCLAIMER,
         generated_by=generated_by,

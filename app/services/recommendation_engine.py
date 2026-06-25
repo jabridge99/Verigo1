@@ -13,9 +13,8 @@ DISCLAIMER: All recommendations are compliance workflow guidance only.
 The reporting entity bears sole responsibility for all regulatory decisions,
 including whether to lodge reports with AUSTRAC.
 """
+
 from datetime import datetime, timezone
-from typing import Optional
-from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -48,44 +47,55 @@ HIGH_RISK_LEVELS = {"high", "critical"}
 # FATF blacklist / sanctioned country sets (mirrored from monitoring_engine)
 FATF_BLACKLIST = frozenset({"KP", "IR", "MM"})
 SANCTIONED_COUNTRIES = frozenset({"IR", "KP", "RU", "BY", "SY", "CU", "SD"})
-FATF_GREYLIST = frozenset({
-    "AF", "BB", "BF", "CM", "CD", "HT", "JM", "ML", "MZ", "NI",
-    "NG", "PK", "PA", "PH", "SN", "SS", "SY", "TZ", "TT", "UG",
-    "AE", "VN", "YE",
-})
+FATF_GREYLIST = frozenset(
+    {
+        "AF",
+        "BB",
+        "BF",
+        "CM",
+        "CD",
+        "HT",
+        "JM",
+        "ML",
+        "MZ",
+        "NI",
+        "NG",
+        "PK",
+        "PA",
+        "PH",
+        "SN",
+        "SS",
+        "SY",
+        "TZ",
+        "TT",
+        "UG",
+        "AE",
+        "VN",
+        "YE",
+    }
+)
 
 
 # ── Regulatory Basis Citations ────────────────────────────────────────────────
 
 _REGULATORY_BASIS = {
-    RecommendationType.consider_ifti:
-        "AML/CTF Act 2006 s.45 — IFTI reporting obligation for cross-border transfers",
-    RecommendationType.consider_ttr:
-        "AML/CTF Act 2006 s.43 — TTR reporting obligation for threshold transactions ≥ AUD 10,000",
-    RecommendationType.consider_smr:
-        "AML/CTF Act 2006 s.41 — SMR reporting obligation when suspicion is formed",
-    RecommendationType.consider_edd:
-        "AML/CTF Rules 2007 Chapter 4 — Enhanced Customer Due Diligence",
-    RecommendationType.request_source_of_funds:
-        "FATF Recommendation 10 — Customer Due Diligence; AML/CTF Rules 2007 r.4.2.2",
-    RecommendationType.request_source_of_wealth:
-        "FATF Recommendation 10 — Source of Wealth for high-risk customers and PEPs",
-    RecommendationType.trigger_customer_review:
-        "AML/CTF Rules 2007 r.15 — Ongoing Customer Due Diligence",
-    RecommendationType.escalate_to_mlro:
-        "AML/CTF Act 2006 — MLRO accountability; internal escalation policy",
-    RecommendationType.senior_approval_required:
-        "AML/CTF Rules 2007 r.4.2.3 — Senior management approval for high-risk relationships",
-    RecommendationType.enhanced_monitoring:
-        "AML/CTF Rules 2007 r.15.5 — Enhanced Ongoing Monitoring",
-    RecommendationType.create_case:
-        "Internal AML/CTF Program — investigation workflow",
-    RecommendationType.no_action_required:
-        "Risk-based assessment — no mandatory obligation identified at this time",
+    RecommendationType.consider_ifti: "AML/CTF Act 2006 s.45 — IFTI reporting obligation for cross-border transfers",
+    RecommendationType.consider_ttr: "AML/CTF Act 2006 s.43 — TTR reporting obligation for threshold transactions ≥ AUD 10,000",
+    RecommendationType.consider_smr: "AML/CTF Act 2006 s.41 — SMR reporting obligation when suspicion is formed",
+    RecommendationType.consider_edd: "AML/CTF Rules 2007 Chapter 4 — Enhanced Customer Due Diligence",
+    RecommendationType.request_source_of_funds: "FATF Recommendation 10 — Customer Due Diligence; AML/CTF Rules 2007 r.4.2.2",
+    RecommendationType.request_source_of_wealth: "FATF Recommendation 10 — Source of Wealth for high-risk customers and PEPs",
+    RecommendationType.trigger_customer_review: "AML/CTF Rules 2007 r.15 — Ongoing Customer Due Diligence",
+    RecommendationType.escalate_to_mlro: "AML/CTF Act 2006 — MLRO accountability; internal escalation policy",
+    RecommendationType.senior_approval_required: "AML/CTF Rules 2007 r.4.2.3 — Senior management approval for high-risk relationships",
+    RecommendationType.enhanced_monitoring: "AML/CTF Rules 2007 r.15.5 — Enhanced Ongoing Monitoring",
+    RecommendationType.create_case: "Internal AML/CTF Program — investigation workflow",
+    RecommendationType.no_action_required: "Risk-based assessment — no mandatory obligation identified at this time",
 }
 
 
 # ── Core Generation Function ──────────────────────────────────────────────────
+
 
 def generate_recommendations(
     txn: Transaction,
@@ -106,18 +116,24 @@ def generate_recommendations(
     industry = org.industry_type.value if org and org.industry_type else None
 
     amount_aud = txn.amount_aud or txn.amount
-    customer_risk = (getattr(customer, "risk_level", None) or "").value \
-        if hasattr(getattr(customer, "risk_level", None), "value") \
+    customer_risk = (
+        (getattr(customer, "risk_level", None) or "").value
+        if hasattr(getattr(customer, "risk_level", None), "value")
         else str(getattr(customer, "risk_level", "") or "")
+    )
     is_pep = bool(getattr(customer, "is_pep", False))
     sof_verified = bool(getattr(customer, "source_of_funds_verified", False))
     sow_verified = bool(getattr(customer, "source_of_wealth_verified", False))
 
     countries = {
-        c for c in [
-            txn.source_country, txn.destination_country,
-            txn.country_origin, txn.country_destination,
-        ] if c
+        c
+        for c in [
+            txn.source_country,
+            txn.destination_country,
+            txn.country_origin,
+            txn.country_destination,
+        ]
+        if c
     }
 
     max_alert_score = max((a.alert_score for a in alerts), default=0.0)
@@ -188,9 +204,13 @@ def generate_recommendations(
     # ── 2. IFTI — International Funds Transfer Instruction ───────────────────
 
     if txn.is_cross_border:
-        dest = txn.destination_country or txn.country_destination or "unknown jurisdiction"
+        dest = (
+            txn.destination_country or txn.country_destination or "unknown jurisdiction"
+        )
         src = txn.source_country or txn.country_origin or "unknown jurisdiction"
-        direction_str = "outgoing to" if txn.direction.value == "outgoing" else "incoming from"
+        direction_str = (
+            "outgoing to" if txn.direction.value == "outgoing" else "incoming from"
+        )
         _add(
             RecommendationType.consider_ifti,
             title=f"Potential IFTI — Cross-border {txn.direction.value} transfer",
@@ -211,7 +231,9 @@ def generate_recommendations(
     blacklist_hit = bool(countries.intersection(FATF_BLACKLIST))
 
     if sanctioned_hit or blacklist_hit:
-        hit_countries = list(countries.intersection(SANCTIONED_COUNTRIES | FATF_BLACKLIST))
+        hit_countries = list(
+            countries.intersection(SANCTIONED_COUNTRIES | FATF_BLACKLIST)
+        )
         _add(
             RecommendationType.consider_smr,
             title=f"Potential SMR — Sanctioned/FATF Blacklist jurisdiction: {', '.join(hit_countries)}",
@@ -260,9 +282,13 @@ def generate_recommendations(
     if edd_rationale_parts:
         edd_triggers = "; ".join(edd_rationale_parts)
         pep_note = (
-            " As a Politically Exposed Person, enhanced scrutiny of this transaction "
-            "and the customer relationship is required under AML/CTF Rules 2007 r.4.2."
-        ) if is_pep else ""
+            (
+                " As a Politically Exposed Person, enhanced scrutiny of this transaction "
+                "and the customer relationship is required under AML/CTF Rules 2007 r.4.2."
+            )
+            if is_pep
+            else ""
+        )
         _add(
             RecommendationType.consider_edd,
             title=f"Consider EDD — {'PEP customer' if is_pep else f'{customer_risk.capitalize()} risk customer'}",
@@ -274,15 +300,16 @@ def generate_recommendations(
                 f"Senior management sign-off may be required."
             ),
             rationale=edd_triggers,
-            priority=RecommendationPriority.high if is_pep or blacklist_hit else RecommendationPriority.normal,
+            priority=RecommendationPriority.high
+            if is_pep or blacklist_hit
+            else RecommendationPriority.normal,
         )
 
     # ── 5. Source of Funds ───────────────────────────────────────────────────
 
     sof_needed = (
-        (amount_aud >= TTR_THRESHOLD_AUD or customer_risk in HIGH_RISK_LEVELS or is_pep)
-        and not sof_verified
-    )
+        amount_aud >= TTR_THRESHOLD_AUD or customer_risk in HIGH_RISK_LEVELS or is_pep
+    ) and not sof_verified
     if sof_needed:
         _add(
             RecommendationType.request_source_of_funds,
@@ -297,19 +324,27 @@ def generate_recommendations(
                 f"sale proceeds documentation, or other verifiable records."
             ),
             rationale=f"sof_verified=False, amount_aud={amount_aud:,.2f}, risk={customer_risk}, is_pep={is_pep}",
-            priority=RecommendationPriority.high if is_pep or customer_risk == "critical" else RecommendationPriority.normal,
+            priority=RecommendationPriority.high
+            if is_pep or customer_risk == "critical"
+            else RecommendationPriority.normal,
         )
 
     # ── 6. Source of Wealth (PEP or high-value) ──────────────────────────────
 
     sow_needed = is_pep and not sow_verified
-    if not sow_needed and customer_risk == "critical" and not sow_verified and amount_aud >= 50_000:
+    if (
+        not sow_needed
+        and customer_risk == "critical"
+        and not sow_verified
+        and amount_aud >= 50_000
+    ):
         sow_needed = True
 
     if sow_needed:
         _add(
             RecommendationType.request_source_of_wealth,
-            title="Request Source of Wealth documentation" + (" — PEP customer" if is_pep else ""),
+            title="Request Source of Wealth documentation"
+            + (" — PEP customer" if is_pep else ""),
             text=(
                 f"Source of wealth has not been verified for this customer. "
                 f"{'As a PEP, source of wealth verification is mandatory under AML/CTF Rules 2007 r.4.2.3. ' if is_pep else ''}"
@@ -354,13 +389,23 @@ def generate_recommendations(
 
     # ── 9. Enhanced Monitoring ───────────────────────────────────────────────
 
-    greylist_hit = bool(countries.intersection(FATF_GREYLIST)) and not blacklist_hit and not sanctioned_hit
-    if greylist_hit or (customer_risk in HIGH_RISK_LEVELS and not has_smr_candidate_alert):
+    greylist_hit = (
+        bool(countries.intersection(FATF_GREYLIST))
+        and not blacklist_hit
+        and not sanctioned_hit
+    )
+    if greylist_hit or (
+        customer_risk in HIGH_RISK_LEVELS and not has_smr_candidate_alert
+    ):
         hit_gl = list(countries.intersection(FATF_GREYLIST))
         _add(
             RecommendationType.enhanced_monitoring,
-            title=f"Enhanced monitoring recommended"
-                  + (f" — FATF grey list country: {', '.join(hit_gl)}" if greylist_hit else ""),
+            title="Enhanced monitoring recommended"
+            + (
+                f" — FATF grey list country: {', '.join(hit_gl)}"
+                if greylist_hit
+                else ""
+            ),
             text=(
                 f"{'This transaction involves ' + ', '.join(hit_gl) + ', which is on the FATF grey list. ' if greylist_hit else ''}"
                 f"{'The customer is rated ' + customer_risk + ' risk. ' if customer_risk in HIGH_RISK_LEVELS else ''}"
@@ -374,7 +419,6 @@ def generate_recommendations(
     # ── 10. Customer Review ──────────────────────────────────────────────────
 
     review_date = getattr(customer, "next_review_date", None)
-    from datetime import date
     today = datetime.now(timezone.utc).date()
     review_overdue = review_date and review_date < today
 
@@ -427,10 +471,14 @@ def action_recommendation(
     org_id: str,
 ) -> RegulatoryRecommendation:
     """Mark a recommendation as actioned with a description of what was done."""
-    rec = db.query(RegulatoryRecommendation).filter(
-        RegulatoryRecommendation.id == rec_id,
-        RegulatoryRecommendation.org_id == org_id,
-    ).first()
+    rec = (
+        db.query(RegulatoryRecommendation)
+        .filter(
+            RegulatoryRecommendation.id == rec_id,
+            RegulatoryRecommendation.org_id == org_id,
+        )
+        .first()
+    )
     if not rec:
         raise ValueError(f"Recommendation {rec_id} not found")
     if rec.status != RecommendationStatus.pending:
@@ -452,10 +500,14 @@ def dismiss_recommendation(
     org_id: str,
 ) -> RegulatoryRecommendation:
     """Dismiss a recommendation with a documented reason."""
-    rec = db.query(RegulatoryRecommendation).filter(
-        RegulatoryRecommendation.id == rec_id,
-        RegulatoryRecommendation.org_id == org_id,
-    ).first()
+    rec = (
+        db.query(RegulatoryRecommendation)
+        .filter(
+            RegulatoryRecommendation.id == rec_id,
+            RegulatoryRecommendation.org_id == org_id,
+        )
+        .first()
+    )
     if not rec:
         raise ValueError(f"Recommendation {rec_id} not found")
     if rec.status != RecommendationStatus.pending:

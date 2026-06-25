@@ -25,14 +25,14 @@ Usage:
 from __future__ import annotations
 
 import io
-from datetime import date, datetime
+from datetime import date
 from typing import List, Optional
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from app.models.ifti_e import IFTIEDirection, IFTIEMode, IFTIERecord
+from app.models.ifti_e import IFTIEDirection, IFTIERecord
 
 # ── Column definitions ────────────────────────────────────────────────────────
 # Each entry: (section_label, column_label)
@@ -190,7 +190,9 @@ def _record_to_row(record: IFTIERecord) -> list:
         record.payer_phone or "",
         record.payer_email or "",
         record.payer_occupation or "",
-        " / ".join(filter(None, [record.payer_abn, record.payer_acn, record.payer_arbn])),
+        " / ".join(
+            filter(None, [record.payer_abn, record.payer_acn, record.payer_arbn])
+        ),
         record.payer_account_number or "",
         record.payer_business_structure or "",
         # Payer ID
@@ -208,11 +210,23 @@ def _record_to_row(record: IFTIERecord) -> list:
         record.payer_instn_city or "",
         record.payer_instn_country or "",
         # Correspondent 1
-        _c(0, "name"), _c(0, "code"), _c(0, "address"), _c(0, "city"), _c(0, "country"),
+        _c(0, "name"),
+        _c(0, "code"),
+        _c(0, "address"),
+        _c(0, "city"),
+        _c(0, "country"),
         # Correspondent 2
-        _c(1, "name"), _c(1, "code"), _c(1, "address"), _c(1, "city"), _c(1, "country"),
+        _c(1, "name"),
+        _c(1, "code"),
+        _c(1, "address"),
+        _c(1, "city"),
+        _c(1, "country"),
         # Correspondent 3
-        _c(2, "name"), _c(2, "code"), _c(2, "address"), _c(2, "city"), _c(2, "country"),
+        _c(2, "name"),
+        _c(2, "code"),
+        _c(2, "address"),
+        _c(2, "city"),
+        _c(2, "country"),
         # Payee institution
         record.payee_instn_name or "",
         record.payee_instn_code or "",
@@ -233,7 +247,9 @@ def _record_to_row(record: IFTIERecord) -> list:
         record.payee_email or "",
         # Payee business
         record.payee_occupation or "",
-        " / ".join(filter(None, [record.payee_abn, record.payee_acn, record.payee_arbn])),
+        " / ".join(
+            filter(None, [record.payee_abn, record.payee_acn, record.payee_arbn])
+        ),
         record.payee_account_number or "",
         record.payee_account_iban or "",
         record.payee_business_structure or "",
@@ -247,15 +263,15 @@ def _record_to_row(record: IFTIERecord) -> list:
 
 # ── Excel styles ──────────────────────────────────────────────────────────────
 
-_HEADER_FILL   = PatternFill("solid", fgColor="1F4E79")
-_SUBHEAD_FILL  = PatternFill("solid", fgColor="2E75B6")
-_HEADER_FONT   = Font(bold=True, color="FFFFFF", size=9)
-_SUBHEAD_FONT  = Font(bold=True, color="FFFFFF", size=8)
-_DATA_FONT     = Font(size=9)
-_CENTER        = Alignment(horizontal="center", vertical="center", wrap_text=True)
-_LEFT          = Alignment(horizontal="left", vertical="center", wrap_text=True)
-_THIN          = Side(style="thin")
-_BORDER        = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+_HEADER_FILL = PatternFill("solid", fgColor="1F4E79")
+_SUBHEAD_FILL = PatternFill("solid", fgColor="2E75B6")
+_HEADER_FONT = Font(bold=True, color="FFFFFF", size=9)
+_SUBHEAD_FONT = Font(bold=True, color="FFFFFF", size=8)
+_DATA_FONT = Font(size=9)
+_CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+_LEFT = Alignment(horizontal="left", vertical="center", wrap_text=True)
+_THIN = Side(style="thin")
+_BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 
 
 def generate_ifti_e_excel(
@@ -273,14 +289,16 @@ def generate_ifti_e_excel(
     # Row 1 — Section headers (merged per section group)
     # Row 2 — Column sub-headers
     sections: list[str] = [s for s, _ in IFTI_E_COLUMNS]
-    labels:   list[str] = [c for _, c in IFTI_E_COLUMNS]
+    labels: list[str] = [c for _, c in IFTI_E_COLUMNS]
 
     # Write section headers with merging
     col = 1
     run_start = 1
     run_label = sections[0]
     for i, sec in enumerate(sections):
-        ws.cell(row=1, column=i + 1).value = sec if sec != sections[i - 1] or i == 0 else None
+        ws.cell(row=1, column=i + 1).value = (
+            sec if sec != sections[i - 1] or i == 0 else None
+        )
         ws.cell(row=1, column=i + 1).fill = _HEADER_FILL
         ws.cell(row=1, column=i + 1).font = _HEADER_FONT
         ws.cell(row=1, column=i + 1).alignment = _CENTER
@@ -294,8 +312,10 @@ def generate_ifti_e_excel(
             run_end += 1
         if run_end - col > 0:
             ws.merge_cells(
-                start_row=1, start_column=col,
-                end_row=1, end_column=run_end,
+                start_row=1,
+                start_column=col,
+                end_row=1,
+                end_column=run_end,
             )
             ws.cell(row=1, column=col).value = sections[col - 1]
         col = run_end + 1
@@ -330,9 +350,15 @@ def generate_ifti_e_excel(
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
-def list_ifti_e(db, org_id: str, direction: Optional[IFTIEDirection] = None,
-                status: Optional[str] = None) -> List[IFTIERecord]:
+
+def list_ifti_e(
+    db,
+    org_id: str,
+    direction: Optional[IFTIEDirection] = None,
+    status: Optional[str] = None,
+) -> List[IFTIERecord]:
     from app.models.ifti_e import IFTIERecord
+
     q = db.query(IFTIERecord).filter(IFTIERecord.industry_id == org_id)
     if direction:
         q = q.filter(IFTIERecord.direction == direction)
@@ -343,7 +369,12 @@ def list_ifti_e(db, org_id: str, direction: Optional[IFTIEDirection] = None,
 
 def get_ifti_e(db, record_id: int, org_id: str) -> Optional[IFTIERecord]:
     from app.models.ifti_e import IFTIERecord
-    return db.query(IFTIERecord).filter(
-        IFTIERecord.id == record_id,
-        IFTIERecord.industry_id == org_id,
-    ).first()
+
+    return (
+        db.query(IFTIERecord)
+        .filter(
+            IFTIERecord.id == record_id,
+            IFTIERecord.industry_id == org_id,
+        )
+        .first()
+    )

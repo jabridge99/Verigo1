@@ -1,4 +1,3 @@
-import secrets
 from typing import List
 
 from pydantic import model_validator
@@ -16,13 +15,27 @@ class Settings(BaseSettings):
     # Production: postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres
     database_url: str = "sqlite:///./tvg.db"
 
+    # Alembic migrations need a direct (non-pooled) connection — PgBouncer's
+    # transaction-mode pooling (used by database_url above, port 6543) doesn't
+    # reliably support Alembic's long multi-statement DDL transactions and can
+    # hang indefinitely. Point this at the direct connection (port 5432), e.g.
+    # postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
+    # Falls back to database_url if unset (e.g. local sqlite/dev Postgres).
+    migration_database_url: str = ""
+
     # ── Supabase ──────────────────────────────────────────────────────────────
-    supabase_url: str = ""               # https://[ref].supabase.co
-    supabase_anon_key: str = ""          # public anon key (frontend)
+    supabase_url: str = ""  # https://[ref].supabase.co
+    supabase_anon_key: str = ""  # public anon key (frontend)
     supabase_service_role_key: str = ""  # secret service role key (backend only)
 
     # ── Auth ─────────────────────────────────────────────────────────────────
-    secret_key: str = secrets.token_urlsafe(32)
+    # A random per-process default (secrets.token_urlsafe(32)) would differ
+    # across worker processes, making JWTs signed by one worker fail to
+    # validate on another, and would never equal the literal string the
+    # production guard below checks for — silently defeating that guard.
+    # Use a fixed, obviously-insecure placeholder instead so the guard works
+    # and dev/test workers agree on a secret.
+    secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480  # 8 hours
 
@@ -35,11 +48,24 @@ class Settings(BaseSettings):
     rate_limit_default: str = "200/minute"
     rate_limit_auth: str = "20/minute"
     redis_url: str = ""  # e.g. redis://localhost:6379/0 — optional, enables Redis-backed rate limiting & cache
+    # X-Forwarded-For is attacker-controlled unless the app sits behind a
+    # proxy/load balancer that overwrites it. Only honor it for client-IP-based
+    # rate limiting when explicitly enabled (i.e. deployed behind such a proxy) —
+    # otherwise any client can set a fresh value per request to bypass per-IP
+    # limits entirely.
+    trust_proxy_headers: bool = False
 
     # ── Document storage ──────────────────────────────────────────────────────
     document_store_path: str = "./uploads"
+    # Encrypts tenant storage_config secret fields at rest. Falls back to a
+    # key derived from secret_key if unset — set this explicitly in production
+    # so rotating the JWT secret doesn't strand stored credentials.
+    storage_encryption_key: str = ""
 
     # ── Email ─────────────────────────────────────────────────────────────────
+    # console (dev logging) | smtp | resend
+    email_backend: str = "console"
+    resend_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
@@ -50,6 +76,20 @@ class Settings(BaseSettings):
     # ── App URLs ──────────────────────────────────────────────────────────────
     app_url: str = "http://localhost:3000"
     api_url: str = "http://localhost:8000"
+
+    # ── OAuth (social login) ─────────────────────────────────────────────────
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_tenant: str = "common"  # or your Azure AD tenant id
+
+    # ── Session cookie ───────────────────────────────────────────────────────
+    session_cookie_name: str = "tvg_session"
+
+    # ── Master admin (seeded on startup if set, idempotent) ────────────────────
+    master_admin_email: str = ""
+    master_admin_password: str = ""
 
     # ── Stripe ────────────────────────────────────────────────────────────────
     stripe_secret_key: str = ""
@@ -63,7 +103,7 @@ class Settings(BaseSettings):
 
     # ── Storage backend ───────────────────────────────────────────────────────
     # Set to "supabase" in production; "local" for dev
-    storage_backend: str = "local"  # local | supabase | s3 | azure | gcs
+    storage_backend: str = "local"  # local | supabase | s3 | r2 | azure | gcs
     document_bucket: str = "documents"  # Supabase Storage bucket name
 
     # S3 / Backblaze B2 (S3-compatible) — also used by Supabase Storage internally
@@ -72,6 +112,13 @@ class Settings(BaseSettings):
     s3_endpoint_url: str = ""
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
+    # Cloudflare R2 (S3-compatible — uses the same adapter as S3, with R2's
+    # account-scoped endpoint and free egress). Credentials come from an R2 API
+    # token (Account → R2 → Manage API Tokens), not your Cloudflare login.
+    r2_account_id: str = ""
+    r2_bucket: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
     # Azure Blob
     azure_account_name: str = ""
     azure_account_key: str = ""
@@ -95,13 +142,15 @@ class Settings(BaseSettings):
     # Identity verification (KYC/KYB): internal | sumsub
     identity_provider: str = "internal"
     sumsub_app_token: str = ""
-    sumsub_secret_key: str = ""          # used for both API request signing and webhook verification
+    sumsub_secret_key: str = (
+        ""  # used for both API request signing and webhook verification
+    )
     sumsub_base_url: str = "https://api.sumsub.com"
     sumsub_level_name: str = "basic-kyc-level"
     sumsub_kyb_level_name: str = "basic-kyb-level"
     # Per-check cost we pay the provider, and our markup when billing tenants
     sumsub_unit_cost_aud: float = 2.50
-    usage_markup_pct: float = 50.0       # tenant is billed unit_cost * (1 + pct/100)
+    usage_markup_pct: float = 50.0  # tenant is billed unit_cost * (1 + pct/100)
     # Crypto wallet screening: internal | chainalysis | ofac_sdn | crypto_apis |
     # scorechain | goplus | trm_labs | elliptic
     # chainalysis/ofac_sdn/scorechain/goplus = free or free-tier sanctions-only
@@ -128,6 +177,7 @@ class Settings(BaseSettings):
 
     # ── Sentry (optional) ────────────────────────────────────────────────────
     sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.1
 
     # ── Logging ──────────────────────────────────────────────────────────────
     log_level: str = "INFO"
@@ -148,6 +198,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def check_production_secrets(self):
+        # CORSMiddleware is configured with allow_credentials=True regardless
+        # of environment, so wildcard CORS is exploitable (any origin gets its
+        # requests echoed back with credentials) in staging just as much as
+        # production — gate on "not local dev", not literally "production".
+        if self.environment in ("production", "staging"):
+            if self.cors_origins == "*":
+                raise ValueError(
+                    f"CORS_ORIGINS must be set to explicit origin(s) in "
+                    f"{self.environment} — wildcard '*' combined with "
+                    f"allow_credentials is unsafe"
+                )
         if self.environment == "production":
             if self.secret_key == "change-me-in-production":
                 raise ValueError("SECRET_KEY must be changed in production")
@@ -155,11 +216,6 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "SQLite is not supported in production — set DATABASE_URL to a "
                     "PostgreSQL connection string (data loss / no concurrency guarantees)"
-                )
-            if self.cors_origins == "*":
-                raise ValueError(
-                    "CORS_ORIGINS must be set to explicit origin(s) in production — "
-                    "wildcard '*' combined with allow_credentials is unsafe"
                 )
             if not self.redis_url:
                 import warnings

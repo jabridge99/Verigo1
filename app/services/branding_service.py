@@ -21,6 +21,8 @@ DEFAULT_BRANDING: dict = {
     "primary_color": "#2563eb",
     "accent_color": "#f59e0b",
     "bg_color": "#060d1a",
+    "surface_color": "#0d1526",
+    "text_color": "#f1f5f9",
     "custom_domain": None,
     "support_email": "support@verigo.com.au",
     "footer_text": "Australian Compliance Operating System",
@@ -86,5 +88,9 @@ def preview_css_vars(branding: dict) -> str:
         lines.append(f"  --color-accent: {branding['accent_color']};")
     if branding.get("bg_color"):
         lines.append(f"  --color-bg: {branding['bg_color']};")
+    if branding.get("surface_color"):
+        lines.append(f"  --color-surface: {branding['surface_color']};")
+    if branding.get("text_color"):
+        lines.append(f"  --color-text: {branding['text_color']};")
     lines.append("}")
     return "\n".join(lines)

@@ -10,6 +10,7 @@ Lifecycle enforced:
 DISCLAIMER: This module provides workflow tooling only.
 All compliance decisions remain with the reporting entity.
 """
+
 import logging
 from datetime import date, datetime, timezone
 from typing import List, Optional
@@ -20,11 +21,21 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_roles
 from app.models.independent_review import (
-    ActionStatus, ActionType,
-    FindingCategory, FindingRisk, FindingStatus,
-    IndependentReview, ReviewAction, ReviewFinding, ReviewRecommendation,
-    RecommendationPriority, RecommendationStatus,
-    ReviewRating, ReviewScope, ReviewStatus, ReviewType,
+    ActionStatus,
+    ActionType,
+    FindingCategory,
+    FindingRisk,
+    FindingStatus,
+    IndependentReview,
+    RecommendationPriority,
+    RecommendationStatus,
+    ReviewAction,
+    ReviewFinding,
+    ReviewRating,
+    ReviewRecommendation,
+    ReviewScope,
+    ReviewStatus,
+    ReviewType,
 )
 from app.models.user import UserRole
 
@@ -35,15 +46,16 @@ router = APIRouter(prefix="/independent-reviews", tags=["Independent Review"])
 # ── REVIEW LIFECYCLE ──────────────────────────────────────────────────────────
 
 REVIEW_TRANSITIONS = {
-    ReviewStatus.planned:         [ReviewStatus.in_progress],
-    ReviewStatus.in_progress:     [ReviewStatus.findings_issued],
+    ReviewStatus.planned: [ReviewStatus.in_progress],
+    ReviewStatus.in_progress: [ReviewStatus.findings_issued],
     ReviewStatus.findings_issued: [ReviewStatus.response_due],
-    ReviewStatus.response_due:    [ReviewStatus.completed],
-    ReviewStatus.completed:       [ReviewStatus.archived],
-    ReviewStatus.archived:        [],
+    ReviewStatus.response_due: [ReviewStatus.completed],
+    ReviewStatus.completed: [ReviewStatus.archived],
+    ReviewStatus.archived: [],
 }
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
+
 
 class ReviewCreate(BaseModel):
     review_ref: str
@@ -142,6 +154,7 @@ class ActionUpdate(BaseModel):
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
+
 def _get_review(db: Session, org_id: str, review_id: str) -> IndependentReview:
     r = db.query(IndependentReview).filter_by(id=review_id, org_id=org_id).first()
     if not r:
@@ -173,6 +186,7 @@ def _get_action(db: Session, org_id: str, action_id: str) -> ReviewAction:
 def _recount_findings(db: Session, review: IndependentReview):
     """Recompute finding_count_* from current DB state."""
     from sqlalchemy import func as sqlfunc
+
     rows = (
         db.query(ReviewFinding.risk_rating, sqlfunc.count())
         .filter_by(review_id=review.id)
@@ -188,13 +202,21 @@ def _recount_findings(db: Session, review: IndependentReview):
 
 def _review_dict(r: IndependentReview) -> dict:
     return {
-        "id": r.id, "review_ref": r.review_ref, "org_id": r.org_id,
-        "review_type": r.review_type, "review_scope": r.review_scope,
-        "status": r.status, "overall_rating": r.overall_rating,
-        "reviewer_name": r.reviewer_name, "reviewer_firm": r.reviewer_firm,
+        "id": r.id,
+        "review_ref": r.review_ref,
+        "org_id": r.org_id,
+        "review_type": r.review_type,
+        "review_scope": r.review_scope,
+        "status": r.status,
+        "overall_rating": r.overall_rating,
+        "reviewer_name": r.reviewer_name,
+        "reviewer_firm": r.reviewer_firm,
         "reviewer_credentials": r.reviewer_credentials,
-        "title": r.title, "description": r.description,
-        "review_period_start": str(r.review_period_start) if r.review_period_start else None,
+        "title": r.title,
+        "description": r.description,
+        "review_period_start": str(r.review_period_start)
+        if r.review_period_start
+        else None,
         "review_period_end": str(r.review_period_end) if r.review_period_end else None,
         "areas_reviewed": r.areas_reviewed,
         "commissioned_by": r.commissioned_by,
@@ -206,13 +228,20 @@ def _review_dict(r: IndependentReview) -> dict:
         "finding_count_high": r.finding_count_high,
         "finding_count_medium": r.finding_count_medium,
         "finding_count_low": r.finding_count_low,
-        "management_response_due": str(r.management_response_due) if r.management_response_due else None,
-        "management_response_at": r.management_response_at.isoformat() if r.management_response_at else None,
+        "management_response_due": str(r.management_response_due)
+        if r.management_response_due
+        else None,
+        "management_response_at": r.management_response_at.isoformat()
+        if r.management_response_at
+        else None,
         "board_acknowledged": r.board_acknowledged,
         "board_acknowledged_by": r.board_acknowledged_by,
-        "board_acknowledged_at": r.board_acknowledged_at.isoformat() if r.board_acknowledged_at else None,
+        "board_acknowledged_at": r.board_acknowledged_at.isoformat()
+        if r.board_acknowledged_at
+        else None,
         "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-        "completed_by": r.completed_by, "closure_notes": r.closure_notes,
+        "completed_by": r.completed_by,
+        "closure_notes": r.closure_notes,
         "created_by": r.created_by,
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "updated_at": r.updated_at.isoformat() if r.updated_at else None,
@@ -221,21 +250,31 @@ def _review_dict(r: IndependentReview) -> dict:
 
 def _finding_dict(f: ReviewFinding) -> dict:
     return {
-        "id": f.id, "finding_ref": f.finding_ref,
-        "review_id": f.review_id, "org_id": f.org_id,
+        "id": f.id,
+        "finding_ref": f.finding_ref,
+        "review_id": f.review_id,
+        "org_id": f.org_id,
         "finding_number": f.finding_number,
-        "title": f.title, "description": f.description,
-        "risk_rating": f.risk_rating, "category": f.category, "status": f.status,
+        "title": f.title,
+        "description": f.description,
+        "risk_rating": f.risk_rating,
+        "category": f.category,
+        "status": f.status,
         "regulatory_reference": f.regulatory_reference,
         "policy_reference": f.policy_reference,
-        "evidence_refs": f.evidence_refs, "affected_areas": f.affected_areas,
-        "sample_tested": f.sample_tested, "sample_failed": f.sample_failed,
+        "evidence_refs": f.evidence_refs,
+        "affected_areas": f.affected_areas,
+        "sample_tested": f.sample_tested,
+        "sample_failed": f.sample_failed,
         "management_response": f.management_response,
         "response_due_date": str(f.response_due_date) if f.response_due_date else None,
-        "response_submitted_at": f.response_submitted_at.isoformat() if f.response_submitted_at else None,
+        "response_submitted_at": f.response_submitted_at.isoformat()
+        if f.response_submitted_at
+        else None,
         "response_submitted_by": f.response_submitted_by,
         "closed_at": f.closed_at.isoformat() if f.closed_at else None,
-        "closed_by": f.closed_by, "closure_evidence": f.closure_evidence,
+        "closed_by": f.closed_by,
+        "closure_evidence": f.closure_evidence,
         "created_by": f.created_by,
         "created_at": f.created_at.isoformat() if f.created_at else None,
         "updated_at": f.updated_at.isoformat() if f.updated_at else None,
@@ -244,9 +283,14 @@ def _finding_dict(f: ReviewFinding) -> dict:
 
 def _rec_dict(r: ReviewRecommendation) -> dict:
     return {
-        "id": r.id, "recommendation_ref": r.recommendation_ref,
-        "finding_id": r.finding_id, "review_id": r.review_id, "org_id": r.org_id,
-        "description": r.description, "priority": r.priority, "status": r.status,
+        "id": r.id,
+        "recommendation_ref": r.recommendation_ref,
+        "finding_id": r.finding_id,
+        "review_id": r.review_id,
+        "org_id": r.org_id,
+        "description": r.description,
+        "priority": r.priority,
+        "status": r.status,
         "target_date": str(r.target_date) if r.target_date else None,
         "accepted_by": r.accepted_by,
         "accepted_at": r.accepted_at.isoformat() if r.accepted_at else None,
@@ -259,12 +303,18 @@ def _rec_dict(r: ReviewRecommendation) -> dict:
 
 def _action_dict(a: ReviewAction) -> dict:
     return {
-        "id": a.id, "action_ref": a.action_ref,
+        "id": a.id,
+        "action_ref": a.action_ref,
         "recommendation_id": a.recommendation_id,
-        "finding_id": a.finding_id, "review_id": a.review_id, "org_id": a.org_id,
-        "title": a.title, "description": a.description,
-        "action_type": a.action_type, "status": a.status,
-        "assigned_to": a.assigned_to, "assigned_by": a.assigned_by,
+        "finding_id": a.finding_id,
+        "review_id": a.review_id,
+        "org_id": a.org_id,
+        "title": a.title,
+        "description": a.description,
+        "action_type": a.action_type,
+        "status": a.status,
+        "assigned_to": a.assigned_to,
+        "assigned_by": a.assigned_by,
         "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
         "due_date": str(a.due_date) if a.due_date else None,
         "is_overdue": a.is_overdue,
@@ -286,15 +336,18 @@ def _action_dict(a: ReviewAction) -> dict:
 
 # ── REVIEW CRUD ───────────────────────────────────────────────────────────────
 
+
 @router.post("", status_code=201)
 def create_review(
     body: ReviewCreate,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(UserRole.compliance)),
 ):
-    if db.query(IndependentReview).filter_by(
-        org_id=current_user.org_id, review_ref=body.review_ref
-    ).first():
+    if (
+        db.query(IndependentReview)
+        .filter_by(org_id=current_user.org_id, review_ref=body.review_ref)
+        .first()
+    ):
         raise HTTPException(409, f"Review ref '{body.review_ref}' already exists")
 
     review = IndependentReview(
@@ -342,7 +395,9 @@ def list_reviews(
     if review_scope:
         q = q.filter(IndependentReview.review_scope == review_scope)
     total = q.count()
-    items = q.order_by(IndependentReview.created_at.desc()).offset(skip).limit(limit).all()
+    items = (
+        q.order_by(IndependentReview.created_at.desc()).offset(skip).limit(limit).all()
+    )
     return {"total": total, "items": [_review_dict(r) for r in items]}
 
 
@@ -403,7 +458,7 @@ def transition_review(
         raise HTTPException(
             422,
             f"Cannot transition from '{review.status}' to '{to_status}'. "
-            f"Allowed: {[s.value for s in allowed]}"
+            f"Allowed: {[s.value for s in allowed]}",
         )
     review.status = to_status
     if to_status == ReviewStatus.completed:
@@ -415,7 +470,12 @@ def transition_review(
         review.management_response_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(review)
-    log.info("review.transition org=%s ref=%s to=%s", current_user.org_id, review.review_ref, to_status)
+    log.info(
+        "review.transition org=%s ref=%s to=%s",
+        current_user.org_id,
+        review.review_ref,
+        to_status,
+    )
     return _review_dict(review)
 
 
@@ -436,6 +496,7 @@ def board_acknowledge(
 
 # ── FINDINGS ──────────────────────────────────────────────────────────────────
 
+
 @router.post("/{review_id}/findings", status_code=201)
 def create_finding(
     review_id: str,
@@ -447,9 +508,11 @@ def create_finding(
     if review.status == ReviewStatus.archived:
         raise HTTPException(409, "Cannot add findings to an archived review")
 
-    if db.query(ReviewFinding).filter_by(
-        org_id=current_user.org_id, finding_ref=body.finding_ref
-    ).first():
+    if (
+        db.query(ReviewFinding)
+        .filter_by(org_id=current_user.org_id, finding_ref=body.finding_ref)
+        .first()
+    ):
         raise HTTPException(409, f"Finding ref '{body.finding_ref}' already exists")
 
     # Sequential finding_number within this review
@@ -484,7 +547,33 @@ def create_finding(
     _recount_findings(db, review)
     db.commit()
     db.refresh(finding)
-    log.info("finding.created org=%s ref=%s risk=%s", current_user.org_id, finding.finding_ref, finding.risk_rating)
+    log.info(
+        "finding.created org=%s ref=%s risk=%s",
+        current_user.org_id,
+        finding.finding_ref,
+        finding.risk_rating,
+    )
+
+    from app.models.automation_rule import RuleEventType
+    from app.services.automation_engine import evaluate_automation_rules
+
+    evaluate_automation_rules(
+        db,
+        RuleEventType.independent_review_finding,
+        current_user.org_id,
+        "review_finding",
+        finding.id,
+        {
+            "finding": {
+                "risk_rating": getattr(
+                    finding.risk_rating, "value", finding.risk_rating
+                ),
+                "category": getattr(finding.category, "value", finding.category),
+            }
+        },
+        triggered_by=current_user.id,
+    )
+
     return _finding_dict(finding)
 
 
@@ -498,7 +587,9 @@ def list_findings(
     current_user=Depends(get_current_user),
 ):
     _get_review(db, current_user.org_id, review_id)
-    q = db.query(ReviewFinding).filter_by(review_id=review_id, org_id=current_user.org_id)
+    q = db.query(ReviewFinding).filter_by(
+        review_id=review_id, org_id=current_user.org_id
+    )
     if status:
         q = q.filter(ReviewFinding.status == status)
     if risk_rating:
@@ -554,7 +645,9 @@ def submit_finding_response(
     _get_review(db, current_user.org_id, review_id)
     finding = _get_finding(db, current_user.org_id, finding_id)
     if finding.status not in (FindingStatus.open, FindingStatus.overdue):
-        raise HTTPException(422, f"Cannot submit response for finding in status '{finding.status}'")
+        raise HTTPException(
+            422, f"Cannot submit response for finding in status '{finding.status}'"
+        )
     finding.management_response = management_response
     finding.response_submitted_at = datetime.now(timezone.utc)
     finding.response_submitted_by = current_user.id
@@ -574,7 +667,10 @@ def start_finding_remediation(
     _get_review(db, current_user.org_id, review_id)
     finding = _get_finding(db, current_user.org_id, finding_id)
     if finding.status != FindingStatus.response_submitted:
-        raise HTTPException(422, f"Finding must be in 'response_submitted' status, not '{finding.status}'")
+        raise HTTPException(
+            422,
+            f"Finding must be in 'response_submitted' status, not '{finding.status}'",
+        )
     finding.status = FindingStatus.in_remediation
     db.commit()
     db.refresh(finding)
@@ -591,7 +687,10 @@ def close_finding(
 ):
     _get_review(db, current_user.org_id, review_id)
     finding = _get_finding(db, current_user.org_id, finding_id)
-    if finding.status not in (FindingStatus.in_remediation, FindingStatus.response_submitted):
+    if finding.status not in (
+        FindingStatus.in_remediation,
+        FindingStatus.response_submitted,
+    ):
         raise HTTPException(422, f"Cannot close finding from status '{finding.status}'")
     finding.status = FindingStatus.closed
     finding.closed_at = datetime.now(timezone.utc)
@@ -627,6 +726,7 @@ def accept_finding_risk(
 
 # ── RECOMMENDATIONS ───────────────────────────────────────────────────────────
 
+
 @router.post("/{review_id}/findings/{finding_id}/recommendations", status_code=201)
 def create_recommendation(
     review_id: str,
@@ -640,10 +740,16 @@ def create_recommendation(
     if finding.status in (FindingStatus.closed, FindingStatus.accepted_risk):
         raise HTTPException(409, "Cannot add recommendations to a closed finding")
 
-    if db.query(ReviewRecommendation).filter_by(
-        org_id=current_user.org_id, recommendation_ref=body.recommendation_ref
-    ).first():
-        raise HTTPException(409, f"Recommendation ref '{body.recommendation_ref}' already exists")
+    if (
+        db.query(ReviewRecommendation)
+        .filter_by(
+            org_id=current_user.org_id, recommendation_ref=body.recommendation_ref
+        )
+        .first()
+    ):
+        raise HTTPException(
+            409, f"Recommendation ref '{body.recommendation_ref}' already exists"
+        )
 
     rec = ReviewRecommendation(
         recommendation_ref=body.recommendation_ref,
@@ -658,7 +764,11 @@ def create_recommendation(
     db.add(rec)
     db.commit()
     db.refresh(rec)
-    log.info("recommendation.created org=%s ref=%s", current_user.org_id, rec.recommendation_ref)
+    log.info(
+        "recommendation.created org=%s ref=%s",
+        current_user.org_id,
+        rec.recommendation_ref,
+    )
     return _rec_dict(rec)
 
 
@@ -712,7 +822,9 @@ def accept_recommendation(
     _get_finding(db, current_user.org_id, finding_id)
     rec = _get_recommendation(db, current_user.org_id, rec_id)
     if rec.status != RecommendationStatus.open:
-        raise HTTPException(422, f"Recommendation must be 'open' to accept, not '{rec.status}'")
+        raise HTTPException(
+            422, f"Recommendation must be 'open' to accept, not '{rec.status}'"
+        )
     rec.status = RecommendationStatus.accepted
     rec.accepted_by = current_user.id
     rec.accepted_at = datetime.now(timezone.utc)
@@ -735,7 +847,9 @@ def reject_recommendation(
     _get_finding(db, current_user.org_id, finding_id)
     rec = _get_recommendation(db, current_user.org_id, rec_id)
     if rec.status not in (RecommendationStatus.open, RecommendationStatus.accepted):
-        raise HTTPException(422, f"Cannot reject recommendation in status '{rec.status}'")
+        raise HTTPException(
+            422, f"Cannot reject recommendation in status '{rec.status}'"
+        )
     rec.status = RecommendationStatus.rejected
     rec.accepted_by = current_user.id
     rec.accepted_at = datetime.now(timezone.utc)
@@ -756,8 +870,13 @@ def complete_recommendation(
     _get_review(db, current_user.org_id, review_id)
     _get_finding(db, current_user.org_id, finding_id)
     rec = _get_recommendation(db, current_user.org_id, rec_id)
-    if rec.status not in (RecommendationStatus.accepted, RecommendationStatus.in_progress):
-        raise HTTPException(422, f"Cannot complete recommendation in status '{rec.status}'")
+    if rec.status not in (
+        RecommendationStatus.accepted,
+        RecommendationStatus.in_progress,
+    ):
+        raise HTTPException(
+            422, f"Cannot complete recommendation in status '{rec.status}'"
+        )
     rec.status = RecommendationStatus.completed
     db.commit()
     db.refresh(rec)
@@ -765,6 +884,7 @@ def complete_recommendation(
 
 
 # ── ACTIONS ───────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/{review_id}/findings/{finding_id}/recommendations/{rec_id}/actions",
@@ -784,9 +904,11 @@ def create_action(
     if rec.status == RecommendationStatus.rejected:
         raise HTTPException(409, "Cannot create actions for a rejected recommendation")
 
-    if db.query(ReviewAction).filter_by(
-        org_id=current_user.org_id, action_ref=body.action_ref
-    ).first():
+    if (
+        db.query(ReviewAction)
+        .filter_by(org_id=current_user.org_id, action_ref=body.action_ref)
+        .first()
+    ):
         raise HTTPException(409, f"Action ref '{body.action_ref}' already exists")
 
     action = ReviewAction(
@@ -831,7 +953,9 @@ def list_actions(
     return {"total": len(items), "items": [_action_dict(a) for a in items]}
 
 
-@router.patch("/{review_id}/findings/{finding_id}/recommendations/{rec_id}/actions/{action_id}")
+@router.patch(
+    "/{review_id}/findings/{finding_id}/recommendations/{rec_id}/actions/{action_id}"
+)
 def update_action(
     review_id: str,
     finding_id: str,
@@ -844,7 +968,9 @@ def update_action(
     _get_review(db, current_user.org_id, review_id)
     action = _get_action(db, current_user.org_id, action_id)
     if action.status in (ActionStatus.verified, ActionStatus.cancelled):
-        raise HTTPException(409, f"Actions in '{action.status}' status cannot be modified")
+        raise HTTPException(
+            409, f"Actions in '{action.status}' status cannot be modified"
+        )
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(action, field, value)
     db.commit()
@@ -866,7 +992,9 @@ def start_action(
     _get_review(db, current_user.org_id, review_id)
     action = _get_action(db, current_user.org_id, action_id)
     if action.status != ActionStatus.planned:
-        raise HTTPException(422, f"Action must be 'planned' to start, not '{action.status}'")
+        raise HTTPException(
+            422, f"Action must be 'planned' to start, not '{action.status}'"
+        )
     action.status = ActionStatus.in_progress
     db.commit()
     db.refresh(action)
@@ -887,7 +1015,11 @@ def complete_action(
 ):
     _get_review(db, current_user.org_id, review_id)
     action = _get_action(db, current_user.org_id, action_id)
-    if action.status not in (ActionStatus.in_progress, ActionStatus.planned, ActionStatus.overdue):
+    if action.status not in (
+        ActionStatus.in_progress,
+        ActionStatus.planned,
+        ActionStatus.overdue,
+    ):
         raise HTTPException(422, f"Cannot complete action in status '{action.status}'")
     if not completion_evidence:
         raise HTTPException(422, "completion_evidence is required")
@@ -921,7 +1053,7 @@ def verify_action(
     if action.completed_by == current_user.id:
         raise HTTPException(
             422,
-            "The verifier cannot be the same person who completed the action (four-eyes principle)"
+            "The verifier cannot be the same person who completed the action (four-eyes principle)",
         )
     action.status = ActionStatus.verified
     action.verified_by = current_user.id
@@ -929,7 +1061,12 @@ def verify_action(
     action.verified_notes = verified_notes
     db.commit()
     db.refresh(action)
-    log.info("action.verified org=%s ref=%s by=%s", current_user.org_id, action.action_ref, current_user.id)
+    log.info(
+        "action.verified org=%s ref=%s by=%s",
+        current_user.org_id,
+        action.action_ref,
+        current_user.id,
+    )
     return _action_dict(action)
 
 
@@ -960,6 +1097,7 @@ def cancel_action(
 
 # ── DASHBOARD / SUMMARY ───────────────────────────────────────────────────────
 
+
 @router.get("/{review_id}/dashboard")
 def review_dashboard(
     review_id: str,
@@ -970,21 +1108,31 @@ def review_dashboard(
     review = _get_review(db, current_user.org_id, review_id)
 
     findings = db.query(ReviewFinding).filter_by(review_id=review_id).all()
-    recommendations = db.query(ReviewRecommendation).filter_by(review_id=review_id).all()
+    recommendations = (
+        db.query(ReviewRecommendation).filter_by(review_id=review_id).all()
+    )
     actions = db.query(ReviewAction).filter_by(review_id=review_id).all()
 
     today = date.today()
 
     def _overdue_action(a: ReviewAction) -> bool:
         return (
-            a.due_date and a.due_date < today
-            and a.status not in (ActionStatus.completed, ActionStatus.verified, ActionStatus.cancelled)
+            a.due_date
+            and a.due_date < today
+            and a.status
+            not in (
+                ActionStatus.completed,
+                ActionStatus.verified,
+                ActionStatus.cancelled,
+            )
         )
 
     return {
         "review": {
-            "id": review.id, "review_ref": review.review_ref,
-            "status": review.status, "overall_rating": review.overall_rating,
+            "id": review.id,
+            "review_ref": review.review_ref,
+            "status": review.status,
+            "overall_rating": review.overall_rating,
             "board_acknowledged": review.board_acknowledged,
         },
         "findings": {
@@ -997,39 +1145,66 @@ def review_dashboard(
             },
             "by_status": {
                 "open": sum(1 for f in findings if f.status == FindingStatus.open),
-                "response_submitted": sum(1 for f in findings if f.status == FindingStatus.response_submitted),
-                "in_remediation": sum(1 for f in findings if f.status == FindingStatus.in_remediation),
+                "response_submitted": sum(
+                    1 for f in findings if f.status == FindingStatus.response_submitted
+                ),
+                "in_remediation": sum(
+                    1 for f in findings if f.status == FindingStatus.in_remediation
+                ),
                 "closed": sum(1 for f in findings if f.status == FindingStatus.closed),
-                "overdue": sum(1 for f in findings if f.status == FindingStatus.overdue),
-                "accepted_risk": sum(1 for f in findings if f.status == FindingStatus.accepted_risk),
+                "overdue": sum(
+                    1 for f in findings if f.status == FindingStatus.overdue
+                ),
+                "accepted_risk": sum(
+                    1 for f in findings if f.status == FindingStatus.accepted_risk
+                ),
             },
             "overdue": [
                 _finding_dict(f)
                 for f in findings
-                if f.status == FindingStatus.overdue or (
-                    f.response_due_date and f.response_due_date < today
-                    and f.status not in (FindingStatus.closed, FindingStatus.accepted_risk)
+                if f.status == FindingStatus.overdue
+                or (
+                    f.response_due_date
+                    and f.response_due_date < today
+                    and f.status
+                    not in (FindingStatus.closed, FindingStatus.accepted_risk)
                 )
             ],
         },
         "recommendations": {
             "total": len(recommendations),
-            "open": sum(1 for r in recommendations if r.status == RecommendationStatus.open),
-            "accepted": sum(1 for r in recommendations if r.status == RecommendationStatus.accepted),
-            "in_progress": sum(1 for r in recommendations if r.status == RecommendationStatus.in_progress),
-            "completed": sum(1 for r in recommendations if r.status == RecommendationStatus.completed),
-            "rejected": sum(1 for r in recommendations if r.status == RecommendationStatus.rejected),
+            "open": sum(
+                1 for r in recommendations if r.status == RecommendationStatus.open
+            ),
+            "accepted": sum(
+                1 for r in recommendations if r.status == RecommendationStatus.accepted
+            ),
+            "in_progress": sum(
+                1
+                for r in recommendations
+                if r.status == RecommendationStatus.in_progress
+            ),
+            "completed": sum(
+                1 for r in recommendations if r.status == RecommendationStatus.completed
+            ),
+            "rejected": sum(
+                1 for r in recommendations if r.status == RecommendationStatus.rejected
+            ),
             "overdue": [
                 _rec_dict(r)
                 for r in recommendations
-                if r.target_date and r.target_date < today
-                and r.status not in (RecommendationStatus.completed, RecommendationStatus.rejected)
+                if r.target_date
+                and r.target_date < today
+                and r.status
+                not in (RecommendationStatus.completed, RecommendationStatus.rejected)
             ],
         },
         "actions": {
             "total": len(actions),
             "planned": sum(1 for a in actions if a.status == ActionStatus.planned),
-            "in_progress": sum(1 for a in actions if a.status == ActionStatus.in_progress),
+            "in_progress": sum(
+                1 for a in actions if a.status == ActionStatus.in_progress
+            ),
             "completed": sum(1 for a in actions if a.status == ActionStatus.completed),
             "verified": sum(1 for a in actions if a.status == ActionStatus.verified),
             "overdue": [_action_dict(a) for a in actions if _overdue_action(a)],
@@ -1052,7 +1227,9 @@ def org_dashboard(
         db.query(ReviewFinding)
         .filter(
             ReviewFinding.org_id == current_user.org_id,
-            ReviewFinding.status.notin_([FindingStatus.closed, FindingStatus.accepted_risk]),
+            ReviewFinding.status.notin_(
+                [FindingStatus.closed, FindingStatus.accepted_risk]
+            ),
         )
         .order_by(ReviewFinding.risk_rating.desc())
         .all()
@@ -1062,9 +1239,9 @@ def org_dashboard(
         .filter(
             ReviewAction.org_id == current_user.org_id,
             ReviewAction.due_date < today,
-            ReviewAction.status.notin_([
-                ActionStatus.completed, ActionStatus.verified, ActionStatus.cancelled
-            ]),
+            ReviewAction.status.notin_(
+                [ActionStatus.completed, ActionStatus.verified, ActionStatus.cancelled]
+            ),
         )
         .all()
     )

@@ -13,11 +13,11 @@ const footerLinks = {
   ],
   Industries: [
     { label: 'Compliance Packs', href: '/packs' },
-    { label: 'VASPs / Digital Currency Exchanges (DCEs)', href: '/packs/digital-currency-exchange' },
-    { label: 'Remittance Providers', href: '/packs/remittance-provider' },
-    { label: 'Real Estate Professionals', href: '/packs/real-estate' },
-    { label: 'Law Firms', href: '/packs/law-firm' },
-    { label: 'Accounting Firms', href: '/packs/accounting-firm' },
+    { label: 'VASPs / Digital Currency Exchanges', href: '/packs/vasp' },
+    { label: 'Remittance Service Providers', href: '/packs/remittance' },
+    { label: 'Real Estate Agents', href: '/packs/real-estate' },
+    { label: 'Legal Professionals', href: '/packs/legal-professionals' },
+    { label: 'Accountants', href: '/packs/accountants' },
     { label: 'View all packs', href: '/packs' },
   ],
   Company: [
@@ -26,7 +26,7 @@ const footerLinks = {
     { label: 'API & Integrations', href: '/api-integrations' },
     { label: 'Trust Centre', href: '/trust-centre' },
     { label: 'Contact Us', href: '/contact' },
-    { label: 'Book Demo', href: '/live-demo' },
+    { label: 'Start Free Trial', href: '/start-trial' },
     { label: 'Sign In', href: '/login' },
   ],
   Resources: [
@@ -83,11 +83,15 @@ export default function Footer() {
 
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-slate-500 text-sm">
-            © {new Date().getFullYear()} Verigo. All rights reserved.
+            © {new Date().getFullYear()} PSP Education Pty Ltd (ABN 21 628 429 925), trading as Verigo. All rights reserved.
           </p>
           <div className="flex gap-6">
-            {['Privacy Policy', 'Terms of Service', 'Security'].map(l => (
-              <Link key={l} href="#" className="text-slate-500 hover:text-slate-400 text-sm transition-colors">{l}</Link>
+            {[
+              { label: 'Privacy Policy', href: '/privacy' },
+              { label: 'Terms of Service', href: '/terms' },
+              { label: 'Security', href: '/trust-centre' },
+            ].map(l => (
+              <Link key={l.label} href={l.href} className="text-slate-500 hover:text-slate-400 text-sm transition-colors">{l.label}</Link>
             ))}
           </div>
         </div>

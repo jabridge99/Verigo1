@@ -1,14 +1,18 @@
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from pydantic import BaseModel
 
 from app.models.aml_solution import (
-    ProgramStatus, RiskAppetite, ServiceStatus, ServiceType, SolutionStatus,
+    ProgramStatus,
+    RiskAppetite,
+    ServiceStatus,
+    ServiceType,
+    SolutionStatus,
 )
 
-
 # ── AML Solution ──────────────────────────────────────────────────────────────
+
 
 class AMLSolutionResponse(BaseModel):
     id: str
@@ -23,6 +27,7 @@ class AMLSolutionResponse(BaseModel):
 
 
 # ── AML Program ───────────────────────────────────────────────────────────────
+
 
 class AMLProgramResponse(BaseModel):
     id: str
@@ -61,6 +66,7 @@ class AMLProgramResponse(BaseModel):
 
 class AMLProgramUpdate(BaseModel):
     """All fields optional — PATCH semantics."""
+
     overview: Optional[str] = None
     scope: Optional[str] = None
     designated_services: Optional[str] = None
@@ -98,6 +104,7 @@ class AMLProgramApproveRequest(BaseModel):
 
 
 # ── AML Service ───────────────────────────────────────────────────────────────
+
 
 class AMLServiceResponse(BaseModel):
     id: str

@@ -7,9 +7,11 @@ from sqlalchemy import (
     DateTime,
     Enum,
     Float,
+    ForeignKey,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.sql import func
 
@@ -141,17 +143,141 @@ PLAN_CATALOGUE = {
 }
 
 
+# ── Default feature catalogue (seed data, derived from PLAN_CATALOGUE) ─────────
+# code -> (label, category)
+FEATURE_DEFINITIONS = {
+    "customers_500": ("Up to 500 customers", "limits"),
+    "customers_5000": ("Up to 5,000 customers", "limits"),
+    "customers_unlimited": ("Unlimited customers", "limits"),
+    "aml_monitoring": ("AML transaction monitoring", "core"),
+    "kyc_kyb_onboarding": ("KYC/KYB onboarding", "core"),
+    "austrac_reporting": ("AUSTRAC TTR & IFTI reporting", "core"),
+    "email_notifications": ("Email notifications", "core"),
+    "standard_support": ("Standard support", "support"),
+    "priority_support": ("Priority support", "support"),
+    "advanced_rule_builder": ("Advanced rule builder", "core"),
+    "ecdd_assessments": ("ECDD assessments", "core"),
+    "mlro_case_management": ("MLRO case management", "core"),
+    "webhooks_api": ("Webhooks & API access", "integration"),
+    "document_vault_50gb": ("Document vault (50 GB)", "storage"),
+    "document_vault_500gb": ("Document vault (500 GB)", "storage"),
+    "analytics_dashboard": ("Analytics dashboard", "core"),
+    "white_label_branding": ("White-label branding", "enterprise"),
+    "custom_domain": ("Custom domain", "enterprise"),
+    "multi_tenant_management": ("Multi-tenant management", "enterprise"),
+    "dedicated_mlro_support": ("Dedicated MLRO support", "support"),
+    "sla_99_9": ("SLA 99.9% uptime", "enterprise"),
+    "dedicated_account_manager": ("Dedicated account manager", "support"),
+    "custom_sla": ("Custom SLA", "enterprise"),
+    "onsite_training": ("On-site training", "enterprise"),
+    "regulatory_liaison_support": ("Regulatory liaison support", "support"),
+    "custom_integrations": ("Custom integrations", "integration"),
+    "full_aml_program": ("Full AML/CTF program (all controls)", "core"),
+    "full_risk_assessment": ("Full risk assessment (all factors)", "core"),
+}
+
+# Default plan -> set of enabled feature codes, derived from the legacy static lists.
+DEFAULT_PLAN_FEATURES = {
+    BillingPlan.free_trial: [],
+    BillingPlan.starter: [
+        "customers_500",
+        "aml_monitoring",
+        "kyc_kyb_onboarding",
+        "austrac_reporting",
+        "email_notifications",
+        "standard_support",
+        "full_aml_program",
+        "full_risk_assessment",
+    ],
+    BillingPlan.professional: [
+        "customers_5000",
+        "advanced_rule_builder",
+        "ecdd_assessments",
+        "mlro_case_management",
+        "webhooks_api",
+        "document_vault_50gb",
+        "analytics_dashboard",
+        "priority_support",
+        "full_aml_program",
+        "full_risk_assessment",
+    ],
+    BillingPlan.enterprise: [
+        "customers_unlimited",
+        "white_label_branding",
+        "custom_domain",
+        "multi_tenant_management",
+        "dedicated_mlro_support",
+        "document_vault_500gb",
+        "sla_99_9",
+        "dedicated_account_manager",
+        "full_aml_program",
+        "full_risk_assessment",
+    ],
+    BillingPlan.vvip: [
+        "customers_unlimited",
+        "white_label_branding",
+        "custom_domain",
+        "multi_tenant_management",
+        "dedicated_mlro_support",
+        "document_vault_500gb",
+        "sla_99_9",
+        "dedicated_account_manager",
+        "custom_sla",
+        "onsite_training",
+        "regulatory_liaison_support",
+        "custom_integrations",
+        "full_aml_program",
+        "full_risk_assessment",
+    ],
+}
+
+
 # ── Models ─────────────────────────────────────────────────────────────────────
+
+
+class Feature(Base):
+    __tablename__ = "features"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(60), unique=True, index=True, nullable=False)
+    name = Column(String(200), nullable=False)
+    category = Column(String(60))
+    description = Column(Text)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PlanFeatureToggle(Base):
+    __tablename__ = "plan_feature_toggles"
+    __table_args__ = (UniqueConstraint("plan", "feature_code", name="uq_plan_feature"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan = Column(Enum(BillingPlan), nullable=False, index=True)
+    feature_code = Column(
+        String(60), ForeignKey("features.code"), nullable=False, index=True
+    )
+    enabled = Column(Boolean, default=True, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "industry_id", "organisation_id", name="uq_subscription_industry_org"
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     subscription_id = Column(String(60), unique=True, index=True, nullable=False)
 
     # Tenant link
     industry_id = Column(String(100), index=True, nullable=False)
+    organisation_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
+    )
     tenant_id = Column(String(60))
 
     # Plan
@@ -193,6 +319,9 @@ class Invoice(Base):
     invoice_id = Column(String(60), unique=True, index=True, nullable=False)
     subscription_id = Column(String(60), index=True)
     industry_id = Column(String(100), index=True)
+    organisation_id = Column(
+        String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
+    )
 
     stripe_invoice_id = Column(String(100))
     amount_aud = Column(Float, nullable=False)
@@ -212,10 +341,45 @@ class Invoice(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class PlanPricing(Base):
+    """Admin-editable base price per plan — overrides the PLAN_CATALOGUE
+    defaults without requiring a redeploy. Seeded from PLAN_CATALOGUE on
+    first read; absent rows fall back to the static catalogue values."""
+
+    __tablename__ = "plan_pricing"
+
+    plan = Column(Enum(BillingPlan), primary_key=True)
+    monthly_aud = Column(Float)
+    annual_aud = Column(Float)
+
+    updated_by = Column(String(60))
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class StripePriceMapping(Base):
+    """Admin-editable Stripe Price ID per (plan, interval) — overrides the
+    STRIPE_*_ID env vars without requiring a redeploy. Lets an admin paste
+    in Price IDs from the Stripe dashboard once a Stripe account is set up."""
+
+    __tablename__ = "stripe_price_mappings"
+    __table_args__ = (UniqueConstraint("plan", "interval", name="uq_plan_interval"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan = Column(Enum(BillingPlan), nullable=False, index=True)
+    interval = Column(Enum(BillingInterval), nullable=False, index=True)
+    stripe_price_id = Column(String(100), nullable=False)
+
+    updated_by = Column(String(60))
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class SubscriptionAddon(Base):
     """Enterprise add-on purchase — gates access to partially-built/sales-gated
     providers (e.g. Elliptic, TRM Labs crypto wallet screening) independent of
     the base subscription plan."""
+
     __tablename__ = "subscription_addons"
 
     id = Column(Integer, primary_key=True, index=True)

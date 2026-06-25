@@ -6,7 +6,7 @@ Credentials are stored encrypted; only the last 4 chars of the key are kept in p
 
 import enum
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.sql import func
 
@@ -48,6 +48,9 @@ class ConnectorCredential(Base):
     id = Column(Integer, primary_key=True, index=True)
     credential_id = Column(String(60), unique=True, index=True, nullable=False)
     industry_id = Column(String(60), index=True, nullable=False)  # tenant scope
+    organisation_id = Column(
+        String(36), ForeignKey("organisations.id", ondelete="CASCADE"), index=True
+    )
     provider = Column(SAEnum(ConnectorProvider), nullable=False, index=True)
     label = Column(String(200))  # friendly name
     # Encrypted credential blob (Fernet or AES-GCM in prod)

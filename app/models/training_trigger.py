@@ -26,95 +26,110 @@ Assessment outcome flow:
     → AssessmentOutcomeFlag created
     → If analyst: their open/recent risk decisions flagged for compliance review
 """
+
 from __future__ import annotations
 
 import enum
 from uuid import uuid4
 
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, Enum, Float,
-    ForeignKey, Integer, JSON, String, Text, func,
+    JSON,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
 
+from app.db.database import Base
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ENUMS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TriggerEventType(str, enum.Enum):
     """Risk events that can fire training assignments."""
+
     # Customer risk events
-    edd_escalation          = "edd_escalation"          # customer escalated to EDD
-    pep_detected            = "pep_detected"             # PEP flag set on customer
-    sanctions_match         = "sanctions_match"          # sanctions screening hit
-    high_risk_customer      = "high_risk_customer"       # customer classified HIGH or CRITICAL
-    adverse_media_hit       = "adverse_media_hit"        # adverse media screening result
+    edd_escalation = "edd_escalation"  # customer escalated to EDD
+    pep_detected = "pep_detected"  # PEP flag set on customer
+    sanctions_match = "sanctions_match"  # sanctions screening hit
+    high_risk_customer = "high_risk_customer"  # customer classified HIGH or CRITICAL
+    adverse_media_hit = "adverse_media_hit"  # adverse media screening result
 
     # Transaction / monitoring events
-    smr_filed               = "smr_filed"                # SMR submitted to AUSTRAC
-    ifti_filed              = "ifti_filed"               # IFTI submitted to AUSTRAC
-    ttr_filed               = "ttr_filed"                # TTR submitted to AUSTRAC
-    critical_alert          = "critical_alert"           # CRITICAL severity monitoring alert
+    smr_filed = "smr_filed"  # SMR submitted to AUSTRAC
+    ifti_filed = "ifti_filed"  # IFTI submitted to AUSTRAC
+    ttr_filed = "ttr_filed"  # TTR submitted to AUSTRAC
+    critical_alert = "critical_alert"  # CRITICAL severity monitoring alert
     transaction_structuring = "transaction_structuring"  # structuring pattern detected
-    crypto_mixer_exposure   = "crypto_mixer_exposure"    # crypto mixer/darknet exposure
+    crypto_mixer_exposure = "crypto_mixer_exposure"  # crypto mixer/darknet exposure
 
     # Case events
-    case_opened_sar         = "case_opened_sar"          # SAR-type case opened
-    case_escalated_mlro     = "case_escalated_mlro"      # case escalated to MLRO
+    case_opened_sar = "case_opened_sar"  # SAR-type case opened
+    case_escalated_mlro = "case_escalated_mlro"  # case escalated to MLRO
 
     # Assessment / competency events
-    assessment_fail         = "assessment_fail"          # staff failed a training assessment
-    training_overdue        = "training_overdue"         # mandatory training overdue > 30 days
+    assessment_fail = "assessment_fail"  # staff failed a training assessment
+    training_overdue = "training_overdue"  # mandatory training overdue > 30 days
 
     # Regulatory events
-    regulatory_update       = "regulatory_update"        # AUSTRAC/FATF guidance published
-    policy_update           = "policy_update"            # internal AML policy updated
+    regulatory_update = "regulatory_update"  # AUSTRAC/FATF guidance published
+    policy_update = "policy_update"  # internal AML policy updated
     independent_review_finding = "independent_review_finding"  # high-risk IR finding
 
 
 class TriggerTargetType(str, enum.Enum):
     """Who gets the training assignment when a rule fires."""
-    handled_analyst    = "handled_analyst"   # the specific user who processed the entity
-    all_role           = "all_role"          # everyone with the specified role(s)
-    all_staff          = "all_staff"         # all active users in the org
-    specific_users     = "specific_users"    # explicit user_id list on the rule
-    mlro_only          = "mlro_only"         # MLRO + admin only
-    compliance_team    = "compliance_team"   # mlro + compliance roles
+
+    handled_analyst = "handled_analyst"  # the specific user who processed the entity
+    all_role = "all_role"  # everyone with the specified role(s)
+    all_staff = "all_staff"  # all active users in the org
+    specific_users = "specific_users"  # explicit user_id list on the rule
+    mlro_only = "mlro_only"  # MLRO + admin only
+    compliance_team = "compliance_team"  # mlro + compliance roles
 
 
 class TriggerStatus(str, enum.Enum):
-    active   = "active"
+    active = "active"
     inactive = "inactive"
     archived = "archived"
 
 
 class RegulatoryUpdateStatus(str, enum.Enum):
-    draft     = "draft"
+    draft = "draft"
     published = "published"
-    archived  = "archived"
+    archived = "archived"
 
 
 class IssuingBody(str, enum.Enum):
-    austrac    = "austrac"
-    fatf       = "fatf"
-    apra       = "apra"
-    asic       = "asic"
-    acams      = "acams"
-    ica        = "ica"
-    internal   = "internal"    # org's own internal guidance
+    austrac = "austrac"
+    fatf = "fatf"
+    apra = "apra"
+    asic = "asic"
+    acams = "acams"
+    ica = "ica"
+    internal = "internal"  # org's own internal guidance
 
 
 class AssessmentFlagStatus(str, enum.Enum):
-    open     = "open"
+    open = "open"
     reviewed = "reviewed"
-    cleared  = "cleared"
+    cleared = "cleared"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TRAINING TRIGGER RULE
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TrainingTriggerRule(Base):
     """
@@ -139,56 +154,67 @@ class TrainingTriggerRule(Base):
       }
     All conditions are AND'd. Omit a key to skip that check.
     """
+
     __tablename__ = "training_trigger_rules"
 
     id = Column(String, primary_key=True, default=lambda: f"ttr_{uuid4().hex[:12]}")
-    org_id          = Column(String, ForeignKey("organisations.id", ondelete="CASCADE"),
-                             nullable=True, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     # null org_id = system-level default rule (applies to all orgs unless overridden)
 
     # ── Rule identity ─────────────────────────────────────────────────────────
-    name            = Column(String(255), nullable=False)
-    description     = Column(Text)
-    event_type      = Column(Enum(TriggerEventType), nullable=False, index=True)
-    status          = Column(Enum(TriggerStatus), default=TriggerStatus.active, nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    event_type = Column(Enum(TriggerEventType), nullable=False, index=True)
+    status = Column(Enum(TriggerStatus), default=TriggerStatus.active, nullable=False)
 
     # ── Condition filter (JSON) ───────────────────────────────────────────────
     condition_filter = Column(JSON, default=dict)
 
     # ── What to assign ───────────────────────────────────────────────────────
-    course_id       = Column(String, ForeignKey("training_courses.id"), nullable=False, index=True)
-    target_type     = Column(Enum(TriggerTargetType), nullable=False)
-    target_roles    = Column(JSON, default=list)    # used when target_type = all_role
-    specific_user_ids = Column(JSON, default=list)  # used when target_type = specific_users
+    course_id = Column(
+        String, ForeignKey("training_courses.id"), nullable=False, index=True
+    )
+    target_type = Column(Enum(TriggerTargetType), nullable=False)
+    target_roles = Column(JSON, default=list)  # used when target_type = all_role
+    specific_user_ids = Column(
+        JSON, default=list
+    )  # used when target_type = specific_users
 
     # ── Assignment parameters ─────────────────────────────────────────────────
-    due_days        = Column(Integer, default=14)   # days from trigger date to complete
-    priority        = Column(String(20), default="normal")  # "urgent" | "normal" | "low"
-    notes_template  = Column(Text)
+    due_days = Column(Integer, default=14)  # days from trigger date to complete
+    priority = Column(String(20), default="normal")  # "urgent" | "normal" | "low"
+    notes_template = Column(Text)
     # Template can include {event_type}, {entity_id}, {customer_name} placeholders
 
     # ── Dedup control ─────────────────────────────────────────────────────────
-    cooldown_days   = Column(Integer, default=90)
+    cooldown_days = Column(Integer, default=90)
     # Don't re-assign same course to same user within cooldown_days of last assignment
 
     # ── System / override ─────────────────────────────────────────────────────
-    is_system           = Column(Boolean, default=False)
-    override_system     = Column(Boolean, default=False)
-    regulatory_basis    = Column(String(500))
+    is_system = Column(Boolean, default=False)
+    override_system = Column(Boolean, default=False)
+    regulatory_basis = Column(String(500))
     # e.g. "AML/CTF Act s.36 — staff must be trained when SMR filed"
 
-    created_by  = Column(String, nullable=False)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    course      = relationship("TrainingCourse", foreign_keys=[course_id])
-    trigger_logs = relationship("TrainingTriggerLog", back_populates="rule",
-                                cascade="all, delete-orphan")
+    course = relationship("TrainingCourse", foreign_keys=[course_id])
+    trigger_logs = relationship(
+        "TrainingTriggerLog", back_populates="rule", cascade="all, delete-orphan"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TRAINING TRIGGER LOG
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TrainingTriggerLog(Base):
     """
@@ -197,41 +223,56 @@ class TrainingTriggerLog(Base):
 
     Never delete or update rows — this is the evidence trail.
     """
+
     __tablename__ = "training_trigger_logs"
 
     id = Column(String, primary_key=True, default=lambda: f"ttl_{uuid4().hex[:12]}")
-    rule_id         = Column(String, ForeignKey("training_trigger_rules.id"),
-                             nullable=True, index=True)
+    rule_id = Column(
+        String, ForeignKey("training_trigger_rules.id"), nullable=True, index=True
+    )
     # null if fired by regulatory_update (not a rule-based trigger)
-    org_id          = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     # ── Trigger context ───────────────────────────────────────────────────────
-    event_type      = Column(Enum(TriggerEventType), nullable=False, index=True)
-    entity_type     = Column(String(50))   # "customer" | "transaction" | "alert" | "case" | "smr"
-    entity_id       = Column(String, index=True)
+    event_type = Column(Enum(TriggerEventType), nullable=False, index=True)
+    entity_type = Column(
+        String(50)
+    )  # "customer" | "transaction" | "alert" | "case" | "smr"
+    entity_id = Column(String, index=True)
     entity_snapshot = Column(JSON, default=dict)
     # Snapshot of key fields at the time of trigger (for audit — entity may change)
 
-    regulatory_update_id = Column(String, ForeignKey("regulatory_update_events.id"), nullable=True)
+    regulatory_update_id = Column(
+        String, ForeignKey("regulatory_update_events.id"), nullable=True
+    )
 
     # ── Outcome ───────────────────────────────────────────────────────────────
-    assignments_created  = Column(Integer, default=0)    # number of training records spawned
-    assignment_ids       = Column(JSON, default=list)    # list of GovernanceTrainingRecord IDs
-    users_assigned       = Column(JSON, default=list)    # list of user_ids assigned
-    skipped_users        = Column(JSON, default=list)    # user_ids skipped (cooldown / exempt)
-    skip_reason          = Column(String(500))
+    assignments_created = Column(
+        Integer, default=0
+    )  # number of training records spawned
+    assignment_ids = Column(JSON, default=list)  # list of GovernanceTrainingRecord IDs
+    users_assigned = Column(JSON, default=list)  # list of user_ids assigned
+    skipped_users = Column(JSON, default=list)  # user_ids skipped (cooldown / exempt)
+    skip_reason = Column(String(500))
 
-    fired_at    = Column(DateTime(timezone=True), server_default=func.now())
-    fired_by    = Column(String)   # "system" or user_id if manually triggered
+    fired_at = Column(DateTime(timezone=True), server_default=func.now())
+    fired_by = Column(String)  # "system" or user_id if manually triggered
 
-    rule        = relationship("TrainingTriggerRule", back_populates="trigger_logs")
-    regulatory_update = relationship("RegulatoryUpdateEvent",
-                                     foreign_keys=[regulatory_update_id])
+    rule = relationship("TrainingTriggerRule", back_populates="trigger_logs")
+    regulatory_update = relationship(
+        "RegulatoryUpdateEvent", foreign_keys=[regulatory_update_id]
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # REGULATORY UPDATE EVENT
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class RegulatoryUpdateEvent(Base):
     """
@@ -250,29 +291,30 @@ class RegulatoryUpdateEvent(Base):
       affected_industries: [] means ALL industries
       affected_roles: [] means ALL roles
     """
+
     __tablename__ = "regulatory_update_events"
 
     id = Column(String, primary_key=True, default=lambda: f"rue_{uuid4().hex[:12]}")
-    event_ref       = Column(String(100), unique=True, nullable=False)
+    event_ref = Column(String(100), unique=True, nullable=False)
     # e.g. "AUSTRAC-2026-001", "FATF-VASP-2025-UPDATE"
 
     # ── Content ───────────────────────────────────────────────────────────────
-    title           = Column(String(500), nullable=False)
-    issuing_body    = Column(Enum(IssuingBody), nullable=False)
-    summary         = Column(Text, nullable=False)
-    key_changes     = Column(JSON, default=list)   # [str] bullet points
-    full_text_url   = Column(String(512))
-    effective_date  = Column(Date)
+    title = Column(String(500), nullable=False)
+    issuing_body = Column(Enum(IssuingBody), nullable=False)
+    summary = Column(Text, nullable=False)
+    key_changes = Column(JSON, default=list)  # [str] bullet points
+    full_text_url = Column(String(512))
+    effective_date = Column(Date)
     compliance_deadline = Column(Date)  # date by which training must be completed
 
     # ── Scope ─────────────────────────────────────────────────────────────────
     affected_industries = Column(JSON, default=list)
     # [] = all industries; ["remittance", "vasp"] = specific only
-    affected_roles      = Column(JSON, default=list)
+    affected_roles = Column(JSON, default=list)
     # [] = all roles; ["mlro", "compliance"] = specific roles
 
     # ── Linked training ───────────────────────────────────────────────────────
-    linked_course_id    = Column(String, ForeignKey("training_courses.id"), nullable=True)
+    linked_course_id = Column(String, ForeignKey("training_courses.id"), nullable=True)
     # The specific course to assign when this update is published
     # If null: system assigns the org's annual refresher course
 
@@ -280,30 +322,37 @@ class RegulatoryUpdateEvent(Base):
     # False = notification only, no auto-assignment
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
-    status          = Column(Enum(RegulatoryUpdateStatus),
-                             default=RegulatoryUpdateStatus.draft, nullable=False, index=True)
-    published_at    = Column(DateTime(timezone=True))
-    published_by    = Column(String)
-    orgs_notified   = Column(Integer, default=0)     # count populated on publish
+    status = Column(
+        Enum(RegulatoryUpdateStatus),
+        default=RegulatoryUpdateStatus.draft,
+        nullable=False,
+        index=True,
+    )
+    published_at = Column(DateTime(timezone=True))
+    published_by = Column(String)
+    orgs_notified = Column(Integer, default=0)  # count populated on publish
     assignments_created = Column(Integer, default=0)
 
-    tags            = Column(JSON, default=list)   # ["tranche_2", "crypto", "pep"]
-    is_urgent       = Column(Boolean, default=False)
+    tags = Column(JSON, default=list)  # ["tranche_2", "crypto", "pep"]
+    is_urgent = Column(Boolean, default=False)
     # Urgent → due_days = 7 instead of standard 30
 
-    created_by  = Column(String, nullable=False)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    linked_course   = relationship("TrainingCourse", foreign_keys=[linked_course_id])
-    trigger_logs    = relationship("TrainingTriggerLog",
-                                   foreign_keys="TrainingTriggerLog.regulatory_update_id",
-                                   back_populates="regulatory_update")
+    linked_course = relationship("TrainingCourse", foreign_keys=[linked_course_id])
+    trigger_logs = relationship(
+        "TrainingTriggerLog",
+        foreign_keys="TrainingTriggerLog.regulatory_update_id",
+        back_populates="regulatory_update",
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ASSESSMENT OUTCOME FLAG
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class AssessmentOutcomeFlag(Base):
     """
@@ -317,43 +366,56 @@ class AssessmentOutcomeFlag(Base):
     This is the feedback loop that makes training a risk control,
     not just a compliance checkbox.
     """
+
     __tablename__ = "assessment_outcome_flags"
 
     id = Column(String, primary_key=True, default=lambda: f"aof_{uuid4().hex[:12]}")
-    org_id          = Column(String, ForeignKey("organisations.id"), nullable=False, index=True)
-    user_id         = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    training_record_id = Column(String, ForeignKey("governance_training_records.id"),
-                                nullable=False)
-    course_id       = Column(String, ForeignKey("training_courses.id"), nullable=False)
+    org_id = Column(
+        String,
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    training_record_id = Column(
+        String, ForeignKey("governance_training_records.id"), nullable=False
+    )
+    course_id = Column(String, ForeignKey("training_courses.id"), nullable=False)
 
     # ── Assessment result ─────────────────────────────────────────────────────
-    score           = Column(Float, nullable=False)
-    pass_mark       = Column(Float, nullable=False)
-    attempt_number  = Column(Integer, nullable=False)
-    course_name     = Column(String(255))
+    score = Column(Float, nullable=False)
+    pass_mark = Column(Float, nullable=False)
+    attempt_number = Column(Integer, nullable=False)
+    course_name = Column(String(255))
 
     # ── Linked risk decisions (populated at flag creation) ────────────────────
     recent_decision_ids = Column(JSON, default=list)
     # IDs of transactions/alerts/cases handled by this user in the past 30 days
     # that relate to the failed training topic
-    decision_summary    = Column(JSON, default=dict)
+    decision_summary = Column(JSON, default=dict)
     # {"transactions_reviewed": 12, "alerts_actioned": 3, "cases_handled": 1}
 
     # ── Risk implication ─────────────────────────────────────────────────────
-    requires_oversight  = Column(Boolean, default=False)
+    requires_oversight = Column(Boolean, default=False)
     # If True: user's risk decisions flagged for compliance co-sign until cleared
-    oversight_note      = Column(Text)
+    oversight_note = Column(Text)
 
     # ── Resolution ────────────────────────────────────────────────────────────
-    status              = Column(Enum(AssessmentFlagStatus),
-                                 default=AssessmentFlagStatus.open, nullable=False, index=True)
-    reviewed_by         = Column(String, ForeignKey("users.id"), nullable=True)
-    reviewed_at         = Column(DateTime(timezone=True))
-    review_notes        = Column(Text)
-    cleared_at          = Column(DateTime(timezone=True))
+    status = Column(
+        Enum(AssessmentFlagStatus),
+        default=AssessmentFlagStatus.open,
+        nullable=False,
+        index=True,
+    )
+    reviewed_by = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at = Column(DateTime(timezone=True))
+    review_notes = Column(Text)
+    cleared_at = Column(DateTime(timezone=True))
 
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 # ══════════════════════════════════════════════════════════════════════════════

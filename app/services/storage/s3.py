@@ -18,6 +18,7 @@ class S3StorageProvider(StorageProvider):
     ):
         try:
             import aioboto3 as _aioboto3
+            from botocore.config import Config as _BotoConfig
         except ImportError:
             raise RuntimeError(
                 "aioboto3 is required for S3 storage: pip install aioboto3"
@@ -30,10 +31,14 @@ class S3StorageProvider(StorageProvider):
         )
         self._endpoint_url = endpoint_url
         self._aioboto3 = _aioboto3
+        self._boto_config = _BotoConfig(connect_timeout=10, read_timeout=15)
 
     def _client(self):
         return self._aioboto3.Session().client(
-            "s3", endpoint_url=self._endpoint_url, **self._session_kwargs
+            "s3",
+            endpoint_url=self._endpoint_url,
+            config=self._boto_config,
+            **self._session_kwargs,
         )
 
     async def upload(

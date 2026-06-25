@@ -18,6 +18,7 @@ def log_action(
     after_state=None,
     notes: str = None,
     industry_id: str = None,
+    organisation_id: str = None,
     ip_address: str = None,
 ) -> AuditLog:
     entry = AuditLog(
@@ -28,6 +29,7 @@ def log_action(
         actor=actor,
         actor_role=actor_role,
         industry_id=industry_id,
+        organisation_id=organisation_id,
         before_state=before_state,
         after_state=after_state,
         notes=notes,

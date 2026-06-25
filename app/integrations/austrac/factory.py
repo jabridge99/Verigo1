@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.config import settings
+
 from .base import AUSTRACProvider
 
 
@@ -11,4 +12,5 @@ def get_provider() -> AUSTRACProvider:
         # Future: from .online import AUSTRACOnlineProvider; return AUSTRACOnlineProvider(...)
         raise NotImplementedError("AUSTRAC Online API provider not yet implemented")
     from .stub import StubAUSTRACProvider
+
     return StubAUSTRACProvider()

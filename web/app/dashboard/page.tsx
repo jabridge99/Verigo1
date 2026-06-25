@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Shield, Users, AlertTriangle, FileText, BarChart3,
+  Shield, Users, FileText, BarChart3,
   Building2, Scale, BookOpen, ChevronRight, LogOut,
-  CheckCircle, Clock, TrendingUp
+  CheckCircle, Clock
 } from 'lucide-react'
 import clsx from 'clsx'
 import { getStoredUser, clearUser } from '@/lib/auth'
@@ -42,9 +42,9 @@ const MODULES: DashboardModule[] = [
   { title: 'Transaction Monitoring', desc: 'AML alerts, velocity analysis, and suspicious transaction review.', href: '/monitoring', icon: <BarChart3 className="w-6 h-6" />, color: 'text-amber-400 bg-amber-900/20', roles: ['viewer', 'analyst', 'compliance', 'mlro', 'admin'] },
   { title: 'Reporting', desc: 'AUSTRAC TTR, IFTI, SMR report preparation and submission workflow.', href: '/reporting', icon: <FileText className="w-6 h-6" />, color: 'text-green-400 bg-green-900/20', roles: ['analyst', 'compliance', 'mlro', 'admin'] },
   { title: 'ECDD', desc: 'Enhanced Customer Due Diligence assessments and risk scoring.', href: '/ecdd', icon: <Shield className="w-6 h-6" />, color: 'text-brand-400 bg-brand-900/20', roles: ['analyst', 'compliance', 'mlro', 'admin'] },
+  { title: 'AML/CTF Program', desc: 'Version history, QR verification, and export audit trail for your AML program.', href: '/aml-program', icon: <CheckCircle className="w-6 h-6" />, color: 'text-cyan-400 bg-cyan-900/20', roles: ['analyst', 'compliance', 'mlro', 'admin'] },
   { title: 'MLRO Dashboard', desc: 'Case management, obligation calendar, and compliance KPIs.', href: '/mlro', icon: <Scale className="w-6 h-6" />, color: 'text-purple-400 bg-purple-900/20', roles: ['compliance', 'mlro', 'admin'], badge: 'MLRO' },
   { title: 'Audit Trail', desc: 'Immutable compliance log — all actions, changes, and reviews.', href: '/audit', icon: <BookOpen className="w-6 h-6" />, color: 'text-slate-400 bg-slate-900/20', roles: ['analyst', 'compliance', 'mlro', 'admin'] },
-  { title: 'Rule Builder', desc: 'No-code compliance rules — IF/THEN logic for monitoring triggers.', href: '/rule-builder', icon: <AlertTriangle className="w-6 h-6" />, color: 'text-orange-400 bg-orange-900/20', roles: ['compliance', 'mlro', 'admin'] },
   { title: 'Industry Management', desc: 'Multi-tenant configuration, compliance pack assignment, tenant status.', href: '/industry', icon: <Building2 className="w-6 h-6" />, color: 'text-rose-400 bg-rose-900/20', roles: ['admin'] },
 ]
 
@@ -57,10 +57,27 @@ const DEMO_STATS = {
   compliance_score: 94,
 }
 
+// Fallback weekly alert volume, used until /dashboard/trends/alerts responds.
+const DEMO_ALERT_TREND = [3, 5, 4, 6, 5, 8, 7]
+
+// Fallback risk breakdown, used until /dashboard/global responds.
+const DEMO_RISK_BREAKDOWN: Record<string, number> = { low: 0, medium: 0, high: 0, critical: 0 }
+
+const HEAT_COLOR = (count: number) => {
+  if (count === 0) return 'bg-navy-800 text-white/20'
+  if (count <= 5) return 'bg-emerald-500/20 text-emerald-300'
+  if (count <= 12) return 'bg-amber-500/25 text-amber-300'
+  if (count <= 20) return 'bg-orange-500/30 text-orange-300'
+  return 'bg-red-500/35 text-red-300'
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [stats, setStats] = useState(DEMO_STATS)
+  const [alertTrend, setAlertTrend] = useState<number[]>(DEMO_ALERT_TREND)
+  const [trendWeeks, setTrendWeeks] = useState<number>(7)
+  const [riskBreakdown, setRiskBreakdown] = useState<Record<string, number>>(DEMO_RISK_BREAKDOWN)
 
   useEffect(() => {
     const stored = getStoredUser()
@@ -70,11 +87,39 @@ export default function DashboardPage() {
     }
     setUser(stored)
 
-    // Try to fetch live stats
-    const token = stored.access_token
-    Promise.allSettled([
-      fetch(`${API}/api/v1/transactions/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
-    ]).catch(() => {})
+    fetch(`${API}/api/v1/dashboard/global`, { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(d => {
+        setStats(prev => ({
+          ...prev,
+          open_alerts: d.alerts?.open ?? prev.open_alerts,
+          pending_reports: d.reports?.total_pending ?? prev.pending_reports,
+          pending_kyc: (d.customers?.pending_review ?? 0) + (d.customers?.edd_required ?? 0),
+          open_cases: d.cases?.open ?? prev.open_cases,
+          customers_total: d.customers?.total ?? prev.customers_total,
+        }))
+        if (d.customers?.by_risk_level) setRiskBreakdown(d.customers.by_risk_level)
+      })
+      .catch(() => {})
+
+    fetch(`${API}/api/v1/dashboard/compliance-score`, { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(d => {
+        if (typeof d.compliance_score === 'number') {
+          setStats(prev => ({ ...prev, compliance_score: Math.round(d.compliance_score) }))
+        }
+      })
+      .catch(() => {})
+
+    fetch(`${API}/api/v1/dashboard/trends/alerts`, { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(d => {
+        if (Array.isArray(d.data) && d.data.length) {
+          setAlertTrend(d.data.map((p: any) => p.alerts ?? 0))
+          setTrendWeeks(d.data.length)
+        }
+      })
+      .catch(() => {})
   }, [router])
 
   function logout() {
@@ -106,21 +151,53 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* KPI bar */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
+        {/* KPI bar — every widget drills down into its filtered list */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           {[
-            { label: 'Open Alerts', value: stats.open_alerts, color: 'text-red-400', urgent: stats.open_alerts > 5 },
-            { label: 'Pending Reports', value: stats.pending_reports, color: 'text-amber-400', urgent: stats.pending_reports > 0 },
-            { label: 'Pending KYC', value: stats.pending_kyc, color: 'text-blue-400', urgent: false },
-            { label: 'Open Cases', value: stats.open_cases, color: 'text-purple-400', urgent: stats.open_cases > 3 },
-            { label: 'Customers', value: stats.customers_total, color: 'text-white', urgent: false },
-            { label: 'Compliance Score', value: `${stats.compliance_score}%`, color: 'text-emerald-400', urgent: false },
+            { key: 'open_alerts', label: 'Open Alerts', value: stats.open_alerts, color: 'text-red-400', urgent: stats.open_alerts > 5, href: '/monitoring?filter=open' },
+            { key: 'pending_reports', label: 'Pending Reports', value: stats.pending_reports, color: 'text-amber-400', urgent: stats.pending_reports > 0, href: '/reporting?status=draft' },
+            { key: 'pending_kyc', label: 'Pending KYC', value: stats.pending_kyc, color: 'text-blue-400', urgent: false, href: '/onboarding?status=pending' },
+            { key: 'open_cases', label: 'Open Cases', value: stats.open_cases, color: 'text-purple-400', urgent: stats.open_cases > 3, href: '/mlro?status=open' },
+            { key: 'customers_total', label: 'Customers', value: stats.customers_total, color: 'text-white', urgent: false, href: '/customers' },
+            { key: 'compliance_score', label: 'Compliance Score', value: `${stats.compliance_score}%`, color: 'text-emerald-400', urgent: false, href: '/aml-program' },
           ].map(s => (
-            <div key={s.label} className={clsx('bg-navy-800 border rounded-xl p-4', s.urgent ? 'border-red-500/30' : 'border-white/5')}>
+            <Link key={s.label} href={s.href}
+              className={clsx('bg-navy-800 border rounded-xl p-4 hover:border-brand-500/40 transition-colors', s.urgent ? 'border-red-500/30' : 'border-white/5')}>
               <div className={clsx('text-2xl font-bold', s.color)}>{s.value}</div>
               <div className="text-xs text-white/40 mt-1 leading-tight">{s.label}</div>
-            </div>
+            </Link>
           ))}
+        </div>
+
+        {/* Trend + risk breakdown */}
+        <div className="grid lg:grid-cols-3 gap-4 mb-10">
+          <Link href="/monitoring?filter=open" className="lg:col-span-1 bg-navy-800 border border-white/5 hover:border-brand-500/40 rounded-xl p-4 transition-colors">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Alert volume · {trendWeeks} weeks</h3>
+              <span className="text-xs text-red-400 font-semibold">
+                {alertTrend[alertTrend.length - 1] - alertTrend[0] >= 0 ? '+' : ''}
+                {alertTrend[alertTrend.length - 1] - alertTrend[0]} vs first week
+              </span>
+            </div>
+            <div className="flex items-end gap-1.5 h-16">
+              {alertTrend.map((v, i) => (
+                <div key={i} className="flex-1 bg-red-500/30 rounded-t" style={{ height: `${(v / Math.max(1, ...alertTrend)) * 100}%` }} />
+              ))}
+            </div>
+          </Link>
+
+          <div className="lg:col-span-2 bg-navy-800 border border-white/5 rounded-xl p-4">
+            <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Customers by risk level</h3>
+            <div className="grid grid-cols-4 gap-2">
+              {(['low', 'medium', 'high', 'critical'] as const).map(level => (
+                <Link key={level} href={`/customers?risk=${level}`}
+                  className={clsx('rounded-lg py-4 text-center hover:opacity-80 transition-opacity', HEAT_COLOR(riskBreakdown[level] ?? 0))}>
+                  <div className="text-xl font-bold">{riskBreakdown[level] ?? 0}</div>
+                  <div className="text-[11px] uppercase tracking-wide mt-1 opacity-80">{level}</div>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Quick actions for MLRO/admin */}

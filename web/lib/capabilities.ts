@@ -53,7 +53,7 @@ export const capabilities: Capability[] = [
         description: 'Real estate professionals use VeriGo to collect buyer identity, source of funds documentation, and beneficial ownership information in a structured, auditable workflow.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'law-firm', 'real-estate', 'conveyancer'],
+    relatedIndustries: ['vasp', 'remittance', 'legal_professionals', 'real_estate', 'conveyancer'],
   },
   {
     id: 'kyc-identity-verification',
@@ -90,7 +90,7 @@ export const capabilities: Capability[] = [
         description: 'Law firms, accountants, and real estate professionals preparing for Tranche 2 use VeriGo KYC to build defensible client identity records integrated into their matter management processes.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'foreign-exchange', 'payment-service-provider', 'real-estate', 'law-firm', 'accounting-firm'],
+    relatedIndustries: ['vasp', 'remittance', 'financial_services', 'remittance', 'real_estate', 'legal_professionals', 'accountants'],
   },
   {
     id: 'kyb-business-verification',
@@ -127,7 +127,7 @@ export const capabilities: Capability[] = [
         description: 'Digital currency exchanges with business account offerings use VeriGo KYB to apply the same rigorous beneficial ownership standards to institutional customers as they do to retail customers.',
       },
     ],
-    relatedIndustries: ['payment-service-provider', 'real-estate', 'law-firm', 'accounting-firm', 'digital-currency-exchange', 'reporting-group'],
+    relatedIndustries: ['remittance', 'real_estate', 'legal_professionals', 'accountants', 'vasp', 'reporting_group'],
   },
   {
     id: 'sanctions-screening',
@@ -164,7 +164,7 @@ export const capabilities: Capability[] = [
         description: 'When OFAC or other sanctions authorities update their lists, VeriGo automatically re-screens the entire customer portfolio and alerts compliance teams to any new potential matches.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'foreign-exchange', 'payment-service-provider', 'real-estate', 'law-firm'],
+    relatedIndustries: ['vasp', 'remittance', 'financial_services', 'remittance', 'real_estate', 'legal_professionals'],
   },
   {
     id: 'pep-screening',
@@ -201,7 +201,7 @@ export const capabilities: Capability[] = [
         description: 'Law firms use VeriGo to screen clients receiving designated services for PEP status, applying proportionate enhanced due diligence for all matters involving PEP-connected clients.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'foreign-exchange', 'real-estate', 'law-firm', 'accounting-firm'],
+    relatedIndustries: ['vasp', 'remittance', 'financial_services', 'real_estate', 'legal_professionals', 'accountants'],
   },
   {
     id: 'adverse-media',
@@ -238,7 +238,7 @@ export const capabilities: Capability[] = [
         description: 'VeriGo surfaces regulatory actions, court orders, and AUSTRAC enforcement actions involving customers or their associated entities, triggering immediate compliance review.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'payment-service-provider', 'law-firm', 'accounting-firm'],
+    relatedIndustries: ['vasp', 'remittance', 'remittance', 'legal_professionals', 'accountants'],
   },
   {
     id: 'transaction-monitoring',
@@ -275,7 +275,7 @@ export const capabilities: Capability[] = [
         description: 'Foreign exchange providers use VeriGo\'s structuring detection rules to identify customers making multiple currency conversions below the $10,000 TTR threshold that together indicate deliberate evasion.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'foreign-exchange', 'payment-service-provider', 'law-firm', 'reporting-group'],
+    relatedIndustries: ['vasp', 'remittance', 'financial_services', 'remittance', 'legal_professionals', 'reporting_group'],
   },
   {
     id: 'case-management',
@@ -312,7 +312,7 @@ export const capabilities: Capability[] = [
         description: 'Cases that result in an SMR determination use VeriGo\'s report preparation workflow, pre-populating the AUSTRAC SMR template from case facts and routing through MLRO sign-off before submission.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'foreign-exchange', 'payment-service-provider', 'law-firm', 'reporting-group'],
+    relatedIndustries: ['vasp', 'remittance', 'financial_services', 'remittance', 'legal_professionals', 'reporting_group'],
   },
   {
     id: 'regulatory-reporting',
@@ -349,7 +349,7 @@ export const capabilities: Capability[] = [
         description: 'Precious metal dealers use VeriGo to capture cash transaction data at the point of sale and generate TTR reports automatically, ensuring no threshold transaction is missed or reported late.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'foreign-exchange', 'payment-service-provider', 'precious-metals', 'reporting-group'],
+    relatedIndustries: ['vasp', 'remittance', 'financial_services', 'remittance', 'precious_metals', 'reporting_group'],
   },
   {
     id: 'reporting-groups',
@@ -386,7 +386,7 @@ export const capabilities: Capability[] = [
         description: 'Group compliance officers use VeriGo\'s consolidated dashboard to prepare board-level compliance reports showing status across all entities, open cases, report submission rates, and outstanding obligations.',
       },
     ],
-    relatedIndustries: ['reporting-group', 'digital-currency-exchange', 'remittance-provider', 'payment-service-provider'],
+    relatedIndustries: ['reporting_group', 'vasp', 'remittance', 'remittance'],
   },
   {
     id: 'workflow-automation',
@@ -423,7 +423,7 @@ export const capabilities: Capability[] = [
         description: 'When a new customer completes onboarding, VeriGo automatically triggers sanctions and PEP screening, routes the results to the compliance queue, and only approves the account after a clean result.',
       },
     ],
-    relatedIndustries: ['digital-currency-exchange', 'remittance-provider', 'payment-service-provider', 'law-firm', 'reporting-group'],
+    relatedIndustries: ['vasp', 'remittance', 'remittance', 'legal_professionals', 'reporting_group'],
   },
 ]
 

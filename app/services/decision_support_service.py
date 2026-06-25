@@ -8,6 +8,7 @@ DISCLAIMER: Decision support panels are compliance workflow guidance only.
 The system never automatically approves compliance decisions.
 All decisions remain with the reporting entity.
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,7 +16,10 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.services.regulatory_decision_service import evaluate_transaction, RegulatoryDecisionResult
+from app.services.regulatory_decision_service import (
+    RegulatoryDecisionResult,
+    evaluate_transaction,
+)
 
 log = logging.getLogger("tvg.decision_support")
 
@@ -27,6 +31,7 @@ DISCLAIMER = (
 
 
 # ── Risk factor computation using OrgRiskFactor weights ──────────────────────
+
 
 def compute_weighted_risk_score(
     db: Session,
@@ -44,49 +49,65 @@ def compute_weighted_risk_score(
       customer_score, geographic_score, product_score, transaction_score,
       behaviour_score, crypto_score, composite_score, level, factor_hits
     """
-    from app.models.risk_matrix_config import OrgRiskFactor, RiskFactorCategory
     from app.models.risk_matrix import OrgMonitoringConfig
+    from app.models.risk_matrix_config import OrgRiskFactor
 
-    factors = (
-        db.query(OrgRiskFactor)
-        .filter_by(org_id=org_id, is_active=True)
-        .all()
-    )
+    factors = db.query(OrgRiskFactor).filter_by(org_id=org_id, is_active=True).all()
 
     config = db.query(OrgMonitoringConfig).filter_by(org_id=org_id).first()
     matrix_weights = {
-        "customer":    getattr(config, "matrix_customer_weight", 0.30) if config else 0.30,
-        "geographic":  getattr(config, "matrix_geographic_weight", 0.25) if config else 0.25,
-        "product":     getattr(config, "matrix_product_weight", 0.20) if config else 0.20,
-        "transaction": getattr(config, "matrix_transaction_weight", 0.25) if config else 0.25,
+        "customer": getattr(config, "matrix_customer_weight", 0.30) if config else 0.30,
+        "geographic": getattr(config, "matrix_geographic_weight", 0.25)
+        if config
+        else 0.25,
+        "product": getattr(config, "matrix_product_weight", 0.20) if config else 0.20,
+        "transaction": getattr(config, "matrix_transaction_weight", 0.25)
+        if config
+        else 0.25,
     }
 
-    amount_aud = float(getattr(transaction, "amount_aud", None) or getattr(transaction, "amount", 0) or 0)
+    amount_aud = float(
+        getattr(transaction, "amount_aud", None)
+        or getattr(transaction, "amount", 0)
+        or 0
+    )
     payment_method = str(getattr(transaction, "payment_method", "") or "")
     transaction_type = str(getattr(transaction, "transaction_type", "") or "")
     source_country = str(getattr(transaction, "source_country", "") or "").upper()
-    destination_country = str(getattr(transaction, "destination_country", "") or "").upper()
+    destination_country = str(
+        getattr(transaction, "destination_country", "") or ""
+    ).upper()
     is_cross_border = bool(getattr(transaction, "is_cross_border", False))
     is_structuring = bool(getattr(transaction, "is_structuring_suspect", False))
     is_near_threshold = bool(getattr(transaction, "is_near_threshold", False))
     is_round = bool(getattr(transaction, "is_round_number", False))
 
     from app.services.regulatory_decision_service import (
-        FATF_BLACK_LIST, FATF_GREY_LIST, SANCTIONED_COUNTRIES
+        FATF_BLACK_LIST,
+        FATF_GREY_LIST,
+        SANCTIONED_COUNTRIES,
     )
 
     countries = {c for c in [source_country, destination_country] if c}
 
     # ── Evaluate each factor ──────────────────────────────────────────────────
     scores_by_category: dict[str, float] = {
-        "customer": 0.0, "geographic": 0.0, "product": 0.0,
-        "transaction": 0.0, "behaviour": 0.0, "crypto": 0.0,
+        "customer": 0.0,
+        "geographic": 0.0,
+        "product": 0.0,
+        "transaction": 0.0,
+        "behaviour": 0.0,
+        "crypto": 0.0,
     }
     max_by_category: dict[str, float] = {k: 0.0 for k in scores_by_category}
     factor_hits = []
 
     for factor in factors:
-        cat = factor.category.value if hasattr(factor.category, "value") else str(factor.category)
+        cat = (
+            factor.category.value
+            if hasattr(factor.category, "value")
+            else str(factor.category)
+        )
         weight = float(factor.weight or 0.10)
         key = factor.factor_key
         hit = False
@@ -96,17 +117,23 @@ def compute_weighted_risk_score(
         if cat == "customer":
             if key == "pep_status" and getattr(customer, "is_pep", False):
                 hit = True
-            elif key == "high_risk_rating" and str(getattr(customer, "risk_level", "")) in ("high", "critical"):
+            elif key == "high_risk_rating" and str(
+                getattr(customer, "risk_level", "")
+            ) in ("high", "critical"):
                 hit = True
-            elif key == "adverse_media" and getattr(customer, "is_adverse_media", False):
+            elif key == "adverse_media" and getattr(
+                customer, "is_adverse_media", False
+            ):
                 hit = True
-            elif key == "non_face_to_face" and str(getattr(customer, "onboarding_channel", "")) in ("online", "mobile_app", "api"):
+            elif key == "non_face_to_face" and str(
+                getattr(customer, "onboarding_channel", "")
+            ) in ("online", "mobile_app", "api"):
                 hit = True
             elif key == "new_customer":
                 created_at = getattr(customer, "created_at", None)
                 if created_at:
-                    from datetime import timezone, timedelta
-                    from datetime import datetime
+                    from datetime import datetime, timezone
+
                     age_days = (datetime.now(timezone.utc) - created_at).days
                     if age_days < 90:
                         hit = True
@@ -115,7 +142,9 @@ def compute_weighted_risk_score(
         elif cat == "geographic":
             if key == "fatf_blacklist" and any(c in FATF_BLACK_LIST for c in countries):
                 hit = True
-            elif key == "sanctioned_country" and any(c in SANCTIONED_COUNTRIES for c in countries):
+            elif key == "sanctioned_country" and any(
+                c in SANCTIONED_COUNTRIES for c in countries
+            ):
                 hit = True
             elif key == "fatf_greylist" and any(c in FATF_GREY_LIST for c in countries):
                 hit = True
@@ -124,11 +153,18 @@ def compute_weighted_risk_score(
 
         # Product factors
         elif cat == "product":
-            if key == "crypto" and ("crypto" in payment_method or "crypto" in transaction_type):
+            if key == "crypto" and (
+                "crypto" in payment_method or "crypto" in transaction_type
+            ):
                 hit = True
-            elif key == "remittance" and ("remittance" in transaction_type or "transfer" in payment_method):
+            elif key == "remittance" and (
+                "remittance" in transaction_type or "transfer" in payment_method
+            ):
                 hit = True
-            elif key == "cash" and ("cash" in payment_method or getattr(transaction, "is_cash_intensive", False)):
+            elif key == "cash" and (
+                "cash" in payment_method
+                or getattr(transaction, "is_cash_intensive", False)
+            ):
                 hit = True
             elif key == "real_estate" and "real_estate" in transaction_type:
                 hit = True
@@ -146,11 +182,17 @@ def compute_weighted_risk_score(
 
         # Behaviour factors
         elif cat == "behaviour" and behaviour_profile:
-            if key == "dormant_reactivation" and getattr(behaviour_profile, "dormant_reactivated", False):
+            if key == "dormant_reactivation" and getattr(
+                behaviour_profile, "dormant_reactivated", False
+            ):
                 hit = True
             elif key == "velocity_breach":
-                total_30d = int(getattr(behaviour_profile, "total_txn_count_30d", 0) or 0)
-                avg_monthly = float(getattr(behaviour_profile, "avg_txn_per_month", 0) or 0)
+                total_30d = int(
+                    getattr(behaviour_profile, "total_txn_count_30d", 0) or 0
+                )
+                avg_monthly = float(
+                    getattr(behaviour_profile, "avg_txn_per_month", 0) or 0
+                )
                 if avg_monthly > 0 and total_30d > avg_monthly * 2:
                     hit = True
             elif key == "unusual_channel":
@@ -161,22 +203,35 @@ def compute_weighted_risk_score(
 
         # Crypto factors
         elif cat == "crypto" and crypto_detail:
-            if key == "mixer_exposure" and (getattr(crypto_detail, "mixer_exposure_pct", 0) or 0) >= 5:
+            if (
+                key == "mixer_exposure"
+                and (getattr(crypto_detail, "mixer_exposure_pct", 0) or 0) >= 5
+            ):
                 hit = True
-            elif key == "darknet_exposure" and (getattr(crypto_detail, "darknet_exposure_pct", 0) or 0) >= 1:
+            elif (
+                key == "darknet_exposure"
+                and (getattr(crypto_detail, "darknet_exposure_pct", 0) or 0) >= 1
+            ):
                 hit = True
-            elif key == "sanctioned_wallet" and (getattr(crypto_detail, "sanctioned_exposure_pct", 0) or 0) > 0:
+            elif (
+                key == "sanctioned_wallet"
+                and (getattr(crypto_detail, "sanctioned_exposure_pct", 0) or 0) > 0
+            ):
                 hit = True
 
         if hit:
-            scores_by_category[cat if cat in scores_by_category else "transaction"] += score_contribution
-            factor_hits.append({
-                "factor_key": key,
-                "category": cat,
-                "label": factor.label,
-                "weight": weight,
-                "score_contribution": round(score_contribution, 1),
-            })
+            scores_by_category[cat if cat in scores_by_category else "transaction"] += (
+                score_contribution
+            )
+            factor_hits.append(
+                {
+                    "factor_key": key,
+                    "category": cat,
+                    "label": factor.label,
+                    "weight": weight,
+                    "score_contribution": round(score_contribution, 1),
+                }
+            )
             max_by_category[cat if cat in scores_by_category else "transaction"] = max(
                 max_by_category.get(cat, 0), score_contribution
             )
@@ -187,10 +242,10 @@ def compute_weighted_risk_score(
 
     # Composite score using matrix weights
     composite = (
-        scores_by_category["customer"]    * matrix_weights["customer"] +
-        scores_by_category["geographic"]  * matrix_weights["geographic"] +
-        scores_by_category["product"]     * matrix_weights["product"] +
-        scores_by_category["transaction"] * matrix_weights["transaction"]
+        scores_by_category["customer"] * matrix_weights["customer"]
+        + scores_by_category["geographic"] * matrix_weights["geographic"]
+        + scores_by_category["product"] * matrix_weights["product"]
+        + scores_by_category["transaction"] * matrix_weights["transaction"]
     )
 
     # Behaviour and crypto boost (additive, not part of matrix weights)
@@ -202,10 +257,13 @@ def compute_weighted_risk_score(
     composite = round(min(composite, 100.0), 1)
 
     level = (
-        "critical" if composite >= 80 else
-        "high"     if composite >= 60 else
-        "medium"   if composite >= 35 else
-        "low"
+        "critical"
+        if composite >= 80
+        else "high"
+        if composite >= 60
+        else "medium"
+        if composite >= 35
+        else "low"
     )
 
     return {
@@ -224,6 +282,7 @@ def compute_weighted_risk_score(
 
 
 # ── Live panel computation ────────────────────────────────────────────────────
+
 
 def build_live_panel(
     db: Session,
@@ -264,6 +323,7 @@ def build_live_panel(
 
     # 3. Outstanding tasks check
     from app.models.task import Task, TaskStatus
+
     outstanding_tasks = (
         db.query(Task)
         .filter(
@@ -278,13 +338,19 @@ def build_live_panel(
     missing_documents = []
     if not getattr(customer, "source_of_funds", None):
         missing_documents.append("Source of Funds documentation")
-    if getattr(customer, "is_pep", False) and not getattr(customer, "source_of_wealth", None):
+    if getattr(customer, "is_pep", False) and not getattr(
+        customer, "source_of_wealth", None
+    ):
         missing_documents.append("Source of Wealth documentation (required for PEP)")
-    if not getattr(customer, "date_of_birth", None) and getattr(customer, "customer_type", "") == "individual":
+    if (
+        not getattr(customer, "date_of_birth", None)
+        and getattr(customer, "customer_type", "") == "individual"
+    ):
         missing_documents.append("Date of Birth — required for individual CDD")
 
     # 5. Approval step
     from app.models.automation_rule import ApprovalStepType
+
     composite = risk_breakdown["composite_score"]
     if composite >= 80 or reg_result.potential_smr:
         current_step = ApprovalStepType.mlro_review.value
@@ -333,8 +399,10 @@ def build_live_panel(
         "required_step": current_step,
         "outstanding_tasks": [
             {
-                "id": t.id, "task_ref": t.task_ref,
-                "title": t.title, "status": t.status.value,
+                "id": t.id,
+                "task_ref": t.task_ref,
+                "title": t.title,
+                "status": t.status.value,
                 "due_date": str(t.due_date) if t.due_date else None,
             }
             for t in outstanding_tasks

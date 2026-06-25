@@ -7,7 +7,6 @@ Registered WITHOUT /api/v1 prefix so probes work at:
   GET /health/detailed — admin-only full diagnostics
 """
 
-import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -28,14 +27,18 @@ _START_TIME = time.monotonic()
 
 # ── Auth helper for admin-only endpoints ──────────────────────────────────────
 
+
 def _require_admin(authorization: Optional[str] = Header(None)):
     """Lightweight admin check — raises 401/403 if caller is not an admin user."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
-        from app.services.auth_service import decode_token, get_user_by_id  # type: ignore
-        from app.models.user import UserRole, UserStatus
         from app.db.database import SessionLocal
+        from app.models.user import UserRole, UserStatus
+        from app.services.auth_service import (  # type: ignore
+            decode_token,
+            get_user_by_id,
+        )
 
         token = authorization.removeprefix("Bearer ").strip()
         payload = decode_token(token)
@@ -46,7 +49,9 @@ def _require_admin(authorization: Optional[str] = Header(None)):
         try:
             user = get_user_by_id(db, payload.get("sub", ""))
             if not user or user.status != UserStatus.active:
-                raise HTTPException(status_code=401, detail="User not found or inactive")
+                raise HTTPException(
+                    status_code=401, detail="User not found or inactive"
+                )
             if user.role not in (UserRole.admin,):
                 raise HTTPException(status_code=403, detail="Admin role required")
             return user
@@ -61,6 +66,7 @@ def _require_admin(authorization: Optional[str] = Header(None)):
 
 # ── Liveness ──────────────────────────────────────────────────────────────────
 
+
 @router.get("/health", status_code=200, summary="Liveness probe")
 def liveness():
     """Liveness probe — returns 200 if the process is running."""
@@ -68,6 +74,7 @@ def liveness():
 
 
 # ── Readiness ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/health/ready", status_code=200, summary="Readiness probe")
 async def readiness(db: Session = Depends(get_db)):
@@ -89,6 +96,7 @@ async def readiness(db: Session = Depends(get_db)):
     if settings.redis_url:
         try:
             from app.services.cache import cache
+
             redis_ok = await cache.ping()
             checks["redis"] = "ok" if redis_ok else "error"
         except Exception as exc:
@@ -107,6 +115,7 @@ async def readiness(db: Session = Depends(get_db)):
 
 
 # ── Detailed (admin-only) ─────────────────────────────────────────────────────
+
 
 @router.get("/health/detailed", status_code=200, summary="Detailed health (admin only)")
 async def detailed_health(
@@ -133,6 +142,7 @@ async def detailed_health(
     if settings.redis_url:
         try:
             from app.services.cache import cache
+
             redis_ok = await cache.ping()
             checks["redis"] = "ok" if redis_ok else "unreachable"
         except Exception as exc:
@@ -144,6 +154,7 @@ async def detailed_health(
     pool_info: dict = {}
     try:
         from app.db.database import engine
+
         pool = engine.pool
         pool_info = {
             "size": pool.size() if hasattr(pool, "size") else None,

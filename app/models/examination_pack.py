@@ -17,21 +17,23 @@ Sections included:
   10. control_testing     — control tests, findings, remediation status
   11. notification_history — evidence that staff were alerted to issues (governance proof)
 """
+
 from __future__ import annotations
 
 import enum
 from uuid import uuid4
-from sqlalchemy import Column, String, Enum, Boolean, DateTime, Date, JSON, Text, func
-from sqlalchemy.orm import relationship
+
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Enum, String, Text, func
+
 from app.db.database import Base
 
 
 class ExaminationPackStatus(str, enum.Enum):
-    draft      = "draft"
+    draft = "draft"
     generating = "generating"
-    ready      = "ready"
-    delivered  = "delivered"
-    archived   = "archived"
+    ready = "ready"
+    delivered = "delivered"
+    archived = "archived"
 
 
 EXAMINATION_SECTIONS = [
@@ -53,31 +55,35 @@ class ExaminationPack(Base):
     __tablename__ = "examination_packs"
 
     id = Column(String, primary_key=True, default=lambda: f"ep_{uuid4().hex[:12]}")
-    org_id          = Column(String, nullable=False, index=True)
-    pack_ref        = Column(String(50), unique=True, nullable=False)
+    org_id = Column(String, nullable=False, index=True)
+    pack_ref = Column(String(50), unique=True, nullable=False)
     # e.g. "EXAM-2026-001" — sequential per org
 
     # ── Examination scope ─────────────────────────────────────────────────────
-    period_start    = Column(Date, nullable=False)
-    period_end      = Column(Date, nullable=False)
-    sections        = Column(JSON, default=list)   # subset of EXAMINATION_SECTIONS
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    sections = Column(JSON, default=list)  # subset of EXAMINATION_SECTIONS
 
     # ── Examiner details ──────────────────────────────────────────────────────
-    examiner_name       = Column(String(255))
-    examiner_agency     = Column(String(100), default="AUSTRAC")
-    examination_ref     = Column(String(100))   # AUSTRAC's own reference number
+    examiner_name = Column(String(255))
+    examiner_agency = Column(String(100), default="AUSTRAC")
+    examination_ref = Column(String(100))  # AUSTRAC's own reference number
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
-    status          = Column(Enum(ExaminationPackStatus),
-                             default=ExaminationPackStatus.draft, nullable=False, index=True)
-    requested_by    = Column(String, nullable=False)
-    generated_at    = Column(DateTime(timezone=True))
-    delivered_at    = Column(DateTime(timezone=True))
-    delivered_by    = Column(String)
-    delivery_notes  = Column(Text)
+    status = Column(
+        Enum(ExaminationPackStatus),
+        default=ExaminationPackStatus.draft,
+        nullable=False,
+        index=True,
+    )
+    requested_by = Column(String, nullable=False)
+    generated_at = Column(DateTime(timezone=True))
+    delivered_at = Column(DateTime(timezone=True))
+    delivered_by = Column(String)
+    delivery_notes = Column(Text)
 
     # ── Frozen snapshot (JSON) ────────────────────────────────────────────────
-    snapshot_data   = Column(JSON, default=dict)
+    snapshot_data = Column(JSON, default=dict)
     # Structure: { "section_name": { ...data... }, ... }
     # Frozen at generation time — never changes after status = ready
 
@@ -94,10 +100,12 @@ class ExaminationPack(Base):
     #   ...
     # }
 
-    generation_errors = Column(JSON, default=list)   # any section errors during generation
+    generation_errors = Column(
+        JSON, default=list
+    )  # any section errors during generation
 
     is_confidential = Column(Boolean, default=True)
-    version         = Column(String(10), default="1.0")
+    version = Column(String(10), default="1.0")
 
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

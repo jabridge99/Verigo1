@@ -121,3 +121,42 @@ class AddonResponse(BaseModel):
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class FeatureToggleRow(BaseModel):
+    code: str
+    name: str
+    category: Optional[str] = None
+    plans: dict  # plan value -> enabled bool
+
+
+class FeatureToggleUpdate(BaseModel):
+    enabled: bool
+
+
+class PlanPricingResponse(BaseModel):
+    plan: str
+    monthly_aud: Optional[float] = None
+    annual_aud: Optional[float] = None
+
+
+class PlanPricingUpdate(BaseModel):
+    monthly_aud: Optional[float] = None
+    annual_aud: Optional[float] = None
+
+
+class StripePriceMappingResponse(BaseModel):
+    plan: str
+    interval: str
+    stripe_price_id: str
+    source: str  # "admin" (DB override) or "env" (fallback)
+
+
+class StripePriceMappingUpdate(BaseModel):
+    stripe_price_id: str
+
+
+class StripeStatusResponse(BaseModel):
+    configured: bool
+    mode: Optional[str] = None  # "live" | "test" | None
+    webhook_secret_configured: bool

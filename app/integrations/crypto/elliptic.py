@@ -17,6 +17,7 @@ several plausible field names) rather than hard-coded to one assumed shape.
 Confirm both the signing scheme and response fields against a live contract
 sandbox before relying on this in production.
 """
+
 from __future__ import annotations
 
 import base64
@@ -67,10 +68,17 @@ class EllipticProvider(CryptoWalletProvider):
         digest = hmac.new(self.api_secret.encode(), message, hashlib.sha256).digest()
         return base64.b64encode(digest).decode()
 
-    async def screen_address(self, address: str, network: str | None = None) -> WalletScreeningResult:
+    async def screen_address(
+        self, address: str, network: str | None = None
+    ) -> WalletScreeningResult:
         asset = NETWORK_TO_ASSET.get(network or "", network or "")
-        body_dict = {"subject": {"asset": asset, "blockchain": asset, "hash": address}, "type": "wallet_exposure"}
-        body = httpx.Request("POST", BASE_URL + WALLET_PATH, json=body_dict).content.decode()
+        body_dict = {
+            "subject": {"asset": asset, "blockchain": asset, "hash": address},
+            "type": "wallet_exposure",
+        }
+        body = httpx.Request(
+            "POST", BASE_URL + WALLET_PATH, json=body_dict
+        ).content.decode()
         timestamp = str(int(time.time() * 1000))
         signature = self._sign("POST", WALLET_PATH, timestamp, body)
 
@@ -84,7 +92,9 @@ class EllipticProvider(CryptoWalletProvider):
             resp = await client.post(WALLET_PATH, content=body, headers=headers)
 
         if resp.status_code >= 400:
-            raise ProviderRejectedError("elliptic", f"{resp.status_code}: {resp.text}", raw=resp.text)
+            raise ProviderRejectedError(
+                "elliptic", f"{resp.status_code}: {resp.text}", raw=resp.text
+            )
 
         data = resp.json()
         risk_score = data.get("risk_score") or data.get("riskScore") or 0

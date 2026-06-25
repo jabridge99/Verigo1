@@ -35,6 +35,8 @@ def get_redis():
             settings.redis_url,
             encoding="utf-8",
             decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
         )
     except Exception as exc:
         log.warning("Redis connection failed — cache disabled: %s", exc)
@@ -71,7 +73,9 @@ class CacheService:
             log.debug("Cache GET error [%s]: %s", key, exc)
             return None
 
-    async def set(self, key: str, value: Any, ttl_seconds: int = TTL_ORG_CONFIG) -> bool:
+    async def set(
+        self, key: str, value: Any, ttl_seconds: int = TTL_ORG_CONFIG
+    ) -> bool:
         """Store value as JSON with a TTL.  Returns True on success."""
         client = await self._get_client()
         if client is None:

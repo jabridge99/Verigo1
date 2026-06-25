@@ -14,15 +14,17 @@ Every compliance event that staff need to act on flows through here:
 Design: each notify_* function creates one or more Notification rows and
 optionally sends email. The event type drives which users are targeted.
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import date
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.notification import Notification, NotificationType, NotificationPriority
+from app.models.notification import Notification, NotificationPriority, NotificationType
 from app.models.user import User, UserRole
 
 log = logging.getLogger("tvg.notifier")
@@ -32,23 +34,32 @@ _NOTIF_ID_PREFIX = "NOTIF"
 
 def _next_id() -> str:
     import uuid
+
     return f"{_NOTIF_ID_PREFIX}-{uuid.uuid4().hex[:12].upper()}"
 
 
 def _mlro_and_above(db: Session, org_id: str) -> list[User]:
-    return db.query(User).filter(
-        User.org_id == org_id,
-        User.status == "active",
-        User.role.in_([UserRole.admin, UserRole.mlro]),
-    ).all()
+    return (
+        db.query(User)
+        .filter(
+            User.org_id == org_id,
+            User.status == "active",
+            User.role.in_([UserRole.admin, UserRole.mlro]),
+        )
+        .all()
+    )
 
 
 def _compliance_and_above(db: Session, org_id: str) -> list[User]:
-    return db.query(User).filter(
-        User.org_id == org_id,
-        User.status == "active",
-        User.role.in_([UserRole.admin, UserRole.mlro, UserRole.compliance]),
-    ).all()
+    return (
+        db.query(User)
+        .filter(
+            User.org_id == org_id,
+            User.status == "active",
+            User.role.in_([UserRole.admin, UserRole.mlro, UserRole.compliance]),
+        )
+        .all()
+    )
 
 
 def _create(
@@ -62,7 +73,23 @@ def _create(
     entity_id: Optional[str] = None,
     link: Optional[str] = None,
     send_email: bool = True,
+    dedupe_key: Optional[str] = None,
 ) -> Notification:
+    """
+    dedupe_key makes this idempotent for scheduled checks (deadline_check
+    runs daily and, without a distributed lock on a multi-worker deploy,
+    could in theory run more than once for the same day) — pass a key
+    stable per user/entity/day (e.g. f"{notif_type}:{entity_id}:{user_id}:
+    {date.today()}") and a re-run returns the existing notification
+    instead of creating + re-emailing a duplicate.
+    """
+    if dedupe_key:
+        existing = (
+            db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
+        )
+        if existing:
+            return existing
+
     n = Notification(
         notif_id=_next_id(),
         user_id=user_id,
@@ -73,10 +100,20 @@ def _create(
         entity_type=entity_type,
         entity_id=entity_id,
         link=link,
+        dedupe_key=dedupe_key,
         emailed=False,
     )
     db.add(n)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        existing = (
+            db.query(Notification).filter(Notification.dedupe_key == dedupe_key).first()
+        )
+        if existing:
+            return existing
+        raise
 
     if send_email and user_id:
         _send_email_for(db, n)
@@ -94,11 +131,23 @@ def _notify_users(
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
     link: Optional[str] = None,
+    dedupe_key_prefix: Optional[str] = None,
 ) -> int:
     count = 0
     for user in users:
-        _create(db, user.id, notif_type, priority, title, body,
-                entity_type, entity_id, link)
+        dedupe_key = f"{dedupe_key_prefix}:{user.id}" if dedupe_key_prefix else None
+        _create(
+            db,
+            user.id,
+            notif_type,
+            priority,
+            title,
+            body,
+            entity_type,
+            entity_id,
+            link,
+            dedupe_key=dedupe_key,
+        )
         count += 1
     return count
 
@@ -106,6 +155,7 @@ def _notify_users(
 def _send_email_for(db: Session, notif: Notification) -> None:
     try:
         from app.services import email_service as em
+
         user = db.query(User).filter_by(id=notif.user_id).first()
         if not user:
             return
@@ -115,7 +165,9 @@ def _send_email_for(db: Session, notif: Notification) -> None:
             to_name=getattr(user, "full_name", user.email) or user.email,
             subject=notif.title,
             body=notif.body,
-            priority=notif.priority.value if hasattr(notif.priority, "value") else notif.priority,
+            priority=notif.priority.value
+            if hasattr(notif.priority, "value")
+            else notif.priority,
             link=notif.link,
         )
         notif.emailed = True
@@ -127,6 +179,7 @@ def _send_email_for(db: Session, notif: Notification) -> None:
 # REGULATORY REPORTING DEADLINES
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def notify_smr_deadline(
     db: Session,
     org_id: str,
@@ -135,15 +188,29 @@ def notify_smr_deadline(
     days_remaining: int,
 ) -> int:
     users = _mlro_and_above(db, org_id)
-    priority = NotificationPriority.urgent if days_remaining <= 1 else NotificationPriority.high
+    priority = (
+        NotificationPriority.urgent
+        if days_remaining <= 1
+        else NotificationPriority.high
+    )
     title = f"SMR deadline in {days_remaining} day{'s' if days_remaining != 1 else ''} — {smr_ref}"
     body = (
         f"Suspicious Matter Report {smr_ref} must be filed with AUSTRAC within "
         f"{days_remaining} day{'s' if days_remaining != 1 else ''}. "
         f"AML/CTF Act s.41 requires filing within 3 business days of forming the suspicion."
     )
-    count = _notify_users(db, users, NotificationType.smr_deadline, priority,
-                          title, body, "smr", smr_id, f"/reports/smr/{smr_id}")
+    count = _notify_users(
+        db,
+        users,
+        NotificationType.smr_deadline,
+        priority,
+        title,
+        body,
+        "smr",
+        smr_id,
+        f"/reports/smr/{smr_id}",
+        dedupe_key_prefix=f"smr_deadline:{smr_id}:{date.today()}",
+    )
     db.commit()
     return count
 
@@ -156,14 +223,28 @@ def notify_ifti_deadline(
     hours_remaining: int,
 ) -> int:
     users = _mlro_and_above(db, org_id)
-    priority = NotificationPriority.urgent if hours_remaining <= 24 else NotificationPriority.high
+    priority = (
+        NotificationPriority.urgent
+        if hours_remaining <= 24
+        else NotificationPriority.high
+    )
     title = f"IFTI deadline in {hours_remaining}h — {ifti_ref}"
     body = (
         f"International Funds Transfer Instruction {ifti_ref} must be reported to AUSTRAC "
         f"within {hours_remaining} hours. AML/CTF Act s.45 — 3 business day deadline."
     )
-    count = _notify_users(db, users, NotificationType.ifti_deadline, priority,
-                          title, body, "ifti", ifti_id, f"/reports/ifti/{ifti_id}")
+    count = _notify_users(
+        db,
+        users,
+        NotificationType.ifti_deadline,
+        priority,
+        title,
+        body,
+        "ifti",
+        ifti_id,
+        f"/reports/ifti/{ifti_id}",
+        dedupe_key_prefix=f"ifti_deadline:{ifti_id}:{date.today()}",
+    )
     db.commit()
     return count
 
@@ -176,14 +257,28 @@ def notify_ttr_deadline(
     days_remaining: int,
 ) -> int:
     users = _mlro_and_above(db, org_id)
-    priority = NotificationPriority.urgent if days_remaining <= 1 else NotificationPriority.high
+    priority = (
+        NotificationPriority.urgent
+        if days_remaining <= 1
+        else NotificationPriority.high
+    )
     title = f"TTR deadline in {days_remaining} day{'s' if days_remaining != 1 else ''} — {ttr_ref}"
     body = (
         f"Threshold Transaction Report {ttr_ref} must be filed with AUSTRAC. "
         f"AML/CTF Act s.43 requires filing within 3 business days of the transaction."
     )
-    count = _notify_users(db, users, NotificationType.ttr_deadline, priority,
-                          title, body, "ttr", ttr_id, f"/reports/ttr/{ttr_id}")
+    count = _notify_users(
+        db,
+        users,
+        NotificationType.ttr_deadline,
+        priority,
+        title,
+        body,
+        "ttr",
+        ttr_id,
+        f"/reports/ttr/{ttr_id}",
+        dedupe_key_prefix=f"ttr_deadline:{ttr_id}:{date.today()}",
+    )
     db.commit()
     return count
 
@@ -191,6 +286,7 @@ def notify_ttr_deadline(
 # ══════════════════════════════════════════════════════════════════════════════
 # TRAINING
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def notify_training_assigned(
     db: Session,
@@ -205,8 +301,17 @@ def notify_training_assigned(
         f"You have been assigned '{course_name}' due by {due_date.strftime('%d %b %Y')}. "
         f"Reason: {trigger_reason}"
     )
-    _create(db, user_id, NotificationType.training_assigned, NotificationPriority.medium,
-            title, body, "training_record", record_id, f"/training/{record_id}")
+    _create(
+        db,
+        user_id,
+        NotificationType.training_assigned,
+        NotificationPriority.medium,
+        title,
+        body,
+        "training_record",
+        record_id,
+        f"/training/{record_id}",
+    )
     db.commit()
 
 
@@ -218,22 +323,44 @@ def notify_training_overdue(
     days_overdue: int,
     record_id: str,
 ) -> None:
-    priority = NotificationPriority.urgent if days_overdue > 14 else NotificationPriority.high
+    priority = (
+        NotificationPriority.urgent if days_overdue > 14 else NotificationPriority.high
+    )
     title = f"Training overdue ({days_overdue}d): {course_name}"
     body = (
         f"Mandatory training '{course_name}' is {days_overdue} days overdue. "
         f"This is a regulatory obligation under AML/CTF Act s.36."
     )
-    _create(db, user_id, NotificationType.training_overdue, priority,
-            title, body, "training_record", record_id, f"/training/{record_id}")
+    today = date.today()
+    _create(
+        db,
+        user_id,
+        NotificationType.training_overdue,
+        priority,
+        title,
+        body,
+        "training_record",
+        record_id,
+        f"/training/{record_id}",
+        dedupe_key=f"training_overdue:{record_id}:{user_id}:{today}",
+    )
 
     # Also alert the MLRO
     for mlro in _mlro_and_above(db, org_id):
         if mlro.id != user_id:
-            _create(db, mlro.id, NotificationType.training_overdue, priority,
-                    f"Staff training overdue: {course_name}",
-                    f"A staff member has mandatory training '{course_name}' overdue by {days_overdue} days.",
-                    "training_record", record_id, f"/training/{record_id}", send_email=False)
+            _create(
+                db,
+                mlro.id,
+                NotificationType.training_overdue,
+                priority,
+                f"Staff training overdue: {course_name}",
+                f"A staff member has mandatory training '{course_name}' overdue by {days_overdue} days.",
+                "training_record",
+                record_id,
+                f"/training/{record_id}",
+                send_email=False,
+                dedupe_key=f"training_overdue:{record_id}:{mlro.id}:{today}",
+            )
     db.commit()
 
 
@@ -248,11 +375,18 @@ def notify_assessment_flag(
 ) -> None:
     for mlro in _mlro_and_above(db, org_id):
         _create(
-            db, mlro.id, NotificationType.assessment_flag, NotificationPriority.high,
+            db,
+            mlro.id,
+            NotificationType.assessment_flag,
+            NotificationPriority.high,
             f"Training assessment failure — {course_name}",
-            (f"A staff member scored {score:.0f}% (attempt {attempt_number}) on '{course_name}'. "
-             f"{'Oversight flag raised — review required.' if attempt_number >= 2 else 'Please monitor.'} "),
-            "assessment_flag", flag_id, f"/training-triggers/assessment-flags/{flag_id}",
+            (
+                f"A staff member scored {score:.0f}% (attempt {attempt_number}) on '{course_name}'. "
+                f"{'Oversight flag raised — review required.' if attempt_number >= 2 else 'Please monitor.'} "
+            ),
+            "assessment_flag",
+            flag_id,
+            f"/training-triggers/assessment-flags/{flag_id}",
         )
     db.commit()
 
@@ -272,15 +406,24 @@ def notify_regulatory_update(
         f"Regulatory update {event_ref} has been published by {issuing_body.upper()}. "
         f"{assignments_created} training assignment(s) have been automatically created for your team."
     )
-    _notify_users(db, users, NotificationType.regulatory_update, NotificationPriority.high,
-                  notif_title, body, "regulatory_update", update_id,
-                  f"/training-triggers/regulatory-updates/{update_id}")
+    _notify_users(
+        db,
+        users,
+        NotificationType.regulatory_update,
+        NotificationPriority.high,
+        notif_title,
+        body,
+        "regulatory_update",
+        update_id,
+        f"/training-triggers/regulatory-updates/{update_id}",
+    )
     db.commit()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER PORTAL
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def notify_portal_submitted(
     db: Session,
@@ -299,11 +442,16 @@ def notify_portal_submitted(
 
     for uid in targets:
         _create(
-            db, uid, NotificationType.portal_submitted, NotificationPriority.medium,
+            db,
+            uid,
+            NotificationType.portal_submitted,
+            NotificationPriority.medium,
             f"Portal submission received — {customer_name}",
             f"{customer_name} has completed their onboarding portal. "
             f"Documents are ready for review.",
-            "portal_session", session_id, f"/customer-portal/sessions/{session_id}",
+            "portal_session",
+            session_id,
+            f"/customer-portal/sessions/{session_id}",
             send_email=(uid == invited_by_user_id),
         )
     db.commit()
@@ -313,6 +461,7 @@ def notify_portal_submitted(
 # GOVERNANCE
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def notify_independent_review_due(
     db: Session,
     org_id: str,
@@ -321,13 +470,23 @@ def notify_independent_review_due(
     days_remaining: int,
 ) -> None:
     users = _mlro_and_above(db, org_id)
-    priority = NotificationPriority.urgent if days_remaining <= 7 else NotificationPriority.high
+    priority = (
+        NotificationPriority.urgent
+        if days_remaining <= 7
+        else NotificationPriority.high
+    )
     _notify_users(
-        db, users, NotificationType.independent_review_due, priority,
+        db,
+        users,
+        NotificationType.independent_review_due,
+        priority,
         f"Independent Review due in {days_remaining} days — {review_ref}",
         f"Independent review {review_ref} target completion is in {days_remaining} days. "
         f"AML/CTF Act s.162 requires periodic independent reviews of your AML/CTF program.",
-        "independent_review", review_id, f"/independent-reviews/{review_id}",
+        "independent_review",
+        review_id,
+        f"/independent-reviews/{review_id}",
+        dedupe_key_prefix=f"independent_review_due:{review_id}:{date.today()}",
     )
     db.commit()
 
@@ -340,10 +499,15 @@ def notify_board_report_ready(
 ) -> None:
     users = _mlro_and_above(db, org_id)
     _notify_users(
-        db, users, NotificationType.board_report_ready, NotificationPriority.medium,
+        db,
+        users,
+        NotificationType.board_report_ready,
+        NotificationPriority.medium,
         f"Board report ready for approval — {report_title}",
         f"'{report_title}' has been submitted for MLRO review and approval before distribution.",
-        "board_report", report_id, f"/board-reports/{report_id}",
+        "board_report",
+        report_id,
+        f"/board-reports/{report_id}",
     )
     db.commit()
 
@@ -357,11 +521,17 @@ def notify_control_test_overdue(
 ) -> None:
     users = _compliance_and_above(db, org_id)
     _notify_users(
-        db, users, NotificationType.control_test_overdue, NotificationPriority.high,
+        db,
+        users,
+        NotificationType.control_test_overdue,
+        NotificationPriority.high,
         f"Control test overdue ({days_overdue}d) — {control_ref}",
         f"Governance control {control_ref} has a test that is {days_overdue} days overdue. "
         f"Overdue control tests are a finding risk in an AUSTRAC examination.",
-        "governance_control", control_id, f"/governance/controls/{control_id}",
+        "governance_control",
+        control_id,
+        f"/governance/controls/{control_id}",
+        dedupe_key_prefix=f"control_test_overdue:{control_id}:{date.today()}",
     )
     db.commit()
 
@@ -374,13 +544,23 @@ def notify_policy_review_due(
     days_remaining: int,
 ) -> None:
     users = _compliance_and_above(db, org_id)
-    priority = NotificationPriority.high if days_remaining <= 14 else NotificationPriority.medium
+    priority = (
+        NotificationPriority.high
+        if days_remaining <= 14
+        else NotificationPriority.medium
+    )
     _notify_users(
-        db, users, NotificationType.policy_review_due, priority,
+        db,
+        users,
+        NotificationType.policy_review_due,
+        priority,
         f"Policy review due in {days_remaining} days — {policy_title}",
         f"AML/CTF policy '{policy_title}' is due for review in {days_remaining} days. "
         f"Overdue policy reviews are flagged in AUSTRAC examinations.",
-        "policy", policy_id, f"/governance/policies/{policy_id}",
+        "policy",
+        policy_id,
+        f"/governance/policies/{policy_id}",
+        dedupe_key_prefix=f"policy_review_due:{policy_id}:{date.today()}",
     )
     db.commit()
 
@@ -388,6 +568,7 @@ def notify_policy_review_due(
 # ══════════════════════════════════════════════════════════════════════════════
 # EXAMINATION PACK
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def notify_exam_pack_ready(
     db: Session,
@@ -402,10 +583,15 @@ def notify_exam_pack_ready(
 
     for uid in targets:
         _create(
-            db, uid, NotificationType.exam_pack_ready, NotificationPriority.high,
+            db,
+            uid,
+            NotificationType.exam_pack_ready,
+            NotificationPriority.high,
             f"AUSTRAC Examination Pack ready — {pack_ref}",
             f"Examination pack {pack_ref} has been generated and is ready for review. "
             f"All sections are frozen and available for export as HTML or CSV.",
-            "examination_pack", pack_id, f"/examination-packs/{pack_id}",
+            "examination_pack",
+            pack_id,
+            f"/examination-packs/{pack_id}",
         )
     db.commit()

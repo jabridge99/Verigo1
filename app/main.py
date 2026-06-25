@@ -5,39 +5,55 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+import app.models.aml_program  # noqa: F401
+import app.models.aml_solution  # noqa: F401
 import app.models.api_key  # noqa: F401
 import app.models.audit  # noqa: F401
+import app.models.audit_log  # noqa: F401
+import app.models.automation_rule  # noqa: F401
+import app.models.benchmark  # noqa: F401
 import app.models.billing  # noqa: F401
+import app.models.board_report  # noqa: F401
+import app.models.case  # noqa: F401
+import app.models.compliance_calendar  # noqa: F401
 import app.models.connector  # noqa: F401
 
 # Register all models so SQLAlchemy creates their tables at startup
 import app.models.customer  # noqa: F401
+import app.models.customer_portal  # noqa: F401
+import app.models.customer_workflow  # noqa: F401
 import app.models.document  # noqa: F401
+import app.models.examination_pack  # noqa: F401
+import app.models.governance  # noqa: F401
+import app.models.governance_controls  # noqa: F401
+import app.models.governance_customisation  # noqa: F401
+import app.models.governance_training  # noqa: F401
 import app.models.ifti  # noqa: F401
 import app.models.ifti_e  # noqa: F401
+import app.models.ifti_receipt  # noqa: F401
+import app.models.independent_review  # noqa: F401
+import app.models.integration  # noqa: F401
 import app.models.kyc  # noqa: F401
+import app.models.monitoring  # noqa: F401
 import app.models.notification  # noqa: F401
 import app.models.onboarding  # noqa: F401
-import app.models.report  # noqa: F401
-import app.models.retention  # noqa: F401
-import app.models.security_event  # noqa: F401
-import app.models.tenant  # noqa: F401
-import app.models.transaction  # noqa: F401
-import app.models.monitoring  # noqa: F401
-import app.models.case  # noqa: F401
-import app.models.user  # noqa: F401
-import app.models.audit_log  # noqa: F401
-import app.models.ifti_receipt  # noqa: F401
-import app.models.usage  # noqa: F401
-import app.models.compliance_calendar  # noqa: F401
-import app.models.regulatory_recommendation  # noqa: F401
-import app.models.risk_matrix  # noqa: F401
+import app.models.organisation  # noqa: F401
 import app.models.professional_assessment  # noqa: F401
+import app.models.regulatory_recommendation  # noqa: F401
+import app.models.report  # noqa: F401
+import app.models.reporting_group  # noqa: F401
+import app.models.retention  # noqa: F401
+import app.models.risk_engine  # noqa: F401
+import app.models.risk_matrix  # noqa: F401
 import app.models.risk_matrix_config  # noqa: F401
-import app.models.integration  # noqa: F401
-import app.models.automation_rule  # noqa: F401
 import app.models.screening  # noqa: F401
-import app.models.aml_solution  # noqa: F401
+import app.models.security_event  # noqa: F401
+import app.models.task  # noqa: F401
+import app.models.tenant  # noqa: F401
+import app.models.training_trigger  # noqa: F401
+import app.models.transaction  # noqa: F401
+import app.models.usage  # noqa: F401
+import app.models.user  # noqa: F401
 from app.api.routes import (
     analytics,
     api_keys,
@@ -52,82 +68,77 @@ from app.api.routes import (
     kyc,
     notifications,
     onboarding,
+    organisations,
     reports,
     retention,
     sanctions,
     security_monitor,
+    storage,
     tenants,
     transactions,
+    verify,
 )
-from app.api.routes.monitoring import router as monitoring_router
 from app.api.routes.alerts import router as alerts_router
-from app.api.routes.cases import router as cases_router
-from app.api.routes.customer_workflow import router as customer_workflow_router
-from app.api.routes.risk_assessment import router as risk_assessment_router
-from app.api.routes.governance.policies import router as governance_policies_router
-from app.api.routes.governance.controls import router as governance_controls_router
-from app.api.routes.ifti_receipts import router as ifti_receipts_router
-from app.api.routes.ifti_e import router as ifti_e_router
-from app.api.routes.compliance_calendar import router as compliance_calendar_router
-from app.api.routes.recommendations import router as recommendations_router
-from app.api.routes.org_config import router as org_config_router
-from app.api.routes.professional_assessment import router as professional_assessment_router
-from app.api.routes.dashboard import router as dashboard_router
-from app.api.routes.risk_matrix_config import router as risk_matrix_config_router
-from app.api.routes.integrations import router as integrations_router
-from app.api.routes.rule_builder import router as rule_builder_router
-from app.api.routes.screening import router as screening_router
 from app.api.routes.aml_program import router as aml_program_router
+from app.api.routes.benchmark import router as benchmark_router
+from app.api.routes.board_reporting import router as board_reporting_router
+from app.api.routes.cases import router as cases_router
+from app.api.routes.compliance_calendar import router as compliance_calendar_router
+from app.api.routes.customer_portal_public import (
+    router as customer_portal_public_router,
+)
+from app.api.routes.customer_portal_staff import router as customer_portal_staff_router
+from app.api.routes.customer_workflow import router as customer_workflow_router
+from app.api.routes.dashboard import router as dashboard_router
+from app.api.routes.examination_packs import router as examination_packs_router
+from app.api.routes.governance.controls import router as governance_controls_router
+from app.api.routes.governance.policies import router as governance_policies_router
 from app.api.routes.governance.training import router as governance_training_router
 from app.api.routes.health import router as health_router
-from app.api.routes.tasks import router as tasks_router
+from app.api.routes.ifti_e import router as ifti_e_router
+from app.api.routes.ifti_receipts import router as ifti_receipts_router
 from app.api.routes.independent_review import router as independent_review_router
-from app.api.routes.board_reporting import router as board_reporting_router
+from app.api.routes.integrations import router as integrations_router
+from app.api.routes.marketplace import router as marketplace_router
+from app.api.routes.monitoring import router as monitoring_router
+from app.api.routes.org_config import router as org_config_router
+from app.api.routes.professional_assessment import (
+    router as professional_assessment_router,
+)
+from app.api.routes.recommendations import router as recommendations_router
 from app.api.routes.reporting_groups import router as reporting_groups_router
-from app.api.routes.customer_portal_staff import router as customer_portal_staff_router
-from app.api.routes.customer_portal_public import router as customer_portal_public_router
+from app.api.routes.risk_assessment import router as risk_assessment_router
+from app.api.routes.risk_matrix_config import router as risk_matrix_config_router
+from app.api.routes.rule_builder import router as rule_builder_router
+from app.api.routes.screening import router as screening_router
+from app.api.routes.tasks import router as tasks_router
 from app.api.routes.training_triggers import router as training_triggers_router
-from app.api.routes.examination_packs import router as examination_packs_router
-from app.api.routes.benchmark import router as benchmark_router
-import app.models.reporting_group  # noqa: F401
-import app.models.customer_portal  # noqa: F401
-import app.models.training_trigger  # noqa: F401
-import app.models.examination_pack  # noqa: F401
-import app.models.benchmark  # noqa: F401
-import app.models.task  # noqa: F401
-import app.models.governance  # noqa: F401
-import app.models.governance_controls  # noqa: F401
-import app.models.governance_training  # noqa: F401
-import app.models.governance_customisation  # noqa: F401
-import app.models.customer_workflow  # noqa: F401
-import app.models.risk_engine  # noqa: F401
-import app.models.independent_review  # noqa: F401
-import app.models.board_report  # noqa: F401
 from app.config import settings
 from app.db.database import Base, SessionLocal, engine
 from app.logging_config import setup_logging
-from app.scheduler import start_scheduler, stop_scheduler
 from app.middleware import (
     RateLimitMiddleware,
     RequestLoggingMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.scheduler import start_scheduler, stop_scheduler
 
+print("main.py: imports complete", flush=True)
+
+# setup_logging() also initialises Sentry (with FastApiIntegration,
+# SqlalchemyIntegration, release tagging, and send_default_pii=False) when
+# SENTRY_DSN is set — do not call sentry_sdk.init() again here, a second
+# call replaces that client and silently drops all of that configuration.
 setup_logging()
 
-if settings.sentry_dsn:
-    import sentry_sdk
-
-    sentry_sdk.init(
-        dsn=settings.sentry_dsn,
-        environment=settings.environment,
-        traces_sample_rate=0.1 if settings.is_production else 0.0,
-    )
+print("main.py: logging configured (Sentry init, if any, handled there)", flush=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import logging
+
+    print("lifespan: entered", flush=True)
 
     log = logging.getLogger("tvg.startup")
     log.info(
@@ -137,8 +148,24 @@ async def lifespan(app: FastAPI):
         settings.environment,
     )
 
-    Base.metadata.create_all(bind=engine)
-    log.info("Database tables verified")
+    if settings.is_production:
+        # Production schema is owned by Alembic (`alembic upgrade head` runs as a
+        # Railway pre-deploy step, once, before any worker starts). Running
+        # create_all() here too is redundant and slow: with --workers N, each
+        # worker's checkfirst=True scan does a catalog round-trip per table for
+        # ~130 tables, and a previous advisory-lock fix to stop them racing on
+        # DDL meant later workers waited out earlier workers' full scan before
+        # running their own — over 90s of workers not yet serving requests,
+        # during which Railway's proxy returned 502s for routed traffic.
+        print(
+            "lifespan: production — skipping create_all (Alembic owns schema)",
+            flush=True,
+        )
+    else:
+        print("lifespan: about to create_all", flush=True)
+        Base.metadata.create_all(bind=engine)
+        print("lifespan: create_all done", flush=True)
+        log.info("Database tables verified")
 
     try:
         from app.services.pack_engine import seed_all_packs
@@ -153,8 +180,26 @@ async def lifespan(app: FastAPI):
     except ImportError:
         log.debug("pack_engine not available — skipping pack seeding")
 
+    print("lifespan: about to seed permissions/roles", flush=True)
+    from app.services.auth_service import seed_master_admin
+    from app.services.org_service import seed_permission_catalog_and_roles
+
+    db = SessionLocal()
+    try:
+        seed_permission_catalog_and_roles(db)
+        log.info("Permission catalog and system roles seeded")
+        print("lifespan: permission catalog seeded", flush=True)
+        admin = seed_master_admin(db)
+        if admin:
+            log.info("Master admin ensured: %s", admin.email)
+        print("lifespan: master admin seeded", flush=True)
+    finally:
+        db.close()
+
+    print("lifespan: about to start scheduler", flush=True)
     start_scheduler()
     log.info("Background scheduler started")
+    print("lifespan: scheduler started, about to yield", flush=True)
 
     yield
 
@@ -212,6 +257,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     logging.getLogger("tvg").error(
         "Unhandled exception: %s\n%s", exc, traceback.format_exc()
     )
+
+    if settings.sentry_dsn:
+        try:
+            import sentry_sdk
+
+            sentry_sdk.capture_exception(exc)
+        except ImportError:
+            pass
+
     return JSONResponse(
         status_code=500,
         content={"detail": "An internal error occurred. Our team has been notified."},
@@ -269,6 +323,10 @@ app.include_router(customer_portal_public_router, prefix="/api/v1")
 app.include_router(training_triggers_router, prefix="/api/v1")
 app.include_router(examination_packs_router, prefix="/api/v1")
 app.include_router(benchmark_router, prefix="/api/v1")
+app.include_router(marketplace_router, prefix="/api/v1")
+app.include_router(verify.router, prefix="/api/v1")
+app.include_router(storage.router, prefix="/api/v1")
+app.include_router(organisations.router, prefix="/api/v1")
 
 
 # ── System endpoints ──────────────────────────────────────────────────────────

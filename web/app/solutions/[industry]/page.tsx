@@ -16,17 +16,16 @@ import { capabilities as libCapabilities } from '@/lib/capabilities'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'digital-currency-exchange': Coins,
-  'remittance-provider': Globe,
-  'foreign-exchange': ArrowLeftRight,
-  'payment-service-provider': CreditCard,
-  'real-estate': Home,
-  'conveyancer': FileCheck,
-  'law-firm': Scale,
-  'accounting-firm': Calculator,
-  'precious-metals': Gem,
-  'reporting-group': Network,
-  'mortgage-broker': Landmark,
+  'vasp': Coins,
+  'remittance': Globe,
+  'bullion_dealers': Gem,
+  'real_estate': Home,
+  'conveyancers': FileCheck,
+  'legal_professionals': Scale,
+  'accountants': Calculator,
+  'precious_metals': Gem,
+  'pubs_clubs': Building2,
+  'reporting_group': Network,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -858,8 +857,8 @@ function CapabilityPage({ cap }: { cap: Capability }) {
             <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
               Start Free Trial <ArrowRight className="w-5 h-5" />
             </Link>
-            <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-              Book Demo
+            <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+              Start Free Trial
             </Link>
           </div>
         </section>
@@ -974,7 +973,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
               <p className="text-slate-600 text-sm leading-relaxed mb-4">
                 Pre-configured for {ind.label} — KYC rules, risk thresholds, AUSTRAC report templates, CDD workflows, and monitoring rules aligned to your obligations. Ready from day one.
               </p>
-              <Link href={`/packs/${ind.id}`} className="pub-btn-secondary inline-flex">View pack details</Link>
+              <Link href={`/packs/${ind.slug}`} className="pub-btn-secondary inline-flex">View pack details</Link>
             </div>
           </div>
 
@@ -1051,8 +1050,8 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
             <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
               Start Free Trial <ArrowRight className="w-5 h-5" />
             </Link>
-            <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-              Book a Demo
+            <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+              Start Free Trial
             </Link>
           </div>
         </section>

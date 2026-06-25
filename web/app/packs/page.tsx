@@ -1,6 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
-import { ArrowRight, Package, Shield, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark } from 'lucide-react'
+import { ArrowRight, Package, Shield, Coins, Globe, Home, FileCheck, Scale, Calculator, Gem, Network, Building2 } from 'lucide-react'
 import { industries } from '@/lib/industries'
 
 export const metadata = {
@@ -9,17 +9,16 @@ export const metadata = {
 }
 
 const industryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'digital-currency-exchange': Coins,
-  'remittance-provider': Globe,
-  'foreign-exchange': ArrowLeftRight,
-  'payment-service-provider': CreditCard,
-  'real-estate': Home,
-  'conveyancer': FileCheck,
-  'law-firm': Scale,
-  'accounting-firm': Calculator,
-  'precious-metals': Gem,
-  'reporting-group': Network,
-  'mortgage-broker': Landmark,
+  'vasp': Coins,
+  'remittance': Globe,
+  'bullion_dealers': Gem,
+  'real_estate': Home,
+  'conveyancers': FileCheck,
+  'legal_professionals': Scale,
+  'accountants': Calculator,
+  'precious_metals': Gem,
+  'pubs_clubs': Building2,
+  'reporting_group': Network,
 }
 
 export default function PacksIndexPage() {
@@ -62,7 +61,7 @@ export default function PacksIndexPage() {
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {current.map(ind => (
-                <Link key={ind.id} href={`/packs/${ind.id}`} className="pub-card-hover group">
+                <Link key={ind.id} href={`/packs/${ind.slug}`} className="pub-card-hover group">
                   <div className="flex items-center gap-4 mb-5">
                     <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}>{(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <Icon className="w-7 h-7 text-white" /> })()}</div>
                     <div>
@@ -99,7 +98,7 @@ export default function PacksIndexPage() {
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {expanded.map(ind => (
-                <Link key={ind.id} href={`/packs/${ind.id}`} className="pub-card-hover group">
+                <Link key={ind.id} href={`/packs/${ind.slug}`} className="pub-card-hover group">
                   <div className="flex items-center gap-4 mb-5">
                     <div className={`w-14 h-14 bg-gradient-to-br ${ind.color} rounded-2xl flex items-center justify-center flex-shrink-0`}>{(() => { const Icon = industryIconMap[ind.id] ?? Shield; return <Icon className="w-7 h-7 text-white" /> })()}</div>
                     <div>
@@ -131,8 +130,8 @@ export default function PacksIndexPage() {
               <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors">
                 Start Free Trial <ArrowRight className="w-5 h-5" />
               </Link>
-              <Link href="/live-demo" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
-                Book Demo
+              <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-4 text-base font-semibold text-white ring-1 ring-slate-700 hover:bg-slate-700 transition-colors">
+                Start Free Trial
               </Link>
             </div>
           </div>

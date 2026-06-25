@@ -12,17 +12,21 @@ Endpoints:
 DISCLAIMER: Configuration supports the compliance workflow only.
 All regulatory decisions remain with the reporting entity.
 """
-from datetime import datetime, timezone
+
 from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import org_id_for, require_compliance_or_above
 from app.db.database import get_db
-from app.models.risk_matrix import OrgApprovalQuestion, OrgMonitoringConfig
+from app.models.risk_matrix import (
+    OrgApprovalQuestion,
+    OrgMonitoringConfig,
+    QuestionContext,
+)
 from app.models.user import User
 
 router = APIRouter(prefix="/org", tags=["Org Config"])
@@ -38,45 +42,50 @@ MIN_APPROVAL_QUESTIONS = 3
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class MonitoringConfigUpdate(BaseModel):
     # Alert score weights — must sum to 1.0 if all provided
-    behaviour_weight:       Optional[float] = Field(None, ge=0.0, le=1.0)
-    rule_weight:            Optional[float] = Field(None, ge=0.0, le=1.0)
-    customer_risk_weight:   Optional[float] = Field(None, ge=0.0, le=1.0)
-    risk_matrix_weight:     Optional[float] = Field(None, ge=0.0, le=1.0)
+    behaviour_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
+    rule_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
+    customer_risk_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
+    risk_matrix_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
 
     # Custom question weight (0% – 40% of final approval score)
     custom_question_weight: Optional[float] = Field(None, ge=0.0, le=0.40)
 
     # Risk matrix dimension weights — must sum to 1.0 if all provided
-    matrix_customer_weight:     Optional[float] = Field(None, ge=0.0, le=1.0)
-    matrix_geographic_weight:   Optional[float] = Field(None, ge=0.0, le=1.0)
-    matrix_product_weight:      Optional[float] = Field(None, ge=0.0, le=1.0)
-    matrix_transaction_weight:  Optional[float] = Field(None, ge=0.0, le=1.0)
+    matrix_customer_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
+    matrix_geographic_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
+    matrix_product_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
+    matrix_transaction_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
 
 
 class ApprovalQuestionCreate(BaseModel):
-    question_text:      str = Field(..., min_length=10, max_length=500)
-    question_order:     int = Field(default=1, ge=1, le=5)
-    is_required:        bool = True
-    industry_context:   Optional[str] = Field(None, max_length=200)
-    help_text:          Optional[str] = Field(None, max_length=500)
+    question_text: str = Field(..., min_length=10, max_length=500)
+    question_order: int = Field(default=1, ge=1, le=5)
+    is_required: bool = True
+    industry_context: Optional[str] = Field(None, max_length=200)
+    help_text: Optional[str] = Field(None, max_length=500)
+    context: QuestionContext = QuestionContext.transaction
 
 
 class ApprovalQuestionUpdate(BaseModel):
-    question_text:  Optional[str] = Field(None, min_length=10, max_length=500)
+    question_text: Optional[str] = Field(None, min_length=10, max_length=500)
     question_order: Optional[int] = Field(None, ge=1, le=5)
-    is_required:    Optional[bool] = None
+    is_required: Optional[bool] = None
     industry_context: Optional[str] = Field(None, max_length=200)
-    help_text:      Optional[str] = Field(None, max_length=500)
+    help_text: Optional[str] = Field(None, max_length=500)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _get_or_create_config(org_id: str, db: Session) -> OrgMonitoringConfig:
-    config = db.query(OrgMonitoringConfig).filter(
-        OrgMonitoringConfig.org_id == org_id
-    ).first()
+    config = (
+        db.query(OrgMonitoringConfig)
+        .filter(OrgMonitoringConfig.org_id == org_id)
+        .first()
+    )
     if not config:
         config = OrgMonitoringConfig(
             id=f"omc_{uuid4().hex[:10]}",
@@ -92,24 +101,30 @@ def _config_dict(c: OrgMonitoringConfig) -> dict:
     return {
         "org_id": c.org_id,
         "alert_score_weights": {
-            "behaviour":     c.behaviour_weight,
-            "rule":          c.rule_weight,
+            "behaviour": c.behaviour_weight,
+            "rule": c.rule_weight,
             "customer_risk": c.customer_risk_weight,
-            "risk_matrix":   c.risk_matrix_weight,
-            "total":         round(
-                (c.behaviour_weight or 0) + (c.rule_weight or 0) +
-                (c.customer_risk_weight or 0) + (c.risk_matrix_weight or 0), 4
+            "risk_matrix": c.risk_matrix_weight,
+            "total": round(
+                (c.behaviour_weight or 0)
+                + (c.rule_weight or 0)
+                + (c.customer_risk_weight or 0)
+                + (c.risk_matrix_weight or 0),
+                4,
             ),
         },
         "custom_question_weight": c.custom_question_weight,
         "risk_matrix_dimension_weights": {
-            "customer":    c.matrix_customer_weight,
-            "geographic":  c.matrix_geographic_weight,
-            "product":     c.matrix_product_weight,
+            "customer": c.matrix_customer_weight,
+            "geographic": c.matrix_geographic_weight,
+            "product": c.matrix_product_weight,
             "transaction": c.matrix_transaction_weight,
-            "total":       round(
-                (c.matrix_customer_weight or 0) + (c.matrix_geographic_weight or 0) +
-                (c.matrix_product_weight or 0) + (c.matrix_transaction_weight or 0), 4
+            "total": round(
+                (c.matrix_customer_weight or 0)
+                + (c.matrix_geographic_weight or 0)
+                + (c.matrix_product_weight or 0)
+                + (c.matrix_transaction_weight or 0),
+                4,
             ),
         },
         "updated_at": c.updated_at,
@@ -126,6 +141,7 @@ def _question_dict(q: OrgApprovalQuestion) -> dict:
         "is_active": q.is_active,
         "industry_context": q.industry_context,
         "help_text": q.help_text,
+        "context": q.context.value if q.context else "transaction",
         "compliant_answer": q.compliant_answer.value if q.compliant_answer else "yes",
         "created_by": q.created_by,
         "created_at": q.created_at,
@@ -134,6 +150,7 @@ def _question_dict(q: OrgApprovalQuestion) -> dict:
 
 
 # ── Monitoring Config Endpoints ───────────────────────────────────────────────
+
 
 @router.get("/monitoring-config")
 def get_monitoring_config(
@@ -170,26 +187,35 @@ def update_monitoring_config(
     updates = payload.model_dump(exclude_none=True)
 
     # Validate alert score weights sum if all four present
-    alert_keys = {"behaviour_weight", "rule_weight", "customer_risk_weight", "risk_matrix_weight"}
+    alert_keys = {
+        "behaviour_weight",
+        "rule_weight",
+        "customer_risk_weight",
+        "risk_matrix_weight",
+    }
     provided_alert = {k: updates[k] for k in alert_keys if k in updates}
     if len(provided_alert) == 4:
         total = sum(provided_alert.values())
         if abs(total - 1.0) > 0.01:
             raise HTTPException(
                 status_code=422,
-                detail=f"Alert score weights must sum to 1.0 (got {total:.4f})."
+                detail=f"Alert score weights must sum to 1.0 (got {total:.4f}).",
             )
 
     # Validate matrix dimension weights sum if all four present
-    matrix_keys = {"matrix_customer_weight", "matrix_geographic_weight",
-                   "matrix_product_weight", "matrix_transaction_weight"}
+    matrix_keys = {
+        "matrix_customer_weight",
+        "matrix_geographic_weight",
+        "matrix_product_weight",
+        "matrix_transaction_weight",
+    }
     provided_matrix = {k: updates[k] for k in matrix_keys if k in updates}
     if len(provided_matrix) == 4:
         total = sum(provided_matrix.values())
         if abs(total - 1.0) > 0.01:
             raise HTTPException(
                 status_code=422,
-                detail=f"Risk matrix dimension weights must sum to 1.0 (got {total:.4f})."
+                detail=f"Risk matrix dimension weights must sum to 1.0 (got {total:.4f}).",
             )
 
     for k, v in updates.items():
@@ -203,8 +229,10 @@ def update_monitoring_config(
 
 # ── Approval Question Endpoints ───────────────────────────────────────────────
 
+
 @router.get("/approval-questions")
 def list_approval_questions(
+    context: Optional[QuestionContext] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
@@ -212,16 +240,21 @@ def list_approval_questions(
     List the org's pre-approval checklist questions, ordered by question_order.
 
     These questions are presented to the compliance officer when reviewing an
-    alert or approving a transaction. Answers contribute custom_question_weight
-    percent of the final approval score.
+    alert, approving a transaction, or approving a customer/onboarding record
+    (depending on `context`). Answers contribute custom_question_weight
+    percent of the final approval score. Pass `context=transaction` or
+    `context=customer` to filter to one workflow; omit to list both.
     """
     org_id = org_id_for(current_user)
+    filters = [
+        OrgApprovalQuestion.org_id == org_id,
+        OrgApprovalQuestion.is_active == True,
+    ]
+    if context is not None:
+        filters.append(OrgApprovalQuestion.context == context)
     questions = (
         db.query(OrgApprovalQuestion)
-        .filter(
-            OrgApprovalQuestion.org_id == org_id,
-            OrgApprovalQuestion.is_active == True,
-        )
+        .filter(*filters)
         .order_by(OrgApprovalQuestion.question_order)
         .all()
     )
@@ -233,7 +266,7 @@ def list_approval_questions(
         "guidance": (
             f"You may configure {MIN_APPROVAL_QUESTIONS}–{MAX_APPROVAL_QUESTIONS} "
             "questions. These are answered by the compliance officer before approving "
-            f"any transaction. Questions contribute {config.custom_question_weight*100:.0f}% "
+            f"any transaction. Questions contribute {config.custom_question_weight * 100:.0f}% "
             "of the final approval score (adjustable via PATCH /org/monitoring-config)."
         ),
         "disclaimer": DISCLAIMER,
@@ -265,14 +298,15 @@ def create_approval_question(
         .filter(
             OrgApprovalQuestion.org_id == org_id,
             OrgApprovalQuestion.is_active == True,
+            OrgApprovalQuestion.context == payload.context,
         )
         .count()
     )
     if active_count >= MAX_APPROVAL_QUESTIONS:
         raise HTTPException(
             status_code=409,
-            detail=f"Maximum of {MAX_APPROVAL_QUESTIONS} active questions allowed. "
-                   "Deactivate an existing question before adding a new one.",
+            detail=f"Maximum of {MAX_APPROVAL_QUESTIONS} active {payload.context.value} "
+            "questions allowed. Deactivate an existing question before adding a new one.",
         )
 
     q = OrgApprovalQuestion(
@@ -296,14 +330,20 @@ def update_approval_question(
 ):
     """Update an existing approval question's text, order, or metadata."""
     org_id = org_id_for(current_user)
-    q = db.query(OrgApprovalQuestion).filter(
-        OrgApprovalQuestion.id == question_id,
-        OrgApprovalQuestion.org_id == org_id,
-    ).first()
+    q = (
+        db.query(OrgApprovalQuestion)
+        .filter(
+            OrgApprovalQuestion.id == question_id,
+            OrgApprovalQuestion.org_id == org_id,
+        )
+        .first()
+    )
     if not q:
         raise HTTPException(404, "Question not found.")
     if not q.is_active:
-        raise HTTPException(409, "Cannot update a deactivated question. Reactivate it first.")
+        raise HTTPException(
+            409, "Cannot update a deactivated question. Reactivate it first."
+        )
 
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(q, k, v)
@@ -323,10 +363,14 @@ def deactivate_approval_question(
     The question will no longer be presented for new transactions.
     """
     org_id = org_id_for(current_user)
-    q = db.query(OrgApprovalQuestion).filter(
-        OrgApprovalQuestion.id == question_id,
-        OrgApprovalQuestion.org_id == org_id,
-    ).first()
+    q = (
+        db.query(OrgApprovalQuestion)
+        .filter(
+            OrgApprovalQuestion.id == question_id,
+            OrgApprovalQuestion.org_id == org_id,
+        )
+        .first()
+    )
     if not q:
         raise HTTPException(404, "Question not found.")
 
@@ -343,7 +387,7 @@ def deactivate_approval_question(
         raise HTTPException(
             status_code=409,
             detail=f"Cannot deactivate: minimum of {MIN_APPROVAL_QUESTIONS} questions required. "
-                   "Add a replacement question first.",
+            "Add a replacement question first.",
         )
 
     q.is_active = False
