@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { CheckCircle, X, ArrowRight, Shield, Zap, Database, Minus, Info } from 'lucide-react'
-import { fetchPlanPrices, formatAud, annualSavingsPct } from '@/lib/pricing'
+import { fetchPlanPrices, formatAud } from '@/lib/pricing'
 
 export const metadata = {
   title: 'Pricing | Verigo',
-  description: 'Simple, transparent monthly or annual pricing for Australian regulated businesses. Start with a 7-day free trial.',
+  description: 'Simple, transparent annual pricing for Australian regulated businesses. Start with a 7-day free trial.',
 }
 
 async function getPlans() {
@@ -12,9 +12,6 @@ async function getPlans() {
   const starter = prices.starter
   const professional = prices.professional
   const enterprise = prices.enterprise
-  const starterSavings = annualSavingsPct(starter.monthly_aud, starter.annual_aud)
-  const proSavings = annualSavingsPct(professional.monthly_aud, professional.annual_aud)
-  const entSavings = annualSavingsPct(enterprise.monthly_aud, enterprise.annual_aud)
 
   return [
   {
@@ -43,18 +40,17 @@ async function getPlans() {
   },
   {
     name: 'Starter',
-    price: formatAud(starter.monthly_aud),
-    period: starter.monthly_aud != null ? '/mo' : '',
-    billing: starter.annual_aud != null
-      ? `or ${formatAud(starter.annual_aud)}/yr billed annually${starterSavings ? ` (${starterSavings}% off)` : ''}`
-      : '',
+    price: formatAud(starter.annual_aud),
+    period: starter.annual_aud != null ? '/yr' : '',
+    billing: starter.annual_aud != null ? 'billed annually' : '',
     badge: null,
     description: 'For small reporting entities building their first AML/CTF programme.',
     highlight: false,
     features: [
       { label: 'Up to 500 customers', included: true },
-      { label: 'Up to 5 users per tenant', included: true },
-      { label: '10,000 API calls / month', included: true },
+      { label: '1 user per tenant', included: true },
+      { label: 'Document vault (5 GB)', included: true },
+      { label: '1,000 API calls / month', included: true },
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
@@ -78,18 +74,16 @@ async function getPlans() {
   },
   {
     name: 'Professional',
-    price: formatAud(professional.monthly_aud),
-    period: professional.monthly_aud != null ? '/mo' : '',
-    billing: professional.annual_aud != null
-      ? `or ${formatAud(professional.annual_aud)}/yr billed annually${proSavings ? ` (${proSavings}% off)` : ''}`
-      : '',
+    price: formatAud(professional.annual_aud),
+    period: professional.annual_aud != null ? '/yr' : '',
+    billing: professional.annual_aud != null ? 'billed annually' : '',
     badge: 'Most Popular',
     description: 'For growing compliance teams with full AUSTRAC reporting obligations.',
     highlight: true,
     features: [
       { label: 'Up to 5,000 customers', included: true },
-      { label: 'Up to 25 users per tenant', included: true },
-      { label: '100,000 API calls / month', included: true },
+      { label: '3 users per tenant', included: true },
+      { label: '5,000 API calls / month', included: true },
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC + KYB verification', included: true },
       { label: 'AML/CTF Program — basic reference template', included: true, note: true },
@@ -101,7 +95,7 @@ async function getPlans() {
       { label: 'MLRO case management', included: true },
       { label: 'Workflow automation', included: true },
       { label: 'Webhooks & API access', included: true },
-      { label: 'Document vault (50 GB)', included: true },
+      { label: 'Document vault (15 GB)', included: true },
       { label: 'Analytics dashboard', included: true },
       { label: 'AML data connectors', included: true },
     ],
@@ -110,18 +104,16 @@ async function getPlans() {
   },
   {
     name: 'Enterprise',
-    price: formatAud(enterprise.monthly_aud),
-    period: enterprise.monthly_aud != null ? '/mo' : '',
-    billing: enterprise.annual_aud != null
-      ? `or ${formatAud(enterprise.annual_aud)}/yr billed annually${entSavings ? ` (${entSavings}% off)` : ''}`
-      : '',
+    price: formatAud(enterprise.annual_aud),
+    period: enterprise.annual_aud != null ? '/yr' : '',
+    billing: enterprise.annual_aud != null ? 'billed annually' : '',
     badge: null,
     description: 'For reporting groups, financial institutions, and SaaS resellers.',
     highlight: false,
     features: [
       { label: 'Unlimited customers', included: true },
-      { label: 'Unlimited users per tenant', included: true },
-      { label: 'Unlimited API calls / month', included: true },
+      { label: '5 users per tenant', included: true },
+      { label: '10,000 API calls / month', included: true },
       { label: 'Up to 2 compliance packs', included: true },
       { label: 'KYC, KYB + beneficial ownership', included: true },
       { label: 'AML/CTF Program — tailored to your industry', included: true },
@@ -130,7 +122,7 @@ async function getPlans() {
       { label: 'Custom domain', included: true },
       { label: 'Multi-tenant management', included: true },
       { label: 'Dedicated MLRO support', included: true },
-      { label: 'Document vault (500 GB)', included: true },
+      { label: 'Document vault (50 GB)', included: true },
       { label: '99.9% uptime SLA', included: true },
       { label: 'Dedicated account manager', included: true },
     ],
@@ -167,8 +159,8 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
     group: 'Platform',
     rows: [
       { feature: 'Customer limit', values: ['10', '500', '5,000', 'Unlimited', 'Unlimited'] },
-      { feature: 'Users per tenant', values: ['1', '5', '25', 'Unlimited', 'Unlimited'] },
-      { feature: 'API calls / month', values: ['—', '10,000', '100,000', 'Unlimited', 'Unlimited'] },
+      { feature: 'Users per tenant', values: ['1', '1', '3', '5', 'Custom'] },
+      { feature: 'API calls / month', values: ['—', '1,000', '5,000', '10,000', 'Custom'] },
       { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'Up to 2 packs', 'Up to 2 packs'] },
       { feature: 'AML/CTF Program', tooltip: 'Basic reference template preloaded. Tailoring to your specific business is an additional service.', values: ['Reference only', 'Reference only', 'Reference only', 'Tailored', 'Tailored'] },
       { feature: 'Annual review workflow', values: [true, true, true, true, true] },
@@ -235,7 +227,7 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
     group: 'Compliance Records',
     rows: [
       { feature: 'Immutable audit log', values: [true, true, true, true, true] },
-      { feature: 'Document vault storage', values: ['1 GB', '5 GB', '50 GB', '500 GB', '500 GB'] },
+      { feature: 'Document vault storage', values: ['1 GB', '5 GB', '15 GB', '50 GB', '50 GB'] },
       { feature: 'AUSTRAC-aligned data retention (7–10 yr)', values: [true, true, true, true, true] },
       { feature: 'Legal hold management', values: [false, false, false, true, true] },
     ],
@@ -297,7 +289,7 @@ export default async function PricingPage() {
             <span className="text-blue-600">Start free for 7 days.</span>
           </h1>
           <p className="text-xl text-slate-600 max-w-xl mx-auto mb-4">
-            Monthly or annual billing. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
+            Billed annually. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
           </p>
           <p className="text-sm text-slate-400">No credit card required for trial. Cancel anytime.</p>
         </div>
