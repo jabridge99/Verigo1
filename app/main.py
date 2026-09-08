@@ -5,55 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-import app.models.aml_program  # noqa: F401
-import app.models.aml_solution  # noqa: F401
-import app.models.api_key  # noqa: F401
-import app.models.audit  # noqa: F401
-import app.models.audit_log  # noqa: F401
-import app.models.automation_rule  # noqa: F401
-import app.models.benchmark  # noqa: F401
-import app.models.billing  # noqa: F401
-import app.models.board_report  # noqa: F401
-import app.models.case  # noqa: F401
-import app.models.compliance_calendar  # noqa: F401
-import app.models.connector  # noqa: F401
-
-# Register all models so SQLAlchemy creates their tables at startup
-import app.models.customer  # noqa: F401
-import app.models.customer_portal  # noqa: F401
-import app.models.customer_workflow  # noqa: F401
-import app.models.document  # noqa: F401
-import app.models.examination_pack  # noqa: F401
-import app.models.governance  # noqa: F401
-import app.models.governance_controls  # noqa: F401
-import app.models.governance_customisation  # noqa: F401
-import app.models.governance_training  # noqa: F401
-import app.models.ifti  # noqa: F401
-import app.models.ifti_e  # noqa: F401
-import app.models.ifti_receipt  # noqa: F401
-import app.models.independent_review  # noqa: F401
-import app.models.integration  # noqa: F401
-import app.models.kyc  # noqa: F401
-import app.models.monitoring  # noqa: F401
-import app.models.notification  # noqa: F401
-import app.models.onboarding  # noqa: F401
-import app.models.organisation  # noqa: F401
-import app.models.professional_assessment  # noqa: F401
-import app.models.regulatory_recommendation  # noqa: F401
-import app.models.report  # noqa: F401
-import app.models.reporting_group  # noqa: F401
-import app.models.retention  # noqa: F401
-import app.models.risk_engine  # noqa: F401
-import app.models.risk_matrix  # noqa: F401
-import app.models.risk_matrix_config  # noqa: F401
-import app.models.screening  # noqa: F401
-import app.models.security_event  # noqa: F401
-import app.models.task  # noqa: F401
-import app.models.tenant  # noqa: F401
-import app.models.training_trigger  # noqa: F401
-import app.models.transaction  # noqa: F401
-import app.models.usage  # noqa: F401
-import app.models.user  # noqa: F401
 from app.api.routes import (
     analytics,
     api_keys,
@@ -120,6 +71,57 @@ from app.middleware import (
     RequestLoggingMiddleware,
     SecurityHeadersMiddleware,
 )
+
+# Register all models so SQLAlchemy creates their tables at startup
+from app.models import (
+    aml_program,  # noqa: F401
+    aml_solution,  # noqa: F401
+    api_key,  # noqa: F401
+    audit_log,  # noqa: F401
+    automation_rule,  # noqa: F401
+    benchmark,  # noqa: F401
+    board_report,  # noqa: F401
+    case,  # noqa: F401
+    compliance_calendar,  # noqa: F401
+    connector,  # noqa: F401
+    customer,  # noqa: F401
+    customer_portal,  # noqa: F401
+    customer_workflow,  # noqa: F401
+    document,  # noqa: F401
+    examination_pack,  # noqa: F401
+    governance,  # noqa: F401
+    governance_controls,  # noqa: F401
+    governance_customisation,  # noqa: F401
+    governance_training,  # noqa: F401
+    ifti_e,  # noqa: F401
+    ifti_receipt,  # noqa: F401
+    independent_review,  # noqa: F401
+    integration,  # noqa: F401
+    monitoring,  # noqa: F401
+    notification,  # noqa: F401
+    organisation,  # noqa: F401
+    professional_assessment,  # noqa: F401
+    regulatory_recommendation,  # noqa: F401
+    report,  # noqa: F401
+    reporting_group,  # noqa: F401
+    risk_engine,  # noqa: F401
+    risk_matrix,  # noqa: F401
+    risk_matrix_config,  # noqa: F401
+    screening,  # noqa: F401
+    security_event,  # noqa: F401
+    task,  # noqa: F401
+    tenant,  # noqa: F401
+    training_trigger,  # noqa: F401
+    transaction,  # noqa: F401
+    usage,  # noqa: F401
+    user,  # noqa: F401
+)
+from app.models import audit as _audit_model  # noqa: F401
+from app.models import billing as _billing_model  # noqa: F401
+from app.models import ifti as _ifti_model  # noqa: F401
+from app.models import kyc as _kyc_model  # noqa: F401
+from app.models import onboarding as _onboarding_model  # noqa: F401
+from app.models import retention as _retention_model  # noqa: F401
 from app.scheduler import start_scheduler, stop_scheduler
 
 print("main.py: imports complete", flush=True)
