@@ -297,6 +297,11 @@ class GovernanceControl(Base):
     evidence = relationship(
         "ControlEvidenceItem", back_populates="control", cascade="all, delete-orphan"
     )
+    remediations = relationship(
+        "ControlRemediationAction",
+        back_populates="control",
+        cascade="all, delete-orphan",
+    )
     linked_policy = relationship("Policy", foreign_keys=[linked_policy_id])
 
 
@@ -442,6 +447,7 @@ class ControlTestFinding(Base):
     org_id = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
 
     # ── Finding detail ────────────────────────────────────────────────────────
     finding_ref = Column(String(20))  # e.g. F-001, F-002
@@ -502,16 +508,25 @@ class ControlRemediationAction(Base):
     __tablename__ = "control_remediation_actions"
 
     id = Column(String, primary_key=True, default=lambda: f"cra_{uuid4().hex[:12]}")
-    test_id = Column(
+    control_id = Column(
         String,
-        ForeignKey("control_tests.id", ondelete="CASCADE"),
+        ForeignKey("governance_controls.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+    test_id = Column(
+        String,
+        ForeignKey("control_tests.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # nullable: a remediation raised directly against a control (not arising
+    # from a specific test finding) has no test to link to
     finding_id = Column(String, ForeignKey("control_test_findings.id"), nullable=True)
     org_id = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
 
     # ── Action detail ─────────────────────────────────────────────────────────
     action_ref = Column(String(20))  # e.g. REM-001
@@ -555,6 +570,7 @@ class ControlRemediationAction(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    control = relationship("GovernanceControl", back_populates="remediations")
     test = relationship("ControlTest", back_populates="remediations")
     finding = relationship("ControlTestFinding", back_populates="remediations")
 

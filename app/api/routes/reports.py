@@ -866,8 +866,6 @@ def mlro_sign_off_smr(
     r.mlro_sign_off = current_user.id
     r.mlro_signed_at = datetime.now(timezone.utc)
     r.mlro_sign_off_notes = notes
-    r.approved_by = current_user.id
-    r.approved_at = datetime.now(timezone.utc)
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {

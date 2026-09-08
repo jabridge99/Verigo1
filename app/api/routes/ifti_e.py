@@ -325,7 +325,7 @@ def list_records(
 ):
     records = list_ifti_e(
         db,
-        current_user.organisation_id,
+        current_user.org_id,
         direction=direction,
         status=status.value if status else None,
     )
@@ -355,7 +355,7 @@ def create_record(
 
     record = IFTIERecord(
         ifti_e_id=f"IFTIE-{uuid.uuid4().hex[:12].upper()}",
-        industry_id=current_user.organisation_id,
+        industry_id=current_user.org_id,
         created_by=current_user.id,
     )
     _apply_create(payload, record)
@@ -371,7 +371,7 @@ def get_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
     return _record_dict(r)
@@ -385,7 +385,7 @@ def update_record(
     current_user: User = Depends(_WRITER),
 ):
     """Draft and ready records may be edited. Submitted records are immutable."""
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
     if r.status == IFTIEStatus.submitted:
@@ -409,7 +409,7 @@ def mark_ready(
     db: Session = Depends(get_db),
     current_user: User = Depends(_WRITER),
 ):
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
     if r.status != IFTIEStatus.draft:
@@ -426,7 +426,7 @@ def submit_record(
     current_user: User = Depends(_SUBMITTER),
 ):
     """Mark as submitted. MLRO/admin only. Records become immutable after submission."""
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
     if r.status != IFTIEStatus.ready:
@@ -447,7 +447,7 @@ def export_excel(
     Download an AUSTRAC-compatible IFTI-E Excel workbook for this record.
     The file matches the AUSTRAC IFTI-E v1.3 template format.
     """
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
 
@@ -470,7 +470,7 @@ def export_excel_bulk(
     """Export all matching records into a single AUSTRAC IFTI-E Excel workbook."""
     records = list_ifti_e(
         db,
-        current_user.organisation_id,
+        current_user.org_id,
         direction=direction,
         status=status.value if status else None,
     )
@@ -497,7 +497,7 @@ def austrac_payload(
     The platform provides compliance tooling only — lodgement decisions remain
     with the reporting entity.
     """
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
 

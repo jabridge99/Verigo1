@@ -30,7 +30,6 @@ log = logging.getLogger("tvg.board_reporting")
 def _cases_section(
     db: Session, org_id: str, period_start: date, period_end: date
 ) -> dict:
-
     from app.models.case import Case, CaseSeverity, CaseStatus
 
     all_open = (
@@ -123,15 +122,20 @@ def _smr_section(
     period_smrs = _in_period(base, SMRReport).all()
     all_smrs = base.all()
 
-    lodged = [s for s in period_smrs if s.smr_lodged]
+    _LODGED_STATUSES = (ReportStatus.submitted, ReportStatus.acknowledged)
+    lodged = [s for s in period_smrs if s.status in _LODGED_STATUSES]
     pending_mlro = [
-        s for s in all_smrs if not s.smr_lodged and s.status == ReportStatus.draft
+        s
+        for s in all_smrs
+        if s.status not in _LODGED_STATUSES and s.status == ReportStatus.draft
     ]
     submitted = [s for s in all_smrs if s.status == ReportStatus.submitted]
 
     return {
         "total_lodged_period": len(lodged),
-        "total_lodged_all_time": sum(1 for s in all_smrs if s.smr_lodged),
+        "total_lodged_all_time": sum(
+            1 for s in all_smrs if s.status in _LODGED_STATUSES
+        ),
         "pending_mlro_sign_off": len(pending_mlro),
         "submitted_to_austrac": len(submitted),
         "is_terrorism_related_period": sum(
@@ -270,21 +274,18 @@ def _alerts_section(
 def _training_section(
     db: Session, org_id: str, period_start: date, period_end: date
 ) -> dict:
-    from app.models.governance_training import (
-        GovernanceTrainingRecord,
-        TrainingAssignment,
-    )
+    from app.models.governance_training import GovernanceTrainingRecord
     from app.models.governance_training import TrainingStatus as GovTrainingStatus
-
-    assignments = db.query(TrainingAssignment).filter_by(org_id=org_id).all()
 
     records = db.query(GovernanceTrainingRecord).filter_by(org_id=org_id).all()
 
     completed = [r for r in records if r.status == GovTrainingStatus.completed]
     overdue_assignments = [
-        a
-        for a in assignments
-        if a.due_date and a.due_date < date.today() and a.status != "completed"
+        r
+        for r in records
+        if r.due_date
+        and r.due_date < date.today()
+        and r.status != GovTrainingStatus.completed
     ]
 
     period_completions = [
@@ -293,8 +294,8 @@ def _training_section(
         if r.completion_date and period_start <= r.completion_date <= period_end
     ]
 
-    total_assigned = len(assignments)
-    total_completed = sum(1 for a in assignments if a.status == "completed")
+    total_assigned = len(records)
+    total_completed = len(completed)
 
     return {
         "total_assigned": total_assigned,
@@ -378,14 +379,8 @@ def _controls_section(
             db.query(ControlTest)
             .filter(
                 ControlTest.control_id.in_(control_ids),
-                ControlTest.tested_at
-                >= datetime.combine(period_start, datetime.min.time()).replace(
-                    tzinfo=timezone.utc
-                ),
-                ControlTest.tested_at
-                <= datetime.combine(period_end, datetime.max.time()).replace(
-                    tzinfo=timezone.utc
-                ),
+                ControlTest.test_date >= period_start,
+                ControlTest.test_date <= period_end,
             )
             .all()
         )
@@ -492,11 +487,11 @@ def _regulatory_reporting_section(
     from app.models.ifti_e import IFTIERecord
     from app.models.report import IFTIReport, ReportStatus, TTRReport
 
-    def _period_count(model, status_field="status"):
+    def _period_count(model, tenant_field="org_id"):
         return (
             db.query(model)
             .filter(
-                model.org_id == org_id,
+                getattr(model, tenant_field) == org_id,
                 model.created_at
                 >= datetime.combine(period_start, datetime.min.time()).replace(
                     tzinfo=timezone.utc
@@ -511,7 +506,9 @@ def _regulatory_reporting_section(
 
     iftis_period = _period_count(IFTIReport)
     ttrs_period = _period_count(TTRReport)
-    ifti_e_period = _period_count(IFTIERecord)
+    # IFTIERecord's only tenant column is industry_id, not org_id (see
+    # app/models/ifti_e.py) -- unlike IFTIReport/TTRReport.
+    ifti_e_period = _period_count(IFTIERecord, tenant_field="industry_id")
 
     iftis_submitted = (
         db.query(IFTIReport)

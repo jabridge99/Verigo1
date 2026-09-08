@@ -282,7 +282,8 @@ class RemediationUpdate(BaseModel):
 
 class RemediationResponse(BaseModel):
     id: str
-    test_id: str
+    control_id: str
+    test_id: Optional[str]
     title: str
     description: str
     finding_severity: Optional[FindingSeverity]

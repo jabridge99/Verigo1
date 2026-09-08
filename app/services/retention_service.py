@@ -328,11 +328,11 @@ def generate_purge_report(
     if industry_id:
         q = q.filter(Customer.org_id == industry_id)
     for c in q.all():
-        if not has_active_hold(db, EntityScope.customer, c.customer_id):
+        if not has_active_hold(db, EntityScope.customer, c.id):
             report["items"].append(
                 {
                     "scope": "customer",
-                    "id": c.customer_id,
+                    "id": c.id,
                     "created_at": c.created_at.isoformat() if c.created_at else None,
                     "action": "eligible_for_deletion",
                 }

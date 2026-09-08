@@ -265,7 +265,9 @@ from app.models.marketplace import (
     VerificationIntegrationMode,
     VerificationOrder,
     VerificationOrderStatus,
-    VerificationProvider,
+)
+from app.models.marketplace import (
+    VerificationProvider as MarketplaceVerificationProvider,
 )
 from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.monitoring import (
@@ -719,7 +721,7 @@ __all__ = [
     "MitigationLibraryItem",
     "MitigationCategory",
     # Verification Marketplace
-    "VerificationProvider",
+    "MarketplaceVerificationProvider",
     "VerificationOrder",
     "VerificationCheckType",
     "VerificationIntegrationMode",

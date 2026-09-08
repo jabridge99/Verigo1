@@ -635,6 +635,7 @@ def upsert_sof(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    sof: SOFAssessment
     if pa.sof_assessment:
         sof = pa.sof_assessment
         for k, v in payload.model_dump().items():
@@ -693,6 +694,7 @@ def upsert_sow(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    sow: SOWAssessment
     if pa.sow_assessment:
         sow = pa.sow_assessment
         for k, v in payload.model_dump().items():
@@ -746,6 +748,7 @@ def upsert_purpose(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    p: TransactionPurposeAssessment
     if pa.purpose_assessment:
         p = pa.purpose_assessment
         for k, v in payload.model_dump().items():
@@ -822,6 +825,7 @@ def upsert_tax_risk(
     )
     indicator_count = sum(1 for v in standard_indicators if v) + custom_count
 
+    t: TaxRiskAssessment
     if pa.tax_risk_assessment:
         t = pa.tax_risk_assessment
         for k, v in data.items():
@@ -880,6 +884,7 @@ def upsert_investment(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    i: InvestmentLegitimacyAssessment
     if pa.investment_assessment:
         i = pa.investment_assessment
         for k, v in payload.model_dump().items():
@@ -985,6 +990,7 @@ def submit_checklist(
 
     update_map = {item.key: item for item in payload.items}
 
+    c: ProfessionalJudgmentChecklist
     if pa.checklist:
         c = pa.checklist
         existing = {it["key"]: it for it in (c.items or [])}
@@ -1028,7 +1034,7 @@ def submit_checklist(
             id=f"pjc_{uuid4().hex[:10]}",
             assessment_id=pa.id,
             org_id=pa.org_id,
-            checklist_type=ctype,
+            checklist_type=ChecklistType(ctype),
             items=items_list,
         )
         db.add(c)

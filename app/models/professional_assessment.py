@@ -36,7 +36,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -339,37 +339,39 @@ class ProfessionalAssessment(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    sof_assessment = relationship(
+    sof_assessment: Mapped["SOFAssessment | None"] = relationship(
         "SOFAssessment",
         back_populates="assessment",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    sow_assessment = relationship(
+    sow_assessment: Mapped["SOWAssessment | None"] = relationship(
         "SOWAssessment",
         back_populates="assessment",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    purpose_assessment = relationship(
+    purpose_assessment: Mapped["TransactionPurposeAssessment | None"] = relationship(
         "TransactionPurposeAssessment",
         back_populates="assessment",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    tax_risk_assessment = relationship(
+    tax_risk_assessment: Mapped["TaxRiskAssessment | None"] = relationship(
         "TaxRiskAssessment",
         back_populates="assessment",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    investment_assessment = relationship(
-        "InvestmentLegitimacyAssessment",
-        back_populates="assessment",
-        uselist=False,
-        cascade="all, delete-orphan",
+    investment_assessment: Mapped["InvestmentLegitimacyAssessment | None"] = (
+        relationship(
+            "InvestmentLegitimacyAssessment",
+            back_populates="assessment",
+            uselist=False,
+            cascade="all, delete-orphan",
+        )
     )
-    checklist = relationship(
+    checklist: Mapped["ProfessionalJudgmentChecklist | None"] = relationship(
         "ProfessionalJudgmentChecklist",
         back_populates="assessment",
         uselist=False,

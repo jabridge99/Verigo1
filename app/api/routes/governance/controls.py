@@ -28,7 +28,7 @@ from app.api.deps import (
     require_compliance_or_above,
 )
 from app.db.database import get_db
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.governance_controls import (
     CONTROL_REF_PREFIX,
     DEFAULT_EFFECTIVENESS_THRESHOLDS,
@@ -126,7 +126,7 @@ def _calculate_effectiveness(
         return ControlEffectiveness.not_tested, 0.0
 
     base = (passed / total) * 100.0
-    deduction = sum(ded.get(f.severity.value, 0) for f in findings)
+    deduction = sum(ded.get(f.severity, 0) for f in findings)
     score = max(0.0, base - deduction)
 
     if score >= thresh["effective"]:
@@ -233,10 +233,14 @@ def create_control(
         AuditLog(
             org_id=oid,
             actor_id=current_user.id,
+            event_type=AuditEventType.other,
             action="governance.control.create",
-            entity_type="GovernanceControl",
-            entity_id=control.id,
-            detail={"ref": control.control_ref, "risk_area": payload.risk_area.value},
+            object_type="GovernanceControl",
+            object_id=control.id,
+            new_value={
+                "ref": control.control_ref,
+                "risk_area": payload.risk_area.value,
+            },
         )
     )
     db.commit()
@@ -303,10 +307,11 @@ def update_control(
         AuditLog(
             org_id=control.org_id,
             actor_id=current_user.id,
+            event_type=AuditEventType.other,
             action="governance.control.update",
-            entity_type="GovernanceControl",
-            entity_id=control.id,
-            detail={"fields": list(updates.keys())},
+            object_type="GovernanceControl",
+            object_id=control.id,
+            new_value={"fields": list(updates.keys())},
         )
     )
     db.commit()
@@ -415,14 +420,14 @@ def finalise_test(
     )
 
     test.calculated_effectiveness = rating
-    test.effectiveness_score = eff_score
+    test.effectiveness_score = eff_score  # type: ignore[assignment]
     test.action_required = rating in (
         ControlEffectiveness.ineffective,
         ControlEffectiveness.partially_effective,
     )
     test.is_finalised = True
-    test.finalised_by = current_user.id
-    test.finalised_at = datetime.now(timezone.utc)
+    test.reviewed_by = current_user.id
+    test.reviewed_at = datetime.now(timezone.utc)
 
     _refresh_control_effectiveness(control, db)
 
@@ -431,7 +436,7 @@ def finalise_test(
 
     for finding in findings:
         if finding.severity in (FindingSeverity.critical, FindingSeverity.high):
-            sla_days = DEFAULT_REMEDIATION_SLA_DAYS.get(finding.severity.value, 30)
+            sla_days = DEFAULT_REMEDIATION_SLA_DAYS.get(finding.severity, 30)
             existing = (
                 db.query(ControlRemediationAction)
                 .filter(
@@ -461,10 +466,11 @@ def finalise_test(
         AuditLog(
             org_id=control.org_id,
             actor_id=current_user.id,
+            event_type=AuditEventType.control_test_completed,
             action="governance.control.test.finalised",
-            entity_type="ControlTest",
-            entity_id=test_id,
-            detail={"effectiveness": rating.value, "score": eff_score},
+            object_type="ControlTest",
+            object_id=test_id,
+            new_value={"effectiveness": rating.value, "score": eff_score},
         )
     )
     db.commit()

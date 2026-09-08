@@ -11,8 +11,16 @@ app/services/retention_service.py's generate_purge_report()
 - Customer.organisation_id / Customer.industry_id -- neither attribute
   exists on Customer (its only tenant column is org_id, which is what
   every other query against this model in the codebase uses).
+- Customer.customer_id -- also doesn't exist (the real PK is `id`, the
+  `customer_ref` field is the human-facing reference). This wasn't caught
+  by the original fix above because that test never had a Customer past
+  the retention cutoff, so the loop body that reads it never ran -- mypy's
+  attr-defined check caught it once the SQLAlchemy plugin was enabled.
 """
 
+from datetime import datetime, timedelta, timezone
+
+from app.models.customer import Customer, CustomerStatus
 from tests.conftest import _auth
 
 
@@ -22,3 +30,26 @@ def test_purge_report_does_not_500(client, admin_user):
     body = resp.json()
     assert "items" in body
     assert "total_eligible" in body
+
+
+def test_purge_report_includes_customer_past_retention_cutoff(client, admin_user, db):
+    old_customer = Customer(
+        customer_ref="CUST-OLD-0001",
+        org_id=admin_user.org_id,
+        full_name="Old Customer",
+        status=CustomerStatus.active,
+    )
+    db.add(old_customer)
+    db.commit()
+    db.refresh(old_customer)
+    # created_at has a server_default -- backdate it past the 7-year AUSTRAC
+    # default retention window so the purge-report loop actually visits it.
+    db.query(Customer).filter(Customer.id == old_customer.id).update(
+        {"created_at": datetime.now(timezone.utc) - timedelta(days=8 * 365)}
+    )
+    db.commit()
+
+    resp = client.get("/api/v1/retention/purge-report", headers=_auth(admin_user))
+    assert resp.status_code == 200, resp.text
+    ids = [item["id"] for item in resp.json()["items"] if item["scope"] == "customer"]
+    assert old_customer.id in ids

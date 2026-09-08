@@ -174,7 +174,7 @@ def _ensure_defaults(org_id: str, user_id: str, db: Session):
                 OrgRiskFactor(
                     id=f"orf_{uuid4().hex[:10]}",
                     org_id=org_id,
-                    category=category,
+                    category=RiskFactorCategory(category),
                     factor_key=f["key"],
                     label=f["label"],
                     description=f["description"],
@@ -294,7 +294,7 @@ def add_risk_factor(
         factor_key=payload.factor_key,
         label=payload.label,
         description=payload.description,
-        weight=payload.weight,
+        weight=payload.weight,  # type: ignore[arg-type]
         display_order=payload.display_order,
         is_system=False,
         is_active=True,
@@ -434,7 +434,7 @@ def rebalance_weights(
     updated = []
     for f in factors:
         if f.factor_key in payload.weights:
-            f.weight = payload.weights[f.factor_key]
+            f.weight = payload.weights[f.factor_key]  # type: ignore[assignment]
             f.updated_by = current_user.id
             updated.append(f.factor_key)
 
@@ -604,7 +604,7 @@ def restore_defaults(
                         OrgRiskFactor(
                             id=f"orf_{uuid4().hex[:10]}",
                             org_id=org_id,
-                            category=cat,
+                            category=RiskFactorCategory(cat),
                             factor_key=default_f["key"],
                             label=default_f["label"],
                             description=default_f["description"],
@@ -619,7 +619,7 @@ def restore_defaults(
 
     if restore_section in ("profiles", "all"):
         for default_p in DEFAULT_RISK_PROFILES:
-            existing = (
+            existing_profile = (
                 db.query(OrgRiskProfile)
                 .filter(
                     OrgRiskProfile.org_id == org_id,
@@ -627,14 +627,16 @@ def restore_defaults(
                 )
                 .first()
             )
-            if existing:
-                existing.score_min = default_p["score_min"]
-                existing.score_max = default_p["score_max"]
-                existing.review_frequency_months = default_p["review_frequency_months"]
-                existing.edd_required = default_p["edd_required"]
-                existing.enhanced_monitoring = default_p["enhanced_monitoring"]
-                existing.description = default_p["description"]
-                existing.updated_by = current_user.id
+            if existing_profile:
+                existing_profile.score_min = default_p["score_min"]
+                existing_profile.score_max = default_p["score_max"]
+                existing_profile.review_frequency_months = default_p[
+                    "review_frequency_months"
+                ]
+                existing_profile.edd_required = default_p["edd_required"]
+                existing_profile.enhanced_monitoring = default_p["enhanced_monitoring"]
+                existing_profile.description = default_p["description"]
+                existing_profile.updated_by = current_user.id
         restored.append("profiles")
 
     db.flush()
