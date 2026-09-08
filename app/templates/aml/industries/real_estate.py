@@ -19,7 +19,7 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     t.scope = (
         "This Program applies to all real estate services provided by the Organisation "
         "that constitute designated services under the AML/CTF Act 2006 as amended "
-        "by the 2024 Amendment Act (Tranche 2, commencing 31 March 2026).\n\n"
+        "by the 2024 Amendment Act (Tranche 2, commencing 1 July 2026).\n\n"
         "In-scope activities include:\n"
         "- Buying or selling real property on behalf of a customer;\n"
         "- Arranging the transfer or settlement of real property;\n"

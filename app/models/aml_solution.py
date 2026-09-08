@@ -147,7 +147,7 @@ class AMLProgram(Base):
     """
     The Organisation's AML/CTF Program document.
 
-    Under the AML/CTF Amendment Act 2024 and Rules 2025 (commencing 31 March 2026),
+    Under the AML/CTF Amendment Act 2024 and Rules 2025 (commencing 1 July 2026),
     reporting entities must maintain a SINGLE, CONSOLIDATED risk-based program.
     The previous Part A / Part B structure is LEGACY — applicable only to
     previously registered entities that adopted that format before the 2026 reform.

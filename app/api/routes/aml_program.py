@@ -3,7 +3,7 @@ AML/CTF Program Management — Phase 5.
 
 Manages the organisation's formal AML/CTF Program and associated risk assessments.
 
-Under the AML/CTF Act 2006 (Cth) (as amended by the 2024 reforms effective 31 March 2026),
+Under the AML/CTF Act 2006 (Cth) (as amended by the 2024 reforms effective 1 July 2026),
 reporting entities must:
   - Maintain a written, risk-based AML/CTF Program
   - Conduct Enterprise-Wide Risk Assessments (EWRA) at least annually

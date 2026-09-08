@@ -18,7 +18,7 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     t.scope = (
         "This Program applies to legal services provided by the Organisation that "
         "constitute designated services under the AML/CTF Act as amended "
-        "(Tranche 2, commencing 31 March 2026).\n\n"
+        "(Tranche 2, commencing 1 July 2026).\n\n"
         "In-scope services include:\n"
         "- Conveyancing and property transactions;\n"
         "- Receiving or disbursing client monies through a trust account;\n"

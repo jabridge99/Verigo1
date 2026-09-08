@@ -33,7 +33,7 @@ class IndustryType(str, enum.Enum):
     vasp = "vasp"  # Virtual asset service providers
     bullion_dealers = "bullion_dealers"  # Bullion dealers
 
-    # ── Tranche 2 (commenced 31 March 2026) ───────────────────────────────────
+    # ── Tranche 2 (commenced 1 July 2026; AUSTRAC enrolment deadline 31 March 2026) ──
     accountants = "accountants"  # Accountants
     conveyancers = "conveyancers"  # Conveyancers
     legal_professionals = "legal_professionals"  # Legal professionals

@@ -4,7 +4,7 @@ from app.templates.risk.base import LibraryFactor, RiskLibrary
 def get_library() -> RiskLibrary:
     return RiskLibrary(
         industry="real_estate",
-        description="Real estate agent / conveyancer — Tranche 2 (commenced 31 March 2026). No IFTI/TTR/Travel Rule.",
+        description="Real estate agent / conveyancer — Tranche 2 (commenced 1 July 2026). No IFTI/TTR/Travel Rule.",
         category_weights={
             "customer": 0.30,
             "product": 0.15,
@@ -113,7 +113,7 @@ def get_library() -> RiskLibrary:
                 ref="REG-001",
                 category_type="regulatory",
                 name="Tranche 2 obligations — new compliance framework",
-                description="Risk of non-compliance with new AML/CTF obligations applicable from 31 March 2026.",
+                description="Risk of non-compliance with new AML/CTF obligations applicable from 1 July 2026.",
                 suggested_likelihood=3,
                 suggested_consequence=4,
                 rationale="Real estate agents are newly regulated; unfamiliarity with obligations is an acute risk.",

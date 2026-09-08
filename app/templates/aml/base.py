@@ -37,7 +37,7 @@ class AMLTemplateBase:
         "('the Organisation') in compliance with the Anti-Money Laundering and "
         "Counter-Terrorism Financing Act 2006 (Cth) ('AML/CTF Act') as amended by "
         "the Anti-Money Laundering and Counter-Terrorism Financing Amendment Act 2024, "
-        "and the AML/CTF Rules 2025 (commencing 31 March 2026).\n\n"
+        "and the AML/CTF Rules 2025 (commencing 1 July 2026).\n\n"
         "The Program is a single, consolidated risk-based document that sets out how "
         "the Organisation identifies, mitigates and manages its money laundering, "
         "terrorism financing and proliferation financing ('ML/TF/PF') risks.\n\n"

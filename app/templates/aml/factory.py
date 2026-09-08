@@ -226,8 +226,9 @@ def seed_aml_solution(
                 "and registration as a reporting entity under the AML/CTF Act. "
                 "This includes reviewing your registration details, designated services "
                 "declaration, and compliance officer appointment notification.\n\n"
-                "Deadline: Registration must be completed before providing designated services. "
-                "For Tranche 2 entities, the reform commenced 31 March 2026."
+                "Deadline: Tranche 2 entities must enrol with AUSTRAC by 31 March 2026, "
+                "and have a compliant AML/CTF Program operational before the reform's "
+                "full obligations commence on 1 July 2026."
             ),
             deadline=date(2026, 7, 1),
             requested_by=created_by,

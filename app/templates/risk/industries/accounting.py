@@ -84,7 +84,7 @@ def get_library() -> RiskLibrary:
                 ref="REG-001",
                 category_type="regulatory",
                 name="Tranche 2 AML/CTF — new obligations",
-                description="Risk of non-compliance with accounting sector Tranche 2 obligations from 31 March 2026.",
+                description="Risk of non-compliance with accounting sector Tranche 2 obligations from 1 July 2026.",
                 suggested_likelihood=3,
                 suggested_consequence=4,
                 rationale="Newly regulated; sector unfamiliarity with AML obligations creates systemic risk.",
