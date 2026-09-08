@@ -152,7 +152,7 @@ def seed_master_admin(db: Session) -> Optional[User]:
         email=email,
         full_name="Master Admin",
         hashed_password=hash_password(settings.master_admin_password),
-        role="admin",
+        role=UserRole.admin,
         status=UserStatus.active,
         email_verified=True,
         is_super_admin=True,

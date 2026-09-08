@@ -483,7 +483,7 @@ class RiskFactorScore(Base):
     # Supporting evidence and notes
     evidence_document_ids = Column(JSON, default=list)  # [document.id]
     comments = Column(Text)
-    factor_weight_override = Column(
+    factor_weight_override: Mapped[Optional[float]] = Column(
         Float
     )  # optional per-factor weight override for this run
 
@@ -564,7 +564,7 @@ class RiskScoreHistory(Base):
     new_likelihood = Column(Integer)
     new_consequence = Column(Integer)
     new_control_effectiveness = Column(Integer)
-    new_residual_score = Column(Float)
+    new_residual_score: Mapped[Optional[float]] = Column(Float)
 
     change_reason = Column(Text)
     changed_by = Column(String, nullable=False)  # user id

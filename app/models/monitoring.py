@@ -221,7 +221,7 @@ class MonitoringRule(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    condition_groups = relationship(
+    condition_groups: Mapped[list["RuleConditionGroup"]] = relationship(
         "RuleConditionGroup",
         back_populates="rule",
         cascade="all, delete-orphan",
@@ -249,7 +249,7 @@ class RuleConditionGroup(Base):
     description = Column(String(255))  # human label for this group
 
     rule = relationship("MonitoringRule", back_populates="condition_groups")
-    conditions = relationship(
+    conditions: Mapped[list["RuleCondition"]] = relationship(
         "RuleCondition",
         back_populates="group",
         cascade="all, delete-orphan",

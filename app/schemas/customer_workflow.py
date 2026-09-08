@@ -20,10 +20,10 @@ class WorkflowEventResponse(BaseModel):
     actor_id: Optional[str]
     actor_role: Optional[str]
     comments: Optional[str]
-    metadata: Optional[Dict[str, Any]]
+    metadata: Optional[Dict[str, Any]] = Field(validation_alias="event_metadata")
     occurred_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class WorkflowResponse(BaseModel):

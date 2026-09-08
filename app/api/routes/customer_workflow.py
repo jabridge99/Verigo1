@@ -137,7 +137,7 @@ def _transition(
         actor_id=actor.id,
         actor_role=actor.role.value,
         comments=comments,
-        metadata=metadata or {},
+        event_metadata=metadata or {},
         occurred_at=datetime.now(timezone.utc),
     )
     db.add(event)

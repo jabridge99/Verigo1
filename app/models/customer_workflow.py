@@ -16,6 +16,7 @@ Risk is scored across 5 dimensions; decision gateway fires automatically after s
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -32,7 +33,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -224,7 +225,7 @@ class CustomerWorkflow(Base):
 
     # Risk gate results (populated by decision_gateway)
     risk_gate_result = Column(String(20))  # low | medium | high | critical
-    risk_gate_score = Column(Float)
+    risk_gate_score: Mapped[Optional[float]] = Column(Float)
     auto_routed = Column(Boolean, default=False)  # whether gateway fired automatically
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -304,7 +305,7 @@ class CustomerRiskProfile(Base):
     version = Column(Integer, default=1)  # increments on each re-assessment
 
     # ── Dimension 1: Customer Risk ────────────────────────────────────────────
-    customer_risk_score = Column(Float, default=0.0)
+    customer_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
     customer_risk_factors = Column(
         JSON
     )  # breakdown: {"pep": 40, "nationality": 20, ...}
@@ -316,7 +317,7 @@ class CustomerRiskProfile(Base):
     is_cash_intensive = Column(Boolean, default=False)
 
     # ── Dimension 2: Product/Service Risk ─────────────────────────────────────
-    product_risk_score = Column(Float, default=0.0)
+    product_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
     product_risk_factors = Column(JSON)
     involves_remittance = Column(Boolean, default=False)
     involves_fx = Column(Boolean, default=False)
@@ -326,7 +327,7 @@ class CustomerRiskProfile(Base):
     involves_bearer_instruments = Column(Boolean, default=False)
 
     # ── Dimension 3: Geographic Risk ──────────────────────────────────────────
-    geographic_risk_score = Column(Float, default=0.0)
+    geographic_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
     geographic_risk_factors = Column(JSON)
     countries_involved = Column(JSON)  # list of ISO codes
     has_fatf_blacklist_country = Column(Boolean, default=False)
@@ -336,7 +337,7 @@ class CustomerRiskProfile(Base):
     highest_risk_country = Column(String(2))
 
     # ── Dimension 4: Delivery Channel Risk ────────────────────────────────────
-    channel_risk_score = Column(Float, default=0.0)
+    channel_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
     channel_risk_factors = Column(JSON)
     channel = Column(String(50))  # online | mobile | branch | agent | third_party
     is_non_face_to_face = Column(Boolean, default=True)
@@ -344,19 +345,19 @@ class CustomerRiskProfile(Base):
     is_third_party_reliance = Column(Boolean, default=False)
 
     # ── Dimension 5: Transaction Risk ─────────────────────────────────────────
-    transaction_risk_score = Column(Float, default=0.0)
+    transaction_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
     transaction_risk_factors = Column(JSON)
-    expected_monthly_volume_aud = Column(Float)
+    expected_monthly_volume_aud: Mapped[Optional[float]] = Column(Float)
     expected_transaction_frequency = Column(
         String(50)
     )  # daily | weekly | monthly | occasional
-    expected_max_transaction_aud = Column(Float)
+    expected_max_transaction_aud: Mapped[Optional[float]] = Column(Float)
     is_high_value = Column(Boolean, default=False)  # > $10,000 threshold
     crosses_border = Column(Boolean, default=False)
 
     # ── Overall result ─────────────────────────────────────────────────────────
     # Weighted: customer 30%, product 25%, geographic 20%, channel 15%, transaction 10%
-    overall_risk_score = Column(Float, nullable=False, default=0.0)
+    overall_risk_score: Mapped[float] = Column(Float, nullable=False, default=0.0)
     overall_risk_level = Column(String(20))  # low | medium | high | critical
     gateway_decision = Column(String(20))  # cdd | edd
     edd_triggers = Column(JSON)  # list of EDDTrigger values if edd

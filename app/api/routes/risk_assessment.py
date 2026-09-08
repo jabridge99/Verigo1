@@ -47,6 +47,7 @@ from app.models.risk_engine import (
     RiskFactorScore,
     RiskFramework,
     RiskMitigation,
+    RiskRating,
     RiskScoreHistory,
 )
 from app.models.user import User
@@ -647,12 +648,12 @@ def score_factor(
     if fs.likelihood and fs.consequence:
         inh = inherent_risk(fs.likelihood, fs.consequence)
         fs.inherent_risk_score = inh
-        fs.inherent_rating = risk_rating(inh)
+        fs.inherent_rating = RiskRating(risk_rating(inh))
 
         if fs.control_effectiveness:
             res = residual_risk(inh, fs.control_effectiveness)
             fs.residual_risk_score = res
-            fs.residual_rating = risk_rating(res)
+            fs.residual_rating = RiskRating(risk_rating(res))
 
     # Handle override
     if override_residual_score is not None:
@@ -663,7 +664,7 @@ def score_factor(
         fs.score_override = True
         fs.override_residual_score = override_residual_score
         fs.override_justification = override_justification
-        fs.residual_rating = risk_rating(override_residual_score)
+        fs.residual_rating = RiskRating(risk_rating(override_residual_score))
 
     fs.scored_by = current_user.id
     fs.scored_at = datetime.now(timezone.utc)
@@ -734,8 +735,8 @@ def recalculate_scores(
     run.category_scores = scores["category_scores"]
     run.overall_inherent_risk_score = scores["overall_inherent"]
     run.overall_residual_risk_score = scores["overall_residual"]
-    run.overall_inherent_rating = risk_rating(scores["overall_inherent"])
-    run.overall_residual_rating = risk_rating(scores["overall_residual"])
+    run.overall_inherent_rating = RiskRating(risk_rating(scores["overall_inherent"]))
+    run.overall_residual_rating = RiskRating(risk_rating(scores["overall_residual"]))
 
     db.commit()
     return {
@@ -902,8 +903,8 @@ def submit_assessment(
     run.category_scores = scores["category_scores"]
     run.overall_inherent_risk_score = scores["overall_inherent"]
     run.overall_residual_risk_score = scores["overall_residual"]
-    run.overall_inherent_rating = risk_rating(scores["overall_inherent"])
-    run.overall_residual_rating = risk_rating(scores["overall_residual"])
+    run.overall_inherent_rating = RiskRating(risk_rating(scores["overall_inherent"]))
+    run.overall_residual_rating = RiskRating(risk_rating(scores["overall_residual"]))
     run.status = AssessmentStatus.completed
     run.reviewed_by = current_user.id
 
