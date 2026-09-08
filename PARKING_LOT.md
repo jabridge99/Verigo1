@@ -26,12 +26,6 @@ Each entry: what it is, why it's parked, where the full detail lives.
 
 Making CI's mypy check actually block the build (fix-now item, see resolved section below) meant triaging all 184 pre-existing errors it had been silently ignoring. Most were either genuine bugs (fixed, see below) or annotation gaps (fixed). A handful of things surfaced along the way that need a decision or more scope than a type-checker fix, rather than a guess:
 
-### P2 — Retention purge report only covers 1 of 5 KYC verification tables
-**Status:** Parked — deliberately scoped narrow rather than guessed wide.
-**What:** `generate_purge_report()` (`app/services/retention_service.py`) crashed outright (`from app.models.kyc import KYCRecord` — no such class). Fixed using `CustomerIdentityDocument`, the most fundamental of the five real KYC verification tables (identity document, selfie, address, phone, email) — but the other four aren't included in the purge-eligibility sweep.
-**Why parked:** A full five-table sweep is a well-defined, bounded piece of work, but expanding it wasn't part of the crash fix and risked overstating what "purge report" now actually covers.
-**Detail:** `app/services/retention_service.py`, `generate_purge_report()`; `tests/test_retention_purge_report_crash_smoke.py`.
-
 ### P4 — "Under review" policy status was mapped to three real sub-stages (judgment call, worth confirming)
 **Status:** Parked for awareness, not blocking — a reasonable reading was applied, flagging it rather than presenting it as unquestionably correct.
 **What:** `board_reporting_service.py`'s `_policies_section()` used `PolicyLifecycleStatus.under_review`/`.approved`, neither of which exist (real lifecycle: draft → internal_review → compliance_review → pending_approval → published → periodic_review → superseded → archived). Fixed `.approved` → `.published` (clear match, per the enum's own comment). For `.under_review`, mapped it to the three real intermediate stages (`internal_review`, `compliance_review`, `pending_approval`) grouped together, since the board report's "under review" bucket is presented as a single count.
@@ -53,6 +47,12 @@ Making CI's mypy check actually block the build (fix-now item, see resolved sect
 **What it was:** `check_independent_review_due()` (`app/services/notification_scheduler.py`) filtered on `IndependentReview.target_completion` — a column that never existed on the model, and there was no field anywhere (model, create/update API schema) for setting a review's target completion date in the first place. Its own try/except silently caught the `AttributeError` on every scheduled run, so this notification had never fired once.
 **What was done:** Added `IndependentReview.target_completion_date` (migration `d2e3f4a5b6c7`) and wired it into `ReviewCreate`/`ReviewUpdate` and the review response dict, so it's an explicit, settable field rather than an inferred/derived one — the simpler of the two options raised when this was parked, chosen because deriving it from a fixed AUSTRAC cadence would need a firmer read on how that cadence should be tracked (per-org override? per-review-type?) than was available here.
 **Detail:** `tests/test_independent_review_target_completion_smoke.py`; `app/models/independent_review.py`; `app/api/routes/independent_review.py`.
+
+### P2 — Retention purge report only covered 1 of 5 KYC verification tables
+**Parked:** 2026-09-08, as "a well-defined, bounded piece of work, but expanding it wasn't part of the [original] crash fix." **Resolved:** 2026-09-08 (same session), as the one clearly worthwhile, self-contained item left in the parking lot once the CI mypy fix was done.
+**What it was:** `generate_purge_report()` (`app/services/retention_service.py`) only swept `CustomerIdentityDocument`, the most fundamental of the five real KYC verification tables (identity document, selfie, address, phone, email) — the other four were never included in the purge-eligibility sweep, so a compliance officer reviewing the report would see it as complete when it wasn't.
+**What was done:** Generalised the sweep into a loop over all five KYC verification models (all share the same `org_id`/`created_at` shape), each reported under its own `scope` label (`kyc_identity_document`, `kyc_selfie_verification`, etc.) rather than collapsing them into one ambiguous `kyc_record` bucket.
+**Detail:** `app/services/retention_service.py`, `generate_purge_report()`; `tests/test_retention_purge_report_crash_smoke.py`.
 
 ### P3 — Registration left every real user's org identity split across three NULLs
 **Parked:** 2026-09-08, as "two parallel org-id concepts, needs a deliberate look before picking a side." **Resolved:** 2026-09-08 (same session), after scanning the parking lot ahead of Stage 5 and digging one level deeper into this specific item, since it sits directly in Stage 5's territory.

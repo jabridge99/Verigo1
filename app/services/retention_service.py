@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -304,7 +304,13 @@ def generate_purge_report(
     Returns a summary for compliance review — does NOT delete anything.
     """
     from app.models.customer import Customer
-    from app.models.kyc import CustomerIdentityDocument
+    from app.models.kyc import (
+        CustomerAddressVerification,
+        CustomerEmailVerification,
+        CustomerIdentityDocument,
+        CustomerPhoneVerification,
+        CustomerSelfieVerification,
+    )
 
     now = datetime.now(timezone.utc)
     report: dict = {
@@ -339,26 +345,34 @@ def generate_purge_report(
             )
 
     # KYC records
-    # NOTE: there is no single unified KYCRecord table -- app/models/kyc.py
-    # has five separate verification tables (identity document, selfie,
-    # address, phone, email). This only covers identity documents, the most
-    # fundamental of the five; it is not a complete KYC-retention sweep.
+    # There is no single unified KYCRecord table -- app/models/kyc.py has
+    # five separate verification tables (identity document, selfie, address,
+    # phone, email), each independently created during onboarding. All five
+    # are swept against the same kyc_record retention policy.
     cutoff = _cutoff(EntityScope.kyc_record)
-    kq = db.query(CustomerIdentityDocument).filter(
-        CustomerIdentityDocument.created_at < cutoff
-    )
-    if industry_id:
-        kq = kq.filter(CustomerIdentityDocument.org_id == industry_id)
-    for k in kq.all():
-        if not has_active_hold(db, EntityScope.kyc_record, k.id):
-            report["items"].append(
-                {
-                    "scope": "kyc_record",
-                    "id": k.id,
-                    "created_at": k.created_at.isoformat() if k.created_at else None,
-                    "action": "eligible_for_deletion",
-                }
-            )
+    kyc_models: list[tuple[str, Any]] = [
+        ("kyc_identity_document", CustomerIdentityDocument),
+        ("kyc_selfie_verification", CustomerSelfieVerification),
+        ("kyc_address_verification", CustomerAddressVerification),
+        ("kyc_phone_verification", CustomerPhoneVerification),
+        ("kyc_email_verification", CustomerEmailVerification),
+    ]
+    for scope_label, model in kyc_models:
+        kq = db.query(model).filter(model.created_at < cutoff)
+        if industry_id:
+            kq = kq.filter(model.org_id == industry_id)
+        for k in kq.all():
+            if not has_active_hold(db, EntityScope.kyc_record, k.id):
+                report["items"].append(
+                    {
+                        "scope": scope_label,
+                        "id": k.id,
+                        "created_at": k.created_at.isoformat()
+                        if k.created_at
+                        else None,
+                        "action": "eligible_for_deletion",
+                    }
+                )
 
     report["total_eligible"] = len(report["items"])
     return report
