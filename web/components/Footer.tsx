@@ -83,7 +83,7 @@ export default function Footer() {
 
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-slate-500 text-sm">
-            © {new Date().getFullYear()} PSP Education Pty Ltd (ABN 21 628 429 925), trading as Verigo. All rights reserved.
+            © {new Date().getFullYear()} PITX Pty Ltd (ABN 90 655 559 112), trading as Verigo. All rights reserved.
           </p>
           <div className="flex gap-6">
             {[

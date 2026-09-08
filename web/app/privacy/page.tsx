@@ -10,7 +10,7 @@ export default function PrivacyPolicyPage() {
       <div className="max-w-3xl mx-auto px-6 py-16 prose prose-slate">
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Privacy Policy</h1>
         <p className="text-sm text-slate-500 mb-10">
-          Last updated 18 June 2026. Published by PSP Education Pty Ltd (ABN 21 628 429 925), trading as Verigo.
+          Last updated 18 June 2026. Published by PITX Pty Ltd (ABN 90 655 559 112), trading as Verigo.
         </p>
 
         <h2>1. Who this applies to</h2>
