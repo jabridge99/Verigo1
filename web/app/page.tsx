@@ -20,14 +20,6 @@ export const metadata = {
 // SECTION 1 — HERO
 // ─────────────────────────────────────────────────────────────────────────────
 function Hero() {
-  const flow = [
-    { label: 'Industry', icon: Building2 },
-    { label: 'Customer', icon: UserCheck },
-    { label: 'Verification', icon: ScanFace },
-    { label: 'Monitoring', icon: Activity },
-    { label: 'Reporting', icon: FileText },
-  ]
-
   return (
     <section className="relative bg-gradient-to-b from-slate-950 via-blue-950 to-slate-900 overflow-hidden pt-32 pb-24 px-4 sm:px-6 lg:px-8">
       {/* Subtle grid overlay */}
@@ -56,21 +48,71 @@ function Hero() {
           </Link>
         </div>
 
-        {/* Workflow illustration */}
-        <div className="flex items-center justify-center gap-1 sm:gap-2 flex-wrap">
-          {flow.map(({ label, icon: Icon }, i) => (
-            <div key={label} className="flex items-center gap-1 sm:gap-2">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/10 ring-1 ring-white/20 flex items-center justify-center backdrop-blur-sm">
-                  <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-blue-300" />
-                </div>
-                <span className="text-xs text-slate-400 font-medium">{label}</span>
+        {/* Product UI mockup */}
+        <div className="relative mt-4 mx-auto max-w-4xl">
+          {/* Glow behind the window */}
+          <div className="absolute inset-x-0 bottom-0 h-32 bg-blue-600/20 blur-3xl rounded-full" />
+
+          {/* Browser chrome */}
+          <div className="relative rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-2xl shadow-black/60">
+            {/* Title bar */}
+            <div className="bg-slate-800 px-4 py-3 flex items-center gap-3">
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-500/70" />
+                <div className="w-3 h-3 rounded-full bg-amber-500/70" />
+                <div className="w-3 h-3 rounded-full bg-green-500/70" />
               </div>
-              {i < flow.length - 1 && (
-                <ArrowRight className="w-4 h-4 text-slate-600 mb-5 flex-shrink-0" />
-              )}
+              <div className="flex-1 bg-slate-700 rounded-md px-3 py-1 text-xs text-slate-400 text-left">
+                app.veri-go.com.au/customers
+              </div>
             </div>
-          ))}
+
+            {/* App body */}
+            <div className="bg-slate-900 p-5 text-left">
+              {/* Stat row */}
+              <div className="grid grid-cols-4 gap-3 mb-5">
+                {[
+                  { label: 'Total Customers', value: '342', delta: '+12 this week', color: 'text-blue-400' },
+                  { label: 'Pending KYC', value: '8', delta: 'Action required', color: 'text-amber-400' },
+                  { label: 'Active Alerts', value: '3', delta: '2 high priority', color: 'text-red-400' },
+                  { label: 'Reports Due', value: '1', delta: 'IFTI due 15 Jul', color: 'text-emerald-400' },
+                ].map(s => (
+                  <div key={s.label} className="bg-slate-800 rounded-xl p-3 ring-1 ring-white/5">
+                    <p className="text-slate-500 text-[10px] mb-1">{s.label}</p>
+                    <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                    <p className="text-slate-500 text-[9px] mt-0.5">{s.delta}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Customer table */}
+              <div className="bg-slate-800 rounded-xl ring-1 ring-white/5 overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white">Customers</span>
+                  <span className="text-[10px] text-blue-400 font-medium">View all →</span>
+                </div>
+                <div className="divide-y divide-white/5">
+                  {[
+                    { name: 'Apex Transfers Pty Ltd', type: 'KYB', status: 'Verified', risk: 'Low', statusColor: 'bg-green-500/20 text-green-400' },
+                    { name: 'Sarah Mitchell', type: 'KYC', status: 'In Review', risk: 'Medium', statusColor: 'bg-amber-500/20 text-amber-400' },
+                    { name: 'Chen Capital Group', type: 'KYB', status: 'Verified', risk: 'Low', statusColor: 'bg-green-500/20 text-green-400' },
+                    { name: 'James Okafor', type: 'KYC', status: 'Alert', risk: 'High', statusColor: 'bg-red-500/20 text-red-400' },
+                  ].map(row => (
+                    <div key={row.name} className="px-4 py-2.5 flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300 flex-shrink-0">
+                        {row.name[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">{row.name}</p>
+                        <p className="text-[10px] text-slate-500">{row.type} · Risk: {row.risk}</p>
+                      </div>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${row.statusColor}`}>{row.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
