@@ -38,12 +38,6 @@ Making CI's mypy check actually block the build (fix-now item, see resolved sect
 **Why parked:** A full five-table sweep is a well-defined, bounded piece of work, but expanding it wasn't part of the crash fix and risked overstating what "purge report" now actually covers.
 **Detail:** `app/services/retention_service.py`, `generate_purge_report()`; `tests/test_retention_purge_report_crash_smoke.py`.
 
-### P3 — Two parallel "which org does this belong to" concepts
-**Status:** Parked — architectural question, not a bug to patch locally.
-**What:** The codebase has two coexisting tenant-scoping concepts that don't always agree: `User.org_id`/`industry_id` (the older, far more pervasive one — used by `Customer.org_id`, most route-level scoping, most of this session's earlier IDOR fixes) and `User.primary_organisation_id` (the newer RBAC concept, set only when a user goes through `org_service.py`'s membership-creation flow, e.g. real self-serve registration). `onboarding_service.py`'s `create_session()` stamps a new Customer's `org_id` from `organisation_id` (the newer concept) while nearly everywhere else treats `Customer.org_id` as holding the older `industry_id` concept — found while chasing an unrelated bug (bulk CSV import), where a test admin without `primary_organisation_id` set hit a NOT NULL constraint on `customers.org_id`.
-**Why parked:** This is exactly the kind of two-systems-coexist situation `docs/multi-tenancy.md` already flagged from Stage 4 (there, about RBAC permissions vs the simple role enum) — worth a deliberate look at whether `create_session()` is wrong, or the many other call sites are, rather than picking one side of the inconsistency to change unilaterally.
-**Detail:** `app/services/onboarding_service.py`'s `create_session()` vs `app/api/routes/customers.py`'s `Customer.org_id` filters; `tests/test_bulk_import_unpack_crash_smoke.py`'s `_give_primary_org()` helper and its docstring.
-
 ### P4 — "Under review" policy status was mapped to three real sub-stages (judgment call, worth confirming)
 **Status:** Parked for awareness, not blocking — a reasonable reading was applied, flagging it rather than presenting it as unquestionably correct.
 **What:** `board_reporting_service.py`'s `_policies_section()` used `PolicyLifecycleStatus.under_review`/`.approved`, neither of which exist (real lifecycle: draft → internal_review → compliance_review → pending_approval → published → periodic_review → superseded → archived). Fixed `.approved` → `.published` (clear match, per the enum's own comment). For `.under_review`, mapped it to the three real intermediate stages (`internal_review`, `compliance_review`, `pending_approval`) grouped together, since the board report's "under review" bucket is presented as a single count.
@@ -53,6 +47,12 @@ Making CI's mypy check actually block the build (fix-now item, see resolved sect
 ---
 
 ## Resolved (moved out of the active parking lot, kept here for the full-process history)
+
+### P3 — Registration left every real user's org identity split across three NULLs
+**Parked:** 2026-09-08, as "two parallel org-id concepts, needs a deliberate look before picking a side." **Resolved:** 2026-09-08 (same session), after scanning the parking lot ahead of Stage 5 and digging one level deeper into this specific item, since it sits directly in Stage 5's territory.
+**What it turned out to be:** Not a judgment call between two legitimate conventions — a real, confirmed, live bug. A real registration through the actual API (`POST /auth/register`, then inspecting the resulting row directly) showed `org_id` set but `industry_id` and `primary_organisation_id` permanently `NULL`, because the frontend never sends `organisation_name` (confirmed: zero references anywhere under `web/`) and the code path that attaches a new user to their own org as "owner" — RBAC membership, `primary_organisation_id`, `industry_id` — was gated behind that field. This broke onboarding-session creation outright (`Customer.org_id` stamped from the `NULL` field, hitting its NOT NULL constraint), and silently broke documents/billing/storage/connectors/IFTI/analytics scoping and org-membership RBAC for every real user.
+**What was done:** Extracted the attach-user-to-org logic (`org_service.py`'s `create_organisation()`) into a reusable `attach_owner()`, and made `register()` always call it on the one org it creates for a new user — self-serve signup still always creates a brand-new org and never joins an existing one (the deliberate anti-privilege-escalation design already documented there is unchanged), it now just consistently owns it across all three identity fields instead of only one.
+**Detail:** `tests/test_register_identity_consistency_smoke.py`; `app/api/routes/auth.py`'s `register()`; `app/services/org_service.py`'s `attach_owner()`.
 
 ### Fix-now items — unauthenticated sanctions endpoint + mypy CI gate
 **Parked:** never — these were the two "fix now" candidates agreed on 2026-09-08 in the same session as the full gap list.
