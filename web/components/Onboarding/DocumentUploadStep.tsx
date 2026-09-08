@@ -32,7 +32,7 @@ export default function DocumentUploadStep({ sessions, onUploaded }: Props) {
     setError(null);
     const form = new FormData();
     form.append("file", file);
-    form.append("category", "identity");
+    form.append("category", "kyc");
     // Tied to the customer record (not the onboarding session) so the
     // document shows up on the customer's profile, where compliance does
     // the actual KYC review.
