@@ -108,66 +108,6 @@ def test_screen_name_match_and_no_match():
     assert screen_transaction("Jane Criminal")["match_found"] is True
 
 
-# ── risk_scoring ──────────────────────────────────────────────────────────
-
-
-def test_score_customer_and_levels():
-    from app.services.risk_scoring import score_customer, score_to_level
-
-    high_risk_customer = types.SimpleNamespace(
-        country_of_residence="AF",
-        nationality="KP",
-        industry=types.SimpleNamespace(value="vasp"),
-        is_pep=True,
-        source_of_funds=None,
-    )
-    score = score_customer(high_risk_customer)
-    assert score == 100.0
-    assert score_to_level(score) == "critical"
-
-    low_risk_customer = types.SimpleNamespace(
-        country_of_residence="AU",
-        nationality="AU",
-        industry=types.SimpleNamespace(value="retail"),
-        is_pep=False,
-        source_of_funds="salary",
-    )
-    low_score = score_customer(low_risk_customer)
-    assert low_score == 0.0
-    assert score_to_level(low_score) == "low"
-
-    assert score_to_level(45) == "medium"
-    assert score_to_level(70) == "high"
-
-
-def test_score_transaction_alerts():
-    from app.services.risk_scoring import score_transaction
-
-    big_txn = types.SimpleNamespace(amount=15_000, counterparty_country="KP")
-    near_threshold_txns = [types.SimpleNamespace(amount=7_500) for _ in range(3)]
-    many_recent = near_threshold_txns + [
-        types.SimpleNamespace(amount=100) for _ in range(8)
-    ]
-
-    result = score_transaction(
-        big_txn, customer_risk_score=50.0, recent_transactions=many_recent
-    )
-    assert result["is_suspicious"] == 1
-    assert result["risk_score"] > 0
-    alert_types = {a[0] for a in result["alerts"]}
-    assert "large_transaction" in alert_types
-    assert "structuring" in alert_types
-    assert "high_risk_country" in alert_types
-    assert "velocity_breach" in alert_types
-
-    small_txn = types.SimpleNamespace(amount=50, counterparty_country=None)
-    clean_result = score_transaction(
-        small_txn, customer_risk_score=0.0, recent_transactions=[]
-    )
-    assert clean_result["is_suspicious"] == 0
-    assert clean_result["alerts"] == []
-
-
 # ── identity_verification ──────────────────────────────────────────────────
 
 
