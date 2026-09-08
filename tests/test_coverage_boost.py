@@ -10,7 +10,6 @@ import pytest
 
 from app.models.organisation import IndustryType, Organisation
 
-
 # ── Template seeding (AML solution + risk framework) ────────────────────────
 
 ALL_INDUSTRIES = list(IndustryType)
@@ -113,6 +112,7 @@ def test_screen_name_match_and_no_match():
 
 def test_verify_document_matches_and_mismatches():
     from datetime import date
+
     from app.services.identity_verification import (
         compute_kyc_identity_score,
         verify_document,
@@ -549,8 +549,8 @@ def test_cancel_subscription_branches(db):
 
 
 def test_create_checkout_session_mock_mode(db):
-    from app.schemas.billing import CheckoutSessionRequest
     from app.models.billing import BillingInterval, BillingPlan
+    from app.schemas.billing import CheckoutSessionRequest
     from app.services import billing_service as svc
 
     svc.create_trial(db, "org-checkout")
@@ -1147,7 +1147,10 @@ def test_customer_risk_engine_individual_dimension_branches():
     txn_result = score_transaction_risk(expected_monthly_volume_aud=500_000)
     assert txn_result.factors.get("medium_monthly_volume") == 25.0
 
-    assert _level(50.0) == "medium"
+    # Boundaries now come from the shared ISO 31000-derived percentage scale
+    # (risk_engine.risk_rating_pct: low<=20, medium<=48, high<=76) rather
+    # than this engine's own retired 33/66/85 thresholds.
+    assert _level(50.0) == "high"
     assert _level(70.0) == "high"
 
     assert cdd_level_from_gateway("cdd", 5.0).value == "simplified"

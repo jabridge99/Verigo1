@@ -37,6 +37,7 @@ from app.models.transaction import (
     Transaction,
     TransactionCryptoDetail,
 )
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ FATF_GREYLIST = frozenset(
 )
 SANCTIONED_COUNTRIES = frozenset({"IR", "KP", "RU", "BY", "SY", "CU", "SD"})
 
-TTR_THRESHOLD_AUD = 10_000.0
+TTR_THRESHOLD_AUD = TTR_CTR_THRESHOLD_AUD
 NEAR_THRESHOLD_PCT = 0.10  # within 10% of reporting threshold
 
 DEFAULT_SIGNAL_WEIGHTS: dict[str, float] = {

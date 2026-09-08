@@ -37,12 +37,13 @@ from app.models.report import (
     TTRReport,
 )
 from app.models.transaction import Transaction
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 TTR_DEADLINE_DAYS = 14  # 10 business ≈ 14 calendar
 IFTI_DEADLINE_DAYS = 14
 SMR_DEADLINE_DAYS = 4  # 3 business ≈ 4 calendar
 SMR_TERRORISM_DEADLINE_HOURS = 24
-TTR_THRESHOLD_AUD = 10_000.0
+TTR_THRESHOLD_AUD = TTR_CTR_THRESHOLD_AUD
 _FALLBACK_ENTITY_CODE = "PSPE"
 
 

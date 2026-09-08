@@ -29,10 +29,11 @@ from app.models.regulatory_recommendation import (
     RegulatoryRecommendation,
 )
 from app.models.transaction import Transaction
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 
-TTR_THRESHOLD_AUD = 10_000.0
+TTR_THRESHOLD_AUD = TTR_CTR_THRESHOLD_AUD
 NEAR_THRESHOLD_PCT = 0.10
 NEAR_THRESHOLD_AUD = TTR_THRESHOLD_AUD * (1 - NEAR_THRESHOLD_PCT)  # 9,000
 

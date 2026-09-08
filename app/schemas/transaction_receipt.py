@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from app.models.monitoring import AlertCategory, AlertSeverity, AlertStatus
 from app.models.transaction import PaymentMethod, TransactionDirection, TransactionType
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 
 class ReceiptAlertSummary(BaseModel):
@@ -103,7 +104,7 @@ class AUSTRACReportingBlock(BaseModel):
     is_ttr_reportable: bool = Field(
         description="True if amount_aud >= AUD 10,000 — TTR may be required"
     )
-    ttr_threshold_aud: float = 10_000.0
+    ttr_threshold_aud: float = TTR_CTR_THRESHOLD_AUD
 
     # IFTI (International Funds Transfer Instruction) indicators
     is_ifti_reportable: bool = Field(
@@ -248,7 +249,7 @@ def build_receipt(
     """
     from app.services.monitoring_engine import FATF_BLACKLIST, SANCTIONED_COUNTRIES
 
-    TTR_THRESHOLD = 10_000.0
+    TTR_THRESHOLD = TTR_CTR_THRESHOLD_AUD
     amount_aud = txn.amount_aud or txn.amount
 
     countries_involved = {

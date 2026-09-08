@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.models.customer import Customer
 from app.models.transaction import Transaction
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD, risk_rating_pct
 
 # ── Country Lists (FATF / AUSTRAC) ────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ _MEDIUM_RISK_PAYMENT_METHODS = frozenset(
     }
 )
 
-TTR_THRESHOLD = 10_000.0
+TTR_THRESHOLD = TTR_CTR_THRESHOLD_AUD
 NEAR_THRESHOLD_MIN = 9_000.0
 HIGH_VALUE_1 = 50_000.0
 HIGH_VALUE_2 = 100_000.0
@@ -144,13 +145,12 @@ class RiskMatrixResult:
 
 
 def _risk_level_from_score(score: float) -> str:
-    if score >= 76:
-        return "critical"
-    elif score >= 51:
-        return "high"
-    elif score >= 26:
-        return "medium"
-    return "low"
+    """
+    Rate a 0-100 matrix score via the shared ISO 31000-derived boundaries
+    (app.services.risk_engine.risk_rating_pct) rather than this module's own,
+    previously-independent 26/51/76 cut points — see STRUCTURE_REVIEW.md §C3.
+    """
+    return risk_rating_pct(score)
 
 
 # ── Dimension 1: Customer Risk ─────────────────────────────────────────────────

@@ -26,6 +26,7 @@ from app.models.monitoring import AlertSeverity, AlertStatus, TransactionAlert
 from app.models.report import IFTIReport, ReportStatus, SMRReport, TTRReport
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -333,10 +334,10 @@ def remittance_dashboard(
         Transaction.transaction_date >= prev_30d,
     ).count()
 
-    # IFTI candidates: cross-border >= AUD 10,000 pending reporting
+    # IFTI candidates: cross-border >= statutory threshold, pending reporting
     ifti_candidates = txn_q.filter(
         Transaction.is_cross_border == True,
-        Transaction.amount_aud >= 10_000,
+        Transaction.amount_aud >= TTR_CTR_THRESHOLD_AUD,
         Transaction.transaction_date >= prev_30d,
     ).count()
     ifti_pending = (

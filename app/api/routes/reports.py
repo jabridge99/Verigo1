@@ -58,6 +58,7 @@ from app.services.reporting_service import (
     register_submission,
     reporting_summary,
 )
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 from app.services.ttr_service import (
     build_austrac_submission_payload,
     build_industry_detail,
@@ -423,9 +424,10 @@ def generate_ttr(
         raise HTTPException(404, "Transaction not found.")
 
     amount_aud = txn.amount_aud or txn.amount
-    if amount_aud < 10_000:
+    if amount_aud < TTR_CTR_THRESHOLD_AUD:
         raise HTTPException(
-            422, "Transaction amount is below the AUD 10,000 TTR threshold."
+            422,
+            f"Transaction amount is below the AUD {TTR_CTR_THRESHOLD_AUD:,.0f} TTR threshold.",
         )
 
     customer = (
@@ -468,9 +470,10 @@ def auto_draft_ttr(
         raise HTTPException(404, "Transaction not found.")
 
     amount_aud = txn.amount_aud or txn.amount
-    if amount_aud < 10_000:
+    if amount_aud < TTR_CTR_THRESHOLD_AUD:
         raise HTTPException(
-            422, "Transaction amount is below the AUD 10,000 TTR threshold."
+            422,
+            f"Transaction amount is below the AUD {TTR_CTR_THRESHOLD_AUD:,.0f} TTR threshold.",
         )
 
     customer = (
@@ -1086,8 +1089,10 @@ def _validate_ttr(r: TTRReport) -> list[str]:
     errors = []
     if not r.transaction_date:
         errors.append("transaction_date is required")
-    if not r.total_amount or r.total_amount < 10000:
-        errors.append("total_amount must be >= AUD 10,000 for a TTR")
+    if not r.total_amount or r.total_amount < TTR_CTR_THRESHOLD_AUD:
+        errors.append(
+            f"total_amount must be >= AUD {TTR_CTR_THRESHOLD_AUD:,.0f} for a TTR"
+        )
     if not r.customer_name:
         errors.append("customer_name is required")
     if not r.reporter_name:

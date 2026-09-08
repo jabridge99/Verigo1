@@ -53,6 +53,7 @@ from app.schemas.transaction import (
 )
 from app.schemas.transaction_receipt import TransactionReceipt, build_receipt
 from app.services.monitoring_engine import run_monitoring
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 from app.services.risk_matrix_service import (
     compute_final_approval_score,
     compute_question_score,
@@ -380,7 +381,7 @@ def get_transaction_summary(
     )
 
     amount_aud = txn.amount_aud or txn.amount
-    TTR_THRESHOLD = 10_000.0
+    TTR_THRESHOLD = TTR_CTR_THRESHOLD_AUD
 
     return {
         "transaction_id": txn.id,

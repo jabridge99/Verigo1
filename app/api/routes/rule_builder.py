@@ -51,6 +51,7 @@ from app.models.automation_rule import (
 )
 from app.models.user import User
 from app.services.automation_engine import evaluate_condition_groups
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 EVENT_LABELS: dict[str, str] = {
     "customer_created": "Customer Created",
@@ -767,8 +768,8 @@ def create_decision_panel(
             is_structuring = getattr(txn, "is_structuring_suspect", False)
             is_near_threshold = getattr(txn, "is_near_threshold", False)
 
-    potential_ttr = amount_aud >= 10_000.0
-    potential_ifti = is_cross_border and amount_aud >= 10_000.0
+    potential_ttr = amount_aud >= TTR_CTR_THRESHOLD_AUD
+    potential_ifti = is_cross_border and amount_aud >= TTR_CTR_THRESHOLD_AUD
     potential_smr = is_structuring or alert_score >= 70.0 or customer_is_pep(customer)
     reporting_rationale = {}
     if potential_ttr:
