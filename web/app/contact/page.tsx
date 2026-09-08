@@ -60,7 +60,7 @@ export default function ContactPage() {
                   <opt.icon className="w-5 h-5" />
                 </div>
                 <h3 className="font-bold text-slate-900 text-lg mb-2">{opt.title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed mb-4 flex-1">{opt.desc}</p>
+                <p className="text-slate-600 text-sm leading-relaxed mb-4 flex-1">{opt.desc}</p>
                 <div className="space-y-2">
                   <a
                     href={`mailto:${opt.email}`}
@@ -89,7 +89,7 @@ export default function ContactPage() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-slate-900 mb-1">Office Address</p>
-                <p className="text-sm text-slate-500">1 Clunies Ross Court<br />Eight Mile Plains QLD 4113</p>
+                <p className="text-sm text-slate-600">1 Clunies Ross Court<br />Eight Mile Plains QLD 4113</p>
               </div>
             </div>
             <div className="flex items-start gap-4 pub-card flex-1">

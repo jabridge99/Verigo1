@@ -62,7 +62,7 @@ function Hero() {
                 <div className="w-3 h-3 rounded-full bg-amber-500/70" />
                 <div className="w-3 h-3 rounded-full bg-green-500/70" />
               </div>
-              <div className="flex-1 bg-slate-700 rounded-md px-3 py-1 text-xs text-slate-400 text-left">
+              <div className="flex-1 bg-slate-700 rounded-xl px-3 py-1 text-xs text-slate-400 text-left">
                 app.veri-go.com.au/customers
               </div>
             </div>
@@ -186,7 +186,7 @@ function WhyComplianceMatters() {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
             Why compliance matters to your business
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-600 max-w-xl mx-auto">
             Compliance isn&apos;t just a legal requirement — it&apos;s a business asset.
           </p>
         </div>
@@ -329,7 +329,7 @@ function WhoWeHelp() {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
             Built for your industry
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-600 max-w-xl mx-auto">
             Select your industry — VeriGo loads the right compliance pack, risk matrix, and AUSTRAC report templates automatically.
           </p>
         </div>
@@ -346,7 +346,7 @@ function WhoWeHelp() {
               </div>
               <div className="flex-1">
                 <h3 className="font-bold text-slate-900 mb-1 text-sm">{ind.label}</h3>
-                <p className="text-slate-400 text-xs leading-relaxed">{ind.packName}</p>
+                <p className="text-slate-500 text-xs leading-relaxed">{ind.packName}</p>
               </div>
               <span className="text-blue-600 text-xs font-semibold flex items-center gap-1 group-hover:gap-2 transition-all mt-auto">
                 Learn More <ArrowRight className="w-3 h-3" />
@@ -489,7 +489,7 @@ function PlatformOverview() {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
             Everything in one platform
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-600 max-w-xl mx-auto">
             Four capability groups. Fully integrated. No switching between tools.
           </p>
         </div>
@@ -510,7 +510,7 @@ function PlatformOverview() {
                   <h3 className="font-bold text-slate-900 mt-0.5">{title}</h3>
                 </div>
               </div>
-              <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
+              <p className="text-slate-600 text-sm leading-relaxed">{desc}</p>
               <div className="flex flex-wrap gap-2 mt-auto">
                 {features.map(f => (
                   <span key={f} className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
@@ -556,7 +556,7 @@ function WhyVerigo() {
               Built for Australia.<br />
               <span className="text-blue-600">Not adapted for it.</span>
             </h2>
-            <p className="text-slate-500 leading-relaxed mb-6">
+            <p className="text-slate-600 leading-relaxed mb-6">
               Most compliance platforms are built for global banks and adapted for the Australian market as an afterthought. VeriGo is built from day one for the AML/CTF Act, AUSTRAC obligations, and the businesses that must comply with them.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
@@ -692,7 +692,7 @@ function PricingPreview({ prices }: { prices: Record<string, PlanPrice> }) {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
             Simple, transparent pricing
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-600 max-w-xl mx-auto">
             7-day free trial. No credit card required. Cancel any time.
           </p>
         </div>

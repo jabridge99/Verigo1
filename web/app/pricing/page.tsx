@@ -310,7 +310,7 @@ export default async function PricingPage() {
                   </div>
                 )}
                 <h2 className="text-xl font-bold text-slate-900 mb-1">{plan.name}</h2>
-                <p className="text-slate-500 text-sm mb-5">{plan.description}</p>
+                <p className="text-slate-600 text-sm mb-5">{plan.description}</p>
                 <div className="mb-1">
                   <span className="text-4xl font-black text-slate-900">{plan.price}</span>
                   <span className="text-slate-400 text-lg">{plan.period}</span>
@@ -365,7 +365,7 @@ export default async function PricingPage() {
                 </div>
                 <div>
                   <h4 className="font-semibold text-slate-900 text-sm mb-1">{title}</h4>
-                  <p className="text-slate-500 text-sm">{desc}</p>
+                  <p className="text-slate-600 text-sm">{desc}</p>
                 </div>
               </div>
             ))}
@@ -374,7 +374,7 @@ export default async function PricingPage() {
           {/* Compare plans table */}
           <div>
             <h2 className="text-3xl font-black text-slate-900 mb-2 text-center">Compare plans</h2>
-            <p className="text-slate-500 text-center mb-10">Every feature, every plan — side by side.</p>
+            <p className="text-slate-600 text-center mb-10">Every feature, every plan — side by side.</p>
 
             <div className="overflow-x-auto rounded-2xl ring-1 ring-slate-200 shadow-sm">
               <table className="w-full border-collapse min-w-[800px]">
