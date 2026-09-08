@@ -92,13 +92,15 @@ Tests use an in-memory/temporary SQLite database created fresh per test run (`te
 
 **SQLite (quick local dev):** works out of the box. On startup, non-production environments auto-create all tables (`Base.metadata.create_all()` runs in `app/main.py`'s lifespan). No migration step needed for local SQLite dev.
 
-**PostgreSQL (matches production):** verified against a real, local PostgreSQL 16 instance — not just SQLite. This is where Stage 1 surfaced a real problem, since fixed:
+**PostgreSQL (matches production):** verified against a real, local PostgreSQL 16 instance — not just SQLite. This is where Stage 1 surfaced a real problem, now **fully fixed and verified**:
 
-> `alembic upgrade head` against a **genuinely fresh** PostgreSQL database failed outright — `Base.metadata` was missing 12 of the 51 model files' tables (they were never imported by `app/models/__init__.py`, which `alembic/env.py` relies on to discover the full schema). A fresh database could not be migrated at all. This has been fixed on this branch — see the commit `Fix fresh-database migration failure: 12 model modules never imported`. Re-verified: `alembic upgrade head` now gets further, but is **not yet confirmed to reach `head` cleanly** — at least one more migration (`training_course_linkage_columns`, and likely `mitigation_library`) has the same class of conflict (adding a column the now-fixed baseline already creates). This was fixed for one migration (`notification_dedupe_key`) as part of the same commit; the remaining ones were **found but not yet fixed** — see the note at the end of this document.
+> `alembic upgrade head` against a **genuinely fresh** PostgreSQL database originally failed outright — `Base.metadata` was missing 12 of the 51 model files' tables (they were never imported by `app/models/__init__.py`, which `alembic/env.py` relies on to discover the full schema). Fixed (`Fix fresh-database migration failure: 12 model modules never imported`). That fix then surfaced a second class of problem: 9 of the remaining migrations each unconditionally added a column/table/type that the now-fixed baseline's `create_all()` (running against *current* models) had already created. Each was made idempotent — checks existence before making the DDL change, so it's a no-op on a database created via the baseline and still performs the real change on a database that predates it (`Make remaining 9 post-baseline migrations idempotent against create_all()`).
+>
+> **Verified end-to-end:** dropped and recreated a real local PostgreSQL 16 database from empty, ran `alembic upgrade head` — completes cleanly, reaches `head`, creates all 161 tables. Booted the app against that freshly-migrated database and completed a real `register → login` round trip through the live API. Full backend test suite (415 tests) still passes.
 
 **What this means practically today:**
-- An **existing** database (e.g. your real Railway production database, which was presumably provisioned before this gap existed) is unaffected — `create_all()` only creates tables that don't already exist, so this bug never touched already-provisioned schemas.
-- A **brand-new** database — a new environment, a disaster-recovery rebuild, a self-hosted customer's first deploy — would previously have failed to come up at all. It's now more likely to succeed than before, but not yet guaranteed to reach `head` without hitting one of the remaining, unverified migrations. Treat "does `alembic upgrade head` work against a truly empty database" as **not fully confirmed** until the remaining migrations are checked.
+- An **existing** database (e.g. your real Railway production database, which was presumably provisioned before this gap existed) was never affected — `create_all()` only creates tables that don't already exist, so this bug never touched already-provisioned schemas.
+- A **brand-new** database — a new environment, a disaster-recovery rebuild, a self-hosted customer's first deploy — previously failed to come up at all. **This is now confirmed fixed**, verified against real PostgreSQL, not inferred from reading the code.
 
 ---
 
@@ -119,22 +121,23 @@ Being explicit about the edges of this baseline check, so nobody mistakes silenc
 - **Docker / `docker-compose` full-stack deployment** — no Docker daemon was available in this environment. The Dockerfiles and `docker-compose.yml` were reviewed (Stage 0) but not built or run.
 - **Vercel deployment itself** — this baseline confirmed the exact thing Vercel runs (`npm run build`) succeeds, which is the strongest available proxy without direct Vercel access, but did not trigger or observe an actual Vercel deployment.
 - **Redis** — not available in this environment; the app correctly falls back to in-process rate limiting/JWT blacklist with a warning (as documented in Stage 0), but Redis-backed behaviour itself was not exercised.
-- **Remaining Alembic migrations beyond `notification_dedupe_key`** — see §5 above.
 - **Third-party integrations** (Stripe, Sumsub, sanctions providers, etc.) — none were exercised; they require live credentials.
 
 ---
 
-## 8. Frontend dependency vulnerabilities — needs a decision
+## 8. Frontend dependency vulnerabilities — resolved (mostly)
 
-`npm audit` on a clean `npm ci` install reports **9 vulnerabilities (1 low, 8 high)**, including real, named CVEs in **Next.js itself** at the currently pinned version (`16.2.9`): SSRF via rewrites with an attacker-controlled destination hostname, cache confusion of response bodies, unauthenticated disclosure of internal Server Function endpoints, and a few denial-of-service issues. The rest are in `postcss`, `sharp`, `browserslist`, `js-yaml`, `nanoid`, and `fast-uri` (all transitive).
+`npm audit` on a clean `npm ci` install reported **9 vulnerabilities (1 low, 8 high)**, including real, named CVEs in **Next.js itself** at the then-resolved version (`16.2.9`): SSRF via rewrites with an attacker-controlled destination hostname, cache confusion of response bodies, unauthenticated disclosure of internal Server Function endpoints, and a few denial-of-service issues. The rest were in `postcss`, `sharp`, `browserslist`, `js-yaml`, `nanoid`, and `fast-uri` (all transitive).
 
-`npm audit fix` (without `--force`) resolves the Next.js CVEs and most others by moving to a patched version within the existing `^16.2.9` semver range. Only `postcss` needs `--force` (bumps outside the declared range, to `8.5.28`). This was **found but not applied** — bumping a pinned dependency, even via `npm audit fix`, is a real change to what ships to production and deserves an explicit go-ahead rather than being folded into a "confirm the baseline" pass.
+**Applied `npm audit fix` (no `--force`)** — resolved 8 of 9, moving Next.js to `16.3.4`, still within the declared `^16.2.9` range in `package.json` (no dependency-range change). Re-verified after: production build still succeeds (114 routes), lint unchanged (0 errors, same 20 pre-existing warnings), production server still serves `/`, `/login`, `/pricing` with `200`s.
+
+**One remaining, deliberately left unresolved:** `postcss` (XSS + path-traversal-via-sourcemap CVEs) needs `npm audit fix --force`, which would move it outside its currently declared range. Not applied — that's a distinct decision from the in-range bump above.
 
 ---
 
 ## 9. Git workflow
 
-The repository currently develops via short-lived feature branches merged directly into `main` (see `git log` — no persistent `development` branch exists today). Before restructuring that into a `main → development → feature branch` model as the staged plan describes, this needs a decision from you: that's a workflow change affecting how the whole team works, not a code change, and the current merge-to-main history suggests it may not match how you actually want to work. Flagged, not applied.
+Confirmed: keep the current workflow. The repository develops via short-lived feature branches merged directly into `main` (see `git log`), and that's staying as-is — no persistent `development` branch was set up.
 
 ---
 
@@ -159,20 +162,17 @@ See `.env.example` for the authoritative, fully-commented list. Categories, and 
 ## Stage Status
 
 **Stage:** 1 — Create a Safe Development Baseline
-**Status:** COMPLETE WITH ISSUES
+**Status:** COMPLETE
 
-**What works:** Backend installs, boots, and serves a fully working authenticated API (verified end-to-end, not just via tests). Frontend installs, builds cleanly for production (114 routes), and — verified in a real browser — logs in and renders a fully authenticated dashboard with live data. Full test suite (415 tests) passes. SQLite local dev works with zero setup.
+**What works:** Backend installs, boots, and serves a fully working authenticated API (verified end-to-end, not just via tests). Frontend installs, builds cleanly for production (114 routes), and — verified in a real browser — logs in and renders a fully authenticated dashboard with live data. Full test suite (415 tests) passes. SQLite local dev works with zero setup. `alembic upgrade head` now confirmed working against a genuinely fresh PostgreSQL 16 database, not just an already-provisioned one.
 
-**Known issues surfaced this stage:**
-1. A genuinely fresh PostgreSQL database could not run `alembic upgrade head` to completion — root-caused to 12 model modules never being imported, which is now fixed; the fix also surfaced and fixed a second, narrower conflict in one migration. **At least one further migration is confirmed to have the same class of problem and was not yet fixed** (§5).
-2. 9 npm dependency vulnerabilities, including real Next.js CVEs, with an available (mostly non-breaking) fix not yet applied (§8).
-3. No persistent `development` branch exists; the staged plan's branching model hasn't been set up (§9).
+**Issues surfaced and resolved this stage:**
+1. A genuinely fresh PostgreSQL database could not run `alembic upgrade head` to completion — root-caused to 12 model modules never being imported, plus 9 migrations that weren't idempotent against the fixed baseline. **Both fully fixed and re-verified against real PostgreSQL 16** (§5).
+2. 9 npm dependency vulnerabilities, including real Next.js CVEs — **8 of 9 fixed** via `npm audit fix` within the declared version range; 1 (`postcss`) deliberately left for a separate, explicit decision since fixing it requires leaving the declared range (§8).
+3. Git workflow — **confirmed**: keep feature-branches-into-`main` as-is, no change made (§9).
 
-**Security concerns:** None new beyond what Stage 0 already found. The migration gap in §5 is a build-integrity issue, not a security exposure.
+**Security concerns:** None new beyond what Stage 0 already found. The migration gap was a build-integrity issue, not a security exposure, and is now closed.
 
-**Technical debt:** As catalogued in `CURRENT_STATE.md` (Stage 0), plus: the migration chain's baseline-vs-incremental-migration conflict pattern (§5) should probably be resolved architecturally (e.g., a fresh re-squash) rather than patched migration-by-migration indefinitely.
+**Technical debt:** As catalogued in `CURRENT_STATE.md` (Stage 0). One new, minor item added: the migration chain now carries defensive existence-checks in 10 files rather than a single clean baseline — functionally correct and fully verified, but a future re-squash (once the team is ready to retire pre-baseline migration history entirely) would be tidier than carrying these guards indefinitely.
 
-**Recommended next stage:** Stage 2 (Repository Structure & Clean-up) — but first, three small decisions from you:
-1. Should I finish verifying/fixing the remaining Alembic migrations (§5) now, or leave that as tracked follow-up work?
-2. Should I apply `npm audit fix` now (§8) — it's a low-risk, mostly non-breaking dependency bump that closes real Next.js CVEs?
-3. Do you want the `main → development → feature branch` workflow set up (§9), or should development keep using feature-branches-into-main as it does today?
+**Recommended next stage:** Stage 2 (Repository Structure & Clean-up).
