@@ -84,7 +84,9 @@ from app.models.case import (
     CaseStatus,
     CaseType,
     EvidenceType,
-    NoteType,
+)
+from app.models.case import (
+    NoteType as CaseNoteType,
 )
 from app.models.compliance_calendar import (
     CalendarItemStatus,
@@ -313,14 +315,12 @@ from app.models.organisation import (
 )
 from app.models.professional_assessment import (
     AssessmentRiskRating,
-    AssessmentStatus,
     ChecklistType,
     InvestmentLegitimacyAssessment,
     OrgProfessionalChecklistTemplate,
     ProfessionalAssessment,
     ProfessionalJudgmentChecklist,
     ProfessionalServiceType,
-    ReviewOutcome,
     SOFAssessment,
     SOFSourceType,
     SOWAssessment,
@@ -329,9 +329,19 @@ from app.models.professional_assessment import (
     TransactionPurposeAssessment,
     TransactionPurposeType,
 )
+from app.models.professional_assessment import (
+    AssessmentStatus as ProfessionalAssessmentStatus,
+)
+from app.models.professional_assessment import (
+    ReviewOutcome as ProfessionalReviewOutcome,
+)
 from app.models.regulatory_recommendation import (
-    RecommendationPriority,
-    RecommendationStatus,
+    RecommendationPriority as RegulatoryRecommendationPriority,
+)
+from app.models.regulatory_recommendation import (
+    RecommendationStatus as RegulatoryRecommendationStatus,
+)
+from app.models.regulatory_recommendation import (
     RecommendationType,
     RegulatoryRecommendation,
 )
@@ -394,9 +404,6 @@ from app.models.risk_matrix_config import (
 from app.models.screening import (
     AdverseMediaCategory,
     AdverseMediaResult,
-    AlertSeverity,
-    AlertStatus,
-    CryptoNetwork,
     CryptoWalletScreening,
     ScreeningAlert,
     ScreeningEntityType,
@@ -405,6 +412,15 @@ from app.models.screening import (
     ScreeningStatus,
     ScreeningType,
     WalletRiskCategory,
+)
+from app.models.screening import (
+    AlertSeverity as ScreeningAlertSeverity,
+)
+from app.models.screening import (
+    AlertStatus as ScreeningAlertStatus,
+)
+from app.models.screening import (
+    CryptoNetwork as ScreeningCryptoNetwork,
 )
 from app.models.security_event import SecurityEvent
 from app.models.task import Task, TaskEvent, TaskPriority, TaskStatus, TaskType
@@ -523,9 +539,9 @@ __all__ = [
     "ScreeningStatus",
     "ScreeningProvider",
     "ScreeningEntityType",
-    "AlertSeverity",
-    "AlertStatus",
-    "CryptoNetwork",
+    "ScreeningAlertSeverity",
+    "ScreeningAlertStatus",
+    "ScreeningCryptoNetwork",
     "WalletRiskCategory",
     "AdverseMediaCategory",
     # Transactions
@@ -537,6 +553,7 @@ __all__ = [
     "TransactionDirection",
     "PaymentMethod",
     "DeliveryChannel",
+    "CryptoNetwork",
     # Monitoring
     "MonitoringRule",
     "RuleConditionGroup",
@@ -560,7 +577,7 @@ __all__ = [
     "CaseStatus",
     "CaseSeverity",
     "CaseOutcome",
-    "NoteType",
+    "CaseNoteType",
     "EvidenceType",
     "IFTIReport",
     "TTRReport",
@@ -590,8 +607,8 @@ __all__ = [
     # Regulatory Recommendations
     "RegulatoryRecommendation",
     "RecommendationType",
-    "RecommendationStatus",
-    "RecommendationPriority",
+    "RegulatoryRecommendationStatus",
+    "RegulatoryRecommendationPriority",
     # Risk Matrix & Pre-Approval Questions
     "OrgMonitoringConfig",
     "OrgApprovalQuestion",
@@ -610,13 +627,13 @@ __all__ = [
     "ProfessionalJudgmentChecklist",
     "OrgProfessionalChecklistTemplate",
     "ProfessionalServiceType",
-    "AssessmentStatus",
+    "ProfessionalAssessmentStatus",
     "AssessmentRiskRating",
     "SOFSourceType",
     "SOWSourceType",
     "TransactionPurposeType",
     "ChecklistType",
-    "ReviewOutcome",
+    "ProfessionalReviewOutcome",
     # Risk Matrix Config
     "OrgRiskFactor",
     "OrgRiskProfile",

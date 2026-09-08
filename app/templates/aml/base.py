@@ -8,7 +8,7 @@ Risk overlays are applied on top to adjust language for low/medium/high risk app
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -449,6 +449,13 @@ class AMLTemplateBase:
     austrac_registration_date: str = ""
     austrac_registration_expiry: str = ""
     designated_business_group: str = ""
+
+    # ── Seeded policies/controls ──────────────────────────────────────────────
+    # Populated by each industry's get_template() from BASE_POLICIES/BASE_CONTROLS
+    # (deep-copied, sometimes with industry-specific entries appended). Read via
+    # getattr() in factory.py when seeding an AMLProgram's policy/control records.
+    _policies: list[dict] = field(default_factory=list)
+    _controls: list[dict] = field(default_factory=list)
 
 
 # ── Default policies seeded per industry ─────────────────────────────────────
