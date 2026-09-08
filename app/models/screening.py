@@ -142,7 +142,7 @@ class ScreeningRecord(Base):
         index=True,
     )
     match_count = Column(Float, default=0)
-    match_score = Column(Float)  # 0–100 fuzzy match confidence
+    match_score: Mapped[Optional[float]] = Column(Float)  # 0–100 fuzzy match confidence
     match_details = Column(JSON)  # structured match data
     provider_raw_response = Column(Text)  # full JSON from provider
 
@@ -162,7 +162,7 @@ class ScreeningRecord(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     customer = relationship("Customer", back_populates="screening_records")
-    alerts = relationship(
+    alerts: Mapped[list["ScreeningAlert"]] = relationship(
         "ScreeningAlert",
         back_populates="screening_record",
         cascade="all, delete-orphan",

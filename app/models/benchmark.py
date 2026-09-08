@@ -261,11 +261,11 @@ class IndustryBenchmark(Base):
     org_count = Column(Integer, nullable=False)
     mean = Column(Float)
     std_dev: Mapped[Optional[float]] = Column(Float)
-    minimum = Column(Float)
+    minimum: Mapped[Optional[float]] = Column(Float)
     p25: Mapped[Optional[float]] = Column(Float)
     median: Mapped[Optional[float]] = Column(Float)
     p75: Mapped[Optional[float]] = Column(Float)
-    maximum = Column(Float)
+    maximum: Mapped[Optional[float]] = Column(Float)
 
     is_published = Column(Boolean, default=False)
     # False if org_count < MIN_ORG_COUNT_FOR_BENCHMARK

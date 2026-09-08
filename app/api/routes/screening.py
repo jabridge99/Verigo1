@@ -95,7 +95,7 @@ class QuickScreenRequest(BaseModel):
 
 
 class BatchScreeningRequest(BaseModel):
-    customer_ids: List[str] = Field(..., min_items=1, max_items=50)
+    customer_ids: List[str] = Field(..., min_length=1, max_length=50)
     screening_types: List[ScreeningType]
     provider: ScreeningProvider = ScreeningProvider.internal
 

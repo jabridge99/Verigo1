@@ -35,6 +35,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -98,8 +99,8 @@ class VerificationProvider(Base):
     # Vendor identifier for api/hybrid modes (e.g. "sumsub", "refinitiv"); null for manual.
     vendor_key = Column(String(50))
 
-    unit_cost_aud = Column(Float, default=0.0, nullable=False)
-    markup_pct = Column(Float, default=0.0, nullable=False)
+    unit_cost_aud: Mapped[float] = Column(Float, default=0.0, nullable=False)
+    markup_pct: Mapped[float] = Column(Float, default=0.0, nullable=False)
 
     is_system = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True, nullable=False, index=True)

@@ -29,6 +29,7 @@ from app.models.customer_portal import (
     CustomerPortalSession,
     PortalDocumentStatus,
     PortalSessionStatus,
+    PortalType,
 )
 
 
@@ -60,7 +61,7 @@ def create_portal_session(
         customer_id=customer_id,
         org_id=org_id,
         invited_by=invited_by,
-        portal_type=portal_type,
+        portal_type=PortalType(portal_type),
         required_documents=required_documents,
         required_questionnaire_sections=required_sections,
         customer_email=customer.email or "",

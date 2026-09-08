@@ -55,3 +55,37 @@ def test_real_ip_still_triggers_brute_force_alert(client, super_admin_user, db):
     brute_force = [a for a in alerts if a.get("type") == "brute_force"]
     assert len(brute_force) == 1
     assert brute_force[0]["ip_address"] == "203.0.113.7"
+
+
+def test_role_change_audit_reads_real_metadata(client, super_admin_user, db):
+    """
+    role_change_audit() read e.metadata -- not a real column (the real
+    one is extra_metadata) but a valid attribute on every SQLAlchemy
+    declarative class (the class's own MetaData object), so on a
+    freshly-queried row json.loads() always got a MetaData object
+    instead of a JSON string, always raised, and was always silently
+    swallowed by the surrounding try/except -- every role-change event
+    the audit endpoint ever returned had target_user_id/from_role/
+    to_role hardcoded to None regardless of what was actually recorded.
+    """
+    import json
+
+    db.add(
+        SecurityEvent(
+            event_id=f"sec_{uuid.uuid4().hex[:12]}",
+            event_type="role_changed",
+            extra_metadata=json.dumps(
+                {"target": "usr_abc123", "from": "analyst", "to": "compliance"}
+            ),
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db.commit()
+
+    resp = client.get("/api/v1/security/role-changes", headers=_auth(super_admin_user))
+    assert resp.status_code == 200, resp.text
+    events = resp.json()["events"]
+    assert len(events) == 1
+    assert events[0]["target_user_id"] == "usr_abc123"
+    assert events[0]["from_role"] == "analyst"
+    assert events[0]["to_role"] == "compliance"

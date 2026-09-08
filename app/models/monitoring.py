@@ -419,8 +419,12 @@ class TransactionAlert(Base):
 
     # ── Pre-Approval Custom Questions ─────────────────────────────────────────
     # Populated after compliance officer answers org approval questions.
-    question_score = Column(Float)  # 0–100 (% compliant answers)
-    final_approval_score = Column(Float)  # alert_score * base_wt + question_risk * q_wt
+    question_score: Mapped[Optional[float]] = Column(
+        Float
+    )  # 0–100 (% compliant answers)
+    final_approval_score: Mapped[Optional[float]] = Column(
+        Float
+    )  # alert_score * base_wt + question_risk * q_wt
     approval_score_detail = Column(
         JSON
     )  # breakdown dict from compute_final_approval_score

@@ -17,7 +17,7 @@ AUSTRAC requirements:
 
 import logging
 from datetime import date, datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -69,6 +69,7 @@ from app.models.risk_matrix import (
 from app.models.screening import (
     CryptoWalletScreening,
     ScreeningAlert,
+    ScreeningEntityType,
     ScreeningRecord,
     ScreeningStatus,
     ScreeningType,
@@ -1070,7 +1071,7 @@ def trigger_screening(
             org_id=customer.org_id,
             customer_id=customer.id,
             screening_type=stype,
-            entity_type=payload.entity_type or "customer",
+            entity_type=ScreeningEntityType(payload.entity_type or "customer"),
             entity_id=entity_id,
             entity_name=entity_name,
             provider=payload.provider,
@@ -1320,7 +1321,10 @@ def rescore_customer(
 ):
     """Re-run risk scoring via the full 5-dimension customer risk engine."""
     customer = _get_customer(customer_id, org_id_for(current_user), db)
-    before = {"risk_score": customer.risk_score, "risk_level": customer.risk_level}
+    before: dict[str, Any] = {
+        "risk_score": customer.risk_score,
+        "risk_level": customer.risk_level,
+    }
 
     result = assess_customer_risk(
         customer,

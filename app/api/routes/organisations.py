@@ -18,6 +18,7 @@ from app.models.organisation import (
 )
 from app.models.user import User
 from app.schemas.aml_program import (
+    AMLProgramItemResponse,
     AMLProgramResponse,
     AMLProgramVersionDetailResponse,
     AMLProgramVersionListResponse,
@@ -171,7 +172,7 @@ def _program_response(db: Session, program) -> AMLProgramResponse:
             status=program.status,
             version=program.version,
             generated_at=program.generated_at,
-            items=items,
+            items=[AMLProgramItemResponse.model_validate(i) for i in items],
         )
     return AMLProgramResponse(
         program_id=program.program_id,
@@ -180,7 +181,10 @@ def _program_response(db: Session, program) -> AMLProgramResponse:
         status=program.status,
         version=program.version,
         generated_at=program.generated_at,
-        items=aml_program_service.to_preview_items(items),
+        items=[
+            AMLProgramItemResponse.model_validate(i)
+            for i in aml_program_service.to_preview_items(items)
+        ],
         is_preview=True,
         total_items=len(items),
     )

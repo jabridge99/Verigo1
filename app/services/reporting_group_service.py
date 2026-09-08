@@ -19,6 +19,7 @@ from app.models.monitoring import AlertStatus, TransactionAlert
 from app.models.organisation import Organisation
 from app.models.reporting_group import (
     GroupMemberRole,
+    GroupType,
     ReportingGroup,
     ReportingGroupMember,
 )
@@ -39,7 +40,7 @@ def create_group(
 
     group = ReportingGroup(
         name=name,
-        group_type=group_type,
+        group_type=GroupType(group_type),
         holding_org_id=holding_org_id,
         austrac_group_id=austrac_group_id,
         shared_aml_program_id=shared_aml_program_id,
@@ -88,7 +89,7 @@ def add_member(
     member = ReportingGroupMember(
         group_id=group_id,
         org_id=org_id,
-        member_role=member_role,
+        member_role=GroupMemberRole(member_role),
         jurisdiction=jurisdiction or org.country or "AU",
     )
     db.add(member)

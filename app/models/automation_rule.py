@@ -291,9 +291,9 @@ class DecisionSupportPanel(Base):
     geographic_risk_score: Mapped[Optional[float]] = Column(Float)
     product_risk_score: Mapped[Optional[float]] = Column(Float)
     behaviour_risk_score: Mapped[Optional[float]] = Column(Float)
-    risk_matrix_score = Column(Float)
+    risk_matrix_score: Mapped[Optional[float]] = Column(Float)
     alert_score: Mapped[Optional[float]] = Column(Float)
-    final_approval_score = Column(Float)
+    final_approval_score: Mapped[Optional[float]] = Column(Float)
 
     # Triggered rules (from MonitoringRule and AutomationRule evaluations)
     triggered_rules = Column(JSON, default=list)  # [{rule_id, rule_name, category}]

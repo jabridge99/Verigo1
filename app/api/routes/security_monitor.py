@@ -184,7 +184,7 @@ def role_change_audit(
     for e in events:
         meta = {}
         try:
-            meta = json.loads(e.metadata or "{}")
+            meta = json.loads(e.extra_metadata or "{}")
         except Exception:
             pass
         result.append(
