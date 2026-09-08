@@ -18,7 +18,11 @@ def _make_session(db, org):
         applicant_email="jane@example.com",
         invite_token=uuid.uuid4().hex,
         status=SessionStatus.in_progress,
-        collected_data={"date_of_birth": "1990-01-01", "nationality": "AU", "country_of_residence": "AU"},
+        collected_data={
+            "date_of_birth": "1990-01-01",
+            "nationality": "AU",
+            "country_of_residence": "AU",
+        },
     )
 
 
@@ -64,5 +68,9 @@ def test_submit_onboarding_is_idempotent(db):
     first = submit_onboarding(db, sess)
     second = submit_onboarding(db, sess)
 
-    assert second["status"] == "already_completed"
+    # Idempotency is now tracked via session.status (SessionStatus.documents_submitted
+    # onward), not the literal string "already_completed" -- customer_id is set on
+    # session creation for every session, so it was never a valid "already submitted"
+    # signal (see test_onboarding_wizard_data_reaches_customer.py).
+    assert second["status"] == SessionStatus.documents_submitted
     assert second["customer_id"] == first["customer_id"]
