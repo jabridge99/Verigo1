@@ -265,6 +265,9 @@ None of these require a rewrite. All five are targeted, well-understood fixes.
 
 **Technical debt:** Moderate and well-understood — mostly duplication (two IFTI systems, two audit-log tables), documentation drift, thin frontend componentisation, and stale dependencies. Nothing here blocks progress; it's a cleanup backlog, not a crisis.
 
-**Recommended next stage:** Stage 1 (Safe Development Baseline) — but first, two things need a decision from you before proceeding:
-1. **Confirm the real production deployment topology** (Railway + Vercel appears to be live, based on the hardcoded `api.verigo.com.au` domain — but this should come from you, not be inferred).
-2. **Decide whether the IFTI cross-tenant bug (§9.1) should be fixed immediately, as a standalone, minimal, low-risk patch, ahead of Stage 1** — given it's a live data-isolation issue independent of any restructuring work. My recommendation is yes, fix it now as its own tiny, reviewed change, rather than letting it sit through the full staged plan.
+**Recommended next stage:** Stage 1 (Safe Development Baseline).
+
+**Update (Stage 1, since this was written):**
+1. **Production deployment topology confirmed by you:** Railway (API) + Vercel (frontend), as this document guessed from the hardcoded `api.verigo.com.au` domain.
+2. **The IFTI cross-tenant bug (§9.1) is fixed** — see commit "Fix cross-tenant IDOR in IFTI module: gate on is_super_admin, not admin role." Verified with a new regression test suite (9 tests) that fails against the old code and passes with the fix; full existing suite (415 tests) still green.
+3. **A second, unrelated critical baseline bug was found and partly fixed during Stage 1:** a genuinely fresh PostgreSQL database could not run `alembic upgrade head` at all (12 model modules were never imported into `Base.metadata`). Root cause fixed; one downstream migration conflict fixed; at least one more migration is known to have the same class of conflict and is not yet fixed. See `DEVELOPMENT.md` §5 for full detail — this is now the top open item.
