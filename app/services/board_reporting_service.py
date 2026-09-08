@@ -174,7 +174,7 @@ def _customers_section(
     ]
     pep_active = [c for c in all_active if c.is_pep]
     sanctioned = [c for c in all_active if c.is_sanctions_match]
-    edd_customers = [c for c in all_active if c.cdd_level == CDDLevel.edd]
+    edd_customers = [c for c in all_active if c.cdd_level == CDDLevel.enhanced]
 
     return {
         "total_active": len(all_active),
@@ -202,6 +202,17 @@ def _alerts_section(
 ) -> dict:
     from app.models.monitoring import AlertSeverity, AlertStatus, TransactionAlert
 
+    # AlertStatus has no single "open" member -- generated/assigned/under_review/
+    # escalated/smr_candidate are all still-active states, matching the
+    # established _open_alert_statuses() convention in app/api/routes/dashboard.py.
+    open_alert_statuses = [
+        AlertStatus.generated,
+        AlertStatus.assigned,
+        AlertStatus.under_review,
+        AlertStatus.escalated,
+        AlertStatus.smr_candidate,
+    ]
+
     period_alerts = (
         db.query(TransactionAlert)
         .filter(
@@ -222,16 +233,14 @@ def _alerts_section(
         db.query(TransactionAlert)
         .filter(
             TransactionAlert.org_id == org_id,
-            TransactionAlert.status == AlertStatus.open,
+            TransactionAlert.status.in_(open_alert_statuses),
         )
         .all()
     )
 
     escalated = [a for a in period_alerts if a.status == AlertStatus.escalated]
-    cleared = [a for a in period_alerts if a.status == AlertStatus.cleared]
-    false_positive = [
-        a for a in period_alerts if a.status == AlertStatus.false_positive
-    ]
+    cleared = [a for a in period_alerts if a.status == AlertStatus.resolved]
+    false_positive = [a for a in period_alerts if a.status == AlertStatus.dismissed]
 
     return {
         "alerts_raised_period": len(period_alerts),
@@ -305,7 +314,17 @@ def _policies_section(
     policies = db.query(Policy).filter_by(org_id=org_id).all()
     today = date.today()
 
-    active = [p for p in policies if p.status == PolicyLifecycleStatus.approved]
+    # PolicyLifecycleStatus has no single "approved"/"under_review" member --
+    # "published" is the active/operative state, and the workflow has three
+    # distinct review sub-stages (internal_review, compliance_review,
+    # pending_approval) grouped here as "under review".
+    review_statuses = (
+        PolicyLifecycleStatus.internal_review,
+        PolicyLifecycleStatus.compliance_review,
+        PolicyLifecycleStatus.pending_approval,
+    )
+
+    active = [p for p in policies if p.status == PolicyLifecycleStatus.published]
     overdue_review = [
         p for p in active if p.review_due_date and p.review_due_date < today
     ]
@@ -317,9 +336,7 @@ def _policies_section(
         <= p.review_due_date
         <= date(today.year, today.month + 1 if today.month < 12 else 1, today.day)
     ]
-    under_review = [
-        p for p in policies if p.status == PolicyLifecycleStatus.under_review
-    ]
+    under_review = [p for p in policies if p.status in review_statuses]
     draft = [p for p in policies if p.status == PolicyLifecycleStatus.draft]
 
     period_updated = [

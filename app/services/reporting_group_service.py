@@ -130,12 +130,32 @@ def get_group_dashboard(db: Session, group_id: str, requesting_org_id: str) -> d
     )
     member_org_ids = [m.org_id for m in active_members]
 
+    # CaseStatus has no single "closed"/"withdrawn" member -- there are five
+    # distinct closed_* terminal states and no "withdrawn" state at all.
+    closed_case_statuses = (
+        CaseStatus.closed_no_action,
+        CaseStatus.closed_smr_filed,
+        CaseStatus.closed_referred,
+        CaseStatus.closed_exited,
+        CaseStatus.closed_no_smr,
+    )
+    # AlertStatus has no single "open" member -- these are the still-active
+    # states, matching the established _open_alert_statuses() convention in
+    # app/api/routes/dashboard.py.
+    open_alert_statuses = (
+        AlertStatus.generated,
+        AlertStatus.assigned,
+        AlertStatus.under_review,
+        AlertStatus.escalated,
+        AlertStatus.smr_candidate,
+    )
+
     customers = db.query(Customer).filter(Customer.org_id.in_(member_org_ids)).all()
     open_cases = (
         db.query(Case)
         .filter(
             Case.org_id.in_(member_org_ids),
-            Case.status.notin_([CaseStatus.closed, CaseStatus.withdrawn]),
+            Case.status.notin_(closed_case_statuses),
         )
         .count()
     )
@@ -143,7 +163,7 @@ def get_group_dashboard(db: Session, group_id: str, requesting_org_id: str) -> d
         db.query(TransactionAlert)
         .filter(
             TransactionAlert.org_id.in_(member_org_ids),
-            TransactionAlert.status == AlertStatus.open,
+            TransactionAlert.status.in_(open_alert_statuses),
         )
         .count()
     )

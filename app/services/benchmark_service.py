@@ -589,11 +589,22 @@ def _compute_org_metrics(db: Session, org_id: str, start: date, end: date) -> di
             )
             .all()
         )
+        # AlertStatus has no single "open" member -- these are the still-active
+        # states, matching the established _open_alert_statuses() convention in
+        # app/api/routes/dashboard.py.
+        open_alert_statuses = (
+            AlertStatus.generated,
+            AlertStatus.assigned,
+            AlertStatus.under_review,
+            AlertStatus.escalated,
+            AlertStatus.smr_candidate,
+        )
+
         total_alerts = len(alerts_in_period)
         m["total_alerts"] = total_alerts
         if total_alerts > 0:
             open_alerts = sum(
-                1 for a in alerts_in_period if a.status == AlertStatus.open
+                1 for a in alerts_in_period if a.status in open_alert_statuses
             )
             m["open_alert_pct"] = round(open_alerts / total_alerts * 100, 2)
             # Alert → SMR conversion: alerts where result = smr_filed / total closed
@@ -669,11 +680,21 @@ def _compute_org_metrics(db: Session, org_id: str, start: date, end: date) -> di
     try:
         from app.models.case import Case, CaseStatus
 
+        # CaseStatus has no single "closed" member -- there are five distinct
+        # closed_* terminal states.
+        closed_case_statuses = (
+            CaseStatus.closed_no_action,
+            CaseStatus.closed_smr_filed,
+            CaseStatus.closed_referred,
+            CaseStatus.closed_exited,
+            CaseStatus.closed_no_smr,
+        )
+
         closed_cases = (
             db.query(Case)
             .filter(
                 Case.org_id == org_id,
-                Case.status == CaseStatus.closed,
+                Case.status.in_(closed_case_statuses),
                 Case.closed_at.isnot(None),
                 Case.created_at.between(start_dt, end_dt),
             )

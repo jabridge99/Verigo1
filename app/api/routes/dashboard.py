@@ -211,20 +211,20 @@ def global_dashboard(
         ComplianceCalendarItem.due_date >= now,
         ComplianceCalendarItem.due_date <= now + timedelta(days=7),
         ComplianceCalendarItem.status.in_(
-            [CalendarItemStatus.open, CalendarItemStatus.in_progress]
+            [CalendarItemStatus.scheduled, CalendarItemStatus.in_progress]
         ),
     ).count()
     upcoming_30d = cal_q.filter(
         ComplianceCalendarItem.due_date >= now,
         ComplianceCalendarItem.due_date <= now + timedelta(days=30),
         ComplianceCalendarItem.status.in_(
-            [CalendarItemStatus.open, CalendarItemStatus.in_progress]
+            [CalendarItemStatus.scheduled, CalendarItemStatus.in_progress]
         ),
     ).count()
     overdue_items = cal_q.filter(
         ComplianceCalendarItem.due_date < now,
         ComplianceCalendarItem.status.in_(
-            [CalendarItemStatus.open, CalendarItemStatus.in_progress]
+            [CalendarItemStatus.scheduled, CalendarItemStatus.in_progress]
         ),
     ).count()
 
@@ -457,7 +457,7 @@ def crypto_dashboard(
                 [
                     AlertCategory.crypto_mixer,
                     AlertCategory.darknet_exposure,
-                    AlertCategory.crypto_anomaly,
+                    AlertCategory.wallet_risk,
                 ]
             ),
             TransactionAlert.status.in_(_open_alert_statuses()),
@@ -886,7 +886,7 @@ def compliance_score(
             ComplianceCalendarItem.due_date < now,
             ComplianceCalendarItem.status.in_(
                 [
-                    CalendarItemStatus.open,
+                    CalendarItemStatus.scheduled,
                     CalendarItemStatus.in_progress,
                 ]
             ),
