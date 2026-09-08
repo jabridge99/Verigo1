@@ -201,7 +201,9 @@ def attach_owner(db: Session, org: Organisation, owner: User) -> None:
     freshly-created org should be the answer to all three, or every
     scoping convention in the codebase that reads a different one of them
     silently treats the owner as belonging to no organisation at all).
-    Seeds the org's default approval questions. Caller commits.
+    Seeds the org's default approval questions and its AML/CTF Solution
+    (Solution + Program + Risk Framework — see _seed_aml_solution_and_risk_framework).
+    Caller commits.
     """
     owner_role = get_system_role(db, "owner")
     db.add(
@@ -218,6 +220,35 @@ def attach_owner(db: Session, org: Organisation, owner: User) -> None:
         owner.industry_id = owner.industry_id or org.id
 
     _seed_default_approval_questions(db, org.id)
+    _seed_aml_solution_and_risk_framework(db, org, owner)
+
+
+def _seed_aml_solution_and_risk_framework(
+    db: Session, org: Organisation, owner: User
+) -> None:
+    """
+    Bootstrap the AML/CTF Solution (Solution + Program document + Risk
+    Framework) every org needs before any of the AML program, governance,
+    or risk-assessment endpoints will work — they all 404 with "Complete
+    onboarding and industry selection first" against an org with no
+    AMLSolution row. seed_aml_solution()/seed_risk_framework() have existed
+    since Stage 3/6 but were never actually called from any real code path
+    (only referenced in their own docstrings) — every organisation ever
+    created through real registration or POST /organisations has had this
+    entire half of the product permanently unreachable. Guarded on
+    AMLSolution's unique org_id constraint so this is safe to no-op if
+    attach_owner() is ever called twice for the same org.
+    """
+    from app.models.aml_solution import AMLSolution
+    from app.templates.aml.factory import seed_aml_solution
+    from app.templates.risk.factory import seed_risk_framework
+
+    if db.query(AMLSolution).filter(AMLSolution.org_id == org.id).first():
+        return
+
+    solution = seed_aml_solution(db, org, owner.id)
+    db.flush()
+    seed_risk_framework(db, org, solution.id, owner.id)
 
 
 def create_organisation(
