@@ -1,6 +1,13 @@
 """
 Remittance / Independent Remittance Dealer (IRD) AML template.
 Tranche 1 — IFTI ✓  TTR ✓  Travel Rule ✓
+
+Covers both variants of this designated service: electronic-only remittance
+dealers (no cash) and cash-handling money changers / currency exchange
+businesses -- the latter is not a separate IndustryType (there is no
+distinct AUSTRAC "money exchange" category; currency exchange is itself
+a remittance-sector activity), it's this same template with the cash/TTR
+content (has_ttr_obligation, ttr_procedures) actually applying.
 """
 
 import copy

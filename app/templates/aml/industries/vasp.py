@@ -77,8 +77,11 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     )
 
     t.travel_rule_procedures = (
-        "OBLIGATION: Under AML/CTF Rules 2025, the Travel Rule applies to all "
-        "virtual asset transfers above AUD $1,000 (or equivalent).\n\n"
+        "OBLIGATION: Under the AML/CTF Rules 2025, the Travel Rule applies to ALL "
+        "virtual asset transfers regardless of value — there is NO minimum threshold "
+        "for virtual asset transfers (unlike traditional wire transfers, where a "
+        "reduced/unverified data set may apply below a de minimis amount). Every "
+        "transfer, of any size, requires full Travel Rule information.\n\n"
         "OUTGOING VIRTUAL ASSET TRANSFERS — transmit to receiving VASP:\n"
         "- Originator: full name, wallet address, account number/reference, "
         "and address OR date of birth OR ID number;\n"
@@ -86,12 +89,17 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
         "INCOMING VIRTUAL ASSET TRANSFERS — receive from sending VASP:\n"
         "- Verify Travel Rule information accompanies the transfer;\n"
         "- If receiving from a non-compliant VASP, apply enhanced due diligence;\n"
-        "- Transfers from self-hosted wallets above AUD $1,000 require "
-        "counterparty verification.\n\n"
+        "- Transfers to/from self-hosted (unhosted) wallets require counterparty "
+        "wallet-ownership verification regardless of value.\n\n"
         "SUNRISE ISSUE: Where the counterparty VASP is in a jurisdiction that "
         "has not yet implemented the Travel Rule, apply best-efforts procedures "
         "and document the approach.\n\n"
-        "RECORDS: All Travel Rule information retained for 7 years."
+        "RECORDS: All Travel Rule information retained for 7 years.\n\n"
+        "NOTE — separate, unrelated $1,000 threshold: the AML/CTF Rules 2025 do "
+        "contain an AUD $1,000 figure for VASPs, but it is a customer due diligence "
+        "exemption (initial CDD is not required for a non-customer withdrawing less "
+        "than $1,000 in virtual assets to a self-hosted wallet), not a Travel Rule "
+        "threshold — the two must not be conflated."
     )
 
     t.ifti_procedures = (
