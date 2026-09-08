@@ -429,7 +429,7 @@ async def upload_new_version(
 
     sha256_hash = hashlib.sha256(content).hexdigest()
 
-    new_doc = svc.create_document(
+    new_doc = await svc.create_document(
         db,
         filename=file.filename or existing.filename,
         content=content,
