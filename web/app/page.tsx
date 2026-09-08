@@ -1,5 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
+import FadeIn from '@/components/FadeIn'
 import {
   Shield, CheckCircle, AlertTriangle, FileText, Users, Lock,
   ArrowRight, Building2, Activity, Database,
@@ -19,14 +20,6 @@ export const metadata = {
 // SECTION 1 — HERO
 // ─────────────────────────────────────────────────────────────────────────────
 function Hero() {
-  const flow = [
-    { label: 'Industry', icon: Building2 },
-    { label: 'Customer', icon: UserCheck },
-    { label: 'Verification', icon: ScanFace },
-    { label: 'Monitoring', icon: Activity },
-    { label: 'Reporting', icon: FileText },
-  ]
-
   return (
     <section className="relative bg-gradient-to-b from-slate-950 via-blue-950 to-slate-900 overflow-hidden pt-32 pb-24 px-4 sm:px-6 lg:px-8">
       {/* Subtle grid overlay */}
@@ -50,27 +43,105 @@ function Hero() {
           <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors shadow-lg">
             Start Free Trial <ArrowRight className="w-5 h-5" />
           </Link>
-          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-            Start Free Trial
+          <Link href="/contact" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+            Book a Demo
           </Link>
         </div>
 
-        {/* Workflow illustration */}
-        <div className="flex items-center justify-center gap-1 sm:gap-2 flex-wrap">
-          {flow.map(({ label, icon: Icon }, i) => (
-            <div key={label} className="flex items-center gap-1 sm:gap-2">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/10 ring-1 ring-white/20 flex items-center justify-center backdrop-blur-sm">
-                  <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-blue-300" />
-                </div>
-                <span className="text-xs text-slate-400 font-medium">{label}</span>
+        {/* Product UI mockup */}
+        <div className="relative mt-4 mx-auto max-w-4xl">
+          {/* Glow behind the window */}
+          <div className="absolute inset-x-0 bottom-0 h-32 bg-blue-600/20 blur-3xl rounded-full" />
+
+          {/* Browser chrome */}
+          <div className="relative rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-2xl shadow-black/60">
+            {/* Title bar */}
+            <div className="bg-slate-800 px-4 py-3 flex items-center gap-3">
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-500/70" />
+                <div className="w-3 h-3 rounded-full bg-amber-500/70" />
+                <div className="w-3 h-3 rounded-full bg-green-500/70" />
               </div>
-              {i < flow.length - 1 && (
-                <ArrowRight className="w-4 h-4 text-slate-600 mb-5 flex-shrink-0" />
-              )}
+              <div className="flex-1 bg-slate-700 rounded-xl px-3 py-1 text-xs text-slate-400 text-left">
+                app.veri-go.com.au/customers
+              </div>
             </div>
-          ))}
+
+            {/* App body */}
+            <div className="bg-slate-900 p-5 text-left">
+              {/* Stat row */}
+              <div className="grid grid-cols-4 gap-3 mb-5">
+                {[
+                  { label: 'Total Customers', value: '342', delta: '+12 this week', color: 'text-blue-400' },
+                  { label: 'Pending KYC', value: '8', delta: 'Action required', color: 'text-amber-400' },
+                  { label: 'Active Alerts', value: '3', delta: '2 high priority', color: 'text-red-400' },
+                  { label: 'Reports Due', value: '1', delta: 'IFTI due 15 Jul', color: 'text-emerald-400' },
+                ].map(s => (
+                  <div key={s.label} className="bg-slate-800 rounded-xl p-3 ring-1 ring-white/5">
+                    <p className="text-slate-500 text-[10px] mb-1">{s.label}</p>
+                    <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                    <p className="text-slate-500 text-[9px] mt-0.5">{s.delta}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Customer table */}
+              <div className="bg-slate-800 rounded-xl ring-1 ring-white/5 overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white">Customers</span>
+                  <span className="text-[10px] text-blue-400 font-medium">View all →</span>
+                </div>
+                <div className="divide-y divide-white/5">
+                  {[
+                    { name: 'Apex Transfers Pty Ltd', type: 'KYB', status: 'Verified', risk: 'Low', statusColor: 'bg-green-500/20 text-green-400' },
+                    { name: 'Sarah Mitchell', type: 'KYC', status: 'In Review', risk: 'Medium', statusColor: 'bg-amber-500/20 text-amber-400' },
+                    { name: 'Chen Capital Group', type: 'KYB', status: 'Verified', risk: 'Low', statusColor: 'bg-green-500/20 text-green-400' },
+                    { name: 'James Okafor', type: 'KYC', status: 'Alert', risk: 'High', statusColor: 'bg-red-500/20 text-red-400' },
+                  ].map(row => (
+                    <div key={row.name} className="px-4 py-2.5 flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300 flex-shrink-0">
+                        {row.name[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">{row.name}</p>
+                        <p className="text-[10px] text-slate-500">{row.type} · Risk: {row.risk}</p>
+                      </div>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${row.statusColor}`}>{row.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1B — TRUST STRIP
+// ─────────────────────────────────────────────────────────────────────────────
+function TrustStrip() {
+  const badges = [
+    { label: 'AUSTRAC-Aligned', sub: 'SMR · IFTI · TTR' },
+    { label: 'Australian Hosted', sub: 'AWS ap-southeast-2' },
+    { label: 'AES-256 Encrypted', sub: 'Data at rest & in transit' },
+    { label: 'Tranche 2 Ready', sub: 'From 1 July 2026' },
+    { label: '7-Day Free Trial', sub: 'No credit card required' },
+  ]
+  return (
+    <section className="bg-white border-b border-slate-100 py-6 px-4">
+      <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+        {badges.map(b => (
+          <div key={b.label} className="flex items-center gap-2.5">
+            <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-slate-800 leading-tight">{b.label}</p>
+              <p className="text-[10px] text-slate-400 leading-tight">{b.sub}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   )
@@ -115,22 +186,24 @@ function WhyComplianceMatters() {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
             Why compliance matters to your business
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-600 max-w-xl mx-auto">
             Compliance isn&apos;t just a legal requirement — it&apos;s a business asset.
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {cards.map(({ icon: Icon, color, title, desc }) => (
-            <div key={title} className="pub-card flex flex-col gap-4">
-              <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
-                <Icon className="w-5 h-5" />
+          {cards.map(({ icon: Icon, color, title, desc }, i) => (
+            <FadeIn key={title} delay={i * 100} direction="up">
+              <div className="pub-card flex flex-col gap-4 h-full">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 mb-2">{title}</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-slate-900 mb-2">{title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
-              </div>
-            </div>
+            </FadeIn>
           ))}
         </div>
       </div>
@@ -256,7 +329,7 @@ function WhoWeHelp() {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
             Built for your industry
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-600 max-w-xl mx-auto">
             Select your industry — VeriGo loads the right compliance pack, risk matrix, and AUSTRAC report templates automatically.
           </p>
         </div>
@@ -273,7 +346,7 @@ function WhoWeHelp() {
               </div>
               <div className="flex-1">
                 <h3 className="font-bold text-slate-900 mb-1 text-sm">{ind.label}</h3>
-                <p className="text-slate-400 text-xs leading-relaxed">{ind.packName}</p>
+                <p className="text-slate-500 text-xs leading-relaxed">{ind.packName}</p>
               </div>
               <span className="text-blue-600 text-xs font-semibold flex items-center gap-1 group-hover:gap-2 transition-all mt-auto">
                 Learn More <ArrowRight className="w-3 h-3" />
@@ -291,41 +364,74 @@ function WhoWeHelp() {
 // ─────────────────────────────────────────────────────────────────────────────
 function HowItWorks() {
   const steps = [
-    { n: 1, title: 'Choose Industry', desc: 'Pick your regulated sector. Your compliance pack loads instantly.' },
-    { n: 2, title: 'Onboard Customers', desc: 'Guided digital onboarding with built-in compliance checks.' },
-    { n: 3, title: 'Verify Risk', desc: 'Screen customers against sanctions, PEP, and adverse media lists.' },
-    { n: 4, title: 'Monitor Activity', desc: 'Automated transaction surveillance flags suspicious patterns 24/7.' },
-    { n: 5, title: 'Generate Reports', desc: 'SMR, IFTI, and TTR reports pre-populated and AUSTRAC-ready.' },
-    { n: 6, title: 'Stay Compliant', desc: 'Audit trails, registers, and annual review workflows built in.' },
+    {
+      n: 1,
+      time: '2 min',
+      title: 'Pick your industry',
+      desc: 'Answer 5 questions. Your full compliance pack — KYC rules, monitoring thresholds, AUSTRAC report templates — loads automatically for your sector.',
+      highlight: 'No configuration required.',
+    },
+    {
+      n: 2,
+      time: '5 min',
+      title: 'Onboard your first customer',
+      desc: 'Guided digital collection, identity verification, and sanctions screening — all in one flow. Every step is logged with a timestamp for your audit trail.',
+      highlight: 'Compliant from customer #1.',
+    },
+    {
+      n: 3,
+      time: 'Ongoing',
+      title: 'Monitor, report, stay ahead',
+      desc: 'Automated transaction surveillance runs 24/7. SMR, IFTI, and TTR reports are pre-populated and AUSTRAC-ready when you need them.',
+      highlight: 'AUSTRAC-ready reports in minutes.',
+    },
   ]
 
   return (
-    <section className="pub-section bg-gradient-to-br from-blue-600 to-blue-700">
+    <section className="pub-section bg-slate-950">
       <div className="pub-container">
-        <div className="text-center mb-12">
-          <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold text-white mb-4 block w-fit mx-auto">
+        <div className="text-center mb-14">
+          <span className="inline-flex items-center rounded-full bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-blue-500/20 mb-4">
             How It Works
           </span>
           <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-3">
-            Six steps to full compliance
+            From signup to compliant — same day.
           </h2>
-          <p className="text-blue-100 max-w-xl mx-auto">
-            From first customer to first AUSTRAC report — in minutes, not months.
+          <p className="text-slate-400 max-w-xl mx-auto">
+            Most compliance platforms take weeks to configure. Verigo is built around your industry from day one.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {steps.map(step => (
-            <div key={step.n} className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 ring-1 ring-white/15 flex gap-4">
-              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
-                {step.n}
+        <div className="relative">
+          {/* Connector line */}
+          <div className="hidden lg:block absolute top-12 left-[16.67%] right-[16.67%] h-px bg-gradient-to-r from-blue-600/0 via-blue-500/40 to-blue-600/0" />
+
+          <div className="grid lg:grid-cols-3 gap-6">
+            {steps.map((step, i) => (
+              <FadeIn key={step.n} delay={i * 150} direction="up">
+              <div className="relative flex flex-col items-center text-center px-6">
+                {/* Step circle */}
+                <div className="relative mb-6">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex flex-col items-center justify-center shadow-lg shadow-blue-900/40 ring-4 ring-slate-950">
+                    <span className="text-xs font-semibold text-blue-200">{step.time}</span>
+                    <span className="text-2xl font-black text-white leading-none">{step.n}</span>
+                  </div>
+                </div>
+                <h3 className="text-lg font-black text-white mb-2">{step.title}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-3">{step.desc}</p>
+                <span className="inline-flex items-center rounded-full bg-green-500/10 px-3 py-1 text-xs font-semibold text-green-400 ring-1 ring-green-500/20">
+                  ✓ {step.highlight}
+                </span>
               </div>
-              <div>
-                <h3 className="font-bold text-white mb-1 text-sm">{step.title}</h3>
-                <p className="text-blue-100 text-xs leading-relaxed">{step.desc}</p>
-              </div>
-            </div>
-          ))}
+              </FadeIn>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-12 text-center">
+          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 px-8 py-4 text-base font-semibold text-white transition-colors shadow-lg shadow-blue-900/30">
+            Start Free Trial — 7 days, no card <ArrowRight className="w-5 h-5" />
+          </Link>
         </div>
       </div>
     </section>
@@ -383,7 +489,7 @@ function PlatformOverview() {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
             Everything in one platform
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-600 max-w-xl mx-auto">
             Four capability groups. Fully integrated. No switching between tools.
           </p>
         </div>
@@ -404,7 +510,7 @@ function PlatformOverview() {
                   <h3 className="font-bold text-slate-900 mt-0.5">{title}</h3>
                 </div>
               </div>
-              <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
+              <p className="text-slate-600 text-sm leading-relaxed">{desc}</p>
               <div className="flex flex-wrap gap-2 mt-auto">
                 {features.map(f => (
                   <span key={f} className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
@@ -450,20 +556,21 @@ function WhyVerigo() {
               Built for Australia.<br />
               <span className="text-blue-600">Not adapted for it.</span>
             </h2>
-            <p className="text-slate-500 leading-relaxed mb-6">
+            <p className="text-slate-600 leading-relaxed mb-6">
               Most compliance platforms are built for global banks and adapted for the Australian market as an afterthought. VeriGo is built from day one for the AML/CTF Act, AUSTRAC obligations, and the businesses that must comply with them.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link href="/start-trial" className="pub-btn-primary">
                 Start Free Trial <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link href="/start-trial" className="pub-btn-secondary">Start Free Trial</Link>
+              <Link href="/contact" className="pub-btn-secondary">Book a Demo</Link>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {points.map(({ icon: Icon, color, title, desc }) => (
-              <div key={title} className="pub-card flex flex-col gap-3">
+            {points.map(({ icon: Icon, color, title, desc }, i) => (
+              <FadeIn key={title} delay={i * 80} direction="up">
+              <div className="pub-card flex flex-col gap-3 h-full">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
                   <Icon className="w-4 h-4" />
                 </div>
@@ -472,6 +579,7 @@ function WhyVerigo() {
                   <p className="text-slate-500 text-xs leading-relaxed">{desc}</p>
                 </div>
               </div>
+              </FadeIn>
             ))}
           </div>
         </div>
@@ -584,7 +692,7 @@ function PricingPreview({ prices }: { prices: Record<string, PlanPrice> }) {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
             Simple, transparent pricing
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-600 max-w-xl mx-auto">
             7-day free trial. No credit card required. Cancel any time.
           </p>
         </div>
@@ -662,8 +770,8 @@ function FinalCTA() {
           <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors shadow-lg">
             Start Free Trial <ArrowRight className="w-5 h-5" />
           </Link>
-          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-            Start Free Trial
+          <Link href="/contact" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+            Book a Demo
           </Link>
         </div>
         <div className="flex flex-wrap justify-center gap-6 text-sm text-slate-500">
@@ -686,6 +794,7 @@ export default async function HomePage() {
   return (
     <div className="bg-white text-slate-900">
       <Hero />
+      <TrustStrip />
       <WhyComplianceMatters />
       <AMLReformTimeline />
       <WhoWeHelp />
