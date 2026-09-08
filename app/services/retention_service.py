@@ -304,7 +304,7 @@ def generate_purge_report(
     Returns a summary for compliance review — does NOT delete anything.
     """
     from app.models.customer import Customer
-    from app.models.kyc import KYCRecord
+    from app.models.kyc import CustomerIdentityDocument
 
     now = datetime.now(timezone.utc)
     report: dict = {
@@ -319,18 +319,14 @@ def generate_purge_report(
         return now - timedelta(days=years * 365)
 
     # Customers
+    # Customer has a single tenant column (org_id, matching the industry_id
+    # scoping convention used everywhere else this model is queried -- e.g.
+    # app/api/routes/customers.py) -- there's no separate organisation_id
+    # column on this model to fall back to.
     cutoff = _cutoff(EntityScope.customer)
     q = db.query(Customer).filter(Customer.created_at < cutoff)
-    if organisation_id:
-        q = q.filter(
-            or_(
-                Customer.organisation_id == organisation_id,
-                (Customer.organisation_id.is_(None))
-                & (Customer.industry_id == industry_id),
-            )
-        )
-    elif industry_id:
-        q = q.filter(Customer.industry_id == industry_id)
+    if industry_id:
+        q = q.filter(Customer.org_id == industry_id)
     for c in q.all():
         if not has_active_hold(db, EntityScope.customer, c.customer_id):
             report["items"].append(
@@ -342,14 +338,23 @@ def generate_purge_report(
                 }
             )
 
-    # KYC Records
+    # KYC records
+    # NOTE: there is no single unified KYCRecord table -- app/models/kyc.py
+    # has five separate verification tables (identity document, selfie,
+    # address, phone, email). This only covers identity documents, the most
+    # fundamental of the five; it is not a complete KYC-retention sweep.
     cutoff = _cutoff(EntityScope.kyc_record)
-    for k in db.query(KYCRecord).filter(KYCRecord.created_at < cutoff).all():
-        if not has_active_hold(db, EntityScope.kyc_record, k.kyc_id):
+    kq = db.query(CustomerIdentityDocument).filter(
+        CustomerIdentityDocument.created_at < cutoff
+    )
+    if industry_id:
+        kq = kq.filter(CustomerIdentityDocument.org_id == industry_id)
+    for k in kq.all():
+        if not has_active_hold(db, EntityScope.kyc_record, k.id):
             report["items"].append(
                 {
                     "scope": "kyc_record",
-                    "id": k.kyc_id,
+                    "id": k.id,
                     "created_at": k.created_at.isoformat() if k.created_at else None,
                     "action": "eligible_for_deletion",
                 }
