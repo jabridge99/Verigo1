@@ -36,6 +36,7 @@ from app.models.governance_controls import (
     DEFAULT_SEVERITY_DEDUCTIONS,
     ControlEffectiveness,
     ControlRemediationAction,
+    ControlRiskArea,
     ControlStatus,
     ControlTest,
     ControlTestFinding,
@@ -91,7 +92,7 @@ def _get_test(test_id: str, control_id: str, db: Session) -> ControlTest:
     return t
 
 
-def _next_control_ref(risk_area: str, org_id: str, db: Session) -> str:
+def _next_control_ref(risk_area: ControlRiskArea, org_id: str, db: Session) -> str:
     prefix = CONTROL_REF_PREFIX.get(risk_area, "CTL-GOV")
     count = (
         db.query(GovernanceControl)
@@ -204,7 +205,7 @@ def create_control(
     control = GovernanceControl(
         org_id=oid,
         solution_id=sol.id,
-        control_ref=_next_control_ref(payload.risk_area.value, oid, db),
+        control_ref=_next_control_ref(payload.risk_area, oid, db),
         name=payload.name,
         description=payload.description,
         objective=payload.objective,

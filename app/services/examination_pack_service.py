@@ -169,7 +169,7 @@ def _section_customer_profile(db: Session, org_id: str, start: date, end: date) 
     ]
 
     risk_dist = {"low": 0, "medium": 0, "high": 0, "critical": 0, "unassessed": 0}
-    cdd_dist = {}
+    cdd_dist: dict[str, int] = {}
     for c in customers:
         lvl = (
             c.risk_level.value
@@ -227,8 +227,8 @@ def _section_transaction_monitoring(
         .all()
     )
 
-    severity_dist = {}
-    status_dist = {}
+    severity_dist: dict[str, int] = {}
+    status_dist: dict[str, int] = {}
     for a in alerts:
         sev = a.severity.value if hasattr(a.severity, "value") else str(a.severity)
         status = a.status.value if hasattr(a.status, "value") else str(a.status)
@@ -258,7 +258,7 @@ def _section_smr_register(db: Session, org_id: str, start: date, end: date) -> d
         .all()
     )
 
-    status_dist = {}
+    status_dist: dict[str, int] = {}
     records = []
     for s in smrs:
         st = s.status.value if hasattr(s.status, "value") else str(s.status)
@@ -347,7 +347,7 @@ def _section_ttr_register(db: Session, org_id: str, start: date, end: date) -> d
         .all()
     )
 
-    status_dist = {}
+    status_dist: dict[str, int] = {}
     for t in ttrs:
         st = t.status.value if hasattr(t.status, "value") else str(t.status)
         status_dist[st] = status_dist.get(st, 0) + 1
@@ -384,7 +384,7 @@ def _section_training_records(db: Session, org_id: str, start: date, end: date) 
     )
     users = db.query(User).filter_by(org_id=org_id, status="active").all()
 
-    status_dist = {}
+    status_dist: dict[str, int] = {}
     for r in records:
         st = r.status.value if hasattr(r.status, "value") else str(r.status)
         status_dist[st] = status_dist.get(st, 0) + 1
@@ -608,7 +608,7 @@ def _section_notification_history(
     )
 
     urgent = [n for n in notifs if n.priority == NotificationPriority.urgent]
-    type_dist = {}
+    type_dist: dict[str, int] = {}
     for n in notifs:
         t = n.notif_type.value if hasattr(n.notif_type, "value") else str(n.notif_type)
         type_dist[t] = type_dist.get(t, 0) + 1
@@ -711,7 +711,7 @@ def _build_summary_metrics(snapshot: dict) -> dict:
 
 
 def _count_by(items: list, attr: str) -> dict:
-    dist = {}
+    dist: dict[str, int] = {}
     for item in items:
         val = getattr(item, attr, None)
         key = val.value if val and hasattr(val, "value") else str(val or "unknown")

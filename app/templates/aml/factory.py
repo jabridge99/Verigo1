@@ -36,7 +36,7 @@ from app.models.aml_solution import (
     ServiceType,
     SolutionStatus,
 )
-from app.models.organisation import Organisation
+from app.models.organisation import IndustryType, Organisation
 from app.templates.aml.base import AMLTemplateBase
 from app.templates.aml.risk_overlay import apply_overlay
 
@@ -45,7 +45,7 @@ log = logging.getLogger("verigo.templates.aml")
 # ── Industry → template module mapping ───────────────────────────────────────
 
 
-def _get_industry_template(industry: str, risk_level: str) -> AMLTemplateBase:
+def _get_industry_template(industry: IndustryType, risk_level: str) -> AMLTemplateBase:
     from app.models.organisation import IndustryType
 
     mapping = {

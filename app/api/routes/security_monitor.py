@@ -35,7 +35,7 @@ def _require_super_admin(current_user: User = Depends(_ROLE_GATE)) -> User:
 _PRIV = _require_super_admin
 
 
-def _since(days: int) -> datetime:
+def _since(days: float) -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=days)
 
 

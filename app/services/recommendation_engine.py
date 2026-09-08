@@ -117,10 +117,9 @@ def generate_recommendations(
     industry = org.industry_type.value if org and org.industry_type else None
 
     amount_aud = txn.amount_aud or txn.amount
+    _risk_level = getattr(customer, "risk_level", None)
     customer_risk = (
-        (getattr(customer, "risk_level", None) or "").value
-        if hasattr(getattr(customer, "risk_level", None), "value")
-        else str(getattr(customer, "risk_level", "") or "")
+        _risk_level.value if hasattr(_risk_level, "value") else str(_risk_level or "")
     )
     is_pep = bool(getattr(customer, "is_pep", False))
     sof_verified = bool(getattr(customer, "source_of_funds_verified", False))

@@ -724,7 +724,7 @@ def calculate_alert_score(
     customer_risk_score: float,
     risk_matrix_score: float = 0.0,
     weights: Optional[dict[str, float]] = None,
-) -> tuple[float, dict[str, float]]:
+) -> tuple[float, dict[str, Any]]:
     """
     Composite alert score integrating AUSTRAC/FATF risk matrix:
       behaviour     default 30%
