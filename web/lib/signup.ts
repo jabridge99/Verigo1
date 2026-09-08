@@ -4,14 +4,16 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 export interface RegisterResult {
   user_id: string
+  org_id: string
   email: string
   full_name: string
   dev_verify_email_token?: string
 }
 
 export interface Organisation {
-  org_id: string
+  id: string
   name: string
+  industry_type?: string
   industry_id?: string
   risk_profile?: 'low' | 'standard' | 'high'
   abn?: string
@@ -53,6 +55,7 @@ export async function registerAccount(opts: {
   email: string
   password: string
   full_name: string
+  organisation_name?: string
 }): Promise<RegisterResult> {
   const r = await fetch(`${API}/api/v1/auth/register`, {
     method: 'POST',
@@ -100,6 +103,21 @@ export async function updateOrganisation(orgId: string, fields: Partial<Organisa
 
 export async function setOrganisationIndustry(orgId: string, industryId: string): Promise<Organisation> {
   return updateOrganisation(orgId, { industry_id: industryId })
+}
+
+// Sets the org's real AUSTRAC industry (industry_type) and re-seeds its
+// AML/CTF Program + Risk Framework from the matching Compliance Pack --
+// distinct from setOrganisationIndustry() above, which only sets the
+// unrelated free-text industry_id field. This is what the onboarding
+// wizard's "choose your industry" step should call.
+export async function selectIndustry(orgId: string, industryType: string): Promise<Organisation> {
+  const r = await fetch(`${API}/api/v1/organisations/${orgId}/select-industry`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ industry_type: industryType }),
+  })
+  return asJson(r)
 }
 
 export async function setOrganisationRiskProfile(

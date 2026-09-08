@@ -5,6 +5,7 @@ import { ArrowRight, Loader2, AlertCircle, CheckCircle2, Lock } from 'lucide-rea
 import { industries } from '@/lib/industries'
 import {
   updateOrganisation,
+  selectIndustry,
   generateAmlProgram,
   generateRiskAssessment,
   acknowledgeAmlAccountability,
@@ -112,7 +113,11 @@ export default function OnboardingWizard() {
   function handleChooseIndustry(e: React.FormEvent) {
     e.preventDefault()
     withLoading(async () => {
-      await updateOrganisation(orgId, { industry_id: industryId })
+      // Sets Organisation.industry_type and re-seeds the AML/CTF Program +
+      // Risk Framework from the matching Compliance Pack (see
+      // app/services/org_service.py's select_industry()) -- not the same
+      // as the free-text industry_id field setOrganisationIndustry() sets.
+      await selectIndustry(orgId, industryId)
       setStep('company')
     }, 'Failed to save industry')
   }

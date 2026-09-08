@@ -27,6 +27,7 @@ from app.schemas.aml_program import (
     ProgramHealthResponse,
 )
 from app.schemas.organisation import (
+    IndustrySelectRequest,
     MemberAdd,
     MemberResponse,
     MemberUpdate,
@@ -51,6 +52,7 @@ from app.services import (
 from app.services.auth_service import get_user_by_email
 from app.services.org_service import (
     SYSTEM_ROLE_TEMPLATES,
+    IndustryLockedError,
     add_user_to_organisation,
     create_organisation,
     get_membership,
@@ -58,6 +60,7 @@ from app.services.org_service import (
     get_user_organisations,
     has_org_permission,
 )
+from app.services.org_service import select_industry as _select_industry_service
 
 router = APIRouter(prefix="/organisations", tags=["Organisations"])
 
@@ -151,6 +154,45 @@ def update(
             organisation_id=org.id,
             before_state=before,
             after_state=updates,
+        )
+    return org
+
+
+@router.post("/{org_id}/select-industry", response_model=OrganisationResponse)
+def select_industry(
+    org_id: str,
+    payload: IndustrySelectRequest,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Stage 7: let the org actually pick its AUSTRAC industry — every org is
+    created as IndustryType.other (nothing upstream of this knows the real
+    one), so this re-seeds the AML/CTF Program and Risk Framework from the
+    correct industry template. Only allowed before anything's been
+    customised (see org_service.select_industry's docstring).
+    """
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    before_industry = org.industry_type
+    try:
+        _select_industry_service(db, org, payload.industry_type, current_user.id)
+    except IndustryLockedError as e:
+        raise HTTPException(409, str(e))
+    db.commit()
+    db.refresh(org)
+    if before_industry != org.industry_type:
+        audit_service.log_action(
+            db,
+            action="policy_updated",
+            entity_type="organisation",
+            entity_id=org.id,
+            actor=current_user.email,
+            actor_role=current_user.role.value if current_user.role else None,
+            industry_id=org.industry_id,
+            organisation_id=org.id,
+            before_state={"industry_type": before_industry.value},
+            after_state={"industry_type": org.industry_type.value},
         )
     return org
 

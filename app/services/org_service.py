@@ -251,6 +251,102 @@ def _seed_aml_solution_and_risk_framework(
     seed_risk_framework(db, org, solution.id, owner.id)
 
 
+class IndustryLockedError(ValueError):
+    """Raised when an org's industry can't be changed anymore (Program active/reviewed,
+    or a risk assessment has already been started)."""
+
+
+def select_industry(
+    db: Session, org: Organisation, industry_type: IndustryType, actor_id: str
+) -> Organisation:
+    """
+    Stage 7: let a business actually pick its real AUSTRAC industry —
+    every org is created as IndustryType.other (attach_owner() has no way
+    to know the real one yet), so this is the first point a user can
+    correct it. Re-seeds the org's AML Solution (Program + Risk Framework)
+    from the correct industry template, since the "other" seed it got at
+    signup is the wrong Compliance Pack for it.
+
+    Only allowed while the org's AML Program is still in its untouched
+    initial state (draft, version "1.0") and no risk assessment run has
+    been started — once a compliance officer has begun customising or
+    approving anything, silently wiping and re-seeding it would destroy
+    real work. Callers should present that as "contact support" rather
+    than a self-service action.
+    """
+    from app.models.aml_solution import (
+        AMLPolicy,
+        AMLProgram,
+        AMLService,
+        AMLSolution,
+        Control,
+        ProgramStatus,
+        RiskAssessment,
+        TrainingRecord,
+    )
+    from app.models.risk_engine import RiskAssessmentRun, RiskFramework
+    from app.templates.aml.factory import seed_aml_solution
+    from app.templates.risk.factory import seed_risk_framework
+
+    if org.industry_type == industry_type:
+        return org
+
+    solution = db.query(AMLSolution).filter(AMLSolution.org_id == org.id).first()
+    if solution:
+        program = (
+            db.query(AMLProgram).filter(AMLProgram.solution_id == solution.id).first()
+        )
+        if program and (
+            program.status != ProgramStatus.draft or program.version != "1.0"
+        ):
+            raise IndustryLockedError(
+                "Industry can't be changed after the AML/CTF Program has been "
+                "activated or reviewed"
+            )
+
+        framework = (
+            db.query(RiskFramework)
+            .filter(RiskFramework.solution_id == solution.id)
+            .first()
+        )
+        if framework and (
+            db.query(RiskAssessmentRun)
+            .filter(RiskAssessmentRun.framework_id == framework.id)
+            .count()
+            > 0
+        ):
+            raise IndustryLockedError(
+                "Industry can't be changed after a risk assessment has been started"
+            )
+
+        # Safe to wipe and reseed — nothing has progressed past the initial
+        # seed. RiskFramework.categories cascades (relationship-level
+        # delete-orphan) to RiskCategory/RiskFactor; the rest are deleted
+        # explicitly since they're plain FKs, not ORM cascade relationships.
+        if framework:
+            db.delete(framework)
+        db.query(AMLProgram).filter(AMLProgram.solution_id == solution.id).delete()
+        db.query(AMLPolicy).filter(AMLPolicy.solution_id == solution.id).delete()
+        db.query(Control).filter(Control.solution_id == solution.id).delete()
+        db.query(TrainingRecord).filter(
+            TrainingRecord.solution_id == solution.id
+        ).delete()
+        db.query(AMLService).filter(AMLService.solution_id == solution.id).delete()
+        db.query(RiskAssessment).filter(
+            RiskAssessment.solution_id == solution.id
+        ).delete()
+        db.delete(solution)
+        db.flush()
+
+    org.industry_type = industry_type
+    db.flush()
+
+    new_solution = seed_aml_solution(db, org, actor_id)
+    db.flush()
+    seed_risk_framework(db, org, new_solution.id, actor_id)
+    return org
+
+
 def create_organisation(
     db: Session, name: str, owner: User, industry_id: Optional[str] = None
 ) -> Organisation:
