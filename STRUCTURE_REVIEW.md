@@ -30,15 +30,19 @@ These were confirmed dead or wrong with no ambiguity, so they're already fixed o
 
 ## Part C — Findings that need a decision
 
-Grouped by how big a change fixing them actually is. Nothing below has been touched yet.
+Grouped by how big a change fixing them actually is.
 
-### C1. Small, low-risk — could do in this session if you want
+### C1. Small, low-risk — DONE
 
-- **`app/services/risk_scoring.py`** — dead in production (only its own test calls it), duplicates logic that lives for real in `app/services/customer_risk_engine.py`. Proposal: delete the module **and** its test together, since the test only exists to cover dead code.
-- **`app/api/routes/aml_solution.py`** — a router with real endpoints (program submit/approve, service management) that's never registered in `main.py`, so `/aml/*` doesn't resolve today. This is *not* simply a bug to fix by registering it — there's already a separate, live, frontend-connected `/aml-program` module (`aml_program.py`) that appears to be the real, current AML-program feature. This looks like the same pattern as the already-known "two parallel IFTI systems" and "two audit-log tables": an older implementation left behind after a newer one replaced it. Proposal: **investigate which one is actually canonical, then delete the other** — not register the orphan blindly, since that would silently turn on a second, possibly-inconsistent AML program workflow.
-- **Dead frontend pages behind their own redirects:** `web/app/ifti/page.tsx` (679 lines) and `web/app/packs/page.tsx` (143 lines) are fully built but permanently unreachable — `next.config.js` redirects both routes away before they can render. Proposal: delete both, since they can't be reached by any user today. (Flagging rather than just doing it, since these represent real prior work someone may want to keep as reference — your call.)
+All three confirmed and fixed, verified after each (test suite, ruff, frontend build):
 
-### C2. Medium — real refactoring, moderate effort, low-to-moderate risk
+- **`app/services/risk_scoring.py`** — deleted, along with the two tests in `tests/test_coverage_boost.py` that existed solely to cover it (its only callers). Its logic lives for real in `app/services/customer_risk_engine.py`.
+- **`app/api/routes/aml_solution.py`** — investigated first, per the plan: confirmed it's an older, never-registered `/aml` API superseded by the richer, live `/aml-program` API (`aml_program.py` — 10+ frontend callers, registered in `main.py`). Deleted the route file and its dedicated schema file (`app/schemas/aml_solution.py`). **Left `app/models/aml_solution.py` untouched** — it turned out to be genuinely, heavily used elsewhere (by `aml_program.py` itself, and by the governance policies/controls/training modules), not part of the dead API surface at all — only the superseded route layer over those same tables was dead.
+- **Dead frontend pages:** `web/app/ifti/page.tsx` and `web/app/packs/page.tsx` deleted — both permanently unreachable behind their own redirects. `web/app/packs/[industry]/page.tsx` (a separate dynamic route, unaffected by the exact-match `/packs` redirect) was left alone.
+
+### C2. Medium — real refactoring, moderate effort, low-to-moderate risk — deferred
+
+Not done this session, by your choice — kept as a documented backlog for a dedicated future pass, one item at a time with its own build+test verification:
 
 - **No central frontend API client.** ~35+ pages each redeclare the API base URL; several hand-roll near-identical `apiFetch` wrappers instead of sharing one from `web/lib/`. Proposal: add one shared client in `web/lib/api.ts` and migrate pages to it incrementally (a handful of pages per pass, tested each time) — not a single big-bang change.
 - **`web/components/ui/` has only `button.tsx` and `card.tsx`.** Every table, modal, and form across ~40 routes is hand-built per page, including a repeated `ROLE_COLOR`/`STATUS_COLOR` badge pattern copy-pasted across many pages. Proposal: extract a small set of real shared primitives (badge, table shell, modal) starting from the most-duplicated pattern, migrate a few pages at a time.
@@ -47,9 +51,9 @@ Grouped by how big a change fixing them actually is. Nothing below has been touc
 - **Oversized backend route files** — `customers.py` (2365 lines), `reports.py` (1590), `governance/training.py` (1350), `screening.py` (1304), `risk_assessment.py` (1119) are each genuinely ~15-20 distinct sub-resources bundled into one file (not one giant function — confirmed via each file's own section markers). Proposal: split into sub-routers per sub-domain (e.g. `customers/kyc.py`, `customers/beneficial_owners.py`, `customers/screening.py` under a `customers/` package) — real work, needs care around import cycles, best done one file at a time with tests after each.
 - **Minor API-organization cleanups:** `api_keys.py` silently serves two unrelated resources (API keys and webhooks) under one file with no shared prefix — proposal: split webhooks into their own route file, matching every other domain's pattern. `organisations.py` (prefix `/organisations`) and `org_config.py` (prefix `/org`) have confusingly close prefixes for related-but-distinct concerns — proposal: rename one prefix for clarity (e.g. `/org-config` or fold into `/organisations/config`).
 
-### C3. Needs your input before any engineering, not just a bigger diff
+### C3. Needs your input before any engineering, not just a bigger diff — deferred, on hold pending your review
 
-These touch actual regulatory/business logic. Getting them "cleaner" without changing what number comes out the other end requires real care, and in a couple of cases, a judgment call about which of two different existing numbers is *right* — that's not something I should decide unilaterally.
+These touch actual regulatory/business logic. Getting them "cleaner" without changing what number comes out the other end requires real care, and in a couple of cases, a judgment call about which of two different existing numbers is *right* — that's not something I should decide unilaterally. **No code changed here — you're reviewing what each scale represents before anything is touched.**
 
 - **Five independent risk-threshold scales.** Deciding whether a customer/transaction is low/medium/high/critical risk is computed with a **different numeric scale in each of five files** — none reference each other:
   - `customer_risk_engine.py`: 33 / 66 / 85 (dict-based)
@@ -71,28 +75,26 @@ These touch actual regulatory/business logic. Getting them "cleaner" without cha
 
 ---
 
-## What I'd suggest doing next
+## Decisions made this session
 
-Given the "incremental, not a rewrite" instruction, my recommendation is:
-
-1. **This session, if you'd like:** the three C1 items (they're small and I can verify each individually).
-2. **A dedicated follow-up pass:** the C2 items, one at a time, each with its own build+test verification — these are real refactors and deserve their own reviewed commits rather than being rushed together.
-3. **C3 needs you (or whoever owns compliance sign-off) to weigh in first** — I can implement whatever's decided, but I shouldn't be the one deciding which risk-scoring scale is "correct."
-4. **C4 is low priority** — cosmetic, can wait indefinitely without cost.
+1. **C1 — done.** All three items fixed and verified (see above).
+2. **C2 — deferred**, by your choice. Kept as a documented backlog for a dedicated future pass, one item at a time with its own build+test verification, rather than rushed into this session.
+3. **C3 — on hold**, by your choice. You're reviewing what each of the five risk-scoring scales actually represents (legitimately different by design, or the same thing computed inconsistently) before any consolidation is even proposed as code. Nothing touched.
+4. **C4 — low priority**, unchanged. Cosmetic, can wait indefinitely.
 
 ---
 
 ## STAGE STATUS
 
 **Stage:** 2 — GitHub Structure & Code Clean-up
-**Status:** COMPLETE (for the safe items) — proposal pending your input for the rest
+**Status:** COMPLETE
 
-**What works:** All Part A cleanups verified — full test suite (415 tests) passing, ruff clean, frontend production build succeeding, at every step.
+**What works:** All C1 cleanups (7 files/items across Part A and C1) verified — full test suite (413 tests, down from 415 as two tests covering now-deleted dead code were removed with it) passing, ruff clean, frontend production build succeeding, at every step.
 
-**Known issues:** None introduced. The structural debt catalogued in Part C is pre-existing, not new.
+**Known issues:** None introduced. The remaining structural debt (C2, C3, C4) is pre-existing, catalogued, and intentionally deferred per your direction — not overlooked.
 
 **Security concerns:** None found in this pass — this was a structure/duplication review, not a security review (Stage 0 already covered that).
 
-**Technical debt:** Catalogued in detail above (C1–C4). The two most consequential items are the five inconsistent risk-threshold scales (C3) and the duplicated $10,000 statutory threshold (C3) — both touch real regulatory-reporting logic, so they're flagged for your input rather than acted on.
+**Technical debt:** Catalogued in detail above (C2–C4, C1 resolved). The two most consequential remaining items are the five inconsistent risk-threshold scales and the duplicated $10,000 statutory threshold (both C3) — both touch real regulatory-reporting logic, so they stay flagged for your review rather than acted on.
 
-**Recommended next stage:** Stage 3 (AML/CTF Domain Foundation) — but first, tell me which of C1/C2/C3 you want tackled now versus deferred, so I don't spend a session refactoring something you'd rather leave alone.
+**Recommended next stage:** Stage 3 (AML/CTF Domain Foundation).
