@@ -603,7 +603,9 @@ def parse_csv(
         text = content.decode("latin-1")
 
     reader = csv.DictReader(io.StringIO(text))
-    rows, warnings, errors = [], [], []
+    rows: list[dict] = []
+    warnings: list[str] = []
+    errors: list[str] = []
     for i, raw_row in enumerate(reader, start=2):
         if not any(str(v or "").strip() for v in raw_row.values()):
             continue
@@ -635,7 +637,9 @@ def parse_excel(content: bytes) -> tuple[list[dict], list[str], list[str]]:
         (i for i, r in enumerate(rows_data) if any(c is not None for c in r)), 0
     )
     headers = [str(h or "").strip() for h in rows_data[header_row_idx]]
-    rows, warnings, errors = [], [], []
+    rows: list[dict] = []
+    warnings: list[str] = []
+    errors: list[str] = []
 
     for i, row in enumerate(rows_data[header_row_idx + 1 :], start=header_row_idx + 2):
         raw = {

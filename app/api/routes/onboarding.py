@@ -82,7 +82,7 @@ def create_onboarding_session(
         applicant_company=payload.applicant_company,
         customer_type=payload.customer_type.value,
         source="manual",
-        created_by=current_user.user_id,
+        created_by=current_user.id,
     )
     db.commit()
     db.refresh(session)
@@ -174,6 +174,23 @@ def delete_session(
     db.commit()
 
 
+def _merge_parse_errors(batch: ImportBatch, parse_errors: list) -> None:
+    """
+    parse_csv()/parse_excel() validate and filter rows before
+    bulk_create_sessions() ever sees them (e.g. a row missing name/email),
+    so those failures wouldn't otherwise appear anywhere in the returned
+    BatchSummary. Fold them in as ordinary row errors alongside the
+    session-creation failures bulk_create_sessions() already collects.
+    """
+    if not parse_errors:
+        return
+    batch.total_rows = (batch.total_rows or 0) + len(parse_errors)
+    batch.error_rows = (batch.error_rows or 0) + len(parse_errors)
+    batch.errors = (batch.errors or []) + [
+        {"row": None, "data": None, "error": e} for e in parse_errors
+    ]
+
+
 @router.post("/import/csv", response_model=BatchSummary, status_code=201)
 async def import_csv(
     file: UploadFile = File(...),
@@ -182,16 +199,17 @@ async def import_csv(
 ):
     scoped = scope_fields(current_user)
     content = await file.read()
-    rows, warnings = parse_csv(content)
+    rows, warnings, parse_errors = parse_csv(content)
     batch = bulk_create_sessions(
         db,
         rows,
         industry_id=scoped.get("industry_id") or current_user.industry_id,
         source="csv",
         file_name=file.filename,
-        created_by=current_user.user_id,
+        created_by=current_user.id,
         organisation_id=scoped.get("organisation_id"),
     )
+    _merge_parse_errors(batch, parse_errors)
     db.commit()
     return batch
 
@@ -205,7 +223,7 @@ async def import_excel(
     scoped = scope_fields(current_user)
     content = await file.read()
     try:
-        rows, warnings = parse_excel(content)
+        rows, warnings, parse_errors = parse_excel(content)
     except ImportError as e:
         raise HTTPException(422, str(e))
     batch = bulk_create_sessions(
@@ -214,9 +232,10 @@ async def import_excel(
         industry_id=scoped.get("industry_id") or current_user.industry_id,
         source="excel",
         file_name=file.filename,
-        created_by=current_user.user_id,
+        created_by=current_user.id,
         organisation_id=scoped.get("organisation_id"),
     )
+    _merge_parse_errors(batch, parse_errors)
     db.commit()
     return batch
 
