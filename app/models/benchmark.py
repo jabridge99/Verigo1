@@ -36,6 +36,7 @@ Benchmark metric glossary:
 from __future__ import annotations
 
 import enum
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -91,7 +92,7 @@ HIGHER_IS_BETTER = {
 }
 
 # Human-readable labels and descriptions
-METRIC_META = {
+METRIC_META: dict[str, dict[str, Any]] = {
     "smr_rate_per_1k": {
         "label": "SMR Rate (per 1,000 customers)",
         "unit": "per 1k",

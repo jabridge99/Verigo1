@@ -1,4 +1,5 @@
 import enum
+from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -63,7 +64,7 @@ class AddonStatus(str, enum.Enum):
 # or sales-gated (no self-serve API access) — sold separately from the base plan
 # so tenants aren't charged for capability they haven't opted into.
 
-ADDON_CATALOGUE = {
+ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
     AddonKey.enterprise_crypto_screening: {
         "name": "Enterprise Crypto Wallet Screening",
         "monthly_aud": 499.00,
@@ -80,7 +81,7 @@ ADDON_CATALOGUE = {
 
 # ── Published plan catalogue ───────────────────────────────────────────────────
 
-PLAN_CATALOGUE = {
+PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
     BillingPlan.starter: {
         "name": "Starter",
         "monthly_aud": 59.00,
