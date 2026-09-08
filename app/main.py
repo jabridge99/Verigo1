@@ -71,7 +71,6 @@ from app.api.routes import (
     organisations,
     reports,
     retention,
-    sanctions,
     security_monitor,
     storage,
     tenants,
@@ -279,7 +278,6 @@ app.include_router(customers.router, prefix="/api/v1")
 app.include_router(kyc.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
-app.include_router(sanctions.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(tenants.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
