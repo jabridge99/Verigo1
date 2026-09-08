@@ -40,6 +40,30 @@ Making CI's mypy check actually block the build (fix-now item, see resolved sect
 
 ---
 
+## Parked from Stage 6 (Risk Assessment Engine, 2026-09-08)
+
+Verifying Stage 6 required a live end-to-end trace of both risk engines (see "Resolved" below for the foundational AMLSolution-seeding bug that trace surfaced). Two further real, narrower limitations came up along the way — neither blocks Stage 6's own deliverable (both engines produce score + rating + reasons, and are configurable), so both are parked rather than fixed in this pass.
+
+### P6 — `Organisation.industry_type` is hardcoded to `other` on every real org-creation path
+**Status:** Parked — needs a product decision (what selects industry, and when) before it's a mechanical fix.
+**What:** Both real org-creation paths (`app/api/routes/auth.py`'s `register()` and `app/services/org_service.py`'s `create_organisation()`) construct `Organisation(..., industry_type=IndustryType.other)` unconditionally — there is no frontend field or API parameter anywhere that lets a new org pick its real industry (e.g. remittance, digital currency exchange, TAB/wagering — see `app/templates/aml/factory.py` and `app/templates/risk/factory.py`'s per-industry seed data). With the AMLSolution-seeding fix in this same pass, every new org now gets a real, working AML Program and Risk Framework for the first time — but always the generic "other" template, never the industry-specific one, even for organisations that clearly are (say) a remittance business.
+**Why parked:** Fixing the seeding gap (this pass) was already a large finding; picking where/when industry selection belongs in the onboarding flow (a registration-time field? a post-registration "complete your profile" step? admin-settable only?) is a product/UX decision, not something to guess at silently.
+**Detail:** `app/api/routes/auth.py`'s `register()`; `app/services/org_service.py`'s `create_organisation()`; `app/templates/aml/factory.py`, `app/templates/risk/factory.py` (both already support per-`IndustryType` seed variation — the machinery exists, nothing currently drives it).
+
+### P7 — Two parallel, duplicate governance/control model sets
+**Status:** Parked — pre-existing architectural duplication, not something introduced or made worse this session; a genuine merge/migration, not a bug fix.
+**What:** `seed_aml_solution()` (`app/templates/aml/factory.py`) creates rows in `app.models.aml_solution.Control` / `app.models.aml_solution.AMLPolicy` — a "legacy" governance model set — while the actively-developed, extensively-fixed-this-session governance module (`app/api/routes/governance/controls.py`, `policies.py`; `app.models.governance_controls.GovernanceControl`, `app.models.governance.Policy`) is a separate, parallel system with no relationship between the two. Newly seeded orgs (after this session's fix) get populated `Control`/`AMLPolicy` rows from the seed template, but the `/governance/controls` and `/governance/policies` endpoints a compliance officer actually uses read from the other, unrelated table set — so the seeded starter controls/policies are invisible to the UI that manages controls and policies day to day.
+**Why parked:** Deciding which model set is canonical (and migrating/deleting the other, or building a bridge) is a real design decision with data-migration implications for any org that already has rows in either table — well beyond a bug fix, and not something to do silently mid-stage.
+**Detail:** `app/templates/aml/factory.py`'s `seed_aml_solution()`; `app/models/aml_solution.py` (`Control`, `AMLPolicy`) vs `app/models/governance_controls.py` (`GovernanceControl`) / `app/models/governance.py` (`Policy`).
+
+### P10 — Customer-level engine's dimension weights are never actually org-configurable
+**Status:** Parked — a real, bounded feature gap (build the missing config path), not a bug in the scoring logic itself.
+**What:** `assess_customer_risk()` (`app/services/customer_risk_engine.py`) accepts a `weights` override parameter, and its own comment on `DEFAULT_WEIGHTS` says it "can be overridden per org via `GovernanceCustomScoring`." Neither of this engine's two real call sites (`app/api/routes/customers.py` line 1329, `app/api/routes/customer_workflow.py`'s `run_risk_assessment()`) ever pass a `weights=` argument, and `GovernanceCustomScoring` (`app/models/governance_customisation.py`) is only ever read by `governance_metrics.py` — an unrelated subsystem (governance/control-test severity thresholds), not this engine. So every org, regardless of industry or risk appetite, is scored on the same hardcoded 30/25/20/15/10 dimension split, despite the code's own comment implying otherwise. This is distinct from the org-level EWRA engine (`app/api/routes/risk_assessment.py`), which genuinely is configurable end to end — category and factor weights live on `RiskFramework`/`RiskCategory`/`RiskFactor` and are editable via `/risk/framework/*`, with industry-specific starting weights from `app/templates/risk/industries/*.py`.
+**Why parked:** Fixing this needs a design decision (where do per-org weight overrides live — a new column, or a genuine wiring into `GovernanceCustomScoring`? — and what UI exposes it) rather than a mechanical fix; flagging it now so `docs/risk-engine.md` doesn't overstate what's actually configurable today.
+**Detail:** `app/services/customer_risk_engine.py`'s `DEFAULT_WEIGHTS`/`assess_customer_risk()`; `app/api/routes/customers.py` line ~1329; `app/api/routes/customer_workflow.py`'s `run_risk_assessment()`.
+
+---
+
 ## Resolved (moved out of the active parking lot, kept here for the full-process history)
 
 ### P1 — Independent review "due" notifications have no date to key off
@@ -89,6 +113,18 @@ Making CI's mypy check actually block the build (fix-now item, see resolved sect
 - `board_reporting_service.py`: `SMRReport.smr_lodged`, `TrainingAssignment.status`, `ControlTest.tested_at`, and a third independent `IFTIERecord.org_id` instance — every board/quarterly/annual compliance snapshot crashed building the SMR, training, controls, or regulatory-reporting sections.
 - `IndependentReview.target_completion` — see P1 above (moved from parked to resolved in this same pass).
 **Detail:** commits on `claude/verigo-repo-inspection-kffwrd` from the `mypy.ini` addition through the final 0-error commit; each real bug has its own regression test file under `tests/`.
+
+### P8 — No organisation ever created through a real code path had a working AML/CTF Solution
+**Parked:** never — found and fixed in the same pass, while running a live end-to-end trace of both risk engines to verify Stage 6.
+**What it was:** `seed_aml_solution()` (`app/templates/aml/factory.py`) and `seed_risk_framework()` (`app/templates/risk/factory.py`) — which create the `AMLSolution` row, the org's `AMLProgram` document, and its `RiskFramework` (with industry-seeded `RiskCategory`/`RiskFactor` rows) — have existed since early in this staged process, but were never actually called from any real code path (only referenced inside their own module docstrings). Every organisation ever created through real registration (`POST /auth/register`) or admin-facing org creation (`POST /organisations`) got a bare `Organisation` row and nothing else: `GET /aml-program`, `GET /risk/framework`, `GET /governance/controls`, and every other endpoint gated on having an `AMLSolution` 404'd with "Complete onboarding and industry selection first," permanently, for every real user — with no "complete onboarding" endpoint anywhere that could have triggered the seeding either. This is why so many of this session's earlier regression tests had to manually construct an `AMLSolution` row in their own setup rather than going through the real flow: the real flow never produced one.
+**What was done:** Wired both seed functions into `org_service.py`'s `attach_owner()` — the one function already called from both real org-creation paths — via a new `_seed_aml_solution_and_risk_framework()` helper, guarded on `AMLSolution.org_id`'s unique constraint so it's a safe no-op if `attach_owner()` is ever called twice for the same org.
+**Detail:** `app/services/org_service.py`'s `attach_owner()`/`_seed_aml_solution_and_risk_framework()`; `tests/test_org_creation_seeds_aml_solution_smoke.py`.
+
+### P9 — Customer-level risk engine carried no governance disclaimer
+**Parked:** never — found and fixed in the same pass, while confirming both risk engines against Stage 6's requirements.
+**What it was:** The org-level EWRA engine (`app/api/routes/risk_assessment.py`) has always returned a `DISCLAIMER` — "this framework is a configurable tool only... the platform does not determine final risk ratings... or accept liability for risk outcomes" — on every response, and requires it be acknowledged at approval. The per-customer onboarding risk engine (`app/services/customer_risk_engine.py`, `app/api/routes/customer_workflow.py`'s `run_risk_assessment()`/`get_risk_profile()`) had no equivalent anywhere — a real gap given this is the engine that actually gates individual customers into CDD vs EDD.
+**What was done:** Added a matching `CUSTOMER_RISK_DISCLAIMER` constant (`app/schemas/customer_workflow.py`) and a `disclaimer` field (with that text as its default) on both `RiskAssessmentResponse` and `RiskProfileResponse`, so every `/assess-risk` and `/risk-profile` response now carries it, same as the EWRA engine.
+**Detail:** `app/schemas/customer_workflow.py`; `tests/test_stage6_risk_assessment_engine_live_trace.py`.
 
 ### C3 — Risk-threshold consolidation
 **Parked:** 2026-09-08. **Resolved:** 2026-09-08 (same session), per your explicit direction to standardise on ISO 31000 style.
