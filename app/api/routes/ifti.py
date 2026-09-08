@@ -26,7 +26,6 @@ from app.db.database import get_db
 from app.models.ifti import IFTIDirection, IFTIRecord, IFTIStatus
 from app.models.user import User, UserRole
 from app.services.ifti_service import generate_ifti_excel, get_ifti, list_ifti
-from app.services.tenant_scope import assert_tenant, scope_fields
 
 router = APIRouter(prefix="/ifti", tags=["IFTI Reports"])
 
@@ -267,7 +266,7 @@ def list_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    industry_id = None if current_user.is_super_admin else current_user.org_id
     return list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
 
@@ -299,7 +298,7 @@ def get_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
     return r
 
@@ -314,7 +313,7 @@ def update_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
     if r.status == IFTIStatus.submitted:
         raise HTTPException(400, "Cannot edit a submitted IFTI record")
@@ -333,7 +332,7 @@ def mark_ready(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
     r.status = IFTIStatus.ready
     db.commit()
@@ -349,7 +348,7 @@ def mark_submitted(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
     r.status = IFTIStatus.submitted
     r.submitted_at = datetime.now(timezone.utc)
@@ -368,7 +367,7 @@ def delete_record(
         raise HTTPException(404, "IFTI record not found")
     if r.status == IFTIStatus.submitted:
         raise HTTPException(400, "Cannot delete a submitted record")
-    if current_user.role != UserRole.admin and r.industry_id != current_user.org_id:
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
     db.delete(r)
     db.commit()
@@ -390,7 +389,7 @@ def export_excel(
     The downloaded file matches the official AUSTRAC IFTI-DRA IN / OUT template
     exactly — open it, verify, then copy-paste rows into AUSTRAC Online and submit.
     """
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    industry_id = None if current_user.is_super_admin else current_user.org_id
     records = list_ifti(db, industry_id=industry_id, direction=direction, status=status)
 
     if not records:
@@ -426,9 +425,12 @@ def export_selected(
 
     from app.models.ifti import IFTIRecord as IFTIModel
 
-    scoped = scope_fields(current_user)
-    industry_id = scoped.get("industry_id")
-    organisation_id = scoped.get("organisation_id")
+    if current_user.is_super_admin:
+        industry_id = None
+        organisation_id = None
+    else:
+        industry_id = current_user.industry_id
+        organisation_id = getattr(current_user, "primary_organisation_id", None)
     q = db.query(IFTIModel).filter(
         IFTIModel.ifti_id.in_(ifti_ids),
         IFTIModel.direction == direction,
