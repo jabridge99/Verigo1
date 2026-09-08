@@ -297,10 +297,10 @@ class Subscription(Base):
     status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.trialing)
 
     # Pricing — base catalogue price
-    base_price_aud = Column(Float)
+    base_price_aud: Mapped[Optional[float]] = Column(Float)
     # VVIP / admin override (takes precedence over catalogue)
-    custom_monthly_aud = Column(Float)
-    custom_annual_aud = Column(Float)
+    custom_monthly_aud: Mapped[Optional[float]] = Column(Float)
+    custom_annual_aud: Mapped[Optional[float]] = Column(Float)
     annual_discount_pct: Mapped[Optional[float]] = Column(
         Float, default=20.0
     )  # editable annual discount
@@ -362,8 +362,8 @@ class PlanPricing(Base):
     __tablename__ = "plan_pricing"
 
     plan = Column(Enum(BillingPlan), primary_key=True)
-    monthly_aud = Column(Float)
-    annual_aud = Column(Float)
+    monthly_aud: Mapped[Optional[float]] = Column(Float)
+    annual_aud: Mapped[Optional[float]] = Column(Float)
 
     updated_by = Column(String(60))
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

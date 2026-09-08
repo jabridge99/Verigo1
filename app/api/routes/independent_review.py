@@ -68,6 +68,7 @@ class ReviewCreate(BaseModel):
     reviewer_credentials: Optional[str] = None
     review_period_start: Optional[date] = None
     review_period_end: Optional[date] = None
+    target_completion_date: Optional[date] = None
     areas_reviewed: Optional[List[str]] = None
     commissioned_by: Optional[str] = None
     commissioned_at: Optional[datetime] = None
@@ -86,6 +87,7 @@ class ReviewUpdate(BaseModel):
     reviewer_credentials: Optional[str] = None
     review_period_start: Optional[date] = None
     review_period_end: Optional[date] = None
+    target_completion_date: Optional[date] = None
     areas_reviewed: Optional[List[str]] = None
     report_date: Optional[date] = None
     report_ref: Optional[str] = None
@@ -218,6 +220,9 @@ def _review_dict(r: IndependentReview) -> dict:
         if r.review_period_start
         else None,
         "review_period_end": str(r.review_period_end) if r.review_period_end else None,
+        "target_completion_date": str(r.target_completion_date)
+        if r.target_completion_date
+        else None,
         "areas_reviewed": r.areas_reviewed,
         "commissioned_by": r.commissioned_by,
         "commissioned_at": r.commissioned_at.isoformat() if r.commissioned_at else None,
@@ -363,6 +368,7 @@ def create_review(
         reviewer_credentials=body.reviewer_credentials,
         review_period_start=body.review_period_start,
         review_period_end=body.review_period_end,
+        target_completion_date=body.target_completion_date,
         areas_reviewed=body.areas_reviewed or [],
         commissioned_by=body.commissioned_by,
         commissioned_at=body.commissioned_at,
@@ -1116,7 +1122,7 @@ def review_dashboard(
     today = date.today()
 
     def _overdue_action(a: ReviewAction) -> bool:
-        return (
+        return bool(
             a.due_date
             and a.due_date < today
             and a.status

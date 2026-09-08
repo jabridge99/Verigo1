@@ -127,7 +127,7 @@ def _section_aml_program(db: Session, org_id: str, start: date, end: date) -> di
         programs = [
             {
                 "id": p.id,
-                "name": p.name,
+                "name": f"AML/CTF Program v{p.version}",
                 "status": p.status,
             }
             for p in db.query(AMLProgram).filter_by(solution_id=solution.id).all()
@@ -136,8 +136,8 @@ def _section_aml_program(db: Session, org_id: str, start: date, end: date) -> di
             {
                 "id": r.id,
                 "status": r.status,
-                "assessed_at": r.assessed_at.isoformat()
-                if getattr(r, "assessed_at", None)
+                "assessed_at": r.assessment_date.isoformat()
+                if r.assessment_date
                 else None,
             }
             for r in db.query(RiskAssessment).filter_by(solution_id=solution.id).all()
@@ -299,7 +299,7 @@ def _section_ifti_register(db: Session, org_id: str, start: date, end: date) -> 
     ifti_e = (
         db.query(IFTIERecord)
         .filter(
-            IFTIERecord.org_id == org_id,
+            IFTIERecord.industry_id == org_id,
             IFTIERecord.created_at >= datetime.combine(start, datetime.min.time()),
             IFTIERecord.created_at <= datetime.combine(end, datetime.max.time()),
         )
@@ -512,7 +512,7 @@ def _section_policy_register(db: Session, org_id: str, start: date, end: date) -
 
     return {
         "total_policies": len(policies),
-        "policies_by_status": _count_by(policies, "lifecycle_status"),
+        "policies_by_status": _count_by(policies, "status"),
         "overdue_review_count": len(overdue_review),
         "attestations_in_period": attestations_this_period,
         "policies": [
@@ -520,9 +520,9 @@ def _section_policy_register(db: Session, org_id: str, start: date, end: date) -
                 "id": p.id,
                 "policy_number": getattr(p, "policy_number", p.id),
                 "title": p.title,
-                "status": p.lifecycle_status.value
-                if hasattr(p.lifecycle_status, "value")
-                else str(p.lifecycle_status),
+                "status": p.status.value
+                if hasattr(p.status, "value")
+                else str(p.status),
                 "review_due_date": p.review_due_date.isoformat()
                 if getattr(p, "review_due_date", None)
                 else None,

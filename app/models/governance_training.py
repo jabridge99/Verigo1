@@ -270,7 +270,9 @@ class GovernanceTrainingRecord(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    course = relationship("TrainingCourse", back_populates="records")
+    course: Mapped["TrainingCourse"] = relationship(
+        "TrainingCourse", back_populates="records"
+    )
     assignment = relationship(
         "TrainingAssignment", back_populates="records", foreign_keys=[assignment_id]
     )

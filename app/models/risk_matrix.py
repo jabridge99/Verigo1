@@ -30,6 +30,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -85,22 +86,26 @@ class OrgMonitoringConfig(Base):
 
     # ── Base alert score component weights ─────────────────────────────────────
     # Must sum to 1.0; validated in the API layer, not enforced at DB level.
-    behaviour_weight = Column(Float, default=0.30, nullable=False)
-    rule_weight = Column(Float, default=0.25, nullable=False)
-    customer_risk_weight = Column(Float, default=0.10, nullable=False)
-    risk_matrix_weight = Column(Float, default=0.35, nullable=False)
+    behaviour_weight: Mapped[float] = Column(Float, default=0.30, nullable=False)
+    rule_weight: Mapped[float] = Column(Float, default=0.25, nullable=False)
+    customer_risk_weight: Mapped[float] = Column(Float, default=0.10, nullable=False)
+    risk_matrix_weight: Mapped[float] = Column(Float, default=0.35, nullable=False)
 
     # ── Custom question weight (0.00 – 0.40) ───────────────────────────────────
     # Proportion of the final approval score contributed by answered questions.
     # Remaining (1 - custom_question_weight) comes from alert_score.
-    custom_question_weight = Column(Float, default=0.20, nullable=False)
+    custom_question_weight: Mapped[float] = Column(Float, default=0.20, nullable=False)
 
     # ── Risk matrix dimension weights ──────────────────────────────────────────
     # Must sum to 1.0 within the matrix sub-score.
-    matrix_customer_weight = Column(Float, default=0.30, nullable=False)
-    matrix_geographic_weight = Column(Float, default=0.25, nullable=False)
-    matrix_product_weight = Column(Float, default=0.20, nullable=False)
-    matrix_transaction_weight = Column(Float, default=0.25, nullable=False)
+    matrix_customer_weight: Mapped[float] = Column(Float, default=0.30, nullable=False)
+    matrix_geographic_weight: Mapped[float] = Column(
+        Float, default=0.25, nullable=False
+    )
+    matrix_product_weight: Mapped[float] = Column(Float, default=0.20, nullable=False)
+    matrix_transaction_weight: Mapped[float] = Column(
+        Float, default=0.25, nullable=False
+    )
 
     updated_by = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -187,6 +187,7 @@ class IndependentReview(Base):
     description = Column(Text)
     review_period_start = Column(Date)
     review_period_end = Column(Date)
+    target_completion_date = Column(Date, index=True)  # when the review itself is due
     areas_reviewed = Column(JSON, default=list)  # Free-text list of specific areas
 
     # ── Commissioning ─────────────────────────────────────────────────────────
