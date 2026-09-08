@@ -319,41 +319,72 @@ function WhoWeHelp() {
 // ─────────────────────────────────────────────────────────────────────────────
 function HowItWorks() {
   const steps = [
-    { n: 1, title: 'Choose Industry', desc: 'Pick your regulated sector. Your compliance pack loads instantly.' },
-    { n: 2, title: 'Onboard Customers', desc: 'Guided digital onboarding with built-in compliance checks.' },
-    { n: 3, title: 'Verify Risk', desc: 'Screen customers against sanctions, PEP, and adverse media lists.' },
-    { n: 4, title: 'Monitor Activity', desc: 'Automated transaction surveillance flags suspicious patterns 24/7.' },
-    { n: 5, title: 'Generate Reports', desc: 'SMR, IFTI, and TTR reports pre-populated and AUSTRAC-ready.' },
-    { n: 6, title: 'Stay Compliant', desc: 'Audit trails, registers, and annual review workflows built in.' },
+    {
+      n: 1,
+      time: '2 min',
+      title: 'Pick your industry',
+      desc: 'Answer 5 questions. Your full compliance pack — KYC rules, monitoring thresholds, AUSTRAC report templates — loads automatically for your sector.',
+      highlight: 'No configuration required.',
+    },
+    {
+      n: 2,
+      time: '5 min',
+      title: 'Onboard your first customer',
+      desc: 'Guided digital collection, identity verification, and sanctions screening — all in one flow. Every step is logged with a timestamp for your audit trail.',
+      highlight: 'Compliant from customer #1.',
+    },
+    {
+      n: 3,
+      time: 'Ongoing',
+      title: 'Monitor, report, stay ahead',
+      desc: 'Automated transaction surveillance runs 24/7. SMR, IFTI, and TTR reports are pre-populated and AUSTRAC-ready when you need them.',
+      highlight: 'AUSTRAC-ready reports in minutes.',
+    },
   ]
 
   return (
-    <section className="pub-section bg-gradient-to-br from-blue-600 to-blue-700">
+    <section className="pub-section bg-slate-950">
       <div className="pub-container">
-        <div className="text-center mb-12">
-          <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold text-white mb-4 block w-fit mx-auto">
+        <div className="text-center mb-14">
+          <span className="inline-flex items-center rounded-full bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-blue-500/20 mb-4">
             How It Works
           </span>
           <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-3">
-            Six steps to full compliance
+            From signup to compliant — same day.
           </h2>
-          <p className="text-blue-100 max-w-xl mx-auto">
-            From first customer to first AUSTRAC report — in minutes, not months.
+          <p className="text-slate-400 max-w-xl mx-auto">
+            Most compliance platforms take weeks to configure. Verigo is built around your industry from day one.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {steps.map(step => (
-            <div key={step.n} className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 ring-1 ring-white/15 flex gap-4">
-              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
-                {step.n}
+        <div className="relative">
+          {/* Connector line */}
+          <div className="hidden lg:block absolute top-12 left-[16.67%] right-[16.67%] h-px bg-gradient-to-r from-blue-600/0 via-blue-500/40 to-blue-600/0" />
+
+          <div className="grid lg:grid-cols-3 gap-6">
+            {steps.map(step => (
+              <div key={step.n} className="relative flex flex-col items-center text-center px-6">
+                {/* Step circle */}
+                <div className="relative mb-6">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex flex-col items-center justify-center shadow-lg shadow-blue-900/40 ring-4 ring-slate-950">
+                    <span className="text-xs font-semibold text-blue-200">{step.time}</span>
+                    <span className="text-2xl font-black text-white leading-none">{step.n}</span>
+                  </div>
+                </div>
+                <h3 className="text-lg font-black text-white mb-2">{step.title}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-3">{step.desc}</p>
+                <span className="inline-flex items-center rounded-full bg-green-500/10 px-3 py-1 text-xs font-semibold text-green-400 ring-1 ring-green-500/20">
+                  ✓ {step.highlight}
+                </span>
               </div>
-              <div>
-                <h3 className="font-bold text-white mb-1 text-sm">{step.title}</h3>
-                <p className="text-blue-100 text-xs leading-relaxed">{step.desc}</p>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-12 text-center">
+          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 px-8 py-4 text-base font-semibold text-white transition-colors shadow-lg shadow-blue-900/30">
+            Start Free Trial — 7 days, no card <ArrowRight className="w-5 h-5" />
+          </Link>
         </div>
       </div>
     </section>
