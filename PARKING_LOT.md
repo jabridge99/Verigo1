@@ -88,6 +88,24 @@ Fixing industry selection (P6, resolved below) required understanding this codeb
 
 ---
 
+## Parked from the Google Drive content library review (2026-09-08)
+
+The full VERIGO AML/CTF template library (8 industry sectors × up to 9 document types) plus the real Liddar client engagement (its own AML/CTF Program, guidelines, and the AUSTRAC-facing Independent Review) were found consolidated in Google Drive (`VERIGO_AML_Compliance_All` folder) — see `CLAUDE_CONTEXT.md`. Two items to track from this, neither blocking the in-progress content read-and-compare against the 8 code templates:
+
+### P15 — Liddar as a real-world validation checkpoint
+**Status:** Parked — scheduled for a later stage, not a current-stage task.
+**What:** Liddar Pty Ltd is VeriGo's first onboarded client. Real, dated, reviewer-produced artifacts already exist for it: `Liddar_AMLCTFProgram_V4.docx`, the guideline suite (KYC/ECDD/TMP/SMR/Sanctions/RATP), `Liddar_Risk_Matrix_V3.xlsx`, and — most valuable for this purpose — `PC00110-LDR-RPT00004.docx`, an independent review with 13 dated findings (0 Critical/4 High/7 Medium/2 Low) and 15 open remediation actions (A-01–A-15) against real AUSTRAC obligations. Once Liddar is actually running on the VeriGo platform (or as a standalone validation exercise beforehand), this is a genuine "does the product hold up against a real, professionally-reviewed instance of the same industry" check — e.g., does VeriGo's seeded remittance Compliance Pack, risk framework, and AML Program actually cover what RPT00004's findings say a real reviewer expected to see (IFTI-DRA reconciliation register, TMP alert log, sanctions screening log, SMR decision log, training attendance register, third-party sender ECDD, EWRA corridor appendix, Travel Rule data collection — its 15 open actions)? A gap between what VeriGo produces and what RPT00004 flagged as missing for a real remittance business is a strong, concrete signal of a real product gap, not a hypothetical one.
+**Why parked:** Needs Liddar actually onboarded (or deliberately run through the platform as a dry run) before there's anything real to compare against live VeriGo output — premature until that happens.
+**Detail:** `CLAUDE_CONTEXT.md`'s Liddar section; `PC00110-LDR-RPT00004.docx`'s 13 findings / 15 open actions (A-01–A-15); Liddar's V3/V4 document suite, all in the `VERIGO_AML_Compliance_All` Drive folder.
+
+### P16 — Independent Review report has no home in the product's template/deliverable model
+**Status:** Parked — explicitly deferred to a later commercialisation stage, per your direction.
+**What:** `PC00110-LDR-RPT00004` (and its generic counterpart `VERIGO_GEN_Independent_Review_v1.docx`) is a different kind of artifact from the 8-sector Compliance Pack templates being read against the code now — it's an **annual independent review deliverable** (AUSTRAC Rule-mandated periodic review of the AML/CTF Program itself), not industry-specific program/policy/guideline content that seeds an org's `AMLProgram`/`RiskFramework`. It doesn't map to any of the 8 sector template comparisons.
+**Why parked:** Per your explicit instruction — this needs figuring out at a later stage what VeriGo's actual deliverable and pricing model looks like for offering (or not offering) independent reviews as part of different subscription packages, which is a Stage 13 (SaaS Commercialisation) question, not something to fold into the current template content-mapping work.
+**Detail:** `PC00110-LDR-RPT00004.docx`; `VERIGO_GEN_Independent_Review_v1.docx`; existing in-app `IndependentReview` model (`app/models/independent_review.py`) already tracks reviews structurally but has no connection to this kind of document deliverable or its pricing.
+
+---
+
 ## Resolved (moved out of the active parking lot, kept here for the full-process history)
 
 ### P1 — Independent review "due" notifications have no date to key off
