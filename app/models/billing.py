@@ -1,5 +1,5 @@
 import enum
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import (
     JSON,
@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.orm import Mapped
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -300,7 +301,9 @@ class Subscription(Base):
     # VVIP / admin override (takes precedence over catalogue)
     custom_monthly_aud = Column(Float)
     custom_annual_aud = Column(Float)
-    annual_discount_pct = Column(Float, default=20.0)  # editable annual discount
+    annual_discount_pct: Mapped[Optional[float]] = Column(
+        Float, default=20.0
+    )  # editable annual discount
 
     # Stripe
     stripe_customer_id = Column(String(100))
@@ -334,9 +337,9 @@ class Invoice(Base):
     )
 
     stripe_invoice_id = Column(String(100))
-    amount_aud = Column(Float, nullable=False)
-    tax_aud = Column(Float, default=0.0)
-    total_aud = Column(Float, nullable=False)
+    amount_aud: Mapped[float] = Column(Float, nullable=False)
+    tax_aud: Mapped[Optional[float]] = Column(Float, default=0.0)
+    total_aud: Mapped[float] = Column(Float, nullable=False)
 
     status = Column(Enum(InvoiceStatus), default=InvoiceStatus.open)
     description = Column(Text)

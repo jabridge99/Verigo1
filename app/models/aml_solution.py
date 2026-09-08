@@ -7,6 +7,7 @@ and optional premium service engagements (billed separately).
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -21,7 +22,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -306,9 +307,9 @@ class RiskAssessment(Base):
     )
 
     # Risk scoring (1–5 scale)
-    inherent_risk_score = Column(Float)
-    control_effectiveness_score = Column(Float)
-    residual_risk_score = Column(Float)
+    inherent_risk_score: Mapped[Optional[float]] = Column(Float)
+    control_effectiveness_score: Mapped[Optional[float]] = Column(Float)
+    residual_risk_score: Mapped[Optional[float]] = Column(Float)
 
     # Risk ratings by category
     customer_risk_rating = Column(String(20))  # low / medium / high

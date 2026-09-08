@@ -103,7 +103,7 @@ def security_summary(
         .filter(
             SecurityEvent.event_type == "login_failed",
             SecurityEvent.created_at >= since,
-            SecurityEvent.ip_address is not None,
+            SecurityEvent.ip_address.is_not(None),
             SecurityEvent.ip_address != "unknown",
         )
         .group_by(SecurityEvent.ip_address)
@@ -239,7 +239,7 @@ def active_alerts(
         .filter(
             SecurityEvent.event_type == "login_failed",
             SecurityEvent.created_at >= since_1h,
-            SecurityEvent.ip_address is not None,
+            SecurityEvent.ip_address.is_not(None),
         )
         .group_by(SecurityEvent.ip_address)
         .having(func.count(SecurityEvent.id) > 20)

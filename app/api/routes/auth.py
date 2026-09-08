@@ -181,7 +181,7 @@ def register(
             email=payload.email,
             full_name=payload.full_name,
             password=payload.password,
-            role=UserRole.analyst.value,
+            role=UserRole.analyst,
             org_id=org_id,
         )
     except IntegrityError:
@@ -588,7 +588,7 @@ def create_user_admin(
         email=payload.email,
         full_name=payload.full_name,
         password=payload.password or secrets.token_urlsafe(16),
-        role=(payload.role.value if payload.role else UserRole.analyst.value),
+        role=(payload.role if payload.role else UserRole.analyst),
         org_id=payload.org_id or current_user.org_id,
     )
     record_security_event(

@@ -21,6 +21,7 @@ Decisions to lodge reports with AUSTRAC remain entirely with the reporting entit
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -37,7 +38,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 from app.models.customer_workflow import EDDTrigger
@@ -618,7 +619,7 @@ class FilingRegisterEntry(Base):
 
     period_start = Column(Date)
     period_end = Column(Date)
-    amount_aud = Column(Float)
+    amount_aud: Mapped[Optional[float]] = Column(Float)
 
     status = Column(
         String(20), nullable=False, default="submitted"

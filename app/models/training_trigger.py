@@ -46,7 +46,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -383,8 +383,8 @@ class AssessmentOutcomeFlag(Base):
     course_id = Column(String, ForeignKey("training_courses.id"), nullable=False)
 
     # ── Assessment result ─────────────────────────────────────────────────────
-    score = Column(Float, nullable=False)
-    pass_mark = Column(Float, nullable=False)
+    score: Mapped[float] = Column(Float, nullable=False)
+    pass_mark: Mapped[float] = Column(Float, nullable=False)
     attempt_number = Column(Integer, nullable=False)
     course_name = Column(String(255))
 

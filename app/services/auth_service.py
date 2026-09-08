@@ -23,7 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import EmailActionToken, MagicLinkToken, User, UserStatus
+from app.models.user import EmailActionToken, MagicLinkToken, User, UserRole, UserStatus
 from app.services.token_blacklist import (
     TOKEN_BLACKLIST,  # noqa: F401 — re-exported for callers
 )
@@ -82,7 +82,7 @@ def create_user(
     email: str,
     full_name: str,
     password: str,
-    role: str = "analyst",
+    role: UserRole = UserRole.analyst,
     org_id: Optional[str] = None,
 ) -> User:
     user = User(
@@ -116,9 +116,9 @@ def seed_master_admin(db: Session) -> Optional[User]:
     if user:
         changed = False
         changes: list[str] = []
-        if not user.is_super_admin or user.role != "admin":
+        if not user.is_super_admin or user.role != UserRole.admin:
             user.is_super_admin = True
-            user.role = "admin"
+            user.role = UserRole.admin
             changed = True
             changes.append("role/super_admin")
         # Resync password to MASTER_ADMIN_PASSWORD on every boot — this is an
@@ -363,7 +363,7 @@ def record_security_event(
             event_type=event_type,
             user_id=user_id,
             ip_address=ip,
-            metadata=json.dumps(meta or {}),
+            extra_metadata=json.dumps(meta or {}),
         )
         db.add(ev)
         db.commit()

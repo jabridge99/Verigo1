@@ -7,6 +7,7 @@ they are set only by the scoring engine or privileged compliance roles.
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -23,7 +24,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -155,7 +156,7 @@ class Customer(Base):
 
     # ── AML risk fields (set by engine / compliance only) ─────────────────────
     risk_level = Column(Enum(RiskLevel), default=RiskLevel.low, nullable=False)
-    risk_score = Column(Float, default=0.0, nullable=False)
+    risk_score: Mapped[float] = Column(Float, default=0.0, nullable=False)
     is_pep = Column(Boolean, default=False, nullable=False)
     pep_type = Column(Enum(PEPType), nullable=True)
     pep_details = Column(Text)
@@ -492,7 +493,7 @@ class CustomerRiskScoreHistory(Base):
     )
     org_id = Column(String, nullable=False, index=True)
 
-    risk_score = Column(Float, nullable=False)
+    risk_score: Mapped[float] = Column(Float, nullable=False)
     risk_level = Column(Enum(RiskLevel), nullable=False)
     cdd_level = Column(Enum(CDDLevel), nullable=False)
     scoring_factors = Column(JSON)  # breakdown of contributing factors
@@ -501,8 +502,8 @@ class CustomerRiskScoreHistory(Base):
     # inherent = likelihood x consequence, residual = inherent x CEF.
     # Nullable — populated only when the customer-level scoring run computes
     # a full breakdown; legacy rows and simple manual scores leave these null.
-    inherent_score = Column(Float)
-    residual_score = Column(Float)
+    inherent_score: Mapped[Optional[float]] = Column(Float)
+    residual_score: Mapped[Optional[float]] = Column(Float)
     control_effectiveness_score = Column(Integer)  # 1-5, see ControlEffectivenessScore
 
     trigger = Column(String(100))  # onboarding | periodic_review | event | manual

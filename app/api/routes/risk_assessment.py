@@ -20,7 +20,7 @@ Governance disclaimer is displayed on every response and acknowledged on approva
 
 import logging
 from datetime import date, datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -526,7 +526,7 @@ def list_factor_scores(
         q = q.filter(RiskFactorScore.factor_id.in_(valid_factor_ids))
 
     if unscored_only:
-        q = q.filter(RiskFactorScore.likelihood == None)
+        q = q.filter(RiskFactorScore.likelihood.is_(None))
 
     scores = q.all()
     result = []
@@ -611,7 +611,7 @@ def score_factor(
         raise HTTPException(404, "Factor score record not found")
 
     # Capture previous for history
-    prev = {
+    prev: dict[str, Any] = {
         "likelihood": fs.likelihood,
         "consequence": fs.consequence,
         "control_effectiveness": fs.control_effectiveness,

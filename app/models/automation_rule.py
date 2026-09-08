@@ -14,6 +14,7 @@ All decisions remain with the reporting entity.
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -29,6 +30,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -253,7 +255,7 @@ class AutomationRuleExecution(Base):
     )  # [{"action_type": "...", "result": "...", "entity_id": "..."}]
     is_shadow_mode = Column(Boolean, default=False)  # True when rule.status == testing
 
-    execution_time_ms = Column(Float)
+    execution_time_ms: Mapped[Optional[float]] = Column(Float)
     error_message = Column(Text)
 
     executed_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -283,14 +285,14 @@ class DecisionSupportPanel(Base):
     customer_id = Column(String, ForeignKey("customers.id"), nullable=False, index=True)
 
     # Risk summary (compiled at panel generation time)
-    customer_risk_score = Column(Float)
+    customer_risk_score: Mapped[Optional[float]] = Column(Float)
     customer_risk_level = Column(String(20))
-    transaction_risk_score = Column(Float)
-    geographic_risk_score = Column(Float)
-    product_risk_score = Column(Float)
-    behaviour_risk_score = Column(Float)
+    transaction_risk_score: Mapped[Optional[float]] = Column(Float)
+    geographic_risk_score: Mapped[Optional[float]] = Column(Float)
+    product_risk_score: Mapped[Optional[float]] = Column(Float)
+    behaviour_risk_score: Mapped[Optional[float]] = Column(Float)
     risk_matrix_score = Column(Float)
-    alert_score = Column(Float)
+    alert_score: Mapped[Optional[float]] = Column(Float)
     final_approval_score = Column(Float)
 
     # Triggered rules (from MonitoringRule and AutomationRule evaluations)

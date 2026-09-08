@@ -14,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -177,7 +177,9 @@ class Role(Base):
     is_system = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    permissions = relationship("Permission", secondary=role_permissions)
+    permissions: Mapped[list["Permission"]] = relationship(
+        "Permission", secondary=role_permissions
+    )
 
 
 class OrganisationUser(Base):

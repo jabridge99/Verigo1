@@ -27,6 +27,7 @@ Architecture:
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -43,7 +44,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -203,7 +204,7 @@ class RiskFramework(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    categories = relationship(
+    categories: Mapped[list["RiskCategory"]] = relationship(
         "RiskCategory",
         back_populates="framework",
         cascade="all, delete-orphan",
@@ -237,14 +238,16 @@ class RiskCategory(Base):
     category_type = Column(Enum(RiskCategoryType), nullable=False)
     name = Column(String(255), nullable=False)  # user can rename
     description = Column(Text)
-    weight = Column(Float, default=0.14)  # contribution to overall score (0-1)
+    weight: Mapped[Optional[float]] = Column(
+        Float, default=0.14
+    )  # contribution to overall score (0-1)
     is_active = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     framework = relationship("RiskFramework", back_populates="categories")
-    factors = relationship(
+    factors: Mapped[list["RiskFactor"]] = relationship(
         "RiskFactor",
         back_populates="category",
         cascade="all, delete-orphan",
@@ -412,7 +415,9 @@ class RiskAssessmentRun(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    framework = relationship("RiskFramework", back_populates="assessments")
+    framework: Mapped["RiskFramework"] = relationship(
+        "RiskFramework", back_populates="assessments"
+    )
     factor_scores = relationship(
         "RiskFactorScore", back_populates="assessment", cascade="all, delete-orphan"
     )
@@ -457,16 +462,22 @@ class RiskFactorScore(Base):
     )
 
     # ── Calculated by engine (read-only for display) ───────────────────────────
-    inherent_risk_score = Column(Float)  # likelihood × consequence (1-25)
-    residual_risk_score = Column(Float)  # inherent × CEF (0.2-25)
-    inherent_rating = Column(Enum(RiskRating))
-    residual_rating = Column(Enum(RiskRating))
+    inherent_risk_score: Mapped[Optional[float]] = Column(
+        Float
+    )  # likelihood × consequence (1-25)
+    residual_risk_score: Mapped[Optional[float]] = Column(
+        Float
+    )  # inherent × CEF (0.2-25)
+    inherent_rating: Mapped[Optional[RiskRating]] = Column(Enum(RiskRating))
+    residual_rating: Mapped[Optional[RiskRating]] = Column(Enum(RiskRating))
 
     # ── User customisation ────────────────────────────────────────────────────
     score_override = Column(
         Boolean, default=False
     )  # user manually overrode calculated score
-    override_residual_score = Column(Float)  # manual override value
+    override_residual_score: Mapped[Optional[float]] = Column(
+        Float
+    )  # manual override value
     override_justification = Column(Text)  # mandatory when override=True
 
     # Supporting evidence and notes
@@ -547,7 +558,7 @@ class RiskScoreHistory(Base):
     previous_likelihood = Column(Integer)
     previous_consequence = Column(Integer)
     previous_control_effectiveness = Column(Integer)
-    previous_residual_score = Column(Float)
+    previous_residual_score: Mapped[Optional[float]] = Column(Float)
 
     # Values after the change
     new_likelihood = Column(Integer)
