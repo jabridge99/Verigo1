@@ -1,5 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
+import FadeIn from '@/components/FadeIn'
 import {
   Shield, CheckCircle, AlertTriangle, FileText, Users, Lock,
   ArrowRight, Building2, Activity, Database,
@@ -149,16 +150,18 @@ function WhyComplianceMatters() {
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {cards.map(({ icon: Icon, color, title, desc }) => (
-            <div key={title} className="pub-card flex flex-col gap-4">
-              <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
-                <Icon className="w-5 h-5" />
+          {cards.map(({ icon: Icon, color, title, desc }, i) => (
+            <FadeIn key={title} delay={i * 100} direction="up">
+              <div className="pub-card flex flex-col gap-4 h-full">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 mb-2">{title}</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-slate-900 mb-2">{title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
-              </div>
-            </div>
+            </FadeIn>
           ))}
         </div>
       </div>
@@ -362,8 +365,9 @@ function HowItWorks() {
           <div className="hidden lg:block absolute top-12 left-[16.67%] right-[16.67%] h-px bg-gradient-to-r from-blue-600/0 via-blue-500/40 to-blue-600/0" />
 
           <div className="grid lg:grid-cols-3 gap-6">
-            {steps.map(step => (
-              <div key={step.n} className="relative flex flex-col items-center text-center px-6">
+            {steps.map((step, i) => (
+              <FadeIn key={step.n} delay={i * 150} direction="up">
+              <div className="relative flex flex-col items-center text-center px-6">
                 {/* Step circle */}
                 <div className="relative mb-6">
                   <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex flex-col items-center justify-center shadow-lg shadow-blue-900/40 ring-4 ring-slate-950">
@@ -377,6 +381,7 @@ function HowItWorks() {
                   ✓ {step.highlight}
                 </span>
               </div>
+              </FadeIn>
             ))}
           </div>
         </div>
@@ -516,13 +521,14 @@ function WhyVerigo() {
               <Link href="/start-trial" className="pub-btn-primary">
                 Start Free Trial <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link href="/start-trial" className="pub-btn-secondary">Start Free Trial</Link>
+              <Link href="/contact" className="pub-btn-secondary">Book a Demo</Link>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {points.map(({ icon: Icon, color, title, desc }) => (
-              <div key={title} className="pub-card flex flex-col gap-3">
+            {points.map(({ icon: Icon, color, title, desc }, i) => (
+              <FadeIn key={title} delay={i * 80} direction="up">
+              <div className="pub-card flex flex-col gap-3 h-full">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
                   <Icon className="w-4 h-4" />
                 </div>
@@ -531,6 +537,7 @@ function WhyVerigo() {
                   <p className="text-slate-500 text-xs leading-relaxed">{desc}</p>
                 </div>
               </div>
+              </FadeIn>
             ))}
           </div>
         </div>
@@ -721,8 +728,8 @@ function FinalCTA() {
           <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors shadow-lg">
             Start Free Trial <ArrowRight className="w-5 h-5" />
           </Link>
-          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-            Start Free Trial
+          <Link href="/contact" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+            Book a Demo
           </Link>
         </div>
         <div className="flex flex-wrap justify-center gap-6 text-sm text-slate-500">
