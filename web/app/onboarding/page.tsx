@@ -128,7 +128,7 @@ function OnboardingDashboardInner() {
       const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/cancel`, { method: "POST", credentials: "include" });
       if (!res.ok) throw new Error();
       showToast("success", "Verification request cancelled");
-      setSessions(prev => prev.map(s => s.session_id === sessionId ? { ...s, status: "cancelled" } : s));
+      setSessions(prev => prev.map(s => s.session_id === sessionId ? { ...s, status: "abandoned" } : s));
       setSelectedSession(null);
       fetchData();
     } catch {
@@ -313,7 +313,7 @@ function OnboardingDashboardInner() {
                   View customer profile
                 </a>
               )}
-              {!["completed", "rejected", "cancelled"].includes(selectedSession.status) && (
+              {!["completed", "rejected", "abandoned"].includes(selectedSession.status) && (
                 <>
                   <button onClick={() => handleRemind(selectedSession.session_id)} className="btn-secondary text-xs py-1.5 px-3">
                     Resend Link

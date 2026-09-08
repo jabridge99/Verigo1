@@ -387,3 +387,17 @@ def send_reminder(db, session):
         {"reminder_number": session.reminders_sent, "email": session.applicant_email},
     )
     db.commit()
+
+
+def cancel_session(db, session, actor=None):
+    """Staff-initiated cancellation before the applicant finishes -- not a
+    KYC decision (see SessionStatus.rejected for that), just "we're no
+    longer pursuing this application"."""
+    if session.status in (SessionStatus.completed, SessionStatus.rejected):
+        raise ValueError(
+            f"Cannot cancel a session that is already {session.status.value}"
+        )
+    session.status = SessionStatus.abandoned
+    _log(db, session, "session_cancelled", {}, actor=actor or "system")
+    db.commit()
+    return session

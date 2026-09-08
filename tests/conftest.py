@@ -130,6 +130,11 @@ def _make_user(db, role: UserRole, industry_id: str = None) -> User:
         status=UserStatus.active,
         org_id=industry_id,
         industry_id=industry_id,
+        # A real registered user has all three identity fields pointing at
+        # the same org (see app/services/org_service.py's attach_owner()) --
+        # match that here so this fixture doesn't understate what a real
+        # user looks like.
+        primary_organisation_id=industry_id,
     )
     db.add(user)
     db.commit()

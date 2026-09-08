@@ -42,6 +42,7 @@ from app.services.onboarding_service import (
     ONBOARDING_STEPS,
     advance_step,
     bulk_create_sessions,
+    cancel_session,
     create_session,
     get_sessions_needing_reminder,
     open_invite,
@@ -158,6 +159,24 @@ def trigger_reminder(
     assert_tenant(current_user, s.organisation_id, s.industry_id)
     send_reminder(db, s)
     return {"sent": True, "reminders_sent": s.reminders_sent}
+
+
+@router.post("/sessions/{session_id}/cancel", response_model=SessionDetail)
+def cancel_onboarding_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    s = db.query(OnboardingSession).filter_by(session_id=session_id).first()
+    if not s:
+        raise HTTPException(404, "Session not found")
+    assert_tenant(current_user, s.organisation_id, s.industry_id)
+    try:
+        cancel_session(db, s, actor=current_user.id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    db.refresh(s)
+    return s
 
 
 @router.delete("/sessions/{session_id}", status_code=204)
