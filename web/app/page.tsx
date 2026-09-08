@@ -50,8 +50,8 @@ function Hero() {
           <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-slate-100 transition-colors shadow-lg">
             Start Free Trial <ArrowRight className="w-5 h-5" />
           </Link>
-          <Link href="/start-trial" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
-            Start Free Trial
+          <Link href="/contact" className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-8 py-4 text-base font-semibold text-white ring-1 ring-white/15 hover:bg-white/10 transition-colors">
+            Book a Demo
           </Link>
         </div>
 
@@ -71,6 +71,34 @@ function Hero() {
             </div>
           ))}
         </div>
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1B — TRUST STRIP
+// ─────────────────────────────────────────────────────────────────────────────
+function TrustStrip() {
+  const badges = [
+    { label: 'AUSTRAC-Aligned', sub: 'SMR · IFTI · TTR' },
+    { label: 'Australian Hosted', sub: 'AWS ap-southeast-2' },
+    { label: 'AES-256 Encrypted', sub: 'Data at rest & in transit' },
+    { label: 'Tranche 2 Ready', sub: 'From 1 July 2026' },
+    { label: '7-Day Free Trial', sub: 'No credit card required' },
+  ]
+  return (
+    <section className="bg-white border-b border-slate-100 py-6 px-4">
+      <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+        {badges.map(b => (
+          <div key={b.label} className="flex items-center gap-2.5">
+            <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-slate-800 leading-tight">{b.label}</p>
+              <p className="text-[10px] text-slate-400 leading-tight">{b.sub}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   )
@@ -686,6 +714,7 @@ export default async function HomePage() {
   return (
     <div className="bg-white text-slate-900">
       <Hero />
+      <TrustStrip />
       <WhyComplianceMatters />
       <AMLReformTimeline />
       <WhoWeHelp />
