@@ -382,7 +382,7 @@ def list_program_versions(
         )
         .order_by(desc(AMLProgram.created_at))
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
     return {"versions": [_program_dict(p) for p in programs], "count": len(programs)}
@@ -439,56 +439,6 @@ def create_program(
     return {
         "program": _program_dict(program),
         "required_sections": REQUIRED_SECTIONS,
-        "disclaimer": DISCLAIMER,
-    }
-
-
-@router.get("/{program_id}")
-def get_program(
-    program_id: str,
-    include_sections: bool = Query(False),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_analyst_or_above),
-):
-    """Get a specific program version."""
-    org_id = org_id_for(current_user)
-    program = _get_program(program_id, org_id, db)
-    return {
-        "program": _program_dict(program, include_sections),
-        "disclaimer": DISCLAIMER,
-    }
-
-
-@router.patch("/{program_id}")
-def update_program(
-    program_id: str,
-    payload: ProgramUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_compliance_or_above),
-):
-    """
-    Update an AML/CTF Program draft.
-
-    Only draft or under_review programs can be updated.
-    Active programs are immutable — create a new version to make changes.
-    """
-    org_id = org_id_for(current_user)
-    program = _get_program(program_id, org_id, db)
-
-    if program.status not in (ProgramStatus.draft, ProgramStatus.under_review):
-        raise HTTPException(
-            409,
-            f"Program is '{program.status.value}' and cannot be updated. "
-            "Active programs are immutable — create a new version.",
-        )
-
-    for field, value in payload.model_dump(exclude_none=True).items():
-        setattr(program, field, value)
-
-    db.commit()
-    db.refresh(program)
-    return {
-        "program": _program_dict(program, True),
         "disclaimer": DISCLAIMER,
     }
 
@@ -653,7 +603,7 @@ def list_risk_assessments(
     assessments = (
         q.order_by(desc(RiskAssessment.assessment_date))
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
     return {
@@ -948,5 +898,61 @@ def program_compliance_status(
             or (ewra_age_days is not None and ewra_age_days > 300)
             or (reg_expiry_days is not None and 0 <= reg_expiry_days < 90),
         ),
+        "disclaimer": DISCLAIMER,
+    }
+
+
+# ── Program detail (registered last: /{program_id} is a catch-all for any ─────
+# single path segment under this router, so it must come after every other
+# static route — e.g. /risk-assessments, /compliance-status — or it shadows
+# them and they 404 with "program not found" instead of ever running) ────────
+
+
+@router.get("/{program_id}")
+def get_program(
+    program_id: str,
+    include_sections: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """Get a specific program version."""
+    org_id = org_id_for(current_user)
+    program = _get_program(program_id, org_id, db)
+    return {
+        "program": _program_dict(program, include_sections),
+        "disclaimer": DISCLAIMER,
+    }
+
+
+@router.patch("/{program_id}")
+def update_program(
+    program_id: str,
+    payload: ProgramUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Update an AML/CTF Program draft.
+
+    Only draft or under_review programs can be updated.
+    Active programs are immutable — create a new version to make changes.
+    """
+    org_id = org_id_for(current_user)
+    program = _get_program(program_id, org_id, db)
+
+    if program.status not in (ProgramStatus.draft, ProgramStatus.under_review):
+        raise HTTPException(
+            409,
+            f"Program is '{program.status.value}' and cannot be updated. "
+            "Active programs are immutable — create a new version.",
+        )
+
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(program, field, value)
+
+    db.commit()
+    db.refresh(program)
+    return {
+        "program": _program_dict(program, True),
         "disclaimer": DISCLAIMER,
     }

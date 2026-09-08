@@ -422,7 +422,7 @@ def list_screening_records(
     records = (
         q.order_by(ScreeningRecord.screened_at.desc())
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
 
@@ -581,7 +581,7 @@ def list_alerts(
     alerts = (
         q.order_by(ScreeningAlert.created_at.desc())
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
     return {"alerts": [_alert_dict(a) for a in alerts], "count": len(alerts)}
