@@ -126,10 +126,11 @@ VeriGo includes all of these in a single platform, pre-configured for your indus
 - **Annual licence fees** — a flat annual cost regardless of customer or transaction volume. Predictable and often better value for businesses with steady or growing volumes.
 - **Enterprise contracts** — custom pricing for large organisations, reporting groups, or businesses with specific integration requirements.
 
-**VeriGo pricing (all plans include unlimited customers):**
-- **Essential — $59/month** (or $599/year). 1 industry pack. Core KYC, KYB, IFTI/SMR/TTR reporting, and essential integrations (email, cloud storage).
-- **Professional — $79/month** (or $799/year). Everything in Essential plus advanced monitoring, case management, workflow automation, AML data connectors, and the ability to connect Verigo to your existing systems.
-- **Enterprise — Custom pricing** for reporting groups, large institutions, and SaaS resellers.
+**VeriGo pricing:**
+- **Starter — $599/yr** (billed annually). Up to 500 customers, 1 user per tenant. Core KYC, KYB, AML transaction monitoring, IFTI/SMR/TTR reporting, 5 GB document vault, and essential integrations.
+- **Professional — $799/yr** (billed annually). Up to 5,000 customers, 3 users per tenant. Everything in Starter plus advanced rule builder, ECDD assessments, MLRO case management, workflow automation, AML data connectors, and 15 GB document vault.
+- **Enterprise — $2,999/yr** (billed annually). Unlimited customers, 5 users per tenant. White-label branding, custom domain, multi-tenant management, dedicated MLRO support, 50 GB document vault, and 99.9% uptime SLA.
+- **VVIP — Custom pricing** for reporting groups, large institutions, and SaaS resellers.
 
 All plans include a 7-day free trial with no credit card required. The AML/CTF Program included is a basic reference template — tailoring it to your specific business is available as an additional service.`,
   },
@@ -143,9 +144,9 @@ All plans include a 7-day free trial with no credit card required. The AML/CTF P
 - **Specialist AML data providers** — for businesses with higher-risk profiles (crypto exchanges, PSPs, FX dealers), integrations with AML data connectors and global watchlist databases add an additional layer of intelligence.
 
 **VeriGo integrations by plan:**
-- **Essential:** Email and cloud storage
+- **Starter:** Email and cloud storage
 - **Professional:** Essential integrations plus AML data connectors and the ability to connect Verigo to your existing systems
-- **Enterprise:** All of the above with BYO vendor contracts, custom integration support, and dedicated technical onboarding`,
+- **Enterprise / VVIP:** All of the above with BYO vendor contracts, custom integration support, and dedicated technical onboarding`,
   },
 ]
 

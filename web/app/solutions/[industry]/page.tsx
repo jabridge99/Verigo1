@@ -879,7 +879,7 @@ function IndustryPage({ ind }: { ind: NonNullable<ReturnType<typeof getIndustry>
     : { label: 'Tranche 2 — obligations from 2026', cls: 'bg-amber-50 text-amber-700 ring-amber-700/10' }
 
   const planColor: Record<string, string> = {
-    Essential: 'bg-slate-900 text-white',
+    Starter: 'bg-slate-900 text-white',
     Professional: 'bg-blue-600 text-white',
     Enterprise: 'bg-indigo-600 text-white',
   }
