@@ -89,7 +89,7 @@ def list_retention_policies(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    industry_id = None if current_user.is_super_admin else current_user.org_id
     return list_policies(db, industry_id)
 
 
@@ -123,7 +123,7 @@ def get_retention_policy(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    industry_id = None if current_user.is_super_admin else current_user.org_id
     return get_policy(db, entity_scope, industry_id)
 
 
@@ -143,9 +143,7 @@ def create_legal_hold(
         entity_id=payload.entity_id,
         reason=payload.reason,
         held_by=current_user.id,
-        industry_id=current_user.org_id
-        if current_user.role != UserRole.admin
-        else None,
+        industry_id=current_user.org_id if not current_user.is_super_admin else None,
     )
 
 
@@ -162,7 +160,7 @@ def release_hold(
             hold_id,
             released_by=current_user.id,
             industry_id=current_user.org_id
-            if current_user.role != UserRole.admin
+            if not current_user.is_super_admin
             else None,
         )
     except (ValueError, PermissionError) as e:
@@ -179,7 +177,7 @@ def list_legal_holds(
     ),
 ):
     q = db.query(LegalHold)
-    if current_user.role != UserRole.admin:
+    if not current_user.is_super_admin:
         q = q.filter(LegalHold.industry_id == current_user.org_id)
     if entity_scope:
         q = q.filter(LegalHold.entity_scope == entity_scope)
@@ -218,5 +216,5 @@ def purge_report(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     """Dry-run purge report — identifies eligible records without deleting them."""
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    industry_id = None if current_user.is_super_admin else current_user.org_id
     return generate_purge_report(db, industry_id)
