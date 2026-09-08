@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Shield } from 'lucide-react'
+import { Shield, Linkedin, Mail, Phone } from 'lucide-react'
 
 const footerLinks = {
   Solutions: [
@@ -54,11 +54,27 @@ export default function Footer() {
             <p className="text-slate-400 text-sm leading-relaxed max-w-xs mb-5">
               Australia&apos;s Compliance Operating System for regulated businesses navigating AUSTRAC obligations and AML reforms.
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mb-5">
               <span className="inline-flex items-center rounded-full bg-blue-950 px-2.5 py-1 text-xs font-medium text-blue-400 ring-1 ring-blue-800">AUSTRAC Aligned</span>
               <span className="inline-flex items-center rounded-full bg-emerald-950 px-2.5 py-1 text-xs font-medium text-emerald-400 ring-1 ring-emerald-800">FATF Ready</span>
-              <span className="inline-flex items-center rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-slate-700">🇦🇺 Australian Data</span>
+              <span className="inline-flex items-center rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-slate-700">🇦🇺 Built in Australia</span>
             </div>
+            <div className="space-y-1.5 mb-5">
+              <a href="mailto:admin@veri-go.com.au" className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-xs transition-colors">
+                <Mail className="w-3.5 h-3.5" /> admin@veri-go.com.au
+              </a>
+              <a href="tel:+610433453883" className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-xs transition-colors">
+                <Phone className="w-3.5 h-3.5" /> 0433 453 883
+              </a>
+            </div>
+            <a
+              href="https://www.linkedin.com/company/verigo-au"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-2 text-xs font-medium text-slate-300 transition-colors"
+            >
+              <Linkedin className="w-3.5 h-3.5" /> Follow on LinkedIn
+            </a>
           </div>
 
           {Object.entries(footerLinks).map(([section, links]) => (
@@ -82,9 +98,10 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-slate-500 text-sm">
-            © {new Date().getFullYear()} PITX Pty Ltd (ABN 90 655 559 112), trading as Verigo. All rights reserved.
-          </p>
+          <div>
+            <p className="text-slate-500 text-xs">© {new Date().getFullYear()} PITX Pty Ltd (ABN 90 655 559 112), trading as Verigo.</p>
+            <p className="text-slate-600 text-xs mt-0.5">1 Clunies Ross Court, Eight Mile Plains QLD 4113 · All rights reserved.</p>
+          </div>
           <div className="flex gap-6">
             {[
               { label: 'Privacy Policy', href: '/privacy' },
