@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Mail, Clock, ArrowRight, MessageSquare, Headphones, BookOpen } from 'lucide-react'
+import { Mail, Clock, ArrowRight, MessageSquare, Headphones, BookOpen, MapPin, Phone, AtSign } from 'lucide-react'
 import { industries } from '@/lib/industries'
 
 export const metadata = {
@@ -60,7 +60,7 @@ export default function ContactPage() {
                   <opt.icon className="w-5 h-5" />
                 </div>
                 <h3 className="font-bold text-slate-900 text-lg mb-2">{opt.title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed mb-4 flex-1">{opt.desc}</p>
+                <p className="text-slate-600 text-sm leading-relaxed mb-4 flex-1">{opt.desc}</p>
                 <div className="space-y-2">
                   <a
                     href={`mailto:${opt.email}`}
@@ -79,6 +79,39 @@ export default function ContactPage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Office details */}
+          <div className="flex flex-col sm:flex-row gap-6 mb-16">
+            <div className="flex items-start gap-4 pub-card flex-1">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <MapPin className="w-5 h-5 text-slate-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900 mb-1">Office Address</p>
+                <p className="text-sm text-slate-600">1 Clunies Ross Court<br />Eight Mile Plains QLD 4113</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-4 pub-card flex-1">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <Phone className="w-5 h-5 text-slate-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900 mb-1">Phone</p>
+                <a href="tel:+610433453883" className="text-sm text-blue-600 hover:text-blue-700 font-medium">0433 453 883</a>
+                <p className="text-xs text-slate-400 mt-0.5">Mon–Fri 9am–5pm AEST</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-4 pub-card flex-1">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <AtSign className="w-5 h-5 text-slate-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900 mb-1">Email</p>
+                <a href="mailto:admin@veri-go.com.au" className="text-sm text-blue-600 hover:text-blue-700 font-medium">admin@veri-go.com.au</a>
+                <p className="text-xs text-slate-400 mt-0.5">We respond within one business day</p>
+              </div>
+            </div>
           </div>
 
           {/* Contact form */}
