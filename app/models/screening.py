@@ -41,6 +41,7 @@ class ScreeningType(str, enum.Enum):
     ubo_pep = "ubo_pep"
     ubo_sanctions = "ubo_sanctions"
     ubo_adverse = "ubo_adverse"
+    manual_review = "manual_review"  # human reviewer sign-off, feeds composite ID score
 
 
 class ScreeningStatus(str, enum.Enum):

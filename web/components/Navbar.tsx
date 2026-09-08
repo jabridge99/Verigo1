@@ -116,17 +116,17 @@ export default function Navbar() {
           {/* Desktop Nav */}
           {isPublicPage && !user ? (
             <div className="hidden lg:flex items-center gap-1">
-              <Link href="/" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Home</Link>
+              <Link href="/" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>Home</Link>
 
               {/* Solutions dropdown */}
               <div className="relative flex items-center">
-                <Link href="/solutions" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                <Link href="/solutions" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>
                   Solutions
                 </Link>
                 <button
                   onClick={() => toggleDropdown('solutions')}
                   aria-label="Toggle solutions menu"
-                  className="p-2 rounded-lg hover:bg-slate-50"
+                  className="p-2 rounded-xl hover:bg-slate-50"
                 >
                   <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'solutions' ? 'rotate-180' : ''}`} />
                 </button>
@@ -157,13 +157,13 @@ export default function Navbar() {
 
               {/* Industries dropdown */}
               <div className="relative flex items-center">
-                <Link href="/industries" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                <Link href="/industries" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>
                   Industries
                 </Link>
                 <button
                   onClick={() => toggleDropdown('industries')}
                   aria-label="Toggle industries menu"
-                  className="p-2 rounded-lg hover:bg-slate-50"
+                  className="p-2 rounded-xl hover:bg-slate-50"
                 >
                   <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'industries' ? 'rotate-180' : ''}`} />
                 </button>
@@ -190,22 +190,23 @@ export default function Navbar() {
                 )}
               </div>
 
-              <Link href="/company" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Our Company</Link>
-              <Link href="/pricing" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Pricing</Link>
+              <Link href="/company" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>Our Company</Link>
+              <Link href="/pricing" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>Pricing</Link>
+              <Link href="/contact" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>Contact Us</Link>
             </div>
           ) : isPublicPage && user ? (
             <div className="hidden lg:flex items-center gap-1">
-              <Link href="/" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Home</Link>
+              <Link href="/" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>Home</Link>
 
               {/* Solutions dropdown */}
               <div className="relative flex items-center">
-                <Link href="/solutions" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                <Link href="/solutions" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>
                   Solutions
                 </Link>
                 <button
                   onClick={() => toggleDropdown('solutions')}
                   aria-label="Toggle solutions menu"
-                  className="p-2 rounded-lg hover:bg-slate-50"
+                  className="p-2 rounded-xl hover:bg-slate-50"
                 >
                   <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'solutions' ? 'rotate-180' : ''}`} />
                 </button>
@@ -236,13 +237,13 @@ export default function Navbar() {
 
               {/* Industries dropdown */}
               <div className="relative flex items-center">
-                <Link href="/industries" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>
+                <Link href="/industries" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>
                   Industries
                 </Link>
                 <button
                   onClick={() => toggleDropdown('industries')}
                   aria-label="Toggle industries menu"
-                  className="p-2 rounded-lg hover:bg-slate-50"
+                  className="p-2 rounded-xl hover:bg-slate-50"
                 >
                   <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${activeDropdown === 'industries' ? 'rotate-180' : ''}`} />
                 </button>
@@ -269,11 +270,12 @@ export default function Navbar() {
                 )}
               </div>
 
-              <Link href="/pricing" className={`${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}>Pricing</Link>
+              <Link href="/pricing" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>Pricing</Link>
+              <Link href="/contact" className={`${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}>Contact Us</Link>
               <div className="relative">
                 <button
                   onClick={() => toggleDropdown('resources')}
-                  className={`flex items-center gap-1 ${linkClass} px-3 py-2 rounded-lg hover:bg-slate-50`}
+                  className={`flex items-center gap-1 ${linkClass} px-3 py-2 rounded-xl hover:bg-slate-50`}
                 >
                   Resources <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdown === 'resources' ? 'rotate-180' : ''}`} />
                 </button>
@@ -297,6 +299,7 @@ export default function Navbar() {
               <Link href="/" className="text-sm text-white/70 hover:text-white transition-colors">Home</Link>
               <Link href="/solutions" className="text-sm text-white/70 hover:text-white transition-colors">Solutions</Link>
               <Link href="/pricing" className="text-sm text-white/70 hover:text-white transition-colors">Pricing</Link>
+              <Link href="/contact" className="text-sm text-white/70 hover:text-white transition-colors">Contact Us</Link>
               <div className="relative">
                 <button
                   onClick={() => toggleDropdown('resources')}
@@ -348,7 +351,7 @@ export default function Navbar() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className={`lg:hidden p-2 rounded-lg ${isPublicPage ? 'text-slate-600 hover:bg-slate-100' : 'text-white/70 hover:bg-white/10'}`}
+            className={`lg:hidden p-2 rounded-xl ${isPublicPage ? 'text-slate-600 hover:bg-slate-100' : 'text-white/70 hover:bg-white/10'}`}
           >
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -378,6 +381,7 @@ export default function Navbar() {
 
           <Link href="/company" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Our Company</Link>
           <Link href="/pricing" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Pricing</Link>
+          <Link href="/contact" onClick={() => setMobileOpen(false)} className="block px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Contact Us</Link>
 
           {user && (
             <div>

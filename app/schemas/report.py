@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.models.customer_workflow import EDDTrigger
 from app.models.report import ReportPriority, ReportType
 
 
@@ -89,7 +90,8 @@ class ReportingSummary(BaseModel):
 class ECDDCreate(BaseModel):
     customer_id: str
     industry_id: Optional[str] = None
-    trigger_reason: str
+    trigger_reason: EDDTrigger
+    trigger_reason_other: Optional[str] = None
     pep_status: int = 0
     adverse_media_found: int = 0
     adverse_media_details: Optional[str] = None
@@ -106,11 +108,17 @@ class ECDDCreate(BaseModel):
     analyst_notes: Optional[str] = None
 
 
+class ECDDDecisionRequest(BaseModel):
+    status: str  # pending | completed | rejected
+    decision_notes: str
+
+
 class ECDDResponse(BaseModel):
     id: str
     ecdd_id: str
     customer_id: str
     trigger_reason: str
+    trigger_reason_other: Optional[str] = None
     pep_status: int
     adverse_media_found: int
     beneficial_owner_verified: int
@@ -125,6 +133,10 @@ class ECDDResponse(BaseModel):
     recommendation: Optional[str]
     analyst_notes: Optional[str]
     status: str
+    decision_notes: Optional[str] = None
+    decided_by: Optional[str] = None
+    decided_at: Optional[datetime] = None
+    last_revised_at: Optional[datetime] = None
     created_at: Optional[datetime]
 
     class Config:

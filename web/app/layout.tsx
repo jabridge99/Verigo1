@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import Navbar from '@/components/Navbar'
+import Tranche2Banner from '@/components/Tranche2Banner'
+import MobileCtaBar from '@/components/MobileCtaBar'
 import Footer from '@/components/Footer'
 import MobileNav from '@/components/MobileNav'
 import AppChrome from '@/components/AppChrome'
@@ -44,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <Tranche2Banner />
           <Navbar />
           <AppChrome>{children}</AppChrome>
           <Footer />
@@ -51,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <PWAProvider />
           <AnalyticsProvider />
           <CookieNotice />
+          <MobileCtaBar />
         </ThemeProvider>
       </body>
     </html>

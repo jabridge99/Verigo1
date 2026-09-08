@@ -38,7 +38,8 @@ from app.config import settings
 from app.db.database import get_db
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
 from app.integrations.crypto import get_provider as get_crypto_provider
-from app.models.customer import Customer
+from app.models.customer import Customer, CustomerStatus
+from app.models.onboarding import OnboardingSession, SessionStatus
 from app.models.screening import (
     AdverseMediaCategory,
     AdverseMediaResult,
@@ -57,6 +58,8 @@ from app.models.screening import (
 )
 from app.models.user import User
 from app.services import billing_service as billing_svc
+from app.services.identity_verification_service import compute_identity_score
+from app.services.sanctions_screening import screen_name
 
 router = APIRouter(prefix="/screening", tags=["Screening Hub"])
 
@@ -82,6 +85,13 @@ class ScreeningRunRequest(BaseModel):
     entity_nationality: Optional[str] = None
     provider: ScreeningProvider = ScreeningProvider.internal
     notes: Optional[str] = None
+
+
+class QuickScreenRequest(BaseModel):
+    category: str = Field(
+        ..., description="One of: sanctions, pep, adverse_media, company, address"
+    )
+    query: str = Field(..., min_length=2, max_length=300)
 
 
 class BatchScreeningRequest(BaseModel):
@@ -210,6 +220,66 @@ def _severity_for_type(
     if screening_type == ScreeningType.adverse_media:
         return AlertSeverity.medium
     return AlertSeverity.medium
+
+
+_QUICK_SCREEN_CATEGORIES = {"sanctions", "pep", "adverse_media", "company", "address"}
+
+
+@router.post("/quick-screen")
+def quick_screen(
+    payload: QuickScreenRequest,
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Ad-hoc, not-yet-linked-to-a-customer lookup — a name (or address) typed
+    straight into the Screening Hub, before any customer record exists.
+    Not persisted; use POST /screening/run for a customer-linked, recorded
+    screen that feeds alerts and the identity-verification score.
+    """
+    category = payload.category.lower()
+    if category not in _QUICK_SCREEN_CATEGORIES:
+        raise HTTPException(
+            400, f"category must be one of {sorted(_QUICK_SCREEN_CATEGORIES)}"
+        )
+
+    if category == "address":
+        return {
+            "category": "address",
+            "query": payload.query,
+            "valid": True,
+            "normalized": payload.query.strip(),
+            "note": "Simulation only — wire to Integration Hub for live address validation.",
+            "disclaimer": DISCLAIMER,
+        }
+
+    if category == "sanctions":
+        result = screen_name(payload.query)
+        return {
+            "category": "sanctions",
+            "query": payload.query,
+            "match_found": result["match_found"],
+            "matches": result["matches"],
+            "lists_checked": result["watchlists_checked"],
+            "disclaimer": DISCLAIMER,
+        }
+
+    type_map = {
+        "pep": ScreeningType.pep,
+        "adverse_media": ScreeningType.adverse_media,
+        "company": ScreeningType.regulatory,
+    }
+    result = _simulate_screening(
+        type_map[category], payload.query, ScreeningProvider.internal
+    )
+    return {
+        "category": category,
+        "query": payload.query,
+        "match_found": result["match_count"] > 0,
+        "match_count": result["match_count"],
+        "status": result["status"].value,
+        "provider_reference": result["provider_reference"],
+        "disclaimer": DISCLAIMER,
+    }
 
 
 # ── Screening Records ─────────────────────────────────────────────────────────
@@ -1164,3 +1234,71 @@ def customer_screening_summary(
         "overall_clear": len(open_alerts) == 0 and media == 0,
         "disclaimer": DISCLAIMER,
     }
+
+
+@router.get("/customers/{customer_id}/identity-score")
+def customer_identity_score(
+    customer_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Composite identity-verification score (Australia "100-point ID check" style):
+    even-weighted across OCR, manual review, PEP, sanctions, adverse media and
+    company/UBO screening, with a Pass / ECDD-required / Fail decision.
+    """
+    org_id = org_id_for(current_user)
+    customer = _resolve_customer(customer_id, org_id, db)
+
+    return compute_identity_score(
+        db,
+        customer_id,
+        is_business=getattr(customer, "customer_type", None) == "company",
+    )
+
+
+@router.post("/customers/{customer_id}/identity-score/decide")
+def decide_customer_identity_score(
+    customer_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Applies the composite identity-verification decision to the customer's
+    KYC status: pass -> active, ecdd_required -> edd_required, fail -> rejected.
+    This is the point at which a draft applicant becomes (or doesn't become)
+    a real customer for the purposes of the Customers list.
+    """
+    org_id = org_id_for(current_user)
+    customer = _resolve_customer(customer_id, org_id, db)
+
+    result = compute_identity_score(
+        db,
+        customer_id,
+        is_business=getattr(customer, "customer_type", None) == "company",
+    )
+
+    decision_to_status = {
+        "pass": CustomerStatus.active,
+        "ecdd_required": CustomerStatus.edd_required,
+        "fail": CustomerStatus.rejected,
+    }
+    customer.status = decision_to_status[result["decision"]]
+    db.add(customer)
+
+    session = (
+        db.query(OnboardingSession)
+        .filter(OnboardingSession.customer_id == customer_id)
+        .first()
+    )
+    if session:
+        session.status = {
+            "pass": SessionStatus.completed,
+            "ecdd_required": SessionStatus.verification_pending,
+            "fail": SessionStatus.rejected,
+        }[result["decision"]]
+        db.add(session)
+
+    db.commit()
+    result["customer_status"] = customer.status.value
+    return result

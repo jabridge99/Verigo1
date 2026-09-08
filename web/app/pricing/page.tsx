@@ -1,12 +1,19 @@
 import Link from 'next/link'
 import { CheckCircle, X, ArrowRight, Shield, Zap, Database, Minus, Info } from 'lucide-react'
+import { fetchPlanPrices, formatAud } from '@/lib/pricing'
 
 export const metadata = {
   title: 'Pricing | Verigo',
   description: 'Simple, transparent annual pricing for Australian regulated businesses. Start with a 7-day free trial.',
 }
 
-const plans = [
+async function getPlans() {
+  const prices = await fetchPlanPrices()
+  const starter = prices.starter
+  const professional = prices.professional
+  const enterprise = prices.enterprise
+
+  return [
   {
     name: 'Free Trial',
     price: 'Free',
@@ -33,16 +40,17 @@ const plans = [
   },
   {
     name: 'Starter',
-    price: '$299',
-    period: '/mo',
-    billing: 'or $2,870.40/yr billed annually (20% off)',
+    price: formatAud(starter.annual_aud),
+    period: starter.annual_aud != null ? '/yr' : '',
+    billing: starter.annual_aud != null ? 'billed annually' : '',
     badge: null,
     description: 'For small reporting entities building their first AML/CTF programme.',
     highlight: false,
     features: [
       { label: 'Up to 500 customers', included: true },
-      { label: 'Up to 5 users per tenant', included: true },
-      { label: '10,000 API calls / month', included: true },
+      { label: '1 user per tenant', included: true },
+      { label: 'Document vault (5 GB)', included: true },
+      { label: '1,000 API calls / month', included: true },
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
@@ -66,16 +74,16 @@ const plans = [
   },
   {
     name: 'Professional',
-    price: '$799',
-    period: '/mo',
-    billing: 'or $7,670.40/yr billed annually (20% off)',
+    price: formatAud(professional.annual_aud),
+    period: professional.annual_aud != null ? '/yr' : '',
+    billing: professional.annual_aud != null ? 'billed annually' : '',
     badge: 'Most Popular',
     description: 'For growing compliance teams with full AUSTRAC reporting obligations.',
     highlight: true,
     features: [
       { label: 'Up to 5,000 customers', included: true },
-      { label: 'Up to 25 users per tenant', included: true },
-      { label: '100,000 API calls / month', included: true },
+      { label: '3 users per tenant', included: true },
+      { label: '5,000 API calls / month', included: true },
       { label: '1 industry compliance pack', included: true },
       { label: 'KYC + KYB verification', included: true },
       { label: 'AML/CTF Program — basic reference template', included: true, note: true },
@@ -87,7 +95,7 @@ const plans = [
       { label: 'MLRO case management', included: true },
       { label: 'Workflow automation', included: true },
       { label: 'Webhooks & API access', included: true },
-      { label: 'Document vault (50 GB)', included: true },
+      { label: 'Document vault (15 GB)', included: true },
       { label: 'Analytics dashboard', included: true },
       { label: 'AML data connectors', included: true },
     ],
@@ -96,16 +104,16 @@ const plans = [
   },
   {
     name: 'Enterprise',
-    price: '$1,999',
-    period: '/mo',
-    billing: 'or $19,190.40/yr billed annually (20% off)',
+    price: formatAud(enterprise.annual_aud),
+    period: enterprise.annual_aud != null ? '/yr' : '',
+    billing: enterprise.annual_aud != null ? 'billed annually' : '',
     badge: null,
     description: 'For reporting groups, financial institutions, and SaaS resellers.',
     highlight: false,
     features: [
       { label: 'Unlimited customers', included: true },
-      { label: 'Unlimited users per tenant', included: true },
-      { label: 'Unlimited API calls / month', included: true },
+      { label: '5 users per tenant', included: true },
+      { label: '10,000 API calls / month', included: true },
       { label: 'Up to 2 compliance packs', included: true },
       { label: 'KYC, KYB + beneficial ownership', included: true },
       { label: 'AML/CTF Program — tailored to your industry', included: true },
@@ -114,7 +122,7 @@ const plans = [
       { label: 'Custom domain', included: true },
       { label: 'Multi-tenant management', included: true },
       { label: 'Dedicated MLRO support', included: true },
-      { label: 'Document vault (500 GB)', included: true },
+      { label: 'Document vault (50 GB)', included: true },
       { label: '99.9% uptime SLA', included: true },
       { label: 'Dedicated account manager', included: true },
     ],
@@ -139,7 +147,8 @@ const plans = [
     cta: 'Contact Sales',
     href: '/contact',
   },
-]
+  ]
+}
 
 type CellValue = true | false | string
 
@@ -150,8 +159,8 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
     group: 'Platform',
     rows: [
       { feature: 'Customer limit', values: ['10', '500', '5,000', 'Unlimited', 'Unlimited'] },
-      { feature: 'Users per tenant', values: ['1', '5', '25', 'Unlimited', 'Unlimited'] },
-      { feature: 'API calls / month', values: ['—', '10,000', '100,000', 'Unlimited', 'Unlimited'] },
+      { feature: 'Users per tenant', values: ['1', '1', '3', '5', 'Custom'] },
+      { feature: 'API calls / month', values: ['—', '1,000', '5,000', '10,000', 'Custom'] },
       { feature: 'Industry compliance packs', values: ['1 pack (trial)', '1 pack', '1 pack', 'Up to 2 packs', 'Up to 2 packs'] },
       { feature: 'AML/CTF Program', tooltip: 'Basic reference template preloaded. Tailoring to your specific business is an additional service.', values: ['Reference only', 'Reference only', 'Reference only', 'Tailored', 'Tailored'] },
       { feature: 'Annual review workflow', values: [true, true, true, true, true] },
@@ -218,7 +227,7 @@ const compareGroups: { group: string; rows: { feature: string; tooltip?: string;
     group: 'Compliance Records',
     rows: [
       { feature: 'Immutable audit log', values: [true, true, true, true, true] },
-      { feature: 'Document vault storage', values: ['1 GB', '5 GB', '50 GB', '500 GB', '500 GB'] },
+      { feature: 'Document vault storage', values: ['1 GB', '5 GB', '15 GB', '50 GB', '50 GB'] },
       { feature: 'AUSTRAC-aligned data retention (7–10 yr)', values: [true, true, true, true, true] },
       { feature: 'Legal hold management', values: [false, false, false, true, true] },
     ],
@@ -267,7 +276,8 @@ function CellDisplay({ value, highlight }: { value: CellValue; highlight: boolea
   )
 }
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const plans = await getPlans()
   return (
     <div className="bg-white text-slate-900">
       {/* Hero */}
@@ -279,7 +289,7 @@ export default function PricingPage() {
             <span className="text-blue-600">Start free for 7 days.</span>
           </h1>
           <p className="text-xl text-slate-600 max-w-xl mx-auto mb-4">
-            Annual plans. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
+            Billed annually. No hidden fees. All plans include IFTI reporting, SMR/TTR generation, and Australian data sovereignty.
           </p>
           <p className="text-sm text-slate-400">No credit card required for trial. Cancel anytime.</p>
         </div>
@@ -300,7 +310,7 @@ export default function PricingPage() {
                   </div>
                 )}
                 <h2 className="text-xl font-bold text-slate-900 mb-1">{plan.name}</h2>
-                <p className="text-slate-500 text-sm mb-5">{plan.description}</p>
+                <p className="text-slate-600 text-sm mb-5">{plan.description}</p>
                 <div className="mb-1">
                   <span className="text-4xl font-black text-slate-900">{plan.price}</span>
                   <span className="text-slate-400 text-lg">{plan.period}</span>
@@ -355,7 +365,7 @@ export default function PricingPage() {
                 </div>
                 <div>
                   <h4 className="font-semibold text-slate-900 text-sm mb-1">{title}</h4>
-                  <p className="text-slate-500 text-sm">{desc}</p>
+                  <p className="text-slate-600 text-sm">{desc}</p>
                 </div>
               </div>
             ))}
@@ -364,7 +374,7 @@ export default function PricingPage() {
           {/* Compare plans table */}
           <div>
             <h2 className="text-3xl font-black text-slate-900 mb-2 text-center">Compare plans</h2>
-            <p className="text-slate-500 text-center mb-10">Every feature, every plan — side by side.</p>
+            <p className="text-slate-600 text-center mb-10">Every feature, every plan — side by side.</p>
 
             <div className="overflow-x-auto rounded-2xl ring-1 ring-slate-200 shadow-sm">
               <table className="w-full border-collapse min-w-[800px]">
