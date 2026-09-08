@@ -133,6 +133,12 @@ The full VERIGO AML/CTF template library (8 industry sectors × up to 9 document
 **Why parked:** Same reasoning as P17-P19 — substantial content-authoring work, your sign-off wanted first.
 **Detail:** Full comparison in this session's research; `app/templates/aml/industries/legal.py`, `app/templates/risk/industries/legal.py`.
 
+### P21 — DPMS falls back to the generic "other" template, which is actively wrong for this sector, not just thin
+**Status:** Parked pending your go-ahead — this one is stronger than "thin content": the fallback's core assumption is factually backwards for this sector.
+**What:** `app/templates/aml/factory.py` maps `IndustryType.precious_metals` (DPMS — Dealers in Precious Metals & Stones) to the generic `other.py` template. `other.py`'s `ttr_procedures` states: *"TTR reporting does not apply... The Organisation does not accept physical currency... Any cash offered by a customer must be declined."* This is backwards for DPMS — the real VERIGO DPMS TMP Guideline's very first sector-specific rule (DPMS-01) is built entirely around DPMS routinely accepting large cash transactions: *"Cash transaction at or above AUD 10,000 — CDD and TTR mandatory trigger."* It also has 11 more DPMS-specific monitoring rules with concrete thresholds (structuring near $10,000, very-large-cash ≥$100,000 requiring Director sign-off, rapid buy-back within 90 days at a loss, unknown provenance, cryptocurrency payment, mule-purchaser indicators, wholesale volume >200% of stated range, sanctioned-origin metals — Russia/Iran/DPRK/Myanmar explicitly named as prohibited, gemstone/watch cash thresholds, PEP transactions) — none of which have any equivalent in the generic fallback.
+**Why parked:** Same reasoning as P17-P20 — this is real content-authoring work (effectively needs a dedicated `dpms.py` module, not a fix to `other.py`), your sign-off wanted first. Flagging the cash/TTR contradiction specifically because it's not just missing detail — an org onboarded as DPMS today gets a Program that actively tells it to refuse the cash transactions its own designated service exists to handle.
+**Detail:** `app/templates/aml/factory.py`'s industry mapping; `app/templates/aml/industries/other.py`'s `ttr_procedures`; DPMS TMP Guideline read directly from Drive this session (`VERIGO_DPMS_TMP_Guideline_v1.docx`).
+
 ---
 
 ## Resolved (moved out of the active parking lot, kept here for the full-process history)
