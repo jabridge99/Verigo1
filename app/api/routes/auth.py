@@ -165,9 +165,12 @@ def register(
     # brand-new org and the lowest-privilege role; joining an existing org
     # requires the authenticated admin-only POST /auth/users flow instead.
     from app.models.organisation import IndustryType, Organisation
+    from app.services.org_service import attach_owner
 
     org = Organisation(
-        name=f"{payload.full_name}'s Organisation", industry_type=IndustryType.other
+        name=payload.organisation_name or f"{payload.full_name}'s Organisation",
+        industry_id=payload.industry_id,
+        industry_type=IndustryType.other,
     )
     db.add(org)
     db.flush()
@@ -195,12 +198,15 @@ def register(
         ip=_client_ip(request),
         meta={"email": user.email},
     )
-    if payload.organisation_name:
-        from app.services.org_service import create_organisation
-
-        create_organisation(
-            db, payload.organisation_name, user, industry_id=payload.industry_id
-        )
+    # Every self-registered user owns the org just created for them — give
+    # them the "owner" RBAC membership and default org pointers now, rather
+    # than only when a (never actually sent by the frontend) organisation_name
+    # was supplied. Without this, primary_organisation_id/industry_id stayed
+    # NULL for every real signup, which broke onboarding session creation,
+    # document/billing/storage scoping, and org member-management RBAC
+    # checks for every user who wasn't manually patched around it.
+    attach_owner(db, org, user)
+    db.commit()
 
     verify_token = create_email_action_token(db, user.email, "verify_email")
     record_security_event(db, "email_verification_requested", user.id)

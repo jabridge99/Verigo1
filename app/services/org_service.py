@@ -192,16 +192,17 @@ def get_system_role(db: Session, role_key: str) -> Optional[Role]:
     return db.query(Role).filter(Role.role_id == f"ROLE-SYS-{role_key.upper()}").first()
 
 
-def create_organisation(
-    db: Session, name: str, owner: User, industry_id: Optional[str] = None
-) -> Organisation:
-    org = Organisation(
-        name=name, industry_id=industry_id, industry_type=IndustryType.other
-    )
-    db.add(org)
-    db.commit()
-    db.refresh(org)
-
+def attach_owner(db: Session, org: Organisation, owner: User) -> None:
+    """
+    Give `owner` an active "owner" membership on `org`, and — only if they
+    don't already have a default org — make it their default (User.org_id/
+    industry_id/primary_organisation_id all point at the same org; these
+    three fields exist for historically different reasons but a single
+    freshly-created org should be the answer to all three, or every
+    scoping convention in the codebase that reads a different one of them
+    silently treats the owner as belonging to no organisation at all).
+    Seeds the org's default approval questions. Caller commits.
+    """
     owner_role = get_system_role(db, "owner")
     db.add(
         OrganisationUser(
@@ -213,8 +214,23 @@ def create_organisation(
     )
     if not owner.primary_organisation_id:
         owner.primary_organisation_id = org.id
+        owner.org_id = owner.org_id or org.id
+        owner.industry_id = owner.industry_id or org.id
 
     _seed_default_approval_questions(db, org.id)
+
+
+def create_organisation(
+    db: Session, name: str, owner: User, industry_id: Optional[str] = None
+) -> Organisation:
+    org = Organisation(
+        name=name, industry_id=industry_id, industry_type=IndustryType.other
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    attach_owner(db, org, owner)
     db.commit()
     return org
 
