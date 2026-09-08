@@ -297,6 +297,28 @@ class RemediationResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EvidenceCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    evidence_date: date
+    document_id: Optional[str] = None
+    evidence_type: Optional[str] = None
+
+
+class EvidenceResponse(BaseModel):
+    id: str
+    control_id: str
+    title: str
+    description: Optional[str]
+    evidence_date: date
+    document_id: Optional[str]
+    evidence_type: Optional[str]
+    uploaded_by: Optional[str]
+    uploaded_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TRAINING SCHEMAS
 # ══════════════════════════════════════════════════════════════════════════════

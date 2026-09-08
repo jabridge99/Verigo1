@@ -35,6 +35,7 @@ from app.models.governance_controls import (
     DEFAULT_REMEDIATION_SLA_DAYS,
     DEFAULT_SEVERITY_DEDUCTIONS,
     ControlEffectiveness,
+    ControlEvidenceItem,
     ControlRemediationAction,
     ControlRiskArea,
     ControlStatus,
@@ -51,6 +52,8 @@ from app.schemas.governance import (
     ControlTestCreate,
     ControlTestResponse,
     ControlUpdate,
+    EvidenceCreate,
+    EvidenceResponse,
     FindingCreate,
     RemediationCreate,
     RemediationResponse,
@@ -615,6 +618,48 @@ def update_remediation(
     db.commit()
     db.refresh(rem)
     return rem
+
+
+# ── Evidence (ongoing operational evidence, distinct from test evidence) ───────
+
+
+@router.get("/{control_id}/evidence", response_model=List[EvidenceResponse])
+def list_evidence(
+    control_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _get_control(control_id, org_id_for(current_user), db)
+    return (
+        db.query(ControlEvidenceItem)
+        .filter(ControlEvidenceItem.control_id == control_id)
+        .order_by(ControlEvidenceItem.evidence_date.desc())
+        .all()
+    )
+
+
+@router.post("/{control_id}/evidence", response_model=EvidenceResponse, status_code=201)
+def add_evidence(
+    control_id: str,
+    payload: EvidenceCreate,
+    current_user: User = Depends(require_compliance_or_above),
+    db: Session = Depends(get_db),
+):
+    control = _get_control(control_id, org_id_for(current_user), db)
+    item = ControlEvidenceItem(
+        control_id=control_id,
+        org_id=control.org_id,
+        title=payload.title,
+        description=payload.description,
+        evidence_date=payload.evidence_date,
+        document_id=payload.document_id,
+        evidence_type=payload.evidence_type,
+        uploaded_by=current_user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 # ── Open remediations (org-wide dashboard view) ────────────────────────────────
