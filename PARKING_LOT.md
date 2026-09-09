@@ -2,7 +2,75 @@
 
 Items identified during the staged review that are real, but deliberately not being acted on right now — either deferred by explicit choice, or waiting on a decision from you. Tracked here so nothing gets lost, and to be summarized in full at the end of the whole staged process.
 
-Each entry: what it is, why it's parked, where the full detail lives.
+Each entry: what it is, why it's parked, where the full detail lives. The two sections immediately below are the tidy, at-a-glance view; the dated sections further down are the full narrative record each item's row links back to.
+
+---
+
+## Open items — at a glance
+
+20 open items, grouped by theme. ID links to the full entry further down this file.
+
+### A. Architecture — duplicate/competing systems (resolve first — most other work sits on top of this)
+| ID | What | Effort |
+|---|---|---|
+| P7 | Two parallel governance model sets: legacy `Control`/`AMLPolicy` (seeded) vs `GovernanceControl`/`Policy` (the one the UI actually uses) | Design decision + migration |
+| P11 | Direct consequence of P7 — freshly-seeded controls are invisible to the real controls UI | Resolved once P7 is |
+| P12 | Two independent AML Program generation systems both reachable after Stage 7's fix; onboarding wizard still drives the wrong one | UX decision + wizard rewire |
+
+### B. Industry template content — Google Drive vs. code (the 8-sector review, largest body of work)
+| ID | Sector | Headline finding | Effort |
+|---|---|---|---|
+| P21 | DPMS | Fallback template is **actively wrong** (tells the org to refuse cash) | New `dpms.py` module |
+| P19 | Conveyancers | Shares Real Estate's template; real risk is trust-account/PEXA, not sales-side | New `conveyancer.py` module |
+| P17 | Remittance | Missing AUSTRAC's #1 typology (third-party sender) entirely | Content rewrite |
+| P18 | VASP | Missing proliferation financing, VASP-to-VASP diligence, unhosted-wallet verification (Travel Rule threshold itself already fixed) | Content rewrite |
+| P20 | Legal | TMP/SMR/Sanctions/PEP procedures entirely unset; LPP theme absent | Content rewrite |
+| P23 | Accountants | Only 7 of ~30 Program fields set; missing designated-service boundary, SMSF, TPB theme | Content rewrite |
+| P22 | Real Estate Agents | Thinner than the real ECDD content even though it's the "native" sector | Content rewrite |
+| P24 | *(cross-cutting)* | No model support for the operational logs (ECDD case file, TMP alert log, SMR/sanctions logs) every sector's real documents center on | New data model — do before/alongside the content rewrites above |
+
+### C. Configurability
+| ID | What | Effort |
+|---|---|---|
+| P10 | Customer risk engine's dimension weights accept an override param nothing ever passes — every org scored identically regardless of industry | Wire a per-org config path |
+
+### D. Commercialisation / go-to-market decisions
+| ID | What | Effort |
+|---|---|---|
+| P16 | Independent Review report doesn't map to any template — needs a deliverables/pricing decision | Product/pricing decision |
+| P15 | Liddar (first onboarded client) as a real-world validation check against a real reviewer's findings | Scheduled for once Liddar is live on the platform |
+
+### E. Frontend — small, cosmetic
+| ID | What | Effort |
+|---|---|---|
+| P13 | Onboarding wizard's last step maps industries via slugs that don't match any real value | One-function fix |
+| P14 | Industry picker offers a non-real "Reporting Group" option | One-line filter |
+
+### F. Structural / mechanical backlog
+| ID | What | Effort |
+|---|---|---|
+| C2 | No central frontend API client; thin shared UI components; oversized route files; inline schemas | Dedicated refactor pass |
+| C4 | A couple of misleadingly-named modules | Rename, no functional risk |
+| P5 | ~2,500 `Column()`/`relationship()` declarations still lack `Mapped[]` type annotations (the ~60 mypy actually flagged are fixed) | Mechanical retrofit, ~40 files |
+| P4 | A judgment call on how "under review" policy status maps to board-report categories | Confirm intent, then it's a one-line change either way |
+
+---
+
+## Suggested future development (a recommended order, not a commitment)
+
+Reading the open items as a roadmap rather than a flat list:
+
+1. **Settle the AML Program architecture first (P7, P11, P12).** Almost everything else — the 8-sector content rewrites, controls, evidence — sits on top of whichever system (the industry-template-seeded one vs. the wizard-generated one) ends up canonical. Rewriting sector content before this is decided risks writing it into the wrong place twice.
+2. **Rewrite the 8 industry templates from the real VERIGO document library (P17–P23), suggested order:**
+   - **DPMS first** — cheapest fix with the highest current harm (the fallback is actively wrong, not just thin), and it's a clean new module rather than an edit to a shared one.
+   - **Conveyancers next** — same shape (needs its own module, currently borrows Real Estate's), and the real content already fully read this session.
+   - **Remittance and VASP** — Tranche 1, most mature/detailed real reference material, and Remittance in particular is missing AUSTRAC's #1-ranked typology for the sector outright.
+   - **Legal, Accountants, Real Estate** — Tranche 2, all three have substantial real content already read and compared; can be sequenced by whichever industry you expect to onboard first.
+3. **Build the operational-log data model (P24) alongside or just before step 2's rewrites** — richer prose content describing an ECDD case file or a TMP alert log is of limited use if there's still nowhere in the product to actually log one. Worth deciding this shape before multiple sectors' content gets written assuming it exists.
+4. **Per-org configurable risk weights (P10)** — a natural follow-on once sector content is richer; today's flat 30/25/20/15/10 split becomes a more visible gap as the templates themselves get more sector-specific.
+5. **Resolve the onboarding wizard's UX questions (P12's "what should the wizard show" decision, P13, P14)** — bundle with step 1 since P12 is already entangled with the architecture decision; P13/P14 are small enough to fix in the same pass.
+6. **Commercialisation decisions (P16 pricing/packaging for Independent Review, P15 the Liddar validation check)** — best made once the underlying product substantively does what the real documents describe, not before.
+7. **Mechanical backlog (C2, C4, P5, P4)** — no functional urgency; pick up opportunistically or as its own dedicated pass whenever there's a lull.
 
 ---
 
