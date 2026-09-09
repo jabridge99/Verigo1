@@ -28,8 +28,6 @@ from app.models.customer import Customer
 from app.models.organisation import Organisation
 from app.models.report import (
     FilingRegisterEntry,
-    IFTIDirection,
-    IFTIReport,
     ReportPriority,
     ReportStatus,
     ReportType,
@@ -40,7 +38,6 @@ from app.models.transaction import Transaction
 from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 TTR_DEADLINE_DAYS = 14  # 10 business ≈ 14 calendar
-IFTI_DEADLINE_DAYS = 14
 SMR_DEADLINE_DAYS = 4  # 3 business ≈ 4 calendar
 SMR_TERRORISM_DEADLINE_HOURS = 24
 TTR_THRESHOLD_AUD = TTR_CTR_THRESHOLD_AUD
@@ -95,76 +92,6 @@ def _priority_from_due(due: date, is_terrorism: bool = False) -> ReportPriority:
     if days_left <= 7:
         return ReportPriority.normal
     return ReportPriority.low
-
-
-# ── IFTI generation ──────────────────────────────────────────────────────────
-
-
-def generate_ifti_from_transaction(
-    txn: Transaction,
-    customer: Customer,
-    db: Session,
-    prepared_by: str,
-    org_code: Optional[str] = None,
-) -> IFTIReport:
-    """
-    Populate a draft IFTIReport from transaction data.
-    Returns unsaved ORM object — caller must db.add() and db.commit().
-    """
-    resolved_code = org_code or _org_code(db, txn.org_id)
-    direction = (
-        IFTIDirection.incoming
-        if txn.direction.value == "incoming"
-        else IFTIDirection.outgoing
-    )
-    dir_code = "I" if direction == IFTIDirection.incoming else "O"
-    report_ref = _next_report_ref(db, resolved_code, "IFTI", dir_code)
-    due = _due_date_from_today(IFTI_DEADLINE_DAYS)
-
-    amount_aud = txn.amount_aud or txn.amount
-
-    report = IFTIReport(
-        org_id=txn.org_id,
-        customer_id=customer.id,
-        transaction_id=txn.id,
-        report_ref=report_ref,
-        direction=direction,
-        status=ReportStatus.draft,
-        priority=_priority_from_due(due),
-        date_received=txn.transaction_date.date()
-        if isinstance(txn.transaction_date, datetime)
-        else txn.transaction_date,
-        total_amount=txn.amount,
-        currency=txn.currency,
-        amount_aud=amount_aud,
-        exchange_rate=txn.exchange_rate,
-        transfer_reference=txn.reference,
-        # Ordering Customer from customer record
-        oc_name=customer.full_name,
-        oc_dob=getattr(customer, "date_of_birth", None),
-        oc_address=getattr(customer, "address_line1", None),
-        oc_city=getattr(customer, "city", None),
-        oc_state=getattr(customer, "state", None),
-        oc_postcode=getattr(customer, "postcode", None),
-        oc_country=getattr(customer, "country_of_residence", None),
-        oc_phone=getattr(customer, "phone", None),
-        oc_email=getattr(customer, "email", None),
-        oc_occupation=getattr(customer, "occupation", None),
-        oc_abn=_customer_abn(customer),
-        oc_account_number=txn.source_account_number,
-        # Beneficiary from transaction destination fields
-        bc_name=txn.destination_account_name,
-        bc_account_number=txn.destination_account_number,
-        bc_institution_name=txn.destination_bank_name,
-        bc_institution_country=txn.destination_country,
-        bc_swift_bic=txn.destination_bank_bic,
-        bc_iban=txn.destination_iban,
-        bc_country=txn.destination_country,
-        reason_for_transfer=txn.purpose,
-        due_date=due,
-        prepared_by=prepared_by,
-    )
-    return report
 
 
 # ── TTR generation ───────────────────────────────────────────────────────────
@@ -315,6 +242,8 @@ def reporting_summary(db: Session, org_id: str) -> dict:
     """Aggregate counts for the reports dashboard."""
     from sqlalchemy import func
 
+    from app.models.ifti import IFTIRecord, IFTIStatus
+
     def _count_by_status(model):
         rows = (
             db.query(model.status, func.count(model.id))
@@ -324,7 +253,17 @@ def reporting_summary(db: Session, org_id: str) -> dict:
         )
         return {str(s): c for s, c in rows}
 
-    ifti_counts = _count_by_status(IFTIReport)
+    # IFTIRecord (app/models/ifti.py, canonical since P28 -- see ifti.py's
+    # docstring) uses industry_id as its tenant-scope column and IFTIStatus
+    # as its status enum, unlike TTRReport/SMRReport's org_id/ReportStatus,
+    # so it can't share _count_by_status()/_overdue() below.
+    ifti_rows = (
+        db.query(IFTIRecord.status, func.count(IFTIRecord.id))
+        .filter(IFTIRecord.industry_id == org_id)
+        .group_by(IFTIRecord.status)
+        .all()
+    )
+    ifti_counts = {str(s): c for s, c in ifti_rows}
     ttr_counts = _count_by_status(TTRReport)
     smr_counts = _count_by_status(SMRReport)
 
@@ -343,6 +282,16 @@ def reporting_summary(db: Session, org_id: str) -> dict:
             .scalar()
         )
 
+    ifti_overdue = (
+        db.query(func.count(IFTIRecord.id))
+        .filter(
+            IFTIRecord.industry_id == org_id,
+            IFTIRecord.due_date < today,
+            IFTIRecord.status.notin_([IFTIStatus.submitted, IFTIStatus.acknowledged]),
+        )
+        .scalar()
+    )
+
     filing_count = (
         db.query(func.count(FilingRegisterEntry.id))
         .filter(FilingRegisterEntry.org_id == org_id)
@@ -354,7 +303,7 @@ def reporting_summary(db: Session, org_id: str) -> dict:
         "ttr": ttr_counts,
         "smr": smr_counts,
         "overdue": {
-            "ifti": _overdue(IFTIReport),
+            "ifti": ifti_overdue,
             "ttr": _overdue(TTRReport),
             "smr": _overdue(SMRReport),
         },

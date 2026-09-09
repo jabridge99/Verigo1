@@ -1,13 +1,25 @@
 """
-IFTI Report API.
+IFTI-DRA Report API.
+
+The canonical IFTI backend (see PARKING_LOT.md P28 for the retired
+alternatives): the user-facing workflow this app actually needs to support
+is filling AUSTRAC's official IFTI-DRA Excel template and lodging it
+manually via AUSTRAC Online -- generate_ifti_excel() in ifti_service.py
+produces that template exactly. This file supplies the maker-checker
+workflow and audit trail around it (previously only app/api/routes/reports.py
+had that, on a model with no Excel export at all).
 
 Supports:
-- Creating IFTI-IN and IFTI-OUT records manually or from a transaction
+- Creating IFTI-IN and IFTI-OUT records manually or from a cross-border transaction
 - Listing/editing draft records
-- Generating AUSTRAC-compatible Excel file (download)
-- Marking records as submitted
+- Maker-checker workflow: draft -> under_review -> approved -> submitted ->
+  acknowledged, with reject -> redraft as a side path (reviewer != approver
+  enforced on approval)
+- Generating AUSTRAC-compatible Excel file (download) for lodgement
+- Every mutating action written to the audit trail (entity_type "ifti_record")
 
-All endpoints require authentication. Generation requires compliance+ role.
+All endpoints require authentication. Generation requires compliance+ role;
+approve/submit/reject require mlro+.
 """
 
 import uuid
@@ -23,9 +35,19 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _require_roles
 from app.db.database import get_db
+from app.models.customer import Customer
 from app.models.ifti import IFTIDirection, IFTIRecord, IFTIStatus
+from app.models.report import ReportType
+from app.models.transaction import Transaction
 from app.models.user import User, UserRole
-from app.services.ifti_service import generate_ifti_excel, get_ifti, list_ifti
+from app.services import audit_service
+from app.services.ifti_service import (
+    generate_ifti_excel,
+    generate_ifti_from_transaction,
+    get_ifti,
+    list_ifti,
+)
+from app.services.reporting_service import register_submission
 
 router = APIRouter(prefix="/ifti", tags=["IFTI Reports"])
 
@@ -33,6 +55,62 @@ _READER = _require_roles(
     UserRole.admin, UserRole.mlro, UserRole.compliance, UserRole.analyst
 )
 _WRITER = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
+_APPROVER = _require_roles(UserRole.admin, UserRole.mlro)
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    org_id: Optional[str],
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    IFTI-DRA audit trail, same convention as cases.py/reports.py's _log():
+    every draft/review/approve/submit/acknowledge/reject/redraft action is
+    written to entity_type "ifti_record", queryable via GET /audit/.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="ifti_record",
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state=after_state,
+        notes=notes,
+    )
+
+
+def _assert_maker_checker(record: IFTIRecord, approver_id: str) -> None:
+    if record.reviewed_by and record.reviewed_by == approver_id:
+        raise HTTPException(
+            403, "Maker-checker violation: approver cannot be the same as reviewer."
+        )
+
+
+def _validate_ifti_record(r: IFTIRecord) -> List[str]:
+    errors = []
+    if not r.date_received:
+        errors.append("date_received is required")
+    if not r.date_available:
+        errors.append("date_available is required")
+    if not r.total_amount or r.total_amount <= 0:
+        errors.append("total_amount must be > 0")
+    if not r.currency_code:
+        errors.append("currency_code is required")
+    if not r.direction:
+        errors.append("direction (incoming/outgoing) is required")
+    if not r.reporter_full_name:
+        errors.append("reporter_full_name is required")
+    if not r.reporter_austrac_id:
+        errors.append(
+            "reporter_austrac_id is required (your AUSTRAC reporting entity ID)"
+        )
+    return errors
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
@@ -203,6 +281,7 @@ class IFTICreate(BaseModel):
     reporter_job_title: Optional[str] = None
     reporter_phone: Optional[str] = None
     reporter_email: Optional[str] = None
+    reporter_austrac_id: Optional[str] = None
 
 
 class IFTIResponse(BaseModel):
@@ -220,8 +299,18 @@ class IFTIResponse(BaseModel):
     reason_for_transfer: Optional[str] = None
     reporter_full_name: Optional[str] = None
     reporter_email: Optional[str] = None
+    reporter_austrac_id: Optional[str] = None
     industry_id: Optional[str] = None
     created_by: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    rejected_reason: Optional[str] = None
+    submission_reference: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    acknowledged_at: Optional[datetime] = None
+    due_date: Optional[_date_type] = None
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -286,6 +375,60 @@ def create_record(
     db.add(record)
     db.commit()
     db.refresh(record)
+    _log(
+        db,
+        current_user,
+        current_user.org_id,
+        record.ifti_id,
+        action="ifti_drafted",
+        after_state={"direction": record.direction.value},
+    )
+    return record
+
+
+@router.post(
+    "/generate-from-transaction/{txn_id}",
+    response_model=IFTIResponse,
+    status_code=201,
+)
+def generate_record(
+    txn_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    """Generate a draft IFTI-DRA record pre-populated from a cross-border transaction."""
+    org_id = current_user.org_id
+    txn = (
+        db.query(Transaction)
+        .filter(Transaction.id == txn_id, Transaction.org_id == org_id)
+        .first()
+    )
+    if not txn:
+        raise HTTPException(404, "Transaction not found.")
+    if not txn.is_cross_border:
+        raise HTTPException(
+            422, "Transaction is not cross-border — IFTI may not be required."
+        )
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == txn.customer_id, Customer.org_id == org_id)
+        .first()
+    )
+    if not customer:
+        raise HTTPException(404, "Customer not found.")
+
+    record = generate_ifti_from_transaction(txn, customer, created_by=current_user.id)
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    _log(
+        db,
+        current_user,
+        org_id,
+        record.ifti_id,
+        action="ifti_drafted",
+        after_state={"transaction_id": txn_id, "direction": record.direction.value},
+    )
     return record
 
 
@@ -315,16 +458,25 @@ def update_record(
         raise HTTPException(404, "IFTI record not found")
     if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
-    if r.status == IFTIStatus.submitted:
-        raise HTTPException(400, "Cannot edit a submitted IFTI record")
+    if r.status not in (IFTIStatus.draft, IFTIStatus.under_review):
+        raise HTTPException(
+            400, f"Cannot edit an IFTI record in status: {r.status.value}"
+        )
     _apply_fields(r, payload)
     db.commit()
     db.refresh(r)
+    _log(
+        db,
+        current_user,
+        r.industry_id,
+        r.ifti_id,
+        action="ifti_updated",
+    )
     return r
 
 
-@router.post("/{ifti_id}/ready")
-def mark_ready(
+@router.post("/{ifti_id}/review", response_model=IFTIResponse)
+def review_record(
     ifti_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(_WRITER),
@@ -334,26 +486,240 @@ def mark_ready(
         raise HTTPException(404, "IFTI record not found")
     if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
-    r.status = IFTIStatus.ready
+    if r.status != IFTIStatus.draft:
+        raise HTTPException(
+            409, f"Record must be in draft status (current: {r.status.value})"
+        )
+    r.status = IFTIStatus.under_review
+    r.reviewed_by = current_user.id
+    r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"ifti_id": ifti_id, "status": r.status}
+    db.refresh(r)
+    _log(
+        db,
+        current_user,
+        r.industry_id,
+        r.ifti_id,
+        action="ifti_reviewed",
+        after_state={"status": r.status.value},
+    )
+    return r
 
 
-@router.post("/{ifti_id}/submitted")
-def mark_submitted(
+@router.post("/{ifti_id}/approve", response_model=IFTIResponse)
+def approve_record(
     ifti_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
+    current_user: User = Depends(_APPROVER),
 ):
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
     if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
+    if r.status != IFTIStatus.under_review:
+        raise HTTPException(
+            409, f"Record must be under_review (current: {r.status.value})"
+        )
+    _assert_maker_checker(r, current_user.id)
+    r.status = IFTIStatus.approved
+    r.approved_by = current_user.id
+    r.approved_at = datetime.now(timezone.utc)
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(r)
+    _log(
+        db,
+        current_user,
+        r.industry_id,
+        r.ifti_id,
+        action="ifti_approved",
+        after_state={"status": r.status.value},
+    )
+    return r
+
+
+@router.post("/{ifti_id}/submit", response_model=IFTIResponse)
+def submit_record(
+    ifti_id: str,
+    submission_reference: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_APPROVER),
+):
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
+    if r.status != IFTIStatus.approved:
+        raise HTTPException(
+            409,
+            f"Record must be approved before submission (current: {r.status.value})",
+        )
+    errors = _validate_ifti_record(r)
+    if errors:
+        raise HTTPException(
+            422,
+            {
+                "detail": "Validation failed — fix errors before submitting",
+                "errors": errors,
+            },
+        )
     r.status = IFTIStatus.submitted
     r.submitted_at = datetime.now(timezone.utc)
+    if submission_reference:
+        r.submission_reference = submission_reference
+    r.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"ifti_id": ifti_id, "status": r.status}
+    db.refresh(r)
+
+    register_submission(
+        db=db,
+        org_id=r.industry_id,
+        report_type=ReportType.ifti_incoming
+        if r.direction == IFTIDirection.incoming
+        else ReportType.ifti_outgoing,
+        report_id=r.ifti_id,
+        report_ref=r.ifti_id,
+        submitted_by=current_user.id,
+        austrac_submission_ref=submission_reference,
+        amount_aud=float(r.total_amount) if r.total_amount is not None else None,
+    )
+    _log(
+        db,
+        current_user,
+        r.industry_id,
+        r.ifti_id,
+        action="ifti_submitted",
+        after_state={
+            "status": r.status.value,
+            "submission_reference": submission_reference,
+        },
+    )
+    return r
+
+
+@router.post("/{ifti_id}/acknowledge", response_model=IFTIResponse)
+def acknowledge_record(
+    ifti_id: str,
+    acknowledgement_ref: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
+    if r.status != IFTIStatus.submitted:
+        raise HTTPException(
+            409, f"Record must be submitted (current: {r.status.value})"
+        )
+    r.status = IFTIStatus.acknowledged
+    r.acknowledged_at = datetime.now(timezone.utc)
+    if acknowledgement_ref:
+        r.submission_reference = acknowledgement_ref
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(r)
+    _log(
+        db,
+        current_user,
+        r.industry_id,
+        r.ifti_id,
+        action="ifti_acknowledged",
+        after_state={"status": r.status.value},
+    )
+    return r
+
+
+@router.post("/{ifti_id}/reject", response_model=IFTIResponse)
+def reject_record(
+    ifti_id: str,
+    reason: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_APPROVER),
+):
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
+    r.status = IFTIStatus.rejected
+    r.rejected_reason = reason
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(r)
+    _log(
+        db,
+        current_user,
+        r.industry_id,
+        r.ifti_id,
+        action="ifti_rejected",
+        after_state={"status": r.status.value},
+        notes=reason,
+    )
+    return r
+
+
+@router.post("/{ifti_id}/redraft", response_model=IFTIResponse)
+def redraft_record(
+    ifti_id: str,
+    reason: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    """Reset a rejected IFTI-DRA record to draft for correction and resubmission."""
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
+    if r.status != IFTIStatus.rejected:
+        raise HTTPException(
+            409, f"Only rejected records can be redrafted (current: {r.status.value})"
+        )
+    r.status = IFTIStatus.draft
+    r.rejected_reason = None
+    r.reviewed_by = None
+    r.approved_by = None
+    r.approved_at = None
+    r.submitted_at = None
+    r.submission_reference = None
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(r)
+    _log(
+        db,
+        current_user,
+        r.industry_id,
+        r.ifti_id,
+        action="ifti_redrafted",
+        after_state={"status": r.status.value},
+        notes=reason,
+    )
+    return r
+
+
+@router.get("/{ifti_id}/validate")
+def validate_record(
+    ifti_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_WRITER),
+):
+    """Validate mandatory AUSTRAC fields before submission. Returns error list."""
+    r = get_ifti(db, ifti_id)
+    if not r:
+        raise HTTPException(404, "IFTI record not found")
+    if not current_user.is_super_admin and r.industry_id != current_user.org_id:
+        raise HTTPException(403, "Access denied")
+    errors = _validate_ifti_record(r)
+    return {
+        "ifti_id": ifti_id,
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "error_count": len(errors),
+    }
 
 
 @router.delete("/{ifti_id}", status_code=204)
@@ -365,12 +731,20 @@ def delete_record(
     r = get_ifti(db, ifti_id)
     if not r:
         raise HTTPException(404, "IFTI record not found")
-    if r.status == IFTIStatus.submitted:
+    if r.status in (IFTIStatus.submitted, IFTIStatus.acknowledged):
         raise HTTPException(400, "Cannot delete a submitted record")
     if not current_user.is_super_admin and r.industry_id != current_user.org_id:
         raise HTTPException(403, "Access denied")
+    industry_id, record_ifti_id = r.industry_id, r.ifti_id
     db.delete(r)
     db.commit()
+    _log(
+        db,
+        current_user,
+        industry_id,
+        record_ifti_id,
+        action="ifti_deleted",
+    )
 
 
 # ── Excel download ────────────────────────────────────────────────────────────

@@ -1,5 +1,25 @@
 # VeriGo — Australian Regulatory Reporting (Stage 10)
 
+> **Addendum (P28 resolved, see `PARKING_LOT.md`):** §3 below and the STAGE
+> STATUS's P28 line reflect this doc's original (incorrect) framing of the
+> three-IFTI-systems finding — it treated `ifti_e.py`/`IFTIERecord` as "the
+> more schema-faithful system" and implied `ifti.py`/`IFTIRecord` was a
+> generic, non-schema-specific implementation. That was wrong: `ifti_e.py`
+> covers **IFTI-E** (electronic/SWIFT transfers, for banks/ADIs via AUSTRAC
+> Connect), a different AUSTRAC report subtype the reporting entities this
+> app targets (remittance dealers) don't file. `ifti.py`/`IFTIRecord` is
+> actually the **IFTI-DRA** (Designated Remittance Arrangement) system —
+> modelled on the real `IFTI-DRA-1-2.xsd` schema, with an Excel export
+> (`generate_ifti_excel()`) that matches AUSTRAC's own IFTI-DRA spreadsheet
+> template field-for-field, for the fill-the-template-then-lodge-via-
+> AUSTRAC-Online workflow this app's users actually need. `ifti.py` is now
+> canonical: it has the maker-checker/audit workflow ported onto it (see
+> `docs/audit-evidence.md`-style coverage under entity_type `ifti_record`),
+> and `reports.py`'s parallel IFTI-only routes have been removed (its
+> TTR/SMR/Filing-Register/ECDD sections are unaffected). `ifti_e.py` was
+> untouched — IFTI-E remains out of scope. The rest of this document is
+> left as the historical record of Stage 10's original (partial) finding.
+
 **Purpose:** Stage 10 asks for reporting workflows covering Australia's core AML/CTF regulatory reports — SMR, TTR, IFTI — built on current, authoritative regulatory requirements rather than hard-coded assumptions, with compliance logic, reporting interface, and regulatory submission kept as separate concerns. Every report must record who created it, when, what changed, who approved it, and its submission status.
 
 **Headline finding:** the reporting workflow itself (`app/api/routes/reports.py`) was, unusually for this staged review, already extensive and largely correct by the time this stage started — full IFTI/TTR/SMR maker-checker workflows (draft → review → approve/MLRO sign-off → submit → acknowledge), a filing register, CSV/XML export, and validation endpoints, all already built. Two real gaps against the stage's own explicit requirements were found and fixed: almost none of that workflow was audited, and TTR/SMR reports had no way to ever be rejected despite having a redraft-from-rejected flow. A third, larger finding — three independent backend implementations of IFTI reporting, two of them entirely unreachable — was investigated and documented but not fixed, since resolving it is a genuine architecture decision, not a bug fix.

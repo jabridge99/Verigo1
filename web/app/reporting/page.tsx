@@ -110,20 +110,18 @@ function mapReport(raw: any, type: ReportKind): Report {
   if (type === "ifti") {
     const austracType = raw.direction === "incoming" ? "ifti_incoming" : "ifti_outgoing";
     return {
-      id: raw.id,
-      report_ref: raw.report_ref,
+      id: raw.ifti_id,
+      report_ref: raw.ifti_id,
       report_type: "ifti",
       direction: raw.direction,
-      customer_id: raw.customer_id,
       status: raw.status,
-      priority: raw.priority,
-      title: `${AUSTRAC_LABEL[austracType]} — Customer ${raw.customer_id ?? "—"}`,
-      summary: `${raw.direction === "incoming" ? "Inbound" : "Outbound"} international funds transfer of ${raw.currency || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()}.`,
-      total_amount_flagged: raw.amount_aud ?? raw.total_amount ?? 0,
+      title: `${AUSTRAC_LABEL[austracType]} — ${raw.oc_full_name || raw.bc_full_name || raw.ifti_id}`,
+      summary: `${raw.direction === "incoming" ? "Inbound" : "Outbound"} international funds transfer of ${raw.currency_code || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()}.`,
+      total_amount_flagged: raw.total_amount ?? 0,
       transaction_count: 1,
       austrac_report_type: AUSTRAC_LABEL[austracType],
       due_date: raw.due_date,
-      prepared_by: raw.prepared_by,
+      prepared_by: raw.created_by,
       reviewed_by: raw.reviewed_by,
       approved_by: raw.approved_by,
       submission_reference: raw.submission_reference,
@@ -195,7 +193,7 @@ export default function ReportingDashboard() {
   const fetchData = useCallback(async () => {
     try {
       const [iRes, tRes, sRes, sumRes] = await Promise.all([
-        fetch(`${API}/api/v1/reports/ifti?limit=100`, { credentials: "include" }),
+        fetch(`${API}/api/v1/ifti/`, { credentials: "include" }),
         fetch(`${API}/api/v1/reports/ttr?limit=100`, { credentials: "include" }),
         fetch(`${API}/api/v1/reports/smr?limit=100`, { credentials: "include" }),
         fetch(`${API}/api/v1/reports/summary`, { credentials: "include" }),
@@ -212,7 +210,9 @@ export default function ReportingDashboard() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const advanceStatus = async (report: Report, action: "review" | "approve" | "submit" | "acknowledge") => {
-    const base = `${API}/api/v1/reports/${report.report_type}/${report.id}`;
+    const base = report.report_type === "ifti"
+      ? `${API}/api/v1/ifti/${report.id}`
+      : `${API}/api/v1/reports/${report.report_type}/${report.id}`;
     const statusMap: Record<string, string> = { review: "under_review", approve: "approved", submit: "submitted", acknowledge: "acknowledged" };
     let url = "";
     if (action === "review") url = `${base}/review`;
