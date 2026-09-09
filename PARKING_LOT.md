@@ -8,7 +8,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 
 ## Open items — at a glance
 
-23 open items, grouped by theme. ID links to the full entry further down this file. A critical/non-critical triage pass (below) went through every item using the criterion "does this undermine real AML/CTF compliance capability" — items that did (DPMS's actively-wrong instruction, the missing alert→case bridge) are fixed and moved to Resolved; items that are gaps or feature debt rather than wrong behaviour stay parked here, several with a deeper investigation confirming why a quick fix isn't safe.
+24 open items, grouped by theme. ID links to the full entry further down this file. A critical/non-critical triage pass (below) went through every item using the criterion "does this undermine real AML/CTF compliance capability" — items that did (DPMS's actively-wrong instruction, the missing alert→case bridge) are fixed and moved to Resolved; items that are gaps or feature debt rather than wrong behaviour stay parked here, several with a deeper investigation confirming why a quick fix isn't safe.
 
 ### A. Architecture — duplicate/competing systems (each needs a design decision, not a quick fix — see the "Resolved" entries below for why the seemingly-obvious fixes turned out not to be safe)
 | ID | What | Effort |
@@ -72,6 +72,11 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 |---|---|---|
 | P30 | `web/app/reporting/page.tsx` has the same demo-data-masking bug (`DEMO_REPORTS`/`DEMO_SUMMARY`) already found and fixed on the MLRO, monitoring, and audit pages this session | Same one-line-per-array fix already applied 3x elsewhere |
 | P31 | `reporting_summary()`'s dict keys are `str(StatusEnum.member)` (e.g. `"IFTIStatus.draft"`, not `"draft"`), and its whole response shape doesn't match what `reporting/page.tsx`'s `Summary` interface expects — the frontend's own empty-check (`if (d.total !== undefined)`) can never pass, so the KPI bar is permanently stuck on demo numbers regardless of P30 | Pick one shape and fix both sides — small but touches TTR/SMR too, not just IFTI |
+
+### J. Regulatory export fidelity — exact match to the official AUSTRAC form
+| ID | What | Effort |
+|---|---|---|
+| P32 | IFTI-DRA Excel export (`generate_ifti_excel()`) was built from AUSTRAC's published schema/reference docs, not verified cell-by-cell against the actual official AUSTRAC IFTI-DRA template file — you've asked for an exact match, not a schema-faithful approximation. SMR/TTR exports carry the same open question, which you'll review separately later | Get the real AUSTRAC template file(s), diff column-by-column/sheet-by-sheet against current output, correct any mismatch |
 
 ---
 
@@ -416,3 +421,15 @@ You asked for the accumulated parking-lot items to be triaged into "fix now" vs.
 **What was done:** Removed `DEMO_LOGS`, so a real empty or failed fetch now shows a real empty/error state. Rebuilt `ENTITY_TYPES`/`ENTITY_COLOR`/`ENTITY_ICON`/`ACTOR_ROLES` from the real strings found via `grep -rho 'entity_type="..."' app/` plus the merged table's `object_type` values, and normalised casing once at fetch time so filtering/matching works regardless of which underlying table a given entry came from. Added `log_action()` calls to `review_kyc()` and to `create_transaction()`/`update_transaction()`.
 **A larger finding surfaced doing this file-by-file:** roughly 35 other route files still have zero audit coverage — parked as P29 above (not attempted in full this pass; `retention.py` flagged as the standout next candidate given its actions are destructive/irreversible).
 **Detail:** `web/app/audit/page.tsx`; `app/api/routes/kyc.py`; `app/api/routes/transactions.py`; `tests/test_stage11_kyc_and_transaction_audit_smoke.py`; `docs/audit-evidence.md`.
+
+---
+
+## Parked from user review (2026-09-09)
+
+### P32 — IFTI-DRA Excel export not yet verified as an exact match to AUSTRAC's official form
+**Status:** Parked — explicit instruction to record and defer, not fix now.
+**What:** P28 made `app/api/routes/ifti.py`/`IFTIRecord`'s `generate_ifti_excel()` (in `app/services/ifti_service.py`) canonical for IFTI-DRA lodgement, on the strength of it being modelled against AUSTRAC's published `IFTI-DRA-1-2.xsd` schema and reference documentation — column order, section headers, and the "Instructions" sheet wording were built to match what AUSTRAC's own spreadsheet describes. That is schema-faithful, not the same as a verified, cell-by-cell match against AUSTRAC's actual distributed template file, which is what you've now asked for: "ifti-dra needs to be exactly same as austrac form."
+**Why parked:** You asked for this to be recorded rather than acted on now.
+**What's needed when picked up:** The real AUSTRAC IFTI-DRA template file (IN and OUT variants), diffed column-by-column and sheet-by-sheet against `generate_ifti_excel()`'s output — header text/order, sheet/tab names, the Instructions sheet, cell formatting/merges/column widths, and any AUSTRAC-side formatting quirks (exact date format, Yes/No casing, etc.) the schema/reference docs alone might not capture exactly.
+**Also noted:** You said you'll review the TTR export (`ttr_service.py`'s CSV/AUSTRAC-payload generation) and the SMR export for the same exact-match requirement yourself, later — not addressed in this pass, and not separately parked here since you're handling it directly rather than asking it to be tracked.
+**Detail:** `app/services/ifti_service.py`'s `generate_ifti_excel()`, `_row_out()`, `_row_in()`; `app/api/routes/ifti.py`'s `GET /ifti/export/{direction}` and `POST /ifti/export/batch`.
