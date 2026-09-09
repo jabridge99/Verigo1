@@ -25,6 +25,7 @@ from app.models.kyc import (
 from app.models.screening import ScreeningRecord, ScreeningStatus
 from app.models.usage import UsageEventType, UsageRecordStatus
 from app.models.user import User, UserRole
+from app.services.audit_service import log_action
 from app.services.identity_verification import (
     compute_kyc_identity_score,
     verify_document,
@@ -238,6 +239,22 @@ def review_kyc(
         customer.status = CustomerStatus.rejected
 
     db.commit()
+
+    log_action(
+        db,
+        action="kyc_reviewed",
+        entity_type="customer",
+        entity_id=customer.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=customer.org_id,
+        after_state={
+            "status": customer.status.value,
+            "approve_requested": approve,
+            "identity_score": identity_score,
+        },
+        notes=rejection_reason if customer.status == CustomerStatus.rejected else notes,
+    )
 
     if customer.status == CustomerStatus.active:
         from app.models.automation_rule import RuleEventType

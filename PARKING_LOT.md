@@ -8,7 +8,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 
 ## Open items — at a glance
 
-20 open items, grouped by theme. ID links to the full entry further down this file. A critical/non-critical triage pass (below) went through every item using the criterion "does this undermine real AML/CTF compliance capability" — items that did (DPMS's actively-wrong instruction, the missing alert→case bridge) are fixed and moved to Resolved; items that are gaps or feature debt rather than wrong behaviour stay parked here, several with a deeper investigation confirming why a quick fix isn't safe.
+21 open items, grouped by theme. ID links to the full entry further down this file. A critical/non-critical triage pass (below) went through every item using the criterion "does this undermine real AML/CTF compliance capability" — items that did (DPMS's actively-wrong instruction, the missing alert→case bridge) are fixed and moved to Resolved; items that are gaps or feature debt rather than wrong behaviour stay parked here, several with a deeper investigation confirming why a quick fix isn't safe.
 
 ### A. Architecture — duplicate/competing systems (each needs a design decision, not a quick fix — see the "Resolved" entries below for why the seemingly-obvious fixes turned out not to be safe)
 | ID | What | Effort |
@@ -63,6 +63,11 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 |---|---|---|
 | P27 | No production transaction-ingestion path beyond manual entry — no batch/API/core-banking connector | Later-stage scope, not Stage 8 |
 
+### H. Audit trail coverage (Stage 11)
+| ID | What | Effort |
+|---|---|---|
+| P29 | ~35 route files still have zero audit-trail coverage (kyc.py and transactions.py fixed this stage as the two highest-value); `retention.py` flagged as the standout next candidate given it's destructive/irreversible | Mechanical, same pattern as the fixes already done — just large |
+
 ---
 
 ## Suggested future development (a recommended order, not a commitment)
@@ -82,6 +87,7 @@ Reading the open items as a roadmap rather than a flat list:
 7. **Decide the rule-engine question (P25)** — build a real `MonitoringRule` UI or merge it with `AutomationRule`/Rule Builder; not urgent since the seeded rules work correctly without one, but worth deciding before more starter rules accumulate with no way to see them.
 8. **Mechanical backlog (C2, C4, P5, P4)** — no functional urgency; pick up opportunistically or as its own dedicated pass whenever there's a lull.
 9. **Production transaction ingestion (P27)** — batch/API/core-banking connectors; a later-stage-sized project once the platform has real transaction volume to receive.
+10. **Finish the audit-trail coverage sweep (P29)** — `retention.py` first given it's destructive/irreversible, then `screening.py`/`independent_review.py`/`board_reporting.py`/`monitoring.py` (rule configuration changes); the mechanical, low-risk pattern is already established from the cases.py/reports.py/kyc.py/transactions.py fixes, it's just a matter of working through the remaining list.
 
 ---
 
@@ -267,6 +273,18 @@ The practical consequence: a real reporting entity filing an IFTI report through
 
 ---
 
+## Parked from Stage 11 (Audit & Evidence, 2026-09-09)
+
+Fixing the two clearest gaps this stage found (`cases.py`-shaped audit-trail gaps in `kyc.py`'s review decision and `transactions.py`'s create/update, plus the audit page's demo-data/stale-filter bugs — see Resolved) required first checking how widespread the "route file never calls the audit service" pattern actually is across the whole API surface.
+
+### P29 — ~35 other route files have zero audit-trail coverage; only the highest-value two (KYC decisions, transactions) were fixed this stage
+**Status:** Parked — the remaining files are a long tail of lower-severity or lower-frequency mutations; fixing all of them in one pass isn't bounded work, and several (billing, marketplace, connectors) aren't AML/CTF-relevant at all.
+**What:** A file-by-file check (`grep -c "log_action(" app/api/routes/*.py`) found roughly 35 route files with zero audit-service calls, beyond the two fixed this stage. Of these, the ones with real AML/CTF relevance to "customer/case/risk history" are: `monitoring.py` (creating/editing/disabling a `MonitoringRule` — a compliance-configuration change, not logged), `screening.py` (sanctions/PEP screening decisions), `independent_review.py` (independent review findings and sign-off), `board_reporting.py` (board report generation), `retention.py` (data retention/purge actions — arguably the highest remaining priority, since a retention purge is destructive and irreversible), `compliance_calendar.py`, and `onboarding.py`'s wizard-driven steps. The rest (`billing.py`, `marketplace.py`, `connectors.py`, `health.py`, `branding.py`, etc.) are commercial/infrastructure concerns outside Stage 11's AML/CTF audit-readiness scope.
+**Why parked:** Auditing every mutating endpoint across the whole API is a large, mechanical, low-risk-per-file piece of work (same shape as the `cases.py`/`reports.py`/`kyc.py`/`transactions.py` fixes already done this session) but not boundable as a single stage-11 pass without ballooning scope indefinitely. `retention.py` is flagged as the standout candidate for a follow-up pass given the irreversibility of what it does.
+**Detail:** Run `grep -c "log_action(" app/api/routes/*.py` for the current file-by-file picture; `app/api/routes/kyc.py`'s `review_kyc()` and `app/api/routes/transactions.py`'s `create_transaction()`/`update_transaction()` are the two fixed this stage, as templates for the rest.
+
+---
+
 ## Resolved (moved out of the active parking lot, kept here for the full-process history)
 
 ### P1 — Independent review "due" notifications have no date to key off
@@ -388,3 +406,10 @@ You asked for the accumulated parking-lot items to be triaged into "fix now" vs.
 **What was done:** Added a `_log()` call (same pattern as cases.py) to every remaining mutating endpoint across all three report types. Added `POST /reports/ttr/{id}/reject` and `POST /reports/smr/{id}/reject`, mirroring the pre-existing `reject_ifti`, making both reports' redraft paths reachable for the first time.
 **A larger architecture finding surfaced investigating this:** three independent backend IFTI implementations exist, only one reachable from any frontend — parked as P28 above rather than fixed in this pass, since neither system alone satisfies Stage 10's requirements and reconciling them is a real design decision.
 **Detail:** `app/api/routes/reports.py`; `tests/test_stage10_report_audit_trail_and_reject_smoke.py`; `docs/regulatory-reporting.md`.
+
+### Stage 11 (Audit & Evidence): the audit page showed fabricated demo entries over a real, now much richer, audit trail; KYC decisions and transaction records were entirely unaudited
+**Parked:** never — found and fixed while inspecting Stage 11 against its own charter ("what happened, when, who did it, why").
+**What it was:** Three issues. (1) `web/app/audit/page.tsx` — the real, reachable audit trail UI — had the same demo-data-masking bug found repeatedly this session: a hardcoded 12-entry `DEMO_LOGS` array shown whenever a real fetch returned zero rows, and silently kept on any fetch error. For a page whose entire purpose is showing "what really happened" in a compliance/audit context, this is a more serious instance of the pattern than the other pages it was found on — someone reviewing "the audit trail" could be looking at entirely fabricated events. (2) The same page's entity-type and role filter lists were fictional: none of `"report"`/`"ecdd"`/`"kyc"`/`"transaction"` match any real `entity_type` string the backend actually writes (the real ones are `ifti_report`/`ttr_report`/`smr_report`/`case`/`customer`/`ecdd_record`/`document`/`aml_program`/`organisation`/`user`, split across two audit tables with inconsistent casing — snake_case vs PascalCase). (3) Checking real audit coverage found `app/api/routes/kyc.py`'s `review_kyc()` (the actual approve/reject decision on a customer's identity verification) and `app/api/routes/transactions.py`'s `create_transaction()`/`update_transaction()` (the core AML transaction record) had zero audit logging — exactly the "customer history"/"what happened to this transaction" Stage 11 names.
+**What was done:** Removed `DEMO_LOGS`, so a real empty or failed fetch now shows a real empty/error state. Rebuilt `ENTITY_TYPES`/`ENTITY_COLOR`/`ENTITY_ICON`/`ACTOR_ROLES` from the real strings found via `grep -rho 'entity_type="..."' app/` plus the merged table's `object_type` values, and normalised casing once at fetch time so filtering/matching works regardless of which underlying table a given entry came from. Added `log_action()` calls to `review_kyc()` and to `create_transaction()`/`update_transaction()`.
+**A larger finding surfaced doing this file-by-file:** roughly 35 other route files still have zero audit coverage — parked as P29 above (not attempted in full this pass; `retention.py` flagged as the standout next candidate given its actions are destructive/irreversible).
+**Detail:** `web/app/audit/page.tsx`; `app/api/routes/kyc.py`; `app/api/routes/transactions.py`; `tests/test_stage11_kyc_and_transaction_audit_smoke.py`; `docs/audit-evidence.md`.

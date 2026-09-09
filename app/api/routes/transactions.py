@@ -52,6 +52,7 @@ from app.schemas.transaction import (
     TransactionUpdate,
 )
 from app.schemas.transaction_receipt import TransactionReceipt, build_receipt
+from app.services.audit_service import log_action
 from app.services.monitoring_engine import run_monitoring
 from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 from app.services.risk_matrix_service import (
@@ -156,6 +157,22 @@ def create_transaction(
     run_monitoring(txn, customer, db)
     db.commit()
 
+    log_action(
+        db,
+        action="transaction_recorded",
+        entity_type="transaction",
+        entity_id=txn.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={
+            "transaction_ref": txn.transaction_ref,
+            "amount": str(txn.amount),
+            "currency": txn.currency,
+            "customer_id": txn.customer_id,
+        },
+    )
+
     return txn
 
 
@@ -208,7 +225,8 @@ def update_transaction(
     current_user: User = Depends(require_compliance_or_above),
 ):
     """Update non-risk fields. Risk fields are engine-only and cannot be patched."""
-    txn = _get_transaction_or_404(txn_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    txn = _get_transaction_or_404(txn_id, org_id, db)
 
     if txn.status == TransactionStatus.completed:
         raise HTTPException(
@@ -216,12 +234,23 @@ def update_transaction(
             detail="Completed transactions are immutable.",
         )
 
-    for k, v in payload.model_dump(exclude_none=True).items():
+    changed_fields = payload.model_dump(exclude_none=True)
+    for k, v in changed_fields.items():
         setattr(txn, k, v)
 
     txn.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(txn)
+    log_action(
+        db,
+        action="transaction_updated",
+        entity_type="transaction",
+        entity_id=txn.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={k: str(v) for k, v in changed_fields.items()},
+    )
     return txn
 
 
