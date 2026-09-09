@@ -11,11 +11,13 @@ DISCLAIMER: This module provides workflow tooling only.
 All compliance decisions remain with the reporting entity.
 """
 
+import html as html_escape_module
 import logging
 from datetime import date, datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -37,6 +39,7 @@ from app.models.independent_review import (
     ReviewStatus,
     ReviewType,
 )
+from app.models.organisation import Organisation
 from app.models.user import UserRole
 from app.services import audit_service
 
@@ -1495,3 +1498,239 @@ def org_dashboard(
             "All compliance decisions remain with the reporting entity."
         ),
     }
+
+
+# ── Export ───────────────────────────────────────────────────────────────────
+#
+# Aligns with the Verigo Independent Review Framework template
+# (VERIGO-GEN-IRF-01): cover page, area-by-area executive-summary rating
+# grid, detailed findings/recommendations, action plan, and sign-off.
+
+_EXEC_SUMMARY_AREAS = [
+    (
+        "AML/CTF Program — Currency and Compliance",
+        (FindingCategory.policies_procedures,),
+    ),
+    ("Risk Assessment (EWRA)", (FindingCategory.risk_assessment,)),
+    ("KYC / CDD Procedures", (FindingCategory.cdd,)),
+    ("ECDD", (FindingCategory.edd,)),
+    ("Transaction Monitoring (TMP)", (FindingCategory.transaction_monitoring,)),
+    ("SMR / Regulatory Reporting", (FindingCategory.regulatory_reporting,)),
+    ("Sanctions Screening", (FindingCategory.sanctions_screening,)),
+    ("Training", (FindingCategory.training,)),
+    ("Record Keeping", (FindingCategory.record_keeping,)),
+    ("Governance / CO Reporting", (FindingCategory.governance,)),
+]
+
+_RISK_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
+
+@router.get("/{review_id}/export-html", response_class=HTMLResponse)
+def export_html(
+    review_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Export an HTML version of the review report matching the Verigo
+    Independent Review Framework template (VERIGO-GEN-IRF-01): cover page,
+    executive summary (area-by-area rating grid), detailed findings and
+    recommendations, action plan, and sign-off section.
+    """
+    review = _get_review(db, current_user.org_id, review_id)
+    org = db.query(Organisation).filter_by(id=current_user.org_id).first()
+
+    findings = (
+        db.query(ReviewFinding)
+        .filter_by(review_id=review_id)
+        .order_by(ReviewFinding.finding_number)
+        .all()
+    )
+    recommendations = {
+        f.id: db.query(ReviewRecommendation).filter_by(finding_id=f.id).all()
+        for f in findings
+    }
+    actions = (
+        db.query(ReviewAction)
+        .filter_by(review_id=review_id)
+        .order_by(ReviewAction.action_ref)
+        .all()
+    )
+
+    def esc(s):
+        return html_escape_module.escape(s) if s else ""
+
+    def _row(*cells) -> str:
+        return "<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
+
+    def _section(title: str, content: str) -> str:
+        return f'<div class="section"><h2>{title}</h2>{content}</div>'
+
+    # Executive summary: worst rating among each area's still-open findings,
+    # defaulting to Satisfactory when no findings were raised against it —
+    # matching the template's per-area checkbox row.
+    open_findings = [
+        f
+        for f in findings
+        if f.status not in (FindingStatus.closed, FindingStatus.accepted_risk)
+    ]
+    exec_rows = []
+    for label, categories in _EXEC_SUMMARY_AREAS:
+        area_findings = [f for f in open_findings if f.category in categories]
+        if area_findings:
+            worst = max(
+                area_findings, key=lambda f: _RISK_RANK.get(f.risk_rating.value, 0)
+            )
+            rating = worst.risk_rating.value.title()
+            css = f"rating-{worst.risk_rating.value}"
+        else:
+            rating = "Satisfactory"
+            css = "rating-satisfactory"
+        exec_rows.append(_row(esc(label), f'<span class="badge {css}">{rating}</span>'))
+    exec_summary_html = f"""
+<table>
+  <thead><tr><th>Review Area</th><th>Rating</th></tr></thead>
+  <tbody>{"".join(exec_rows)}</tbody>
+</table>"""
+
+    findings_rows = []
+    for f in findings:
+        recs = recommendations.get(f.id, [])
+        recs_html = "<br>".join(esc(r.description) for r in recs) or "—"
+        findings_rows.append(
+            _row(
+                esc(f.finding_ref),
+                f"<strong>{esc(f.title)}</strong><br>{esc(f.description)}",
+                f'<span class="badge rating-{f.risk_rating.value}">{f.risk_rating.value.title()}</span>',
+                esc(f.category.value.replace("_", " ").title()),
+                recs_html,
+                f.status.value.replace("_", " ").title(),
+            )
+        )
+    findings_html = f"""
+<table>
+  <thead><tr><th>Ref</th><th>Finding</th><th>Rating</th><th>Area</th><th>Recommendation(s)</th><th>Status</th></tr></thead>
+  <tbody>{"".join(findings_rows) or '<tr><td colspan="6">No findings recorded.</td></tr>'}</tbody>
+</table>"""
+
+    action_rows = [
+        _row(
+            esc(a.action_ref),
+            esc(a.title),
+            a.assigned_to or "—",
+            str(a.due_date) if a.due_date else "—",
+            a.status.value.replace("_", " ").title(),
+        )
+        for a in actions
+    ]
+    action_plan_html = f"""
+<table>
+  <thead><tr><th>Ref</th><th>Action Required</th><th>Responsible Officer</th><th>Target Date</th><th>Status</th></tr></thead>
+  <tbody>{"".join(action_rows) or '<tr><td colspan="5">No actions recorded.</td></tr>'}</tbody>
+</table>"""
+
+    review_title = esc(review.title)
+    exec_summary_narrative = (
+        esc(review.executive_summary)
+        if review.executive_summary
+        else "<em>No executive summary provided.</em>"
+    )
+
+    # NOTE: nested triple-quoted f-strings using the same quote character
+    # require Python 3.12+ (see board_reporting.py's export_html for the
+    # same constraint); this runtime targets 3.11, so the sign-off block is
+    # built as its own variable rather than inlined in the outer f-string.
+    signoff_html = _section(
+        "Sign-Off",
+        f"""
+<div class="signoff">
+  <div class="signoff-box">
+    <h3>Reviewer</h3>
+    <p>Name: {esc(review.reviewer_name) or "—"}</p>
+    <div class="line"></div>
+    <p>Signature</p>
+    <p>Date: {review.report_date or "—"}</p>
+  </div>
+  <div class="signoff-box">
+    <h3>Director / Principal Acknowledgement</h3>
+    <p>{"Acknowledged by " + esc(review.board_acknowledged_by) if review.board_acknowledged else "Not yet acknowledged"}</p>
+    <div class="line"></div>
+    <p>Signature</p>
+    <p>Date: {review.board_acknowledged_at.strftime("%d %B %Y") if review.board_acknowledged_at else "—"}</p>
+  </div>
+</div>""",
+    )
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{review_title}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1a1a2e; background: #fff; line-height: 1.5; }}
+  .cover {{ background: linear-gradient(135deg, #0f3460 0%, #16213e 100%); color: #fff; padding: 60px 48px; min-height: 160px; }}
+  .cover h1 {{ font-size: 22pt; font-weight: 700; margin-bottom: 8px; }}
+  .cover .meta {{ font-size: 10pt; opacity: 0.8; margin-top: 10px; }}
+  .cover .period {{ font-size: 12pt; opacity: 0.9; margin-top: 6px; }}
+  .confidential {{ display: inline-block; background: #e63946; color: #fff; padding: 2px 10px; border-radius: 3px; font-size: 9pt; font-weight: 700; letter-spacing: 1px; margin-top: 12px; }}
+  .content {{ padding: 32px 48px; }}
+  .section {{ margin-bottom: 32px; border-left: 4px solid #0f3460; padding-left: 16px; }}
+  h2 {{ font-size: 14pt; color: #0f3460; margin-bottom: 12px; font-weight: 700; }}
+  h3 {{ font-size: 11pt; color: #16213e; margin-bottom: 8px; font-weight: 600; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }}
+  th {{ background: #0f3460; color: #fff; padding: 7px 10px; text-align: left; font-weight: 600; }}
+  td {{ padding: 6px 10px; border-bottom: 1px solid #e8e8e8; }}
+  tr:nth-child(even) td {{ background: #f7f9fc; }}
+  .narrative {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; margin: 10px 0; font-style: italic; color: #334155; }}
+  .badge {{ padding: 2px 8px; border-radius: 3px; font-size: 9pt; font-weight: 600; }}
+  .rating-satisfactory {{ background: #dcfce7; color: #166534; }}
+  .rating-low {{ background: #e0f2fe; color: #075985; }}
+  .rating-medium {{ background: #fef3c7; color: #92400e; }}
+  .rating-high {{ background: #fee2e2; color: #991b1b; }}
+  .rating-critical {{ background: #7f1d1d; color: #fff; }}
+  .signoff {{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }}
+  .signoff-box {{ border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; }}
+  .signoff-box .line {{ border-bottom: 1px solid #999; margin: 24px 0 4px; }}
+  .disclaimer {{ font-size: 8pt; color: #888; border-top: 1px solid #e0e0e0; padding-top: 12px; margin-top: 40px; font-style: italic; }}
+  @media print {{ body {{ font-size: 10pt; }} .content {{ padding: 16px 24px; }} }}
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="confidential">CONFIDENTIAL</div>
+  <h1>AML/CTF Independent Review — {review_title}</h1>
+  <div class="period">Review Period: {review.review_period_start or "—"} to {review.review_period_end or "—"}</div>
+  <div class="meta">
+    Entity: {esc(org.name) if org else "—"} &nbsp;|&nbsp; ABN: {esc(org.abn) if org and org.abn else "—"} &nbsp;|&nbsp;
+    Review Ref: {esc(review.review_ref)} &nbsp;|&nbsp; Status: {review.status.value.replace("_", " ").title()}
+  </div>
+  <div class="meta">
+    Reviewer: {esc(review.reviewer_name) or "—"} ({esc(review.reviewer_firm) or "internal"}) &nbsp;|&nbsp;
+    Qualifications / Independence: {esc(review.reviewer_credentials) or "—"}
+  </div>
+</div>
+
+<div class="content">
+
+{_section("Executive Summary — Overall Assessment", exec_summary_html)}
+
+{_section("Key Findings Summary", f'<div class="narrative">{exec_summary_narrative}</div>')}
+
+{_section("Detailed Findings and Recommendations", findings_html)}
+
+{_section("Action Plan", action_plan_html)}
+
+{signoff_html}
+
+<div class="disclaimer">
+  RETENTION: Retain this Independent Review Report and Action Plan for 7 years (AML/CTF Act s.112).
+  This module provides workflow tooling only — all compliance decisions and the accuracy of this report
+  remain the responsibility of the reporting entity and its independent reviewer.
+</div>
+
+</div>
+</body>
+</html>"""
+    return HTMLResponse(content=html, media_type="text/html")

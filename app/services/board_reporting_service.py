@@ -530,6 +530,257 @@ def _regulatory_reporting_section(
     }
 
 
+# ── CO Quarterly Compliance Report sections ─────────────────────────────────
+#
+# Built to align generate_quarterly_compliance_snapshot() with the specific
+# sections named by the Verigo CO Quarterly Compliance Report template
+# (VERIGO-GEN-COR, from the Google Drive AML/CTF document library) — the
+# generic _base_snapshot() sections don't compute any of these on their own.
+
+
+def _smr_quarterly_detail(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.report import ReportStatus, SMRReport
+
+    period_smrs = (
+        db.query(SMRReport)
+        .filter(
+            SMRReport.org_id == org_id,
+            SMRReport.created_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            SMRReport.created_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
+        )
+        .all()
+    )
+    lodged = [
+        s
+        for s in period_smrs
+        if s.status in (ReportStatus.submitted, ReportStatus.acknowledged)
+    ]
+    late = [
+        s
+        for s in lodged
+        if s.due_date and s.submitted_at and s.submitted_at.date() > s.due_date
+    ]
+    terrorism = [s for s in lodged if s.is_terrorism_related]
+    terrorism_within_24h = [
+        s
+        for s in terrorism
+        if s.submitted_at
+        and s.created_at
+        and (s.submitted_at - s.created_at).total_seconds() <= 24 * 3600
+    ]
+    cleared = [
+        s
+        for s in period_smrs
+        if s.status not in (ReportStatus.submitted, ReportStatus.acknowledged)
+        and s.status == ReportStatus.rejected
+    ]
+
+    return {
+        "escalated_to_co_period": len(period_smrs),
+        "lodged_period": len(lodged),
+        "cleared_not_lodged": len(cleared),
+        "terrorism_smrs_period": len(terrorism),
+        "terrorism_all_within_24h": len(terrorism) == len(terrorism_within_24h),
+        "late_smrs": len(late),
+    }
+
+
+def _ttr_quarterly_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.report import ReportStatus, SMRReport, TTRReport
+
+    period_ttrs = (
+        db.query(TTRReport)
+        .filter(
+            TTRReport.org_id == org_id,
+            TTRReport.created_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            TTRReport.created_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
+        )
+        .all()
+    )
+    lodged = [
+        t
+        for t in period_ttrs
+        if t.status in (ReportStatus.submitted, ReportStatus.acknowledged)
+    ]
+    late = [
+        t
+        for t in lodged
+        if t.due_date and t.submitted_at and t.submitted_at.date() > t.due_date
+    ]
+
+    smr_customer_ids = {
+        row[0]
+        for row in db.query(SMRReport.customer_id)
+        .filter(SMRReport.org_id == org_id, SMRReport.customer_id.isnot(None))
+        .all()
+    }
+    also_smr = sum(1 for t in lodged if t.customer_id in smr_customer_ids)
+
+    return {
+        "ttrs_lodged_period": len(lodged),
+        "total_value_aud": round(sum(t.total_amount or 0 for t in lodged), 2),
+        "late_ttrs": len(late),
+        "ttrs_also_smr": also_smr,
+    }
+
+
+def _ecdd_quarterly_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.report import ECDDRecord, ECDDStatus
+
+    period_cases = (
+        db.query(ECDDRecord)
+        .filter(
+            ECDDRecord.org_id == org_id,
+            ECDDRecord.created_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            ECDDRecord.created_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
+        )
+        .all()
+    )
+    all_open = (
+        db.query(ECDDRecord).filter_by(org_id=org_id, status=ECDDStatus.pending).count()
+    )
+
+    return {
+        "new_cases_opened": len(period_cases),
+        "approved": sum(
+            1
+            for c in period_cases
+            if c.status == ECDDStatus.completed and c.recommendation != "reject"
+        ),
+        "declined": sum(
+            1
+            for c in period_cases
+            if c.status == ECDDStatus.rejected or c.recommendation == "reject"
+        ),
+        "still_open_end_of_quarter": all_open,
+    }
+
+
+def _sanctions_quarterly_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.screening import ScreeningRecord, ScreeningStatus, ScreeningType
+
+    period_screens = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.org_id == org_id,
+            ScreeningRecord.screening_type == ScreeningType.sanctions,
+            ScreeningRecord.screened_at
+            >= datetime.combine(period_start, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
+            ScreeningRecord.screened_at
+            <= datetime.combine(period_end, datetime.max.time()).replace(
+                tzinfo=timezone.utc
+            ),
+        )
+        .all()
+    )
+    possible_matches = [
+        s for s in period_screens if s.status == ScreeningStatus.potential_match
+    ]
+    false_positives = [s for s in period_screens if s.is_false_positive]
+    confirmed = [
+        s for s in period_screens if s.status == ScreeningStatus.confirmed_match
+    ]
+
+    return {
+        "total_screens_period": len(period_screens),
+        "possible_matches": len(possible_matches),
+        "false_positives": len(false_positives),
+        "confirmed_matches": len(confirmed),
+    }
+
+
+def _open_actions_quarterly_section(db: Session, org_id: str) -> list:
+    """
+    "Open Actions from Prior Quarters" -- the template's own carryover list.
+    Sourced from the Compliance Calendar (app/api/routes/compliance_calendar.py),
+    which is where scheduled compliance obligations and their due dates already
+    live, rather than inventing a second tracking mechanism.
+    """
+    from app.models.compliance_calendar import (
+        CalendarItemStatus,
+        ComplianceCalendarItem,
+    )
+
+    today = date.today()
+    overdue = (
+        db.query(ComplianceCalendarItem)
+        .filter(
+            ComplianceCalendarItem.org_id == org_id,
+            ComplianceCalendarItem.due_date < today,
+            ComplianceCalendarItem.status.notin_(
+                [CalendarItemStatus.completed, CalendarItemStatus.cancelled]
+            ),
+        )
+        .order_by(ComplianceCalendarItem.due_date)
+        .limit(20)
+        .all()
+    )
+    return [
+        {"title": i.title, "due_date": str(i.due_date), "status": i.status.value}
+        for i in overdue
+    ]
+
+
+def _co_quarterly_extras(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    from app.models.independent_review import IndependentReview
+
+    latest_review = (
+        db.query(IndependentReview)
+        .filter_by(org_id=org_id)
+        .order_by(IndependentReview.created_at.desc())
+        .first()
+    )
+
+    return {
+        "smr_quarterly": _smr_quarterly_detail(db, org_id, period_start, period_end),
+        "ttr": _ttr_quarterly_section(db, org_id, period_start, period_end),
+        "ecdd_quarterly": _ecdd_quarterly_section(db, org_id, period_start, period_end),
+        "sanctions_quarterly": _sanctions_quarterly_section(
+            db, org_id, period_start, period_end
+        ),
+        "open_actions_prior_quarters": _open_actions_quarterly_section(db, org_id),
+        "independent_review_status": {
+            "status": latest_review.status.value if latest_review else None,
+            "reviewer": latest_review.reviewer_name if latest_review else None,
+            "report_date": str(latest_review.report_date)
+            if latest_review and latest_review.report_date
+            else None,
+        }
+        if latest_review
+        else {"status": None, "reviewer": None, "report_date": None},
+    }
+
+
 # ── Main generators ───────────────────────────────────────────────────────────
 
 
@@ -612,9 +863,14 @@ def generate_quarterly_compliance_snapshot(
     db: Session, org_id: str, period_start: date, period_end: date
 ) -> dict:
     """
-    Quarterly Compliance Report — detailed operational view for compliance committee.
+    Quarterly Compliance Report — the AML/CTF Compliance Officer's quarterly
+    report to the Director/Board (AML/CTF Program s.14.4), aligned to the
+    Verigo CO Quarterly Compliance Report template (VERIGO-GEN-COR)'s
+    sections: SMR/TTR/ECDD/TMP/Sanctions activity, training, open actions
+    carried over, and independent review status.
     """
     snap = _base_snapshot(db, org_id, period_start, period_end)
+    snap.update(_co_quarterly_extras(db, org_id, period_start, period_end))
     snap["report_type"] = "quarterly_compliance"
     snap["disclaimer"] = (
         "This report is generated from compliance workflow data as at the date shown. "

@@ -98,6 +98,11 @@ class FindingCategory(str, enum.Enum):
     record_keeping = "record_keeping"
     risk_assessment = "risk_assessment"
     policies_procedures = "policies_procedures"
+    # Two mandatory review areas named by the Verigo Independent Review
+    # Framework template (VERIGO-GEN-IRF-01) that had no dedicated category
+    # before this and would otherwise have to be filed under "other".
+    sanctions_screening = "sanctions_screening"
+    austrac_enrolment = "austrac_enrolment"
     other = "other"
 
 
