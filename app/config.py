@@ -86,6 +86,9 @@ class Settings(BaseSettings):
 
     # ── Session cookie ───────────────────────────────────────────────────────
     session_cookie_name: str = "tvg_session"
+    # Double-submit CSRF token — NOT httpOnly (the frontend must be able to
+    # read it and echo it back as a header); see set_csrf_cookie().
+    csrf_cookie_name: str = "tvg_csrf"
 
     # ── Master admin (seeded on startup if set, idempotent) ────────────────────
     master_admin_email: str = ""

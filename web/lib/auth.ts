@@ -34,20 +34,23 @@ export function clearUser() {
 //
 // app/api/deps.py's get_current_user (used by 32 of 49 route files) reads
 // the Authorization header only -- it does not accept the httpOnly session
-// cookie login also sets. sessionStorage (not localStorage) matches the
-// token's short lifetime and keeps it out of the persistent user-metadata
-// store; it's cleared on tab close, same as the cookie's intended session
-// scope. See PARKING_LOT.md P35.
+// cookie login also sets. localStorage (not sessionStorage) so the token
+// is available in a freshly opened tab, not just the one that logged in --
+// sessionStorage is per-tab, and a fresh tab falling back to cookie-only
+// auth would now be rejected by the CSRF double-submit check (see
+// auth.py's _decode_current_user). No worse an exposure window than the
+// cookie itself already has -- both carry the same
+// ACCESS_TOKEN_EXPIRY_MINUTES max_age. See PARKING_LOT.md P35/CSRF.
 
 export function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null
   try {
-    return sessionStorage.getItem(TOKEN_KEY)
+    return localStorage.getItem(TOKEN_KEY)
   } catch { return null }
 }
 
 function storeToken(token: string) {
-  try { sessionStorage.setItem(TOKEN_KEY, token) } catch {}
+  try { localStorage.setItem(TOKEN_KEY, token) } catch {}
 }
 
 /** Store both halves of a session in one call -- used by registerAccount()
@@ -60,7 +63,7 @@ export function storeSession(user: AuthUser, token: string) {
 }
 
 function clearToken() {
-  try { sessionStorage.removeItem(TOKEN_KEY) } catch {}
+  try { localStorage.removeItem(TOKEN_KEY) } catch {}
 }
 
 /**
@@ -71,11 +74,28 @@ function clearToken() {
  * hitting. Pass the same arguments as fetch(); credentials/headers/etc. in
  * `init` are preserved, with Authorization added only if not already set.
  */
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+function getCsrfCookie(): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(/(?:^|;\s*)tvg_csrf=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 export function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const token = getStoredToken()
   const headers = new Headers(init.headers)
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`)
+  }
+  // CSRF double-submit: harmless to send even when the request will
+  // actually authenticate via the Authorization header above (the backend
+  // only checks this for requests that resolve auth via the session
+  // cookie) -- covers the fallback case where no token is stored yet.
+  const method = (init.method ?? 'GET').toUpperCase()
+  if (MUTATING_METHODS.has(method) && !headers.has('X-CSRF-Token')) {
+    const csrf = getCsrfCookie()
+    if (csrf) headers.set('X-CSRF-Token', csrf)
   }
   return fetch(input, { ...init, headers })
 }

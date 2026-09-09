@@ -344,6 +344,47 @@ def clear_session_cookie(response) -> None:
     )
 
 
+# ── CSRF (double-submit cookie) ─────────────────────────────────────────────
+#
+# The session cookie is SameSite=None in production (required cross-origin,
+# see above) with no other CSRF mitigation — a forged cross-site request
+# still gets the cookie attached by the browser. app.api.deps.get_current_user
+# (32 of 49 route files) is header-only and so is inherently immune, but
+# app/api/routes/auth.py's _current_user (the other 17, plus itself) accepts
+# the cookie alone. Double-submit: a second, non-httpOnly cookie carries a
+# random token the frontend reads via document.cookie and echoes back as
+# X-CSRF-Token on state-changing requests; _decode_current_user rejects any
+# cookie-authenticated mutation where the header doesn't match. A forged
+# cross-site request can get the cookie auto-attached but has no way to read
+# it (SameSite/httpOnly-adjacent same-origin-only readability) to construct
+# a matching header.
+
+
+def new_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def set_csrf_cookie(response, token: str) -> None:
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=token,
+        httponly=False,  # frontend JS must read this to echo it back
+        secure=settings.environment != "development",
+        samesite=_session_cookie_samesite(),
+        max_age=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+        path="/",
+    )
+
+
+def clear_csrf_cookie(response) -> None:
+    response.delete_cookie(
+        key=settings.csrf_cookie_name,
+        path="/",
+        secure=settings.environment != "development",
+        samesite=_session_cookie_samesite(),
+    )
+
+
 # ── Security event logging ────────────────────────────────────────────────────
 
 
