@@ -628,8 +628,17 @@ def _build_txn_context(
         "is_round_number": transaction.is_round_number,
         "is_structuring_suspect": transaction.is_structuring_suspect,
         "is_cash_intensive": transaction.is_cash_intensive,
-        "source_country": transaction.source_country,
-        "destination_country": transaction.destination_country,
+        # Transaction has two overlapping country-pair columns
+        # (source_country/destination_country alongside country_origin/
+        # country_destination -- see app/models/transaction.py). Behaviour
+        # scoring (_score_geographic) already checks all four; rule
+        # conditions only ever had these two keys to match against, so a
+        # transaction populated via the other pair (e.g. the frontend's
+        # manual transaction form, which sends country_destination) was
+        # invisible to any "high-risk jurisdiction" MonitoringRule.
+        "source_country": transaction.source_country or transaction.country_origin,
+        "destination_country": transaction.destination_country
+        or transaction.country_destination,
         "risk_score": transaction.risk_score,
         "behaviour_score": transaction.behaviour_score,
         # Customer fields
