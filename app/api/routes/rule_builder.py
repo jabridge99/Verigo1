@@ -50,6 +50,7 @@ from app.models.automation_rule import (
     RuleEventType,
 )
 from app.models.user import User
+from app.services import audit_service
 from app.services.automation_engine import evaluate_condition_groups
 from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
@@ -197,6 +198,34 @@ def _rule_dict(r: AutomationRule) -> dict:
         "created_at": r.created_at,
         "updated_at": r.updated_at,
     }
+
+
+def _log_panel(
+    db: Session,
+    current_user: User,
+    org_id: str,
+    panel_id: str,
+    action: str,
+    notes: str = None,
+) -> None:
+    """
+    Decision support panels aren't AutomationRules, so they don't fit the
+    AuditEventType-based AuditLog pattern create_rule()/update_rule()/
+    delete_rule() already use above (also already merged into GET /audit/,
+    per app/api/routes/audit.py). submit_review_step() in particular
+    records a real human compliance/MLRO/senior-approval decision -- the
+    same kind of event cases.py/reports.py already audit.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="decision_support_panel",
+        entity_id=panel_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        notes=notes,
+    )
 
 
 def _panel_dict(p: DecisionSupportPanel) -> dict:
@@ -842,6 +871,7 @@ def create_decision_panel(
     db.add(panel)
     db.commit()
     db.refresh(panel)
+    _log_panel(db, current_user, org_id, panel.id, "decision_panel_generated")
     return _panel_dict(panel)
 
 
@@ -992,6 +1022,14 @@ def submit_review_step(
 
     db.commit()
     db.refresh(p)
+    _log_panel(
+        db,
+        current_user,
+        org_id,
+        panel_id,
+        f"decision_panel_{step_type.value}_{payload.decision.value}",
+        notes=payload.review_notes,
+    )
     return {
         "panel_id": panel_id,
         "step_recorded": step_type.value,

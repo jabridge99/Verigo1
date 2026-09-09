@@ -51,6 +51,7 @@ from app.models.risk_engine import (
     RiskScoreHistory,
 )
 from app.models.user import User
+from app.services import audit_service
 from app.services.control_effectiveness import governance_rating_to_score
 from app.services.risk_engine import (
     inherent_risk,
@@ -77,6 +78,35 @@ def _get_framework(org_id: str, db: Session) -> RiskFramework:
     if not fw:
         raise HTTPException(404, "Risk framework not found — complete onboarding first")
     return fw
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    notes: str = None,
+) -> None:
+    """
+    create_assessment()/submit_assessment()/approve_assessment() below
+    already write directly to AuditLog (app.models.audit_log, merged into
+    GET /audit/ -- see app/api/routes/audit.py), but framework configuration
+    (category weights, custom factors), factor scoring, and the mitigation
+    library had no audit coverage of any kind. AuditEventType has no values
+    for those, so this uses the free-text audit_service.log_action() path
+    (a second, also-merged table) instead of stretching that enum.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        notes=notes,
+    )
 
 
 def _get_run(run_id: str, org_id: str, db: Session) -> RiskAssessmentRun:
@@ -265,6 +295,7 @@ def update_category_weights(
     # Normalise
     fw.category_weights = {k: round(v / total, 4) for k, v in weights.items()}
     db.commit()
+    _log(db, current_user, "risk_framework", fw.id, "risk_category_weights_updated")
     return {"category_weights": fw.category_weights}
 
 
@@ -353,6 +384,7 @@ def add_custom_factor(
     db.add(factor)
     db.commit()
     db.refresh(factor)
+    _log(db, current_user, "risk_factor", factor.id, "risk_factor_added", notes=name)
     return factor
 
 
@@ -703,6 +735,14 @@ def score_factor(
 
     db.commit()
     db.refresh(fs)
+    _log(
+        db,
+        current_user,
+        "risk_factor_score",
+        fs.id,
+        "risk_factor_scored",
+        notes=comments,
+    )
     return {
         "factor_score_id": fs.id,
         "likelihood": fs.likelihood,
@@ -776,6 +816,13 @@ def update_narrative(
     if action_items is not None:
         run.action_items = action_items
     db.commit()
+    _log(
+        db,
+        current_user,
+        "risk_assessment_run",
+        run_id,
+        "risk_assessment_narrative_updated",
+    )
     return {"status": "updated"}
 
 
@@ -812,6 +859,14 @@ def add_mitigation(
     db.add(mit)
     db.commit()
     db.refresh(mit)
+    _log(
+        db,
+        current_user,
+        "risk_mitigation",
+        mit.id,
+        "risk_mitigation_added",
+        notes=mitigation_action,
+    )
     return mit
 
 
@@ -853,6 +908,14 @@ def update_mitigation(
         mit.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(mit)
+    _log(
+        db,
+        current_user,
+        "risk_mitigation",
+        mit.id,
+        "risk_mitigation_updated",
+        notes=completion_notes,
+    )
     return mit
 
 
@@ -1082,6 +1145,14 @@ def create_mitigation_library_item(
     db.add(item)
     db.commit()
     db.refresh(item)
+    _log(
+        db,
+        current_user,
+        "mitigation_library_item",
+        item.id,
+        "mitigation_library_item_created",
+        notes=name,
+    )
     return item
 
 
@@ -1117,4 +1188,11 @@ def update_mitigation_library_item(
         item.is_active = is_active
     db.commit()
     db.refresh(item)
+    _log(
+        db,
+        current_user,
+        "mitigation_library_item",
+        item.id,
+        "mitigation_library_item_updated",
+    )
     return item

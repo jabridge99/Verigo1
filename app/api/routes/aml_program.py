@@ -52,8 +52,37 @@ from app.models.aml_solution import (
     RiskAssessment,
 )
 from app.models.user import User
+from app.services import audit_service
 
 router = APIRouter(prefix="/aml-program", tags=["AML/CTF Program"])
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    notes: str = None,
+) -> None:
+    """
+    The AML/CTF Program document and its annual risk assessments are the
+    organisation's central compliance artefacts -- program activation,
+    annual review, and risk-assessment approval are exactly the kind of
+    decisions this codebase's audit trail exists to record, and had no
+    coverage at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        notes=notes,
+    )
+
 
 DISCLAIMER = (
     "This module provides AML/CTF Program document management only. "
@@ -436,6 +465,7 @@ def create_program(
     db.add(program)
     db.commit()
     db.refresh(program)
+    _log(db, current_user, "aml_program", program.id, "aml_program_created")
     return {
         "program": _program_dict(program),
         "required_sections": REQUIRED_SECTIONS,
@@ -456,6 +486,9 @@ def submit_for_review(
         raise HTTPException(409, "Only draft programs can be submitted for review.")
     program.status = ProgramStatus.under_review
     db.commit()
+    _log(
+        db, current_user, "aml_program", program.id, "aml_program_submitted_for_review"
+    )
     return {
         "program_id": program.id,
         "version": program.version,
@@ -499,6 +532,7 @@ def activate_program(
 
     db.commit()
     db.refresh(program)
+    _log(db, current_user, "aml_program", program.id, "aml_program_activated")
     return {
         "program": _program_dict(program),
         "message": f"Program v{program.version} activated. Previous version superseded.",
@@ -535,6 +569,14 @@ def record_annual_review(
 
     db.commit()
     db.refresh(program)
+    _log(
+        db,
+        current_user,
+        "aml_program",
+        program.id,
+        "aml_program_annual_review_recorded",
+        notes=f"changes_required={payload.changes_required}",
+    )
     return {
         "program_id": program.id,
         "version": program.version,
@@ -576,6 +618,13 @@ def update_austrac_details(
 
     db.commit()
     db.refresh(program)
+    _log(
+        db,
+        current_user,
+        "aml_program",
+        program.id,
+        "aml_program_austrac_details_updated",
+    )
     return {
         "program_id": program.id,
         "austrac_enrolment_date": program.austrac_enrolment_date,
@@ -651,6 +700,7 @@ def create_risk_assessment(
     db.add(assessment)
     db.commit()
     db.refresh(assessment)
+    _log(db, current_user, "risk_assessment", assessment.id, "risk_assessment_created")
     return {
         "assessment": _assessment_dict(assessment),
         "disclaimer": DISCLAIMER,
@@ -707,6 +757,7 @@ def update_risk_assessment(
 
     db.commit()
     db.refresh(assessment)
+    _log(db, current_user, "risk_assessment", assessment.id, "risk_assessment_updated")
     return {"assessment": _assessment_dict(assessment), "disclaimer": DISCLAIMER}
 
 
@@ -732,6 +783,9 @@ def complete_risk_assessment(
         raise HTTPException(409, "Assessment is already approved.")
     assessment.status = AssessmentStatus.completed
     db.commit()
+    _log(
+        db, current_user, "risk_assessment", assessment.id, "risk_assessment_completed"
+    )
     return {
         "assessment_id": assessment.id,
         "status": assessment.status.value,
@@ -771,6 +825,7 @@ def approve_risk_assessment(
     assessment.approved_at = now
     db.commit()
     db.refresh(assessment)
+    _log(db, current_user, "risk_assessment", assessment.id, "risk_assessment_approved")
     return {"assessment": _assessment_dict(assessment), "disclaimer": DISCLAIMER}
 
 
@@ -952,6 +1007,7 @@ def update_program(
 
     db.commit()
     db.refresh(program)
+    _log(db, current_user, "aml_program", program.id, "aml_program_updated")
     return {
         "program": _program_dict(program, True),
         "disclaimer": DISCLAIMER,
