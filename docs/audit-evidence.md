@@ -1,5 +1,26 @@
 # VeriGo — Audit & Evidence (Stage 11)
 
+> **Addendum (P29, most of the AML/CTF-relevant subset resolved — see
+> `PARKING_LOT.md`):** §3's "Not fixed this stage" list named seven files —
+> `retention.py`, `screening.py`, `independent_review.py`,
+> `board_reporting.py`, `monitoring.py`, `compliance_calendar.py`,
+> `onboarding.py` — as the highest-value remaining gaps. All seven now call
+> the central audit trail. Two corrections to this doc's original framing
+> surfaced doing that work: `retention.py` has no destructive/irreversible
+> action at all (`generate_purge_report()` is explicitly dry-run-only —
+> the "destructive/irreversible" framing below overstated it); and
+> `onboarding.py` already had its own audit trail (`OnboardingAuditLog`,
+> `GET /onboarding/sessions/{id}/audit`) that was never merged into the
+> central `GET /audit/` this doc describes, so onboarding events were
+> invisible from the one place described in §1 as "the" audit trail — now
+> also written to the central trail (entity_type `onboarding_session`)
+> alongside the pre-existing session-scoped one. The remaining ~28 files
+> P29 originally left untriaged are reparked as P33, since a few of them
+> (`risk_assessment.py`, `aml_program.py`, `professional_assessment.py`,
+> `rule_builder.py`, `examination_packs.py`, `customer_workflow.py`) look
+> AML/CTF-relevant on inspection despite not being named in the original
+> "commercial/infrastructure" bucket below.
+
 **Purpose:** Stage 11 asks VeriGo to be audit-ready: an audit log, an evidence repository, and history for compliance, risk, customers, cases, reports, and user activity — so a reporting entity can answer "what happened? when? who did it? why? what evidence supported the decision?" for anything in the system.
 
 **Headline finding:** the audit trail itself was, by this stage, already substantially real — Stages 8–10 each found and fixed a version of "this domain's mutating endpoints never wrote to the audit trail" (transaction monitoring, case management, regulatory reporting). Stage 11 found two more instances of the same gap (KYC decisions, transaction records) and, more importantly, found that the one place a human would actually go to read all of this — the audit trail page itself — was showing twelve fabricated demo entries whenever a real query came back empty, with a filter UI built around entity types that don't exist in the real data. Both fixed.

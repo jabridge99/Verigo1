@@ -38,10 +38,41 @@ from app.models.independent_review import (
     ReviewType,
 )
 from app.models.user import UserRole
+from app.services import audit_service
 
 log = logging.getLogger("tvg.independent_review")
 
 router = APIRouter(prefix="/independent-reviews", tags=["Independent Review"])
+
+
+def _log(
+    db: Session,
+    current_user,
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Independent review audit trail. The review/finding/recommendation/action
+    lifecycle is itself an AML/CTF Program governance record -- who raised a
+    finding, who accepted or rejected a recommendation, who signed off that
+    a remediation action was genuinely complete -- and had no audit coverage
+    at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=current_user.org_id,
+        after_state=after_state,
+        notes=notes,
+    )
+
 
 # ── REVIEW LIFECYCLE ──────────────────────────────────────────────────────────
 
@@ -380,6 +411,17 @@ def create_review(
     db.commit()
     db.refresh(review)
     log.info("review.created org=%s ref=%s", current_user.org_id, review.review_ref)
+    _log(
+        db,
+        current_user,
+        "independent_review",
+        review.id,
+        action="review_created",
+        after_state={
+            "review_ref": review.review_ref,
+            "review_type": review.review_type.value,
+        },
+    )
     return _review_dict(review)
 
 
@@ -443,10 +485,19 @@ def update_review(
     review = _get_review(db, current_user.org_id, review_id)
     if review.status == ReviewStatus.archived:
         raise HTTPException(409, "Archived reviews cannot be modified")
-    for field, value in body.model_dump(exclude_none=True).items():
+    changed = body.model_dump(exclude_none=True)
+    for field, value in changed.items():
         setattr(review, field, value)
     db.commit()
     db.refresh(review)
+    _log(
+        db,
+        current_user,
+        "independent_review",
+        review.id,
+        action="review_updated",
+        after_state={k: str(v) for k, v in changed.items()},
+    )
     return _review_dict(review)
 
 
@@ -482,6 +533,15 @@ def transition_review(
         review.review_ref,
         to_status,
     )
+    _log(
+        db,
+        current_user,
+        "independent_review",
+        review.id,
+        action="review_transitioned",
+        after_state={"status": review.status.value},
+        notes=notes,
+    )
     return _review_dict(review)
 
 
@@ -497,6 +557,13 @@ def board_acknowledge(
     review.board_acknowledged_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(review)
+    _log(
+        db,
+        current_user,
+        "independent_review",
+        review.id,
+        action="review_board_acknowledged",
+    )
     return _review_dict(review)
 
 
@@ -558,6 +625,18 @@ def create_finding(
         current_user.org_id,
         finding.finding_ref,
         finding.risk_rating,
+    )
+    _log(
+        db,
+        current_user,
+        "review_finding",
+        finding.id,
+        action="finding_created",
+        after_state={
+            "finding_ref": finding.finding_ref,
+            "risk_rating": finding.risk_rating.value,
+            "category": finding.category.value,
+        },
     )
 
     from app.models.automation_rule import RuleEventType
@@ -630,13 +709,22 @@ def update_finding(
     if finding.status in (FindingStatus.closed, FindingStatus.accepted_risk):
         raise HTTPException(409, "Closed findings cannot be modified")
     old_risk = finding.risk_rating
-    for field, value in body.model_dump(exclude_none=True).items():
+    changed = body.model_dump(exclude_none=True)
+    for field, value in changed.items():
         setattr(finding, field, value)
     db.flush()
     if body.risk_rating and body.risk_rating != old_risk:
         _recount_findings(db, review)
     db.commit()
     db.refresh(finding)
+    _log(
+        db,
+        current_user,
+        "review_finding",
+        finding.id,
+        action="finding_updated",
+        after_state={k: str(v) for k, v in changed.items()},
+    )
     return _finding_dict(finding)
 
 
@@ -660,6 +748,15 @@ def submit_finding_response(
     finding.status = FindingStatus.response_submitted
     db.commit()
     db.refresh(finding)
+    _log(
+        db,
+        current_user,
+        "review_finding",
+        finding.id,
+        action="finding_response_submitted",
+        after_state={"status": finding.status.value},
+        notes=management_response,
+    )
     return _finding_dict(finding)
 
 
@@ -680,6 +777,14 @@ def start_finding_remediation(
     finding.status = FindingStatus.in_remediation
     db.commit()
     db.refresh(finding)
+    _log(
+        db,
+        current_user,
+        "review_finding",
+        finding.id,
+        action="finding_remediation_started",
+        after_state={"status": finding.status.value},
+    )
     return _finding_dict(finding)
 
 
@@ -705,6 +810,15 @@ def close_finding(
     db.commit()
     db.refresh(finding)
     log.info("finding.closed org=%s ref=%s", current_user.org_id, finding.finding_ref)
+    _log(
+        db,
+        current_user,
+        "review_finding",
+        finding.id,
+        action="finding_closed",
+        after_state={"status": finding.status.value},
+        notes=closure_evidence,
+    )
     return _finding_dict(finding)
 
 
@@ -727,6 +841,15 @@ def accept_finding_risk(
     finding.closure_evidence = f"[RISK ACCEPTED] {rationale}"
     db.commit()
     db.refresh(finding)
+    _log(
+        db,
+        current_user,
+        "review_finding",
+        finding.id,
+        action="finding_risk_accepted",
+        after_state={"status": finding.status.value},
+        notes=rationale,
+    )
     return _finding_dict(finding)
 
 
@@ -775,6 +898,17 @@ def create_recommendation(
         current_user.org_id,
         rec.recommendation_ref,
     )
+    _log(
+        db,
+        current_user,
+        "review_recommendation",
+        rec.id,
+        action="recommendation_created",
+        after_state={
+            "recommendation_ref": rec.recommendation_ref,
+            "priority": rec.priority.value,
+        },
+    )
     return _rec_dict(rec)
 
 
@@ -809,10 +943,19 @@ def update_recommendation(
     rec = _get_recommendation(db, current_user.org_id, rec_id)
     if rec.status == RecommendationStatus.completed:
         raise HTTPException(409, "Completed recommendations cannot be modified")
-    for field, value in body.model_dump(exclude_none=True).items():
+    changed = body.model_dump(exclude_none=True)
+    for field, value in changed.items():
         setattr(rec, field, value)
     db.commit()
     db.refresh(rec)
+    _log(
+        db,
+        current_user,
+        "review_recommendation",
+        rec.id,
+        action="recommendation_updated",
+        after_state={k: str(v) for k, v in changed.items()},
+    )
     return _rec_dict(rec)
 
 
@@ -836,6 +979,14 @@ def accept_recommendation(
     rec.accepted_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(rec)
+    _log(
+        db,
+        current_user,
+        "review_recommendation",
+        rec.id,
+        action="recommendation_accepted",
+        after_state={"status": rec.status.value},
+    )
     return _rec_dict(rec)
 
 
@@ -862,6 +1013,15 @@ def reject_recommendation(
     rec.rejection_reason = rejection_reason
     db.commit()
     db.refresh(rec)
+    _log(
+        db,
+        current_user,
+        "review_recommendation",
+        rec.id,
+        action="recommendation_rejected",
+        after_state={"status": rec.status.value},
+        notes=rejection_reason,
+    )
     return _rec_dict(rec)
 
 
@@ -886,6 +1046,14 @@ def complete_recommendation(
     rec.status = RecommendationStatus.completed
     db.commit()
     db.refresh(rec)
+    _log(
+        db,
+        current_user,
+        "review_recommendation",
+        rec.id,
+        action="recommendation_completed",
+        after_state={"status": rec.status.value},
+    )
     return _rec_dict(rec)
 
 
@@ -939,6 +1107,17 @@ def create_action(
     db.commit()
     db.refresh(action)
     log.info("action.created org=%s ref=%s", current_user.org_id, action.action_ref)
+    _log(
+        db,
+        current_user,
+        "review_action",
+        action.id,
+        action="action_created",
+        after_state={
+            "action_ref": action.action_ref,
+            "action_type": action.action_type.value,
+        },
+    )
     return _action_dict(action)
 
 
@@ -977,10 +1156,19 @@ def update_action(
         raise HTTPException(
             409, f"Actions in '{action.status}' status cannot be modified"
         )
-    for field, value in body.model_dump(exclude_none=True).items():
+    changed = body.model_dump(exclude_none=True)
+    for field, value in changed.items():
         setattr(action, field, value)
     db.commit()
     db.refresh(action)
+    _log(
+        db,
+        current_user,
+        "review_action",
+        action.id,
+        action="action_updated",
+        after_state={k: str(v) for k, v in changed.items()},
+    )
     return _action_dict(action)
 
 
@@ -1004,6 +1192,14 @@ def start_action(
     action.status = ActionStatus.in_progress
     db.commit()
     db.refresh(action)
+    _log(
+        db,
+        current_user,
+        "review_action",
+        action.id,
+        action="action_started",
+        after_state={"status": action.status.value},
+    )
     return _action_dict(action)
 
 
@@ -1036,6 +1232,15 @@ def complete_action(
     db.commit()
     db.refresh(action)
     log.info("action.completed org=%s ref=%s", current_user.org_id, action.action_ref)
+    _log(
+        db,
+        current_user,
+        "review_action",
+        action.id,
+        action="action_completed",
+        after_state={"status": action.status.value},
+        notes=completion_evidence,
+    )
     return _action_dict(action)
 
 
@@ -1073,6 +1278,15 @@ def verify_action(
         action.action_ref,
         current_user.id,
     )
+    _log(
+        db,
+        current_user,
+        "review_action",
+        action.id,
+        action="action_verified",
+        after_state={"status": action.status.value},
+        notes=verified_notes,
+    )
     return _action_dict(action)
 
 
@@ -1098,6 +1312,15 @@ def cancel_action(
     action.cancellation_reason = cancellation_reason
     db.commit()
     db.refresh(action)
+    _log(
+        db,
+        current_user,
+        "review_action",
+        action.id,
+        action="action_cancelled",
+        after_state={"status": action.status.value},
+        notes=cancellation_reason,
+    )
     return _action_dict(action)
 
 

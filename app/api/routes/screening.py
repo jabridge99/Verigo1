@@ -57,11 +57,42 @@ from app.models.screening import (
     WalletRiskCategory,
 )
 from app.models.user import User
+from app.services import audit_service
 from app.services import billing_service as billing_svc
 from app.services.identity_verification_service import compute_identity_score
 from app.services.sanctions_screening import screen_name
 
 router = APIRouter(prefix="/screening", tags=["Screening Hub"])
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    org_id: Optional[str],
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Screening Hub audit trail. Sanctions/PEP/adverse-media/crypto-wallet
+    screening decisions -- and the identity-verification decision that
+    gates a customer's KYC status -- are exactly the "who did it, why"
+    record this platform's other AML/CTF domains already write.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state=after_state,
+        notes=notes,
+    )
+
 
 DISCLAIMER = (
     "Screening results are data inputs to the compliance workflow only. "
@@ -364,6 +395,22 @@ def run_screening(
     for r in created_records:
         db.refresh(r)
 
+    for r in created_records:
+        _log(
+            db,
+            current_user,
+            org_id,
+            "screening_record",
+            r.id,
+            action="screening_run",
+            after_state={
+                "customer_id": customer.id,
+                "screening_type": r.screening_type.value,
+                "status": r.status.value,
+                "match_count": r.match_count,
+            },
+        )
+
     if matched_record_ids:
         from app.models.automation_rule import RuleEventType
         from app.services.automation_engine import evaluate_automation_rules
@@ -655,6 +702,19 @@ def re_screen(
     db.add(new_record)
     db.commit()
     db.refresh(new_record)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "screening_record",
+        new_record.id,
+        action="screening_rescreened",
+        after_state={
+            "original_record_id": record_id,
+            "status": new_record.status.value,
+            "match_count": new_record.match_count,
+        },
+    )
     return {
         "message": "Re-screening record created.",
         "record": _record_dict(new_record),
@@ -758,6 +818,16 @@ def review_alert(
 
     db.commit()
     db.refresh(alert)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "screening_alert",
+        alert.id,
+        action=f"screening_alert_{action}",
+        after_state={"status": alert.status.value},
+        notes=payload.notes,
+    )
     return {
         "alert": _alert_dict(alert),
         "disclaimer": DISCLAIMER,
@@ -787,6 +857,15 @@ def assign_alert(
     alert.assigned_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(alert)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "screening_alert",
+        alert.id,
+        action="screening_alert_assigned",
+        after_state={"assigned_to": assigned_to},
+    )
     return _alert_dict(alert)
 
 
@@ -847,6 +926,19 @@ def batch_screen(
             records_created += 1
 
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "screening_batch",
+        f"batch_{uuid4().hex[:12]}",
+        action="screening_batch_run",
+        after_state={
+            "customer_ids": [c.id for c in customers],
+            "screening_types": [t.value for t in payload.screening_types],
+            "records_created": records_created,
+        },
+    )
     return {
         "customers_screened": len(customers),
         "records_created": records_created,
@@ -971,6 +1063,20 @@ async def screen_crypto_wallet(
     db.add(screening)
     db.commit()
     db.refresh(screening)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "crypto_wallet_screening",
+        screening.id,
+        action="crypto_wallet_screened",
+        after_state={
+            "customer_id": payload.customer_id,
+            "network": screening.network.value,
+            "risk_category": screening.risk_category.value,
+            "status": screening.status.value,
+        },
+    )
 
     return {
         "id": screening.id,
@@ -1063,6 +1169,19 @@ def record_adverse_media(
     db.add(result)
     db.commit()
     db.refresh(result)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "adverse_media_result",
+        result.id,
+        action="adverse_media_recorded",
+        after_state={
+            "customer_id": result.customer_id,
+            "category": result.category.value,
+            "headline": result.headline,
+        },
+    )
 
     return {
         "id": result.id,
@@ -1151,6 +1270,16 @@ def review_adverse_media(
 
     db.commit()
     db.refresh(result)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "adverse_media_result",
+        result.id,
+        action=f"adverse_media_{action}",
+        after_state={"review_status": result.review_status.value},
+        notes=notes,
+    )
     return {
         "id": result.id,
         "is_confirmed_match": result.is_confirmed_match,
@@ -1301,4 +1430,16 @@ def decide_customer_identity_score(
 
     db.commit()
     result["customer_status"] = customer.status.value
+    _log(
+        db,
+        current_user,
+        org_id,
+        "customer",
+        customer.id,
+        action="identity_score_decided",
+        after_state={
+            "decision": result["decision"],
+            "customer_status": customer.status.value,
+        },
+    )
     return result

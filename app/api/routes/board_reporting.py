@@ -33,11 +33,39 @@ from app.models.board_report import (
     ReportPeriod,
 )
 from app.models.user import UserRole
+from app.services import audit_service
 from app.services.board_reporting_service import generate_snapshot
 
 log = logging.getLogger("tvg.board_reporting")
 
 router = APIRouter(prefix="/board-reports", tags=["Board & Executive Reporting"])
+
+
+def _log(
+    db: Session,
+    current_user,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Board report audit trail. Who created, approved, and distributed a
+    report to the Board -- the entity's own governance record of what
+    its Board was told -- had no audit coverage at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="board_report",
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=current_user.org_id,
+        after_state=after_state,
+        notes=notes,
+    )
+
 
 # ── Status transitions ────────────────────────────────────────────────────────
 
@@ -237,6 +265,16 @@ def create_report(
         report.report_ref,
         report.report_type,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_created",
+        after_state={
+            "report_ref": report.report_ref,
+            "report_type": report.report_type.value,
+        },
+    )
     return _report_dict(report, include_snapshot=True)
 
 
@@ -274,6 +312,12 @@ def regenerate_snapshot(
         "board_report.snapshot_regenerated org=%s ref=%s",
         current_user.org_id,
         report.report_ref,
+    )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_snapshot_regenerated",
     )
     return _report_dict(report, include_snapshot=True)
 
@@ -329,10 +373,18 @@ def update_report(
         raise HTTPException(
             409, f"Reports in '{report.status}' status cannot be edited"
         )
-    for field, value in body.model_dump(exclude_none=True).items():
+    changed = body.model_dump(exclude_none=True)
+    for field, value in changed.items():
         setattr(report, field, value)
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_updated",
+        after_state={k: str(v) for k, v in changed.items()},
+    )
     return _report_dict(report)
 
 
@@ -359,6 +411,14 @@ def submit_for_review(
         "board_report.submitted_for_review org=%s ref=%s",
         current_user.org_id,
         report.report_ref,
+    )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_submitted_for_review",
+        after_state={"status": report.status.value},
+        notes=notes,
     )
     return _report_dict(report)
 
@@ -388,6 +448,14 @@ def approve_report(
         report.report_ref,
         current_user.id,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_approved",
+        after_state={"status": report.status.value},
+        notes=approval_notes,
+    )
     return _report_dict(report)
 
 
@@ -408,6 +476,14 @@ def return_to_draft(
     report.review_notes = review_notes
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_returned_to_draft",
+        after_state={"status": report.status.value},
+        notes=review_notes,
+    )
     return _report_dict(report)
 
 
@@ -439,6 +515,17 @@ def distribute_report(
         report.report_ref,
         body.distributed_to,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_distributed",
+        after_state={
+            "status": report.status.value,
+            "distributed_to": body.distributed_to,
+        },
+        notes=body.distribution_notes,
+    )
     return _report_dict(report)
 
 
@@ -454,6 +541,13 @@ def archive_report(
     report.status = BoardReportStatus.archived
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_archived",
+        after_state={"status": report.status.value},
+    )
     return _report_dict(report)
 
 
@@ -518,6 +612,17 @@ def create_new_version(
         current_user.org_id,
         new_report.report_ref,
         new_report.version,
+    )
+    _log(
+        db,
+        current_user,
+        new_report.id,
+        action="board_report_new_version",
+        after_state={
+            "report_ref": new_report.report_ref,
+            "version": new_report.version,
+        },
+        notes=f"Supersedes {report_id}",
     )
     return _report_dict(new_report, include_snapshot=True)
 

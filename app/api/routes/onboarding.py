@@ -37,6 +37,7 @@ from app.schemas.onboarding import (
     SessionSummary,
     StepSubmit,
 )
+from app.services import audit_service
 from app.services.bulk_import import generate_csv_template, parse_csv, parse_excel
 from app.services.onboarding_service import (
     ONBOARDING_STEPS,
@@ -52,6 +53,36 @@ from app.services.onboarding_service import (
 from app.services.tenant_scope import assert_tenant, scope_fields, scope_query
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
+
+
+def _log(
+    db: Session,
+    org_id: Optional[str],
+    entity_id: str,
+    action: str,
+    actor: str = "system",
+    actor_role: Optional[str] = None,
+    after_state: Optional[dict] = None,
+) -> None:
+    """
+    Central audit trail (entity_type "onboarding_session"), queryable via
+    GET /audit/. Separate from OnboardingAuditLog (this file's own
+    session-scoped step-by-step log, GET /onboarding/sessions/{id}/audit) --
+    that one is not merged into the central audit trail, so onboarding
+    events were invisible from the one place a compliance officer would
+    otherwise go to answer "what happened".
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="onboarding_session",
+        entity_id=entity_id,
+        actor=actor,
+        actor_role=actor_role,
+        organisation_id=org_id,
+        after_state=after_state,
+    )
+
 
 _READER = _require_roles(
     UserRole.admin,
@@ -87,6 +118,15 @@ def create_onboarding_session(
     )
     db.commit()
     db.refresh(session)
+    _log(
+        db,
+        session.organisation_id or session.industry_id,
+        session.session_id,
+        action="onboarding_session_created",
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        after_state={"applicant_email": session.applicant_email, "source": "manual"},
+    )
     return session
 
 
@@ -158,6 +198,15 @@ def trigger_reminder(
         raise HTTPException(404, "Session not found")
     assert_tenant(current_user, s.organisation_id, s.industry_id)
     send_reminder(db, s)
+    _log(
+        db,
+        s.organisation_id or s.industry_id,
+        s.session_id,
+        action="onboarding_reminder_sent",
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        after_state={"reminders_sent": s.reminders_sent},
+    )
     return {"sent": True, "reminders_sent": s.reminders_sent}
 
 
@@ -176,6 +225,15 @@ def cancel_onboarding_session(
     except ValueError as e:
         raise HTTPException(409, str(e))
     db.refresh(s)
+    _log(
+        db,
+        s.organisation_id or s.industry_id,
+        s.session_id,
+        action="onboarding_session_cancelled",
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        after_state={"status": s.status.value},
+    )
     return s
 
 
@@ -189,8 +247,17 @@ def delete_session(
     if not s:
         raise HTTPException(404, "Session not found")
     assert_tenant(current_user, s.organisation_id, s.industry_id)
+    org_id, session_id_val = s.organisation_id or s.industry_id, s.session_id
     db.delete(s)
     db.commit()
+    _log(
+        db,
+        org_id,
+        session_id_val,
+        action="onboarding_session_deleted",
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+    )
 
 
 def _merge_parse_errors(batch: ImportBatch, parse_errors: list) -> None:
@@ -230,6 +297,15 @@ async def import_csv(
     )
     _merge_parse_errors(batch, parse_errors)
     db.commit()
+    _log(
+        db,
+        scoped.get("organisation_id") or scoped.get("industry_id"),
+        batch.batch_id,
+        action="onboarding_batch_imported",
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        after_state={"source": "csv", "total_rows": batch.total_rows},
+    )
     return batch
 
 
@@ -256,6 +332,15 @@ async def import_excel(
     )
     _merge_parse_errors(batch, parse_errors)
     db.commit()
+    _log(
+        db,
+        scoped.get("organisation_id") or scoped.get("industry_id"),
+        batch.batch_id,
+        action="onboarding_batch_imported",
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        after_state={"source": "excel", "total_rows": batch.total_rows},
+    )
     return batch
 
 
@@ -339,6 +424,15 @@ def run_reminders(
     for s in due:
         send_reminder(db, s)
         sent += 1
+        _log(
+            db,
+            s.organisation_id or s.industry_id,
+            s.session_id,
+            action="onboarding_reminder_sent",
+            actor=current_user.email,
+            actor_role=current_user.role.value if current_user.role else None,
+            after_state={"reminders_sent": s.reminders_sent},
+        )
     return {"due": len(due), "sent": sent}
 
 
@@ -381,6 +475,14 @@ def portal_submit_step(token: str, payload: StepSubmit, db: Session = Depends(ge
         raise HTTPException(404, "Invalid invite link")
     advance_step(db, session, payload.step, payload.data)
     db.commit()
+    _log(
+        db,
+        session.organisation_id or session.industry_id,
+        session.session_id,
+        action="onboarding_step_submitted",
+        actor="applicant",
+        after_state={"step": payload.step, "completion_pct": session.completion_pct},
+    )
     return {
         "step": session.current_step,
         "completion_pct": session.completion_pct,
@@ -394,4 +496,12 @@ def portal_final_submit(token: str, db: Session = Depends(get_db)):
     if not session:
         raise HTTPException(404, "Invalid invite link")
     result = submit_onboarding(db, session)
+    _log(
+        db,
+        session.organisation_id or session.industry_id,
+        session.session_id,
+        action="onboarding_submitted",
+        actor="applicant",
+        after_state={"status": session.status.value},
+    )
     return result
