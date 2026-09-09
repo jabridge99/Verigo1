@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   Briefcase, AlertTriangle, CheckCircle, Clock, Plus,
   Search, RefreshCw, Eye, ChevronRight, User, FileText,
@@ -72,6 +73,14 @@ const OBLIGATIONS = [
 
 type Tab = "cases" | "create" | "calendar" | "overview";
 
+interface LinkedAlert {
+  id: string;
+  alert_ref: string;
+  category: string;
+  severity: string;
+  status: string;
+}
+
 export default function MLRODashboard() {
   const [tab, setTab] = useState<Tab>("overview");
   const [cases, setCases] = useState<Case[]>([]);
@@ -83,6 +92,7 @@ export default function MLRODashboard() {
   const [closeForm, setCloseForm] = useState<{
     status: string; outcome: string; closure_reason: string; outcome_notes: string;
   } | null>(null);
+  const [linkedAlerts, setLinkedAlerts] = useState<LinkedAlert[]>([]);
 
   const showToast = (type: "success" | "error", msg: string) => {
     setToast({ type, msg }); setTimeout(() => setToast(null), 4000);
@@ -99,6 +109,20 @@ export default function MLRODashboard() {
 
   useEffect(() => { fetchCases(); }, [fetchCases]);
   useEffect(() => { setCloseForm(null); }, [selected?.id]);
+
+  useEffect(() => {
+    if (!selected) { setLinkedAlerts([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/api/v1/cases/${selected.id}/alerts`, { credentials: "include" });
+        if (!cancelled) setLinkedAlerts(res.ok ? await res.json() : []);
+      } catch {
+        if (!cancelled) setLinkedAlerts([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selected?.id]);
 
   const updateStatus = async (caseId: string, status: string) => {
     try {
@@ -395,7 +419,7 @@ export default function MLRODashboard() {
                     {[
                       { label: "Assigned to",  value: selected.assigned_to || "Unassigned" },
                       { label: "Customer ID",  value: `CUST-${selected.customer_id}` },
-                      { label: "Linked alerts",value: selected.alert_ids?.length ? selected.alert_ids.join(", ") : "None" },
+                      { label: "Linked alerts",value: linkedAlerts.length ? `${linkedAlerts.length} alert${linkedAlerts.length > 1 ? "s" : ""}` : "None" },
                       { label: "Opened",       value: selected.created_at ? new Date(selected.created_at).toLocaleDateString("en-AU") : "—" },
                       ...(selected.closed_at ? [{ label: "Closed", value: new Date(selected.closed_at).toLocaleDateString("en-AU") }] : []),
                       ...(selected.outcome ? [{ label: "Outcome", value: selected.outcome.replace(/_/g, " ") }] : []),
@@ -407,6 +431,22 @@ export default function MLRODashboard() {
                       </div>
                     ))}
                   </div>
+
+                  {linkedAlerts.length > 0 && (
+                    <div className="border-t border-navy-700 pt-4 space-y-2">
+                      <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Linked alerts</div>
+                      <div className="space-y-1.5">
+                        {linkedAlerts.map(a => (
+                          <Link key={a.id} href={`/monitoring?customer=${selected.customer_id ?? ""}`}
+                            className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-navy-700 bg-navy-900/40 hover:border-brand-500/40 transition-colors text-xs">
+                            <span className="font-mono text-slate-400">{a.alert_ref}</span>
+                            <span className="text-slate-300 capitalize">{a.category.replace(/_/g, " ")}</span>
+                            <span className={clsx("px-2 py-0.5 rounded-full font-medium border capitalize", SEV_COLOR[a.severity] || "")}>{a.severity}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="border-t border-navy-700 pt-4">
                     <div className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-3">Actions</div>

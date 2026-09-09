@@ -15,8 +15,15 @@ Roles:
   POST /cases/{id}/evidence — compliance+
   GET  /cases/{id}/evidence — analyst+
   POST /cases/{id}/link-alert — compliance+
+  GET  /cases/{id}/alerts — analyst+
   POST /cases/{id}/smr/consider — mlro+
   POST /cases/{id}/smr/lodge — mlro+
+
+Every state-changing action here is written to the audit trail
+(app.services.audit_service.log_action) -- entity_type="case", so the full
+"who did what, when" history for a case is queryable via GET /audit/ by
+filtering entity_type=case / entity_id=<case_id>, same as every other
+mutable AML/CTF record in this platform (customers, alerts, reports).
 
 DISCLAIMER: The platform provides case management tooling only. Decisions to
 lodge Suspicious Matter Reports, refer matters to law enforcement, or take
@@ -64,8 +71,33 @@ from app.schemas.case import (
     SMRConsiderRequest,
     SMRLodgeRequest,
 )
+from app.schemas.monitoring import AlertOut
+from app.services import audit_service
 
 router = APIRouter(prefix="/cases", tags=["Case Management"])
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    org_id: str,
+    case_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="case",
+        entity_id=case_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state=after_state,
+        notes=notes,
+    )
+
 
 DISCLAIMER = (
     "The platform provides case management tooling only. Decisions to lodge "
@@ -161,6 +193,14 @@ def create_case(
 
     db.commit()
     db.refresh(case)
+    _log(
+        db,
+        current_user,
+        org_id,
+        case_id,
+        action="case_opened",
+        after_state={"title": case.title, "severity": case.severity.value},
+    )
     return case
 
 
@@ -246,7 +286,8 @@ def update_case(
     if case.status in CLOSED_STATUSES:
         raise HTTPException(status_code=409, detail="Closed cases cannot be modified.")
 
-    for k, v in payload.model_dump(exclude_none=True).items():
+    changed_fields = payload.model_dump(exclude_none=True)
+    for k, v in changed_fields.items():
         setattr(case, k, v)
 
     # Recalculate overdue
@@ -256,6 +297,14 @@ def update_case(
     case.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(case)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_updated",
+        after_state={k: str(v) for k, v in changed_fields.items()},
+    )
     return case
 
 
@@ -273,6 +322,14 @@ def assign_case(
     case.assigned_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(case)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_assigned",
+        after_state={"assigned_to": payload.assign_to},
+    )
     return case
 
 
@@ -295,6 +352,15 @@ def escalate_case(
     case.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(case)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_escalated",
+        after_state={"escalated_to": payload.escalate_to},
+        notes=payload.escalation_reason,
+    )
     return case
 
 
@@ -317,10 +383,20 @@ def transition_status(
             detail=f"Cannot transition from {case.status.value} to {payload.new_status.value}.",
         )
 
+    old_status = case.status.value
     case.status = payload.new_status
     case.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(case)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_status_changed",
+        after_state={"from": old_status, "to": case.status.value},
+        notes=payload.reason,
+    )
     return case
 
 
@@ -357,6 +433,15 @@ def close_case(
     case.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(case)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_closed",
+        after_state={"status": case.status.value, "outcome": case.outcome.value},
+        notes=payload.closure_reason,
+    )
     return case
 
 
@@ -398,6 +483,23 @@ def add_note(
     db.add(note)
     db.commit()
     db.refresh(note)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_note_added",
+        after_state={
+            "note_type": note.note_type.value
+            if hasattr(note.note_type, "value")
+            else str(note.note_type),
+            "is_confidential": note.is_confidential,
+        },
+        # Never write note content itself into the audit trail -- confidential
+        # / legally-privileged notes are access-restricted at the note level
+        # (see the check above); the audit entry must not become a side
+        # channel that leaks that content to a broader audience.
+    )
     return note
 
 
@@ -446,6 +548,20 @@ def add_evidence(
     db.add(evidence)
     db.commit()
     db.refresh(evidence)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_evidence_added",
+        after_state={
+            "evidence_id": evidence.id,
+            "evidence_type": evidence.evidence_type.value
+            if hasattr(evidence.evidence_type, "value")
+            else str(evidence.evidence_type),
+            "file_name": evidence.file_name,
+        },
+    )
     return evidence
 
 
@@ -468,7 +584,7 @@ def verify_evidence(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    _get_case_or_404(case_id, org_id_for(current_user), db)
+    case = _get_case_or_404(case_id, org_id_for(current_user), db)
 
     ev = (
         db.query(CaseEvidence)
@@ -486,6 +602,14 @@ def verify_evidence(
     ev.verified_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(ev)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_evidence_verified",
+        after_state={"evidence_id": ev.id},
+    )
     return ev
 
 
@@ -526,8 +650,44 @@ def link_alert(
     )
     db.add(link)
     db.commit()
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_alert_linked",
+        after_state={"alert_id": payload.alert_id},
+    )
 
     return {"case_id": case_id, "alert_id": payload.alert_id, "linked": True}
+
+
+@router.get("/{case_id}/alerts", response_model=list[AlertOut])
+def list_case_alerts(
+    case_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    The alerts linked to this case (via link-alert at creation, /link-alert,
+    or /alerts/{alert_id}/create-case). CaseAlert links have existed since
+    the case-management API was first built, but nothing ever read them back
+    -- a case could be created from, or linked to, an alert with no way for
+    an investigator to see which alert(s) actually drove it from the case
+    itself, undermining the "review alerts" step of the investigation
+    workflow this stage requires.
+    """
+    from app.models.monitoring import TransactionAlert
+
+    _get_case_or_404(case_id, org_id_for(current_user), db)
+
+    return (
+        db.query(TransactionAlert)
+        .join(CaseAlert, CaseAlert.alert_id == TransactionAlert.id)
+        .filter(CaseAlert.case_id == case_id)
+        .order_by(CaseAlert.added_at.asc())
+        .all()
+    )
 
 
 # ── SMR Workflow ──────────────────────────────────────────────────────────────
@@ -562,6 +722,15 @@ def smr_consider(
     case.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(case)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_smr_considered",
+        after_state={"proceed_to_lodge": payload.proceed_to_lodge},
+        notes=payload.smr_notes,
+    )
     return case
 
 
@@ -597,4 +766,12 @@ def smr_lodge(
     case.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(case)
+    _log(
+        db,
+        current_user,
+        case.org_id,
+        case_id,
+        action="case_smr_lodged",
+        after_state={"smr_reference": payload.smr_reference},
+    )
     return case
