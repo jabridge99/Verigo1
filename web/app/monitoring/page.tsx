@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   AlertTriangle, ShieldAlert, Activity, BarChart3,
   RefreshCw, CheckCircle, XCircle, ArrowUpCircle, Search, Eye, FilePlus2, Scale, FileText,
@@ -79,22 +79,9 @@ const TYPE_LABELS: Record<string, string> = {
   pep_transaction: "PEP Transaction", rule_triggered: "Custom Rule",
 };
 
-const DEMO_ALERTS: Alert[] = [
-  { id: "1", alert_id: "ALT-DEMO0001", transaction_id: "1", customer_id: "1", alert_type: "sanctions_match", severity: "critical", status: "open", description: "Counterparty 'Petrov Trading LLC' matched on OFAC SDN sanctions watchlist.", is_resolved: 0, created_at: new Date(Date.now() - 300000).toISOString() },
-  { id: "2", alert_id: "ALT-DEMO0002", transaction_id: "2", customer_id: "2", alert_type: "large_transaction", severity: "high", status: "under_review", description: "Transaction AUD $45,000.00 meets or exceeds the CTR threshold of $10,000. AUSTRAC reporting may be required.", is_resolved: 0, assigned_to: "compliance@firm.com.au", created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: "3", alert_id: "ALT-DEMO0003", transaction_id: "3", customer_id: "3", alert_type: "structuring", severity: "high", status: "open", description: "4 transactions totalling AUD $38,200 detected near the CTR threshold within 24 hours — possible structuring.", is_resolved: 0, created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: "4", alert_id: "ALT-DEMO0004", transaction_id: "4", customer_id: "1", alert_type: "cross_border", severity: "high", status: "open", description: "International funds transfer instruction (IFTI) detected to/from IR. AUSTRAC IFTI report may be required.", is_resolved: 0, created_at: new Date(Date.now() - 10800000).toISOString() },
-  { id: "5", alert_id: "ALT-DEMO0005", transaction_id: "5", customer_id: "4", alert_type: "velocity_breach", severity: "medium", status: "open", description: "Velocity breach (24h): 18 transactions totalling AUD $72,400 exceed thresholds (15 txns / $50,000).", is_resolved: 0, created_at: new Date(Date.now() - 14400000).toISOString() },
-  { id: "6", alert_id: "ALT-DEMO0006", transaction_id: "6", customer_id: "5", alert_type: "pep_transaction", severity: "high", status: "escalated", description: "Transaction of AUD $25,000.00 by a Politically Exposed Person (PEP). Enhanced due diligence required.", is_resolved: 0, created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: "7", alert_id: "ALT-DEMO0007", transaction_id: "7", customer_id: "2", alert_type: "high_risk_country", severity: "medium", status: "dismissed", description: "Counterparty country RU is on FATF/AUSTRAC high-risk jurisdiction list.", is_resolved: 1, created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: "8", alert_id: "ALT-DEMO0008", transaction_id: "8", customer_id: "3", alert_type: "rule_triggered", severity: "medium", status: "resolved", description: "Custom rule triggered: 'Crypto withdrawal > $5,000'. Action: flag.", rule_name: "Crypto withdrawal > $5,000", is_resolved: 1, created_at: new Date(Date.now() - 259200000).toISOString() },
-];
-
-const DEMO_STATS: Stats = {
-  total_alerts: 8, open_alerts: 5, smr_candidates: 1,
-  by_severity: { critical: 1, high: 4, medium: 3, low: 0 },
-  by_type: { large_transaction: 1, structuring: 1, cross_border: 1, sanctions_match: 1, velocity_breach: 1, pep_transaction: 1, high_risk_country: 1, rule_triggered: 1 },
-  by_status: { open: 4, under_review: 1, escalated: 1, dismissed: 1, resolved: 1 },
+const EMPTY_STATS: Stats = {
+  total_alerts: 0, open_alerts: 0, smr_candidates: 0,
+  by_severity: {}, by_type: {}, by_status: {},
 };
 
 type Tab = "queue" | "stats" | "create" | "simulate";
@@ -108,11 +95,12 @@ export default function MonitoringDashboardPage() {
 }
 
 function MonitoringDashboard() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const customerParam = searchParams.get("customer") || "";
   const [tab, setTab] = useState<Tab>(searchParams.get("action") === "new" ? "create" : "queue");
-  const [alerts, setAlerts] = useState<Alert[]>(DEMO_ALERTS);
-  const [stats, setStats] = useState<Stats>(DEMO_STATS);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -131,49 +119,68 @@ function MonitoringDashboard() {
         fetch(`${API}/api/v1/alerts?limit=200`, { credentials: "include" }),
         fetch(`${API}/api/v1/alerts/dashboard`, { credentials: "include" }),
       ]);
-      if (aRes.ok) {
-        const d = await aRes.json();
-        if (d.length) {
-          const mapped = d.map(mapAlert);
-          setAlerts(mapped);
-          const byType: Record<string, number> = {};
-          for (const a of mapped) byType[a.alert_type] = (byType[a.alert_type] || 0) + 1;
-          setStats(prev => ({ ...prev, by_type: byType }));
-        }
-      }
-      if (sRes.ok) {
-        const d = await sRes.json();
-        if (d.total_alerts) setStats(prev => ({ ...prev, total_alerts: d.total_alerts, open_alerts: d.open_alerts, smr_candidates: d.smr_candidates, by_severity: d.by_severity, by_status: d.by_status }));
-      }
-    } catch {}
+      if (!aRes.ok || !sRes.ok) { showToast("error", "Failed to load alerts"); return; }
+      const d = await aRes.json();
+      const mapped = d.map(mapAlert);
+      setAlerts(mapped);
+      const byType: Record<string, number> = {};
+      for (const a of mapped) byType[a.alert_type] = (byType[a.alert_type] || 0) + 1;
+      const sd = await sRes.json();
+      setStats({
+        total_alerts: sd.total_alerts ?? 0,
+        open_alerts: sd.open_alerts ?? 0,
+        smr_candidates: sd.smr_candidates ?? 0,
+        by_severity: sd.by_severity ?? {},
+        by_type: byType,
+        by_status: sd.by_status ?? {},
+      });
+    } catch {
+      showToast("error", "Failed to load alerts");
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const doAction = async (action: "resolve" | "dismiss" | "escalate", alertId: string) => {
-    const statusMap: Record<string, string> = { resolve: "resolved", dismiss: "dismissed", escalate: "escalated" };
     try {
-      if (action === "escalate") {
-        await fetch(`${API}/api/v1/alerts/${alertId}/escalate`, {
-          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." }),
-        });
-      } else {
-        await fetch(`${API}/api/v1/alerts/${alertId}/review`, {
-          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            resolution: action === "resolve" ? "cleared" : "dismissed",
-            review_notes: actionNote || (action === "resolve" ? "Reviewed and cleared." : "Dismissed — false positive."),
-          }),
-        });
-      }
-    } catch {}
-    setAlerts(prev => prev.map(a =>
-      a.id === alertId ? { ...a, status: statusMap[action], is_resolved: action !== "escalate" ? 1 : 0 } : a
-    ));
-    setSelected(null);
-    setActionNote("");
-    showToast("success", `Alert ${action}d`);
+      const res = action === "escalate"
+        ? await fetch(`${API}/api/v1/alerts/${alertId}/escalate`, {
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." }),
+          })
+        : await fetch(`${API}/api/v1/alerts/${alertId}/review`, {
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              resolution: action === "resolve" ? "cleared" : "dismissed",
+              review_notes: actionNote || (action === "resolve" ? "Reviewed and cleared." : "Dismissed — false positive."),
+            }),
+          });
+      if (!res.ok) { showToast("error", `Failed to ${action} alert`); return; }
+      const updated = mapAlert(await res.json());
+      setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
+      setSelected(null);
+      setActionNote("");
+      showToast("success", `Alert ${action}d`);
+    } catch {
+      showToast("error", `Failed to ${action} alert`);
+    }
+  };
+
+  const createCaseFromAlert = async (alert: Alert) => {
+    try {
+      const res = await fetch(
+        `${API}/api/v1/alerts/${alert.id}/create-case`,
+        { method: "POST", credentials: "include" }
+      );
+      if (!res.ok) { showToast("error", "Failed to create case"); return; }
+      const body = await res.json();
+      setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, status: "escalated" } : a));
+      setSelected(null);
+      showToast("success", body.message || `${body.case_ref} created`);
+      router.push("/mlro");
+    } catch {
+      showToast("error", "Failed to create case");
+    }
   };
 
   const filtered = alerts.filter(a => {
@@ -423,7 +430,9 @@ function MonitoringDashboard() {
             <div className="border-t border-navy-700 pt-4 space-y-2">
               <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
               <QuickActions actions={[
-                { label: "Create Case", href: `/mlro?customer=${selected.customer_id ?? ""}&action=new-case&alert=${selected.alert_id}`, icon: Scale },
+                ...(selected.is_resolved
+                  ? []
+                  : [{ label: "Create Case", onClick: () => createCaseFromAlert(selected), icon: Scale }]),
                 { label: "File Report", href: `/reporting?customer=${selected.customer_id ?? ""}&action=new&alert=${selected.alert_id}`, icon: FileText },
               ]} />
             </div>
