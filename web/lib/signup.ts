@@ -155,6 +155,37 @@ export async function generateAmlProgram(orgId: string): Promise<AmlProgram> {
   return asJson(r)
 }
 
+// The organisation's real AML/CTF Program document (app/api/routes/aml_program.py),
+// auto-drafted from the industry template as soon as an industry is selected --
+// distinct from the AmlProgram/generateAmlProgram() checklist above, which is a
+// separate, versioned deliverable with its own export/QR-verification workflow
+// (see web/app/aml-program/page.tsx). This document has no preview/paywall concept.
+export interface AmlProgramSectionCompletion {
+  sections: Record<string, boolean>
+  completed: number
+  total: number
+  completion_pct: number
+}
+
+export interface AmlProgramDocument {
+  id: string
+  status: string
+  version: number
+  risk_appetite?: string
+  section_completion: AmlProgramSectionCompletion
+}
+
+// Uses /versions (not GET /aml-program, which only returns an *active*
+// program) because a freshly-seeded program is still a draft at this point
+// in onboarding -- nobody has reviewed/activated it yet. /versions returns
+// every version regardless of status, newest first, so the most recent one
+// is the org's real, just-seeded program document.
+export async function getLatestAmlProgramDocument(): Promise<AmlProgramDocument | null> {
+  const r = await apiFetch(`${API}/api/v1/aml-program/versions?page_size=1`, { credentials: 'include' })
+  const data = await asJson(r)
+  return data.versions?.[0] ?? null
+}
+
 export interface RiskFactor {
   factor: string
   label: string

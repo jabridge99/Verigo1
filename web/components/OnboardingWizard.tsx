@@ -10,10 +10,24 @@ import {
   generateRiskAssessment,
   acknowledgeAmlAccountability,
   createFirstCustomer,
+  getLatestAmlProgramDocument,
   type AmlProgram,
   type RiskAssessment,
   type FirstCustomerInput,
+  type AmlProgramDocument,
 } from '@/lib/signup'
+
+// Human-readable labels for a handful of the AML program document's sections
+// (app/api/routes/aml_program.py's section_completion), shown as highlights
+// rather than all ~22 -- enough to give a sense of what was drafted.
+const PROGRAM_SECTION_HIGHLIGHTS: { key: string; label: string }[] = [
+  { key: 'designated_services', label: 'Designated services' },
+  { key: 'cdd_individuals', label: 'Customer due diligence' },
+  { key: 'transaction_monitoring', label: 'Transaction monitoring' },
+  { key: 'sanctions_procedures', label: 'Sanctions & PEP screening' },
+  { key: 'smr_procedures', label: 'Suspicious matter reporting' },
+  { key: 'independent_review', label: 'Independent review' },
+]
 
 type Step =
   | 'industry'
@@ -74,6 +88,7 @@ export default function OnboardingWizard() {
   const [officerName, setOfficerName] = useState('')
   const [officerEmail, setOfficerEmail] = useState('')
   const [program, setProgram] = useState<AmlProgram | null>(null)
+  const [programDoc, setProgramDoc] = useState<AmlProgramDocument | null>(null)
   const [assessment, setAssessment] = useState<RiskAssessment | null>(null)
   const [accountabilityAck, setAccountabilityAck] = useState(false)
   const [ackSaving, setAckSaving] = useState(false)
@@ -147,8 +162,17 @@ export default function OnboardingWizard() {
     try {
       await updateOrganisation(orgId, { risk_profile: profile })
       setStep('generating')
+      // Keeps the versioned deliverable (export/QR-verification, see the
+      // dedicated AML Program page) in sync in the background; the wizard
+      // itself now shows the real program document generated from industry
+      // selection instead of this one's preview/locked-item list.
       const generated = await generateAmlProgram(orgId)
       setProgram(generated)
+      try {
+        setProgramDoc(await getLatestAmlProgramDocument())
+      } catch {
+        setProgramDoc(null)
+      }
       setStep('program')
     } catch (err: any) {
       setError(err.message ?? 'Failed to generate AML program')
@@ -300,24 +324,31 @@ export default function OnboardingWizard() {
             <CheckCircle2 className="w-6 h-6 text-green-500" />
             <h2 className="text-xl font-bold text-slate-900">Your AML/CTF program is ready</h2>
           </div>
-          <p className="text-sm text-slate-500 mb-4">
-            {program.total_items ?? program.items.length} controls generated for a {program.risk_profile}-risk profile.
-          </p>
-          <ul className="space-y-2 max-h-56 overflow-y-auto mb-6">
-            {program.items.map((item, idx) => (
-              <li key={`${item.category}-${idx}`} className={`flex items-start gap-2 text-sm ${item.locked ? 'text-slate-400' : 'text-slate-700'}`}>
-                {item.locked ? (
-                  <Lock className="w-4 h-4 text-slate-300 flex-shrink-0 mt-0.5" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                )}
-                <span>{item.locked ? `${item.category} — upgrade to unlock` : item.title}</span>
-              </li>
-            ))}
-          </ul>
-          {program.is_preview && (
-            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
-              This is a preview. Upgrade your plan to unlock all {program.total_items} controls.
+          {programDoc ? (
+            <>
+              <p className="text-sm text-slate-500 mb-4">
+                {programDoc.section_completion.completed} of {programDoc.section_completion.total} program
+                sections drafted from your industry's compliance pack.
+              </p>
+              <ul className="space-y-2 mb-6">
+                {PROGRAM_SECTION_HIGHLIGHTS.map(({ key, label }) => {
+                  const done = !!programDoc.section_completion.sections[key]
+                  return (
+                    <li key={key} className={`flex items-start gap-2 text-sm ${done ? 'text-slate-700' : 'text-slate-400'}`}>
+                      <CheckCircle2 className={`w-4 h-4 flex-shrink-0 mt-0.5 ${done ? 'text-green-500' : 'text-slate-300'}`} />
+                      <span>{label}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+              <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-4">
+                Your compliance officer can review and customise the full program in the AML Program area
+                once you're set up.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500 mb-6">
+              {program.total_items ?? program.items.length} controls generated for a {program.risk_profile}-risk profile.
             </p>
           )}
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
