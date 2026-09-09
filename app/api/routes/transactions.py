@@ -82,7 +82,7 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    """Record a new transaction. Risk scoring and monitoring are handled separately."""
+    """Record a new transaction. Automatically runs the monitoring engine against it."""
     org_id = org_id_for(current_user)
 
     # Verify customer belongs to org
@@ -146,6 +146,15 @@ def create_transaction(
         transaction_context(txn),
         triggered_by=current_user.id,
     )
+
+    # Real monitoring pipeline (MonitoringRule + behaviour-signal scoring --
+    # distinct from the automation rules above). Was never actually called
+    # here despite this route's own /run-monitoring sibling endpoint
+    # docstring claiming it happens "automatically...in production" --
+    # every transaction sat unscored unless something separately called
+    # that endpoint afterward.
+    run_monitoring(txn, customer, db)
+    db.commit()
 
     return txn
 
@@ -224,8 +233,9 @@ def run_monitoring_on_transaction(
 ):
     """
     Manually trigger the monitoring engine against a specific transaction.
-    This is automatically triggered on transaction creation in production;
-    this endpoint supports re-evaluation and backfill use cases.
+    This runs automatically on transaction creation (POST /transactions);
+    this endpoint supports re-evaluation and backfill use cases (e.g. after
+    a rule is edited, or for transactions imported before this existed).
 
     DISCLAIMER: Alerts generated are indicators for human review only.
     """
