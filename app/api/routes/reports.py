@@ -9,6 +9,15 @@ Role permissions:
   - mlro+         : approve, submit, acknowledge, reject
   - Maker-checker : reviewer ≠ approver enforced on all regulatory reports
 
+Every draft/review/approve/sign-off/submit/acknowledge/reject/redraft action
+on every report type is written to the audit trail (_log(), entity_type
+ifti_report/ttr_report/smr_report) -- queryable via GET /audit/. Previously
+only "submit" was audited; see docs/regulatory-reporting.md.
+
+TTR and SMR now both have a /reject endpoint (mirroring IFTI's, which
+already existed) -- their redraft endpoints guard on status == rejected,
+but nothing could ever set that status before this fix.
+
 DISCLAIMER: This API provides compliance workflow tooling only.
 All decisions to lodge reports with AUSTRAC remain with the reporting entity.
 """
@@ -66,6 +75,36 @@ from app.services.ttr_service import (
 )
 
 router = APIRouter(prefix="/reports", tags=["Regulatory Reports"])
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    org_id: str,
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Regulatory-report audit trail. Stage 10 explicitly requires every report
+    to record who created it, when, what changed, and who approved it -- most
+    of that maker-checker chain (draft, review, approve, MLRO sign-off,
+    acknowledge, reject, redraft) was previously unaudited; only the final
+    "submit" step was. See docs/regulatory-reporting.md.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state=after_state,
+        notes=notes,
+    )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -190,6 +229,15 @@ def generate_ifti(
     db.add(report)
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ifti_report",
+        report.id,
+        action="ifti_drafted",
+        after_state={"transaction_id": txn_id, "direction": report.direction.value},
+    )
     return _ifti_dict(report)
 
 
@@ -224,12 +272,21 @@ def update_ifti(
         "acknowledged_at",
         "created_at",
     }
-    for k, v in payload.items():
-        if k not in _PROTECTED:
-            setattr(r, k, v)
+    changed_fields = {k: v for k, v in payload.items() if k not in _PROTECTED}
+    for k, v in changed_fields.items():
+        setattr(r, k, v)
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(r)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ifti_report",
+        r.id,
+        action="ifti_updated",
+        after_state={k: str(v) for k, v in changed_fields.items()},
+    )
     return _ifti_dict(r)
 
 
@@ -249,6 +306,15 @@ def review_ifti(
     r.reviewed_by = current_user.id
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ifti_report",
+        r.id,
+        action="ifti_reviewed",
+        after_state={"status": r.status.value},
+    )
     return {
         "report_id": report_id,
         "status": r.status.value,
@@ -274,6 +340,15 @@ def approve_ifti(
     r.approved_at = datetime.now(timezone.utc)
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ifti_report",
+        r.id,
+        action="ifti_approved",
+        after_state={"status": r.status.value},
+    )
     return {
         "report_id": report_id,
         "status": r.status.value,
@@ -365,6 +440,15 @@ def acknowledge_ifti(
         r.submission_reference = acknowledgement_ref
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ifti_report",
+        r.id,
+        action="ifti_acknowledged",
+        after_state={"status": r.status.value},
+    )
     return {"report_id": report_id, "status": r.status.value}
 
 
@@ -381,6 +465,16 @@ def reject_ifti(
     r.rejected_reason = reason
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ifti_report",
+        r.id,
+        action="ifti_rejected",
+        after_state={"status": r.status.value},
+        notes=reason,
+    )
     return {"report_id": report_id, "status": r.status.value}
 
 
@@ -444,6 +538,15 @@ def generate_ttr(
     db.add(report)
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ttr_report",
+        report.id,
+        action="ttr_drafted",
+        after_state={"transaction_id": txn_id},
+    )
     return _ttr_dict(report)
 
 
@@ -492,6 +595,15 @@ def auto_draft_ttr(
     db.add(report)
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ttr_report",
+        report.id,
+        action="ttr_drafted",
+        after_state={"transaction_id": txn_id, "industry_type": industry_type.value},
+    )
     return _ttr_dict(report)
 
 
@@ -569,7 +681,8 @@ def update_ttr(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_ttr_or_404(report_id, org_id, db)
     _assert_editable(r, "TTR report")
     _PROTECTED = {
         "id",
@@ -583,12 +696,21 @@ def update_ttr(
         "acknowledged_at",
         "created_at",
     }
-    for k, v in payload.items():
-        if k not in _PROTECTED:
-            setattr(r, k, v)
+    changed_fields = {k: v for k, v in payload.items() if k not in _PROTECTED}
+    for k, v in changed_fields.items():
+        setattr(r, k, v)
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(r)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ttr_report",
+        r.id,
+        action="ttr_updated",
+        after_state={k: str(v) for k, v in changed_fields.items()},
+    )
     return _ttr_dict(r)
 
 
@@ -598,13 +720,23 @@ def review_ttr(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_ttr_or_404(report_id, org_id, db)
     if r.status != ReportStatus.draft:
         raise HTTPException(409, f"Report must be draft (current: {r.status.value})")
     r.status = ReportStatus.under_review
     r.reviewed_by = current_user.id
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ttr_report",
+        r.id,
+        action="ttr_reviewed",
+        after_state={"status": r.status.value},
+    )
     return {"report_id": report_id, "status": r.status.value}
 
 
@@ -614,7 +746,8 @@ def approve_ttr(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_mlro_or_above),
 ):
-    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_ttr_or_404(report_id, org_id, db)
     if r.status != ReportStatus.under_review:
         raise HTTPException(
             409, f"Report must be under_review (current: {r.status.value})"
@@ -625,6 +758,15 @@ def approve_ttr(
     r.approved_at = datetime.now(timezone.utc)
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ttr_report",
+        r.id,
+        action="ttr_approved",
+        after_state={"status": r.status.value},
+    )
     return {"report_id": report_id, "status": r.status.value}
 
 
@@ -692,7 +834,8 @@ def acknowledge_ttr(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_ttr_or_404(report_id, org_id, db)
     if r.status != ReportStatus.submitted:
         raise HTTPException(409, "Report must be submitted.")
     r.status = ReportStatus.acknowledged
@@ -701,6 +844,46 @@ def acknowledge_ttr(
         r.submission_reference = acknowledgement_ref
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ttr_report",
+        r.id,
+        action="ttr_acknowledged",
+        after_state={"status": r.status.value},
+    )
+    return {"report_id": report_id, "status": r.status.value}
+
+
+@router.post("/ttr/{report_id}/reject")
+def reject_ttr(
+    report_id: str,
+    reason: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    """
+    Reject a TTR under review. Was previously unreachable -- redraft_ttr
+    guards on status == rejected, but nothing could ever set it; this is
+    the missing counterpart, mirroring reject_ifti.
+    """
+    org_id = org_id_for(current_user)
+    r = _get_ttr_or_404(report_id, org_id, db)
+    r.status = ReportStatus.rejected
+    r.rejected_reason = reason
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ttr_report",
+        r.id,
+        action="ttr_rejected",
+        after_state={"status": r.status.value},
+        notes=reason,
+    )
     return {"report_id": report_id, "status": r.status.value}
 
 
@@ -784,6 +967,15 @@ def generate_smr(
     db.add(report)
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "smr_report",
+        report.id,
+        action="smr_drafted",
+        after_state={"case_id": case_id, "is_terrorism_related": is_terrorism_related},
+    )
     return _smr_dict(report)
 
 
@@ -804,7 +996,8 @@ def update_smr(
     current_user: User = Depends(require_compliance_or_above),
 ):
     """Only draft/under_review SMRs can be edited. All SMR fields require explicit human action."""
-    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_smr_or_404(report_id, org_id, db)
     _assert_editable(r, "SMR report")
     _PROTECTED = {
         "id",
@@ -820,14 +1013,23 @@ def update_smr(
         "updated_at",
         "is_terrorism_related",
     }
-    for k, v in payload.items():
-        if k not in _PROTECTED:
-            setattr(r, k, v)
+    changed_fields = {k: v for k, v in payload.items() if k not in _PROTECTED}
+    for k, v in changed_fields.items():
+        setattr(r, k, v)
     # Derive 24h deadline flag from offence_type — never trust the caller to set it
     r.is_terrorism_related = r.offence_type == SMROffenceType.TERRORISM.value
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(r)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "smr_report",
+        r.id,
+        action="smr_updated",
+        after_state={k: str(v) for k, v in changed_fields.items()},
+    )
     return _smr_dict(r)
 
 
@@ -837,13 +1039,23 @@ def review_smr(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_smr_or_404(report_id, org_id, db)
     if r.status != ReportStatus.draft:
         raise HTTPException(409, "SMR must be in draft status.")
     r.status = ReportStatus.under_review
     r.reviewed_by = current_user.id
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "smr_report",
+        r.id,
+        action="smr_reviewed",
+        after_state={"status": r.status.value},
+    )
     return {"report_id": report_id, "status": r.status.value}
 
 
@@ -858,7 +1070,8 @@ def mlro_sign_off_smr(
     MLRO sign-off — required before SMR submission.
     Enforces maker-checker: MLRO cannot sign off if they also reviewed the report.
     """
-    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_smr_or_404(report_id, org_id, db)
     if r.status != ReportStatus.under_review:
         raise HTTPException(409, "SMR must be under_review for MLRO sign-off.")
     _assert_maker_checker(r, current_user.id)
@@ -868,6 +1081,16 @@ def mlro_sign_off_smr(
     r.mlro_sign_off_notes = notes
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "smr_report",
+        r.id,
+        action="smr_mlro_signed_off",
+        after_state={"status": r.status.value},
+        notes=notes,
+    )
     return {
         "report_id": report_id,
         "status": r.status.value,
@@ -943,7 +1166,8 @@ def acknowledge_smr(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_smr_or_404(report_id, org_id, db)
     if r.status != ReportStatus.submitted:
         raise HTTPException(409, "SMR must be submitted.")
     r.status = ReportStatus.acknowledged
@@ -952,6 +1176,46 @@ def acknowledge_smr(
         r.submission_reference = acknowledgement_ref
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "smr_report",
+        r.id,
+        action="smr_acknowledged",
+        after_state={"status": r.status.value},
+    )
+    return {"report_id": report_id, "status": r.status.value}
+
+
+@router.post("/smr/{report_id}/reject")
+def reject_smr(
+    report_id: str,
+    reason: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    """
+    Reject an SMR under review or awaiting sign-off. Was previously
+    unreachable -- redraft_smr guards on status == rejected, but nothing
+    could ever set it; this is the missing counterpart, mirroring reject_ifti.
+    """
+    org_id = org_id_for(current_user)
+    r = _get_smr_or_404(report_id, org_id, db)
+    r.status = ReportStatus.rejected
+    r.rejected_reason = reason
+    r.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "smr_report",
+        r.id,
+        action="smr_rejected",
+        after_state={"status": r.status.value},
+        notes=reason,
+    )
     return {"report_id": report_id, "status": r.status.value}
 
 
@@ -1195,7 +1459,8 @@ def redraft_ifti(
     current_user: User = Depends(require_compliance_or_above),
 ):
     """Reset a rejected IFTI to draft for correction and resubmission."""
-    r = _get_ifti_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_ifti_or_404(report_id, org_id, db)
     if r.status != ReportStatus.rejected:
         raise HTTPException(
             409, f"Only rejected reports can be redrafted (current: {r.status.value})"
@@ -1209,6 +1474,16 @@ def redraft_ifti(
     r.submission_reference = None
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ifti_report",
+        r.id,
+        action="ifti_redrafted",
+        after_state={"status": r.status.value},
+        notes=reason,
+    )
     return {
         "report_id": report_id,
         "status": r.status.value,
@@ -1224,7 +1499,8 @@ def redraft_ttr(
     current_user: User = Depends(require_compliance_or_above),
 ):
     """Reset a rejected TTR to draft for correction."""
-    r = _get_ttr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_ttr_or_404(report_id, org_id, db)
     if r.status != ReportStatus.rejected:
         raise HTTPException(
             409, f"Only rejected reports can be redrafted (current: {r.status.value})"
@@ -1238,6 +1514,16 @@ def redraft_ttr(
     r.submission_reference = None
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "ttr_report",
+        r.id,
+        action="ttr_redrafted",
+        after_state={"status": r.status.value},
+        notes=reason,
+    )
     return {"report_id": report_id, "status": r.status.value}
 
 
@@ -1252,7 +1538,8 @@ def redraft_smr(
     Reset a rejected SMR to draft for correction.
     MLRO sign-off is cleared and must be re-obtained before resubmission.
     """
-    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    r = _get_smr_or_404(report_id, org_id, db)
     if r.status != ReportStatus.rejected:
         raise HTTPException(
             409, f"Only rejected reports can be redrafted (current: {r.status.value})"
@@ -1267,6 +1554,16 @@ def redraft_smr(
     r.submission_reference = None
     r.updated_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "smr_report",
+        r.id,
+        action="smr_redrafted",
+        after_state={"status": r.status.value},
+        notes=reason,
+    )
     return {
         "report_id": report_id,
         "status": r.status.value,
