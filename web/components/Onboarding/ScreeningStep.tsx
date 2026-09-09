@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ShieldCheck, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -50,7 +51,7 @@ export default function ScreeningStep({ sessions }: { sessions: Session[] }) {
     if (!selected?.customer_id) { setScore(null); return; }
     setLoading(true);
     setError(null);
-    fetch(`${API}/api/v1/screening/customers/${selected.customer_id}/identity-score`, { credentials: "include" })
+    apiFetch(`${API}/api/v1/screening/customers/${selected.customer_id}/identity-score`, { credentials: "include" })
       .then(res => { if (!res.ok) throw new Error("Failed to load identity score"); return res.json(); })
       .then(setScore)
       .catch(e => setError(e.message))
@@ -67,7 +68,7 @@ export default function ScreeningStep({ sessions }: { sessions: Session[] }) {
     setDeciding(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/api/v1/screening/customers/${selected.customer_id}/identity-score/decide`, {
+      const res = await apiFetch(`${API}/api/v1/screening/customers/${selected.customer_id}/identity-score/decide`, {
         method: "POST",
         credentials: "include",
       });

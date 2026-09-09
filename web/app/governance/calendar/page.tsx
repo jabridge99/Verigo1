@@ -6,6 +6,7 @@ import {
   LayoutList, CalendarDays, GanttChartSquare, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -107,8 +108,8 @@ export default function ComplianceCalendarPage() {
   const fetchAll = useCallback(async () => {
     try {
       const [iRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/compliance-calendar`, { credentials: "include" }),
-        fetch(`${API}/api/v1/compliance-calendar/dashboard`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/compliance-calendar`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/compliance-calendar/dashboard`, { credentials: "include" }),
       ]);
       if (iRes.ok) { const d = await iRes.json(); if (d.length) setItems(d); }
       if (dRes.ok) { const d = await dRes.json(); setDashboard(d); }
@@ -119,7 +120,7 @@ export default function ComplianceCalendarPage() {
 
   const completeItem = async (id: string) => {
     try {
-      await fetch(`${API}/api/v1/compliance-calendar/${id}/complete`, {
+      await apiFetch(`${API}/api/v1/compliance-calendar/${id}/complete`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });

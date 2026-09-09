@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -100,7 +101,7 @@ export default function MLRODashboard() {
 
   const fetchCases = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/cases?limit=100`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/cases?limit=100`, { credentials: "include" });
       if (res.ok) { setCases(await res.json()); } else { showToast("error", "Failed to load cases"); }
     } catch {
       showToast("error", "Failed to load cases");
@@ -115,7 +116,7 @@ export default function MLRODashboard() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API}/api/v1/cases/${selected.id}/alerts`, { credentials: "include" });
+        const res = await apiFetch(`${API}/api/v1/cases/${selected.id}/alerts`, { credentials: "include" });
         if (!cancelled) setLinkedAlerts(res.ok ? await res.json() : []);
       } catch {
         if (!cancelled) setLinkedAlerts([]);
@@ -126,7 +127,7 @@ export default function MLRODashboard() {
 
   const updateStatus = async (caseId: string, status: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/cases/${caseId}/status`, {
+      const res = await apiFetch(`${API}/api/v1/cases/${caseId}/status`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_status: status }),
       });
@@ -144,7 +145,7 @@ export default function MLRODashboard() {
     if (!selected || !closeForm) return;
     if (!closeForm.closure_reason.trim()) { showToast("error", "Closure reason is required"); return; }
     try {
-      const res = await fetch(`${API}/api/v1/cases/${selected.id}/close`, {
+      const res = await apiFetch(`${API}/api/v1/cases/${selected.id}/close`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: closeForm.status,
@@ -652,7 +653,7 @@ function CreateCaseForm({
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/cases`, {
+      const res = await apiFetch(`${API}/api/v1/cases`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });

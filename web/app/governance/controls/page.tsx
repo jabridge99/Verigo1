@@ -6,6 +6,7 @@ import {
   ClipboardCheck, Wrench, User,
 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -86,7 +87,7 @@ export default function ControlsPage() {
 
   const fetchControls = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/governance/controls`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setControls(d); }
     } catch {}
   }, []);
@@ -96,7 +97,7 @@ export default function ControlsPage() {
   const openControl = async (c: Control) => {
     setSelected(c);
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls/${c.id}/tests`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/governance/controls/${c.id}/tests`, { credentials: "include" });
       setTests(res.ok ? await res.json() : []);
     } catch { setTests([]); }
   };
@@ -110,7 +111,7 @@ export default function ControlsPage() {
       result: result === "pass" ? "pass" : "fail",
     };
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls/${control.id}/tests`, {
+      const res = await apiFetch(`${API}/api/v1/governance/controls/${control.id}/tests`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -392,7 +393,7 @@ function CreateControlForm({ onCreated }: { onCreated: (c: Control) => void }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls`, {
+      const res = await apiFetch(`${API}/api/v1/governance/controls`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });

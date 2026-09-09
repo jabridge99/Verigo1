@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiFetch as authFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${API}${path}`, {
+  const res = await authFetch(`${API}${path}`, {
     ...opts,
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(opts?.headers || {}) },

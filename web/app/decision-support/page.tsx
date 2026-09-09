@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import Link from "next/link";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const BASE = `${API}/api/v1/rule-builder`;
@@ -102,7 +103,7 @@ export default function DecisionSupportPage() {
     setLoading(true);
     const params = new URLSearchParams();
     if (completeFilter !== "all") params.set("is_complete", completeFilter === "complete" ? "true" : "false");
-    fetch(`${BASE}/decision-support?${params.toString()}`, { credentials: "include" })
+    apiFetch(`${BASE}/decision-support?${params.toString()}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : []))
       .then(setPanels)
       .finally(() => setLoading(false));
@@ -283,7 +284,7 @@ function CreatePanelDrawer({
       const params = new URLSearchParams({ customer_id: customerId });
       if (transactionId) params.set("transaction_id", transactionId);
       if (caseId) params.set("case_id", caseId);
-      const res = await fetch(`${BASE}/decision-support?${params.toString()}`, {
+      const res = await apiFetch(`${BASE}/decision-support?${params.toString()}`, {
         method: "POST",
         credentials: "include",
       });
@@ -536,7 +537,7 @@ function ReviewTab({
     }
     setSubmitting(true);
     try {
-      const res = await fetch(`${BASE}/decision-support/${panel.id}/review?step_type=${stepType}`, {
+      const res = await apiFetch(`${BASE}/decision-support/${panel.id}/review?step_type=${stepType}`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -548,7 +549,7 @@ function ReviewTab({
       });
       if (res.ok) {
         await res.json();
-        const refreshed = await fetch(`${BASE}/decision-support/${panel.id}`, { credentials: "include" }).then((r) => r.json());
+        const refreshed = await apiFetch(`${BASE}/decision-support/${panel.id}`, { credentials: "include" }).then((r) => r.json());
         onUpdated(refreshed);
         showToast("success", "Review recorded");
         setNotes("");
@@ -609,7 +610,7 @@ function HistoryTab({ panelId }: { panelId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/decision-support/${panelId}/workflow-history`, { credentials: "include" })
+    apiFetch(`${BASE}/decision-support/${panelId}/workflow-history`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : []))
       .then(setSteps)
       .finally(() => setLoading(false));

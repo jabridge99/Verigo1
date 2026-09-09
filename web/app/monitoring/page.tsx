@@ -9,6 +9,7 @@ import {
 import clsx from "clsx";
 import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -116,8 +117,8 @@ function MonitoringDashboard() {
   const fetchData = useCallback(async () => {
     try {
       const [aRes, sRes] = await Promise.all([
-        fetch(`${API}/api/v1/alerts?limit=200`, { credentials: "include" }),
-        fetch(`${API}/api/v1/alerts/dashboard`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/alerts?limit=200`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/alerts/dashboard`, { credentials: "include" }),
       ]);
       if (!aRes.ok || !sRes.ok) { showToast("error", "Failed to load alerts"); return; }
       const d = await aRes.json();
@@ -144,11 +145,11 @@ function MonitoringDashboard() {
   const doAction = async (action: "resolve" | "dismiss" | "escalate", alertId: string) => {
     try {
       const res = action === "escalate"
-        ? await fetch(`${API}/api/v1/alerts/${alertId}/escalate`, {
+        ? await apiFetch(`${API}/api/v1/alerts/${alertId}/escalate`, {
             method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." }),
           })
-        : await fetch(`${API}/api/v1/alerts/${alertId}/review`, {
+        : await apiFetch(`${API}/api/v1/alerts/${alertId}/review`, {
             method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               resolution: action === "resolve" ? "cleared" : "dismissed",
@@ -168,7 +169,7 @@ function MonitoringDashboard() {
 
   const createCaseFromAlert = async (alert: Alert) => {
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${API}/api/v1/alerts/${alert.id}/create-case`,
         { method: "POST", credentials: "include" }
       );
@@ -593,7 +594,7 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
   );
 
   useEffect(() => {
-    fetch(`${API}/api/v1/customers/?limit=200`, { credentials: "include" })
+    apiFetch(`${API}/api/v1/customers/?limit=200`, { credentials: "include" })
       .then(res => res.ok ? res.json() : Promise.reject())
       .then(d => { if (d.length) setCustomers(d.map((c: any) => ({ id: c.id, full_name: c.full_name }))); })
       .catch(() => {});
@@ -607,7 +608,7 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
     if (!form.customer_id) { onCreate({ error: "Select a customer before creating a transaction." }); return; }
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/transactions`, {
+      const res = await apiFetch(`${API}/api/v1/transactions`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transaction_ref: `TXN-${Date.now()}`,
@@ -630,7 +631,7 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
 
       let alertsGenerated = 0;
       try {
-        const monRes = await fetch(`${API}/api/v1/transactions/${txn.id}/run-monitoring`, {
+        const monRes = await apiFetch(`${API}/api/v1/transactions/${txn.id}/run-monitoring`, {
           method: "POST", credentials: "include",
         });
         if (monRes.ok) alertsGenerated = (await monRes.json()).alerts_generated ?? 0;

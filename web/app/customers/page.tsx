@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { DEMO_CUSTOMERS, DEMO_PROFILES, type Customer } from "@/lib/demoCustomers";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -52,7 +53,7 @@ function CustomerRiskDashboard() {
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/customers/?limit=100`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/customers/?limit=100`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setCustomers(d); }
     } catch {}
     setLoading(false);

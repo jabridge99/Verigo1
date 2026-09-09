@@ -6,6 +6,7 @@ import {
   CheckCircle, AlertTriangle, ChevronDown, ChevronRight, X, Beaker,
 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const BASE = `${API}/api/v1/rule-builder`;
@@ -123,8 +124,8 @@ export default function RuleBuilderPage() {
     setLoading(true);
     try {
       const [rRes, refRes] = await Promise.all([
-        fetch(`${BASE}/rules`, { credentials: "include" }),
-        fetch(`${BASE}/rules/reference`, { credentials: "include" }),
+        apiFetch(`${BASE}/rules`, { credentials: "include" }),
+        apiFetch(`${BASE}/rules/reference`, { credentials: "include" }),
       ]);
       if (rRes.ok) setRules(await rRes.json());
       if (refRes.ok) setReference(await refRes.json());
@@ -148,7 +149,7 @@ export default function RuleBuilderPage() {
   const deleteRule = async (id: string) => {
     if (!confirm("Delete this rule? This cannot be undone.")) return;
     try {
-      const res = await fetch(`${BASE}/rules/${id}`, { method: "DELETE", credentials: "include" });
+      const res = await apiFetch(`${BASE}/rules/${id}`, { method: "DELETE", credentials: "include" });
       if (res.ok || res.status === 204) {
         setRules((prev) => prev.filter((r) => r.id !== id));
         if (selected?.id === id) setSelected(null);
@@ -165,7 +166,7 @@ export default function RuleBuilderPage() {
   const toggleStatus = async (r: Rule) => {
     const next: RuleStatus = r.status === "active" ? "inactive" : "active";
     try {
-      const res = await fetch(`${BASE}/rules/${r.id}`, {
+      const res = await apiFetch(`${BASE}/rules/${r.id}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -387,7 +388,7 @@ function RuleDrawer({
         actions,
         ...(isNew ? {} : { status }),
       };
-      const res = await fetch(isNew ? `${BASE}/rules` : `${BASE}/rules/${rule!.id}`, {
+      const res = await apiFetch(isNew ? `${BASE}/rules` : `${BASE}/rules/${rule!.id}`, {
         method: isNew ? "POST" : "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -789,7 +790,7 @@ function TestPanel({ rule }: { rule: Rule }) {
     }
     setRunning(true);
     try {
-      const res = await fetch(`${BASE}/rules/${rule.id}/test`, {
+      const res = await apiFetch(`${BASE}/rules/${rule.id}/test`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -851,7 +852,7 @@ function ExecutionsPanel({ ruleId }: { ruleId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/rules/${ruleId}/executions`, { credentials: "include" })
+    apiFetch(`${BASE}/rules/${ruleId}/executions`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : []))
       .then(setExecs)
       .finally(() => setLoading(false));
@@ -902,7 +903,7 @@ function VersionsPanel({ ruleId }: { ruleId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/rules/${ruleId}/versions`, { credentials: "include" })
+    apiFetch(`${BASE}/rules/${ruleId}/versions`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : []))
       .then(setVersions)
       .finally(() => setLoading(false));

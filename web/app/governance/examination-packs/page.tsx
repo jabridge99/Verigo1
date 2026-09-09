@@ -6,7 +6,7 @@ import {
   Send, Archive,
 } from "lucide-react";
 import clsx from "clsx";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -69,7 +69,7 @@ export default function ExaminationPacksPage() {
 
   const fetchPacks = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/examination-packs/`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/examination-packs/`, { credentials: "include" });
       if (!res.ok) throw new Error("api");
       const d = await res.json();
       if (Array.isArray(d) && d.length) setPacks(d);
@@ -88,7 +88,7 @@ export default function ExaminationPacksPage() {
       return;
     }
     try {
-      const res = await fetch(`${API}/api/v1/examination-packs/`, {
+      const res = await apiFetch(`${API}/api/v1/examination-packs/`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           period_start: form.period_start, period_end: form.period_end,
@@ -111,7 +111,7 @@ export default function ExaminationPacksPage() {
   const deliver = async (p: Pack) => {
     const notes = prompt("Delivery notes (optional):") || undefined;
     try {
-      const res = await fetch(`${API}/api/v1/examination-packs/${p.id}/deliver`, {
+      const res = await apiFetch(`${API}/api/v1/examination-packs/${p.id}/deliver`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ delivery_notes: notes }),
       });
@@ -125,7 +125,7 @@ export default function ExaminationPacksPage() {
 
   const archive = async (p: Pack) => {
     try {
-      const res = await fetch(`${API}/api/v1/examination-packs/${p.id}/archive`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/examination-packs/${p.id}/archive`, { method: "POST", credentials: "include" });
       if (res.ok) {
         setPacks(prev => prev.map(x => x.id === p.id ? { ...x, status: "archived" as PackStatus } : x));
         showToast("success", `${p.pack_ref} archived`);

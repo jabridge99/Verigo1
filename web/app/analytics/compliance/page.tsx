@@ -5,7 +5,7 @@ import {
   BarChart2, TrendingUp, Users, FileText, AlertTriangle,
   Shield, CheckCircle, Clock, Activity,
 } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChartSVG, DonutChart, KPI } from "../_components/charts";
@@ -49,10 +49,10 @@ export default function CompliancePage() {
   const load = useCallback(async () => {
     try {
       const [sr, tr, or_, rr] = await Promise.all([
-        fetch(`${API}/api/v1/analytics/summary`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/transactions/volume-trend?days=${range}`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=${range}`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/reports/submission-trend?days=${Math.max(range, 90)}`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/summary`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/transactions/volume-trend?days=${range}`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=${range}`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/reports/submission-trend?days=${Math.max(range, 90)}`, { credentials: "include" }),
       ]);
       if (!sr.ok) throw new Error("api");
       setSummary(await sr.json());

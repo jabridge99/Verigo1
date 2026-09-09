@@ -7,6 +7,7 @@ import {
   Activity,
 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -86,7 +87,7 @@ export default function AuditTrail() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/audit/?limit=200`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/audit/?limit=200`, { credentials: "include" });
       if (res.ok) {
         const d: AuditLog[] = await res.json();
         // The two underlying audit tables this endpoint merges use different
@@ -111,7 +112,7 @@ export default function AuditTrail() {
 
   const exportCSV = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/audit/export/csv`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/audit/export/csv`, { credentials: "include" });
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);

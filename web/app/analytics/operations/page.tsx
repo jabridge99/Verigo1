@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Users, Activity, GraduationCap, FileCheck, Settings } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChartSVG, DonutChart, KPI, StatTile } from "../_components/charts";
@@ -32,11 +32,11 @@ export default function OperationsPage() {
   const load = useCallback(async () => {
     try {
       const [ob, kyc, tx, tr, gv] = await Promise.all([
-        fetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=30`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/kyc/status-breakdown`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/transactions/volume-trend?days=30`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/training/status-breakdown`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/governance/overview`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=30`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/kyc/status-breakdown`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/transactions/volume-trend?days=30`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/training/status-breakdown`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/governance/overview`, { credentials: "include" }),
       ]);
       if (!ob.ok) throw new Error("api");
       setD({

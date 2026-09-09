@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -184,10 +185,10 @@ export default function ReportingDashboard() {
   const fetchData = useCallback(async () => {
     try {
       const [iRes, tRes, sRes, sumRes] = await Promise.all([
-        fetch(`${API}/api/v1/ifti/`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/ttr?limit=100`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/smr?limit=100`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/summary`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/ifti/`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/reports/ttr?limit=100`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/reports/smr?limit=100`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/reports/summary`, { credentials: "include" }),
       ]);
       if (!iRes.ok && !tRes.ok && !sRes.ok && !sumRes.ok) {
         showToast("error", "Failed to load reports");
@@ -217,7 +218,7 @@ export default function ReportingDashboard() {
     else if (action === "submit") url = `${base}/submit?submission_reference=${encodeURIComponent(`AUTO-${Date.now()}`)}`;
     else url = `${base}/acknowledge?acknowledgement_ref=${encodeURIComponent(`ACK-${Date.now()}`)}`;
     try {
-      const res = await fetch(url, { method: "POST", credentials: "include" });
+      const res = await apiFetch(url, { method: "POST", credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
     } catch (err: any) {
       showToast("error", `Failed to ${action}: ${err.message || "request failed"}`);

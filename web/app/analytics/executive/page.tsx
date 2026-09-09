@@ -5,7 +5,7 @@ import {
   Users, Shield, AlertTriangle, Clock, GraduationCap, FileCheck,
   Search, Briefcase, Activity, FileText, TrendingUp,
 } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { BarChartSVG, DonutChart, KPI, StatTile } from "../_components/charts";
 
@@ -36,12 +36,12 @@ export default function ExecutivePage() {
   const load = useCallback(async () => {
     try {
       const [sr, ob, pr, tr, gv, cs] = await Promise.all([
-        fetch(`${API}/api/v1/analytics/summary`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=30`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/customers/pending-reviews`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/training/status-breakdown`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/governance/overview`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/cases/open-stats`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/summary`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=30`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/customers/pending-reviews`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/training/status-breakdown`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/governance/overview`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/cases/open-stats`, { credentials: "include" }),
       ]);
       if (!sr.ok) throw new Error("api");
       setD({

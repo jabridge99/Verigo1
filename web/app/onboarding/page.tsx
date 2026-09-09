@@ -8,6 +8,7 @@ import ApplicantTable from "@/components/Onboarding/ApplicantTable";
 import PipelineView from "@/components/Onboarding/PipelineView";
 import DocumentUploadStep from "@/components/Onboarding/DocumentUploadStep";
 import ScreeningStep from "@/components/Onboarding/ScreeningStep";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const INDUSTRY_ID = "digital-currency-exchange";
@@ -91,8 +92,8 @@ function OnboardingDashboardInner() {
     setLoading(true);
     try {
       const [sessRes, statsRes] = await Promise.all([
-        fetch(`${API}/api/v1/onboarding/sessions?industry_id=${INDUSTRY_ID}&limit=200`, { credentials: "include" }),
-        fetch(`${API}/api/v1/onboarding/stats?industry_id=${INDUSTRY_ID}`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/onboarding/sessions?industry_id=${INDUSTRY_ID}&limit=200`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/onboarding/stats?industry_id=${INDUSTRY_ID}`, { credentials: "include" }),
       ]);
       if (sessRes.ok) setSessions(await sessRes.json());
       if (statsRes.ok) setStats(await statsRes.json());
@@ -117,7 +118,7 @@ function OnboardingDashboardInner() {
 
   const handleRemind = async (sessionId: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/remind`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/onboarding/sessions/${sessionId}/remind`, { method: "POST", credentials: "include" });
       if (res.ok) { showToast("success", "Reminder sent"); fetchData(); }
       else throw new Error();
     } catch { showToast("error", "Failed to send reminder"); }
@@ -125,7 +126,7 @@ function OnboardingDashboardInner() {
 
   const handleCancel = async (sessionId: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/cancel`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/onboarding/sessions/${sessionId}/cancel`, { method: "POST", credentials: "include" });
       if (!res.ok) throw new Error();
       showToast("success", "Verification request cancelled");
       setSessions(prev => prev.map(s => s.session_id === sessionId ? { ...s, status: "abandoned" } : s));
@@ -140,7 +141,7 @@ function OnboardingDashboardInner() {
     e.preventDefault();
     setSubmittingManual(true);
     try {
-      const res = await fetch(`${API}/api/v1/onboarding/sessions`, {
+      const res = await apiFetch(`${API}/api/v1/onboarding/sessions`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
