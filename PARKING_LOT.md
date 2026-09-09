@@ -8,7 +8,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 
 ## Open items — at a glance
 
-21 open items, grouped by theme. ID links to the full entry further down this file. A critical/non-critical triage pass (below) went through every item using the criterion "does this undermine real AML/CTF compliance capability" — items that did (DPMS's actively-wrong instruction, the missing alert→case bridge) are fixed and moved to Resolved; items that are gaps or feature debt rather than wrong behaviour stay parked here, several with a deeper investigation confirming why a quick fix isn't safe.
+22 open items, grouped by theme. ID links to the full entry further down this file. A critical/non-critical triage pass (below) went through every item using the criterion "does this undermine real AML/CTF compliance capability" — items that did (DPMS's actively-wrong instruction, the missing alert→case bridge) are fixed and moved to Resolved; items that are gaps or feature debt rather than wrong behaviour stay parked here, several with a deeper investigation confirming why a quick fix isn't safe.
 
 ### A. Architecture — duplicate/competing systems (each needs a design decision, not a quick fix — see the "Resolved" entries below for why the seemingly-obvious fixes turned out not to be safe)
 | ID | What | Effort |
