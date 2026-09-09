@@ -435,6 +435,8 @@ def select_industry(
         RiskAssessment,
         TrainingRecord,
     )
+    from app.models.governance import Policy
+    from app.models.governance_controls import GovernanceControl
     from app.models.risk_engine import RiskAssessmentRun, RiskFramework
     from app.templates.aml.factory import seed_aml_solution
     from app.templates.risk.factory import seed_risk_framework
@@ -477,6 +479,13 @@ def select_industry(
         if framework:
             db.delete(framework)
         db.query(AMLProgram).filter(AMLProgram.solution_id == solution.id).delete()
+        db.query(Policy).filter(Policy.solution_id == solution.id).delete()
+        db.query(GovernanceControl).filter(
+            GovernanceControl.solution_id == solution.id
+        ).delete()
+        # Legacy tables (P7/P11): seeding no longer writes to these, but an
+        # org seeded before that fix may still carry rows here — clean them
+        # up on reseed rather than leaving them orphaned indefinitely.
         db.query(AMLPolicy).filter(AMLPolicy.solution_id == solution.id).delete()
         db.query(Control).filter(Control.solution_id == solution.id).delete()
         db.query(TrainingRecord).filter(
