@@ -239,58 +239,55 @@ def register_submission(
 
 
 def reporting_summary(db: Session, org_id: str) -> dict:
-    """Aggregate counts for the reports dashboard."""
-    from sqlalchemy import func
+    """
+    Aggregate counts for the reports dashboard (web/app/reporting/page.tsx's
+    `Summary` interface -- total/by_type/by_status/overdue/due_soon/submitted/
+    draft/under_review). P31: this used to return a completely different shape
+    ({ifti, ttr, smr, overdue: {...}, total_filed}) keyed by str(StatusEnum.
+    member) (e.g. "IFTIStatus.draft", not "draft"), which the frontend could
+    never actually consume -- its own empty-check (`if (d.total !== undefined)`)
+    could never pass, so the KPI bar stayed on demo numbers regardless of
+    whether real reports existed.
+    """
+    from app.models.ifti import IFTIRecord
 
-    from app.models.ifti import IFTIRecord, IFTIStatus
-
-    def _count_by_status(model):
-        rows = (
-            db.query(model.status, func.count(model.id))
-            .filter(model.org_id == org_id)
-            .group_by(model.status)
-            .all()
-        )
-        return {str(s): c for s, c in rows}
-
-    # IFTIRecord (app/models/ifti.py, canonical since P28 -- see ifti.py's
-    # docstring) uses industry_id as its tenant-scope column and IFTIStatus
-    # as its status enum, unlike TTRReport/SMRReport's org_id/ReportStatus,
-    # so it can't share _count_by_status()/_overdue() below.
+    # IFTIRecord (app/models/ifti.py, canonical since P28) uses industry_id as
+    # its tenant-scope column, unlike TTRReport/SMRReport's org_id. IFTIStatus
+    # and ReportStatus share the same value set (draft/under_review/approved/
+    # submitted/acknowledged/rejected), so counts can be merged on `.value`.
     ifti_rows = (
-        db.query(IFTIRecord.status, func.count(IFTIRecord.id))
+        db.query(IFTIRecord.status, IFTIRecord.due_date)
         .filter(IFTIRecord.industry_id == org_id)
-        .group_by(IFTIRecord.status)
         .all()
     )
-    ifti_counts = {str(s): c for s, c in ifti_rows}
-    ttr_counts = _count_by_status(TTRReport)
-    smr_counts = _count_by_status(SMRReport)
+    ttr_rows = (
+        db.query(TTRReport.status, TTRReport.due_date)
+        .filter(TTRReport.org_id == org_id)
+        .all()
+    )
+    smr_rows = (
+        db.query(SMRReport.status, SMRReport.due_date)
+        .filter(SMRReport.org_id == org_id)
+        .all()
+    )
 
     today = datetime.now(timezone.utc).date()
+    due_soon_cutoff = today + timedelta(days=3)
+    inactive_statuses = ("submitted", "acknowledged")
 
-    def _overdue(model):
-        return (
-            db.query(func.count(model.id))
-            .filter(
-                model.org_id == org_id,
-                model.due_date < today,
-                model.status.notin_(
-                    [ReportStatus.submitted, ReportStatus.acknowledged]
-                ),
-            )
-            .scalar()
-        )
+    by_status: dict[str, int] = {s.value: 0 for s in ReportStatus}
+    overdue = 0
+    due_soon = 0
+    for rows in (ifti_rows, ttr_rows, smr_rows):
+        for status, due_date in rows:
+            by_status[status.value] = by_status.get(status.value, 0) + 1
+            if due_date and status.value not in inactive_statuses:
+                if due_date < today:
+                    overdue += 1
+                elif due_date <= due_soon_cutoff:
+                    due_soon += 1
 
-    ifti_overdue = (
-        db.query(func.count(IFTIRecord.id))
-        .filter(
-            IFTIRecord.industry_id == org_id,
-            IFTIRecord.due_date < today,
-            IFTIRecord.status.notin_([IFTIStatus.submitted, IFTIStatus.acknowledged]),
-        )
-        .scalar()
-    )
+    from sqlalchemy import func
 
     filing_count = (
         db.query(func.count(FilingRegisterEntry.id))
@@ -299,13 +296,13 @@ def reporting_summary(db: Session, org_id: str) -> dict:
     )
 
     return {
-        "ifti": ifti_counts,
-        "ttr": ttr_counts,
-        "smr": smr_counts,
-        "overdue": {
-            "ifti": ifti_overdue,
-            "ttr": _overdue(TTRReport),
-            "smr": _overdue(SMRReport),
-        },
+        "total": len(ifti_rows) + len(ttr_rows) + len(smr_rows),
+        "by_type": {"ifti": len(ifti_rows), "ttr": len(ttr_rows), "smr": len(smr_rows)},
+        "by_status": by_status,
+        "overdue": overdue,
+        "due_soon": due_soon,
+        "draft": by_status["draft"],
+        "under_review": by_status["under_review"],
+        "submitted": by_status["submitted"],
         "total_filed": filing_count,
     }

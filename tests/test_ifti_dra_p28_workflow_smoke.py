@@ -256,8 +256,7 @@ def test_reporting_summary_reflects_ifti_records(client, compliance_headers):
     resp = client.get("/api/v1/reports/summary", headers=compliance_headers)
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    # _count_by_status()'s dict keys are str(StatusEnum.member), which for a
-    # (str, Enum) mixin is "IFTIStatus.draft" not "draft" -- a pre-existing
-    # formatting quirk shared with the ttr/smr counts in the same summary,
-    # not something P28 introduced or is fixing here.
-    assert sum(data["ifti"].values()) >= 1
+    # P31 fixed reporting_summary()'s shape/key-formatting; see
+    # test_reporting_dashboard_summary_shape_smoke.py for the full contract.
+    assert data["by_type"]["ifti"] >= 1
+    assert data["by_status"]["draft"] >= 1
