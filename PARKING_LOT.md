@@ -8,7 +8,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 
 ## Open items — at a glance
 
-20 open items, grouped by theme. ID links to the full entry further down this file.
+23 open items, grouped by theme. ID links to the full entry further down this file.
 
 ### A. Architecture — duplicate/competing systems (resolve first — most other work sits on top of this)
 | ID | What | Effort |
@@ -16,6 +16,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 | P7 | Two parallel governance model sets: legacy `Control`/`AMLPolicy` (seeded) vs `GovernanceControl`/`Policy` (the one the UI actually uses) | Design decision + migration |
 | P11 | Direct consequence of P7 — freshly-seeded controls are invisible to the real controls UI | Resolved once P7 is |
 | P12 | Two independent AML Program generation systems both reachable after Stage 7's fix; onboarding wizard still drives the wrong one | UX decision + wizard rewire |
+| P25 | `rule-builder` frontend wired to the generic `AutomationRule` system instead of the real `MonitoringRule` engine | New UI against the real API |
 
 ### B. Industry template content — Google Drive vs. code (the 8-sector review, largest body of work)
 | ID | Sector | Headline finding | Effort |
@@ -54,6 +55,12 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 | P5 | ~2,500 `Column()`/`relationship()` declarations still lack `Mapped[]` type annotations (the ~60 mypy actually flagged are fixed) | Mechanical retrofit, ~40 files |
 | P4 | A judgment call on how "under review" policy status maps to board-report categories | Confirm intent, then it's a one-line change either way |
 
+### G. Transaction monitoring / case management (Stage 8)
+| ID | What | Effort |
+|---|---|---|
+| P26 | No "create case from alert" button in the monitoring UI, despite the backend endpoint being fully wired | Small, scoped frontend addition |
+| P27 | No production transaction-ingestion path beyond manual entry — no batch/API/core-banking connector | Later-stage scope, not Stage 8 |
+
 ---
 
 ## Suggested future development (a recommended order, not a commitment)
@@ -70,7 +77,9 @@ Reading the open items as a roadmap rather than a flat list:
 4. **Per-org configurable risk weights (P10)** — a natural follow-on once sector content is richer; today's flat 30/25/20/15/10 split becomes a more visible gap as the templates themselves get more sector-specific.
 5. **Resolve the onboarding wizard's UX questions (P12's "what should the wizard show" decision, P13, P14)** — bundle with step 1 since P12 is already entangled with the architecture decision; P13/P14 are small enough to fix in the same pass.
 6. **Commercialisation decisions (P16 pricing/packaging for Independent Review, P15 the Liddar validation check)** — best made once the underlying product substantively does what the real documents describe, not before.
-7. **Mechanical backlog (C2, C4, P5, P4)** — no functional urgency; pick up opportunistically or as its own dedicated pass whenever there's a lull.
+7. **Close the monitoring/case-management UI gaps (P25, P26)** — the pipeline itself is correct end to end after Stage 8, but a compliance officer can't yet configure the real monitoring rules or open a case straight from an alert; both are bounded frontend work once picked up.
+8. **Mechanical backlog (C2, C4, P5, P4)** — no functional urgency; pick up opportunistically or as its own dedicated pass whenever there's a lull.
+9. **Production transaction ingestion (P27)** — batch/API/core-banking connectors; a later-stage-sized project once the platform has real transaction volume to receive.
 
 ---
 
@@ -227,6 +236,30 @@ The full VERIGO AML/CTF template library (8 industry sectors × up to 9 document
 
 ---
 
+## Parked from Stage 8 (Transaction & Monitoring Engine, 2026-09-09)
+
+Fixing the pipeline's two critical gaps (see "Resolved" below — monitoring never ran on transaction creation, and no org had any starter rules) required tracing the whole `Transaction → Rules → Alert → Case → Investigation → Outcome` chain live, including the MLRO case-management frontend. Three real gaps came up that don't block Stage 8's own deliverable (the pipeline now runs end to end and produces real alerts and closeable cases) but are worth recording rather than silently building around.
+
+### P25 — `rule-builder` frontend page is wired to the wrong rule engine
+**Status:** Parked — real UI/backend mismatch, but building a correct UI here is a scoped project of its own, not a bug-fix-sized change.
+**What:** `web/app/rule-builder/page.tsx` creates/edits rows via the generic `AutomationRule`/`automation_engine.py` system (fires on a broad set of workflow events — document uploads, status changes, etc.) — not `MonitoringRule` (`app/models/monitoring.py`, `app/services/monitoring_engine.py`), the actual no-code, per-org configurable transaction-monitoring rule engine this stage's seeding fix (P25's sibling "Resolved" item below) populated with 6 starter rules. A compliance officer opening "Rule Builder" today can't see, edit, or add to the real monitoring rules the transaction pipeline actually runs — only an unrelated automation system. `GET/POST /api/v1/monitoring/rules` (the real CRUD API) has no frontend at all.
+**Why parked:** Needs either a real UI built against the `MonitoringRule` API, or a decision to point the existing page at it (its condition-group/condition shape is different enough — field_path/operator/value against a flat context dict — that this isn't a drop-in rewire); out of scope for a pipeline-correctness pass.
+**Detail:** `web/app/rule-builder/page.tsx`; `app/api/routes/monitoring.py`; `app/models/monitoring.py` (`MonitoringRule`, `RuleConditionGroup`, `RuleCondition`) vs `app/models/automation.py`/`app/services/automation_engine.py`.
+
+### P26 — No "create case from alert" action in the monitoring UI, despite full backend support
+**Status:** Parked — small, well-scoped frontend addition; not attempted this pass to keep the pipeline fix bounded.
+**What:** `POST /api/v1/alerts/{alert_id}/create-case` (`app/api/routes/alerts.py`) exists, is fully wired (creates the `Case`, links the alert via `CaseAlert`, sets `is_smr_candidate` from the alert's severity), and is exactly the step an analyst takes after triaging an alert that warrants investigation. `web/app/monitoring/page.tsx` — the page that lists alerts — has no button, link, or any reference to this endpoint anywhere; the only way to open a case today is the MLRO dashboard's separate "New Case" form, which doesn't carry the alert context across.
+**Why parked:** One button plus a small form (or a direct call, since the endpoint needs no extra input) — bounded frontend work, but a new UI surface, not a bug fix.
+**Detail:** `app/api/routes/alerts.py`'s `create_case_from_alert()`; `web/app/monitoring/page.tsx`.
+
+### P27 — No production transaction-ingestion path beyond manual entry
+**Status:** Parked — this is later-stage territory (batch/API ingestion, core-banking integration), not a Stage 8 gap.
+**What:** Every transaction that reaches the monitoring pipeline today arrives via a human filling in the manual entry form (`web/app/monitoring/page.tsx`) and `POST /transactions/`. There's no file-upload/batch-import endpoint, no webhook/API-ingestion path, and no connector to a core banking or payments system — meaning a real reporting entity currently has no way to get its actual transaction volume into the pipeline this stage just fixed.
+**Why parked:** Explicitly noted rather than silently treated as in-scope — building real ingestion is a substantial, separate piece of work (format handling, idempotency, partial-failure semantics, likely per-integration) that belongs to a later stage of the original plan, not a fix folded into this one.
+**Detail:** `app/api/routes/transactions.py`'s `create_transaction()` is the only real entry point today.
+
+---
+
 ## Resolved (moved out of the active parking lot, kept here for the full-process history)
 
 ### P1 — Independent review "due" notifications have no date to key off
@@ -301,3 +334,22 @@ The full VERIGO AML/CTF template library (8 industry sectors × up to 9 document
 **What was done:** `risk_engine.py`'s ISO 31000 methodology is now the single source of truth for both — a shared `risk_rating_pct()` function every scoring module rates against, and one `TTR_CTR_THRESHOLD_AUD` constant every threshold check references. Professional assessment scoring combined into the same rating function (with a documented, bump-able ceiling for future indicators). A real pre-existing bug surfaced and fixed along the way: a sanctions match forced the EDD workflow but not the numeric score to critical — now it does, verified live end-to-end.
 **Real behavioural changes to be aware of:** customer risk classification boundaries are now stricter in some cases (a score that was "medium" can now be "high"); professional assessment classification is now more lenient in some cases (needs a relatively higher point total to reach "critical"). Existing stored risk levels aren't retroactively recomputed — this affects new scoring and rescoring going forward.
 **Detail:** `STRUCTURE_REVIEW.md`, section C3.
+
+### Transaction creation never actually ran the monitoring pipeline it claimed to
+**Parked:** never — found and fixed in the same pass, tracing Stage 8's `Transaction → Rules → Alert → Case` pipeline live end to end.
+**What it was:** `POST /transactions/` (`app/api/routes/transactions.py`'s `create_transaction()`) never called `run_monitoring()`. Its own docstring, and the sibling `/run-monitoring` endpoint's docstring, both claimed scoring happened "automatically... in production" — it didn't; every transaction sat completely unscored, with zero alerts ever generated, unless something separately called the manual re-evaluation endpoint afterward. Same "seeding function exists but is never wired in" shape as P8 (Stage 6) and the starter-rules gap below.
+**What was done:** Added the `run_monitoring(txn, customer, db)` call to `create_transaction()`, alongside the (already-wired) automation-rules call. Corrected both docstrings to state what actually happens.
+**Detail:** `app/api/routes/transactions.py`'s `create_transaction()`/`run_monitoring_on_transaction()`; `tests/test_stage8_transaction_creation_triggers_monitoring_smoke.py`.
+
+### No organisation ever got any starter `MonitoringRule` rows — the "configurable rules" layer had nothing to configure
+**Parked:** never — found and fixed in the same pass.
+**What it was:** `MonitoringRule` (the real, no-code, per-org configurable rule engine the pipeline reads — distinct from the unrelated `AutomationRule` system, see P25 above) has a full CRUD API, but nothing ever seeded a starting set of rules for a new org. Every org started with zero rules; score-based behaviour-signal alerting still worked independently, but the configurable-rules layer Stage 8 explicitly asks for had no starting content — no seed to edit, just an empty list, for every real org.
+**What was done:** Seeded 6 starter rules on org creation (`org_service.py`'s `attach_owner()`, via `_seed_default_monitoring_rules()`), one per indicator type the stage brief names: unusual amount, rapid movement, structuring, frequency anomaly, high-risk jurisdiction, high-risk customer. Marked `is_system_rule` (editable/disable-able, not deletable), matching the seeding discipline already used for controls/policies/approval questions.
+**A second bug surfaced verifying it against a real payload:** `Transaction` has two overlapping country-pair column sets (`source_country`/`destination_country` vs `country_origin`/`country_destination`). Behaviour-signal scoring already checked all four; the rule-condition context (`monitoring_engine.py`'s `_build_txn_context()`) only ever exposed the first pair — so a transaction entered via the real frontend form (which sends `country_destination`, confirmed in `web/app/monitoring/page.tsx`) was invisible to every "high-risk jurisdiction" rule, seeded or user-created, regardless of this fix. Fixed alongside by falling back to the other pair when the first is unset.
+**Detail:** `app/services/org_service.py`'s `_seed_default_monitoring_rules()`; `app/services/monitoring_engine.py`'s `_build_txn_context()`; `tests/test_stage8_default_monitoring_rules_seeded_smoke.py`.
+
+### MLRO dashboard's "Close Case" button called the wrong endpoint and silently faked success on failure
+**Parked:** never — found and fixed in the same pass, tracing the pipeline's investigation/outcome stage (`web/app/mlro/page.tsx`).
+**What it was:** Three compounding issues in the case-management frontend. (1) The "Close Case" button called `POST /cases/{id}/status` (`transition_status`, compliance+) instead of `POST /cases/{id}/close` (`close_case`, mlro+) — the only endpoint that records `outcome`/`outcome_notes`/`closure_reason`/`closed_by`/`closed_at`; every case "closed" through the dashboard silently lost all of that data. (2) `updateStatus()` wrapped its fetch in `try { ... } catch {}`, discarding the response, then unconditionally updated local state and showed a success toast regardless of whether the backend call actually succeeded. (3) The page initialised and fell back to a hardcoded 5-case `DEMO_CASES` array whenever a real fetch returned zero cases — masking a genuinely empty, real organisation behind fabricated data indefinitely.
+**What was done:** Added a proper close-case form (closing status, outcome, required closure reason, optional outcome notes) that calls the real `/close` endpoint; `updateStatus()` and the new close flow now check `response.ok` and only update state/show success on a genuine success, with an error toast otherwise; removed `DEMO_CASES` entirely — `fetchCases()` now sets real data unconditionally (including a real empty array) and surfaces a failed fetch as an error rather than silently keeping stale/fake data. `CreateCaseForm`'s matching fake-success-on-failure fallback (fabricated a synthetic case object) fixed the same way. Also fixed three smaller spots hardcoded to only recognise `closed_no_action` as "closed" (stats, the critical-cases list, the open-cases-by-age table) now that the UI can produce any of the 5 real closed statuses.
+**Detail:** `web/app/mlro/page.tsx`; `tests/test_stage8_case_close_records_outcome_smoke.py` (backend contract — this frontend fix depends on, and this test file is also the first backend test coverage `app/api/routes/cases.py` has ever had).

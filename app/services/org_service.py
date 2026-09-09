@@ -364,7 +364,7 @@ def _seed_default_monitoring_rules(db: Session, org_id: str, created_by: str) ->
     _rule(
         "RULE-TM-006",
         "High-risk customer",
-        "Customer is a Politically Exposed Person or independently rated " "high risk.",
+        "Customer is a Politically Exposed Person or independently rated high risk.",
         AlertCategory.pep_exposure,
         AlertSeverity.high,
         [
