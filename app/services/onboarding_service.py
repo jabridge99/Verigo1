@@ -251,7 +251,7 @@ _SUBMITTED_STATUSES = {
 }
 
 
-def submit_onboarding(db, session, ip_address=None):
+async def submit_onboarding(db, session, ip_address=None):
     """
     Finishes the applicant's self-entry step (Step 1). This does NOT decide
     KYC pass/fail — a Customer record is created in `draft` status as the
@@ -270,7 +270,7 @@ def submit_onboarding(db, session, ip_address=None):
         return {"status": session.status, "customer_id": session.customer_id}
     data = session.collected_data or {}
 
-    sanctions = screen_name(session.applicant_name)
+    sanctions = await screen_name(session.applicant_name)
     session.sanctions_match = sanctions["match_found"]
     _log(
         db,

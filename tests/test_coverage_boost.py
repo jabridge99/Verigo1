@@ -93,18 +93,21 @@ def test_compute_ecdd_score_and_recommendation():
 # ── sanctions_screening ──────────────────────────────────────────────────────
 
 
-def test_screen_name_match_and_no_match():
+@pytest.mark.asyncio
+async def test_screen_name_match_and_no_match():
     from app.services.sanctions_screening import screen_name, screen_transaction
 
-    result = screen_name("John Doe Sanction")
+    # "Al-Qaeda" is one of InternalSanctionsProvider's real DFAT entries
+    # (app/integrations/sanctions/internal.py) -- the default SANCTIONS_PROVIDER.
+    result = await screen_name("Al-Qaeda")
     assert result["match_found"] is True
-    assert result["matches"][0]["list"] == "OFAC"
+    assert result["matches"][0]["list"] == "DFAT_AU"
 
-    result_clean = screen_name("Totally Unrelated Person")
+    result_clean = await screen_name("Totally Unrelated Person")
     assert result_clean["match_found"] is False
 
-    assert screen_transaction("")["match_found"] is False
-    assert screen_transaction("Jane Criminal")["match_found"] is True
+    assert (await screen_transaction(""))["match_found"] is False
+    assert (await screen_transaction("Taliban"))["match_found"] is True
 
 
 # ── identity_verification ──────────────────────────────────────────────────

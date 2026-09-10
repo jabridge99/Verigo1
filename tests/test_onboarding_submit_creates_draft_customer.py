@@ -1,5 +1,7 @@
 import uuid
 
+import pytest
+
 from app.models.customer import Customer
 from app.models.onboarding import CustomerType as OBCustomerType
 from app.models.onboarding import OnboardingSession, SessionStatus
@@ -40,13 +42,14 @@ def _get_org(db):
     return org
 
 
-def test_submit_onboarding_creates_draft_customer(db):
+@pytest.mark.asyncio
+async def test_submit_onboarding_creates_draft_customer(db):
     org = _get_org(db)
     sess = _make_session(db, org)
     db.add(sess)
     db.commit()
 
-    result = submit_onboarding(db, sess)
+    result = await submit_onboarding(db, sess)
 
     assert sess.status == SessionStatus.documents_submitted
     assert result["status"] == SessionStatus.documents_submitted
@@ -59,14 +62,15 @@ def test_submit_onboarding_creates_draft_customer(db):
     assert sr is not None
 
 
-def test_submit_onboarding_is_idempotent(db):
+@pytest.mark.asyncio
+async def test_submit_onboarding_is_idempotent(db):
     org = _get_org(db)
     sess = _make_session(db, org)
     db.add(sess)
     db.commit()
 
-    first = submit_onboarding(db, sess)
-    second = submit_onboarding(db, sess)
+    first = await submit_onboarding(db, sess)
+    second = await submit_onboarding(db, sess)
 
     # Idempotency is now tracked via session.status (SessionStatus.documents_submitted
     # onward), not the literal string "already_completed" -- customer_id is set on

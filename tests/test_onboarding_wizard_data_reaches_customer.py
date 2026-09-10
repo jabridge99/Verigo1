@@ -30,6 +30,8 @@ updating the existing draft Customer in place rather than assuming one
 still needs to be created.
 """
 
+import pytest
+
 from app.models.customer import Customer
 from app.models.organisation import IndustryType, Organisation
 from app.services.onboarding_service import (
@@ -39,7 +41,8 @@ from app.services.onboarding_service import (
 )
 
 
-def test_applicant_wizard_data_reaches_customer_record(db):
+@pytest.mark.asyncio
+async def test_applicant_wizard_data_reaches_customer_record(db):
     org = Organisation(
         name="Wizard Data Test Org",
         industry_id="digital-currency-exchange",
@@ -80,7 +83,7 @@ def test_applicant_wizard_data_reaches_customer_record(db):
     db.commit()
 
     # The "Submit Application" button -> POST /portal/{token}/submit.
-    result = submit_onboarding(db, session)
+    result = await submit_onboarding(db, session)
 
     customer = db.query(Customer).filter(Customer.id == session.customer_id).first()
     assert customer.date_of_birth is not None
@@ -89,7 +92,8 @@ def test_applicant_wizard_data_reaches_customer_record(db):
     assert result["customer_id"] == customer.id
 
 
-def test_second_submit_is_idempotent_and_does_not_wipe_data(db):
+@pytest.mark.asyncio
+async def test_second_submit_is_idempotent_and_does_not_wipe_data(db):
     org = Organisation(
         name="Wizard Idempotent Test Org",
         industry_id="digital-currency-exchange",
@@ -111,8 +115,8 @@ def test_second_submit_is_idempotent_and_does_not_wipe_data(db):
     advance_step(db, session, 1, {"date_of_birth": "1990-05-15"})
     db.commit()
 
-    first = submit_onboarding(db, session)
-    second = submit_onboarding(db, session)
+    first = await submit_onboarding(db, session)
+    second = await submit_onboarding(db, session)
 
     assert second["customer_id"] == first["customer_id"]
     customer = db.query(Customer).filter(Customer.id == session.customer_id).first()

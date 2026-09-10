@@ -491,11 +491,11 @@ def portal_submit_step(token: str, payload: StepSubmit, db: Session = Depends(ge
 
 
 @router.post("/portal/{token}/submit")
-def portal_final_submit(token: str, db: Session = Depends(get_db)):
+async def portal_final_submit(token: str, db: Session = Depends(get_db)):
     session = db.query(OnboardingSession).filter_by(invite_token=token).first()
     if not session:
         raise HTTPException(404, "Invalid invite link")
-    result = submit_onboarding(db, session)
+    result = await submit_onboarding(db, session)
     _log(
         db,
         session.organisation_id or session.industry_id,
