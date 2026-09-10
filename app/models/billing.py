@@ -21,9 +21,9 @@ from app.db.database import Base
 
 
 class BillingPlan(str, enum.Enum):
-    starter = "starter"  # $299/mo
-    professional = "professional"  # $799/mo
-    enterprise = "enterprise"  # $1,999/mo
+    starter = "starter"  # $59/mo — see PLAN_CATALOGUE for current pricing
+    professional = "professional"  # $79/mo
+    enterprise = "enterprise"  # $299/mo
     vvip = "vvip"  # custom pricing
     free_trial = "free_trial"
 
@@ -149,6 +149,18 @@ PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
         ],
         "limits": {"customers": -1, "users": -1, "api_calls_month": -1},
     },
+}
+
+# BillingPlan.free_trial is the implicit "no subscription yet" state
+# (current_plan() returns it when no Subscription row exists) rather than a
+# purchasable tier, so it's deliberately not in PLAN_CATALOGUE (it's never
+# listed on /billing/plans). It still needs its own usage limits to enforce
+# though -- values match what web/app/pricing/page.tsx already advertises
+# for the free trial card ("Up to 10 customers", "1 user per tenant").
+FREE_TRIAL_LIMITS: dict[str, int] = {
+    "customers": 10,
+    "users": 1,
+    "api_calls_month": 250,
 }
 
 

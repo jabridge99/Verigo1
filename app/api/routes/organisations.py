@@ -101,6 +101,7 @@ def create(
     current_user: User = Depends(_current_user),
     db: Session = Depends(get_db),
 ):
+    billing_service.enforce_org_creation_limit(db, current_user)
     org = create_organisation(
         db, payload.name, current_user, industry_id=payload.industry_id
     )
@@ -588,6 +589,7 @@ def add_member(
 ):
     org = _get_org_or_404(db, org_id)
     _require_permission(db, org, current_user, "org:manage")
+    billing_service.enforce_user_limit(db, org.id, org.industry_id)
     target = get_user_by_email(db, payload.email)
     if not target:
         raise HTTPException(404, "No user with that email")

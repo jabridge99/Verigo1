@@ -115,7 +115,7 @@ from app.schemas.customer import (
     WalletScreeningCreate,
     WalletScreeningResponse,
 )
-from app.services import audit_service
+from app.services import audit_service, billing_service
 from app.services.customer_risk_engine import (
     assess_customer_risk,
     risk_level_from_score,
@@ -290,6 +290,7 @@ def create_customer(
     db: Session = Depends(get_db),
 ):
     oid = org_id_for(current_user)
+    billing_service.enforce_customer_limit(db, oid)
 
     customer = Customer(
         org_id=oid,
