@@ -132,7 +132,7 @@ def _get_industry_template(industry: IndustryType, risk_level: str) -> AMLTempla
         IndustryType.bullion_dealers: "dpms",
         # Tranche 2
         IndustryType.accountants: "accounting",
-        IndustryType.conveyancers: "real_estate",  # shares real_estate template
+        IndustryType.conveyancers: "conveyancers",
         IndustryType.legal_professionals: "legal",
         IndustryType.real_estate: "real_estate",
         IndustryType.precious_metals: "dpms",

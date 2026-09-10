@@ -36,7 +36,7 @@ INDUSTRY_MODULE_MAP = {
     "bullion_dealers": "other",
     # ── Tranche 2 ─────────────────────────────────────────────────────────────
     "accountants": "accounting",
-    "conveyancers": "real_estate",
+    "conveyancers": "conveyancers",
     "legal_professionals": "legal",
     "real_estate": "real_estate",
     "precious_metals": "other",
