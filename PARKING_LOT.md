@@ -10,9 +10,9 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 
 ## Open items — at a glance
 
-19 open items, grouped by theme. ID links to the full entry further down this file. A critical/non-critical triage pass (below) went through every item using the criterion "does this undermine real AML/CTF compliance capability" — items that did (DPMS's actively-wrong instruction, the missing alert→case bridge) are fixed and moved to Resolved; items that are gaps or feature debt rather than wrong behaviour stay parked here, several with a deeper investigation confirming why a quick fix isn't safe.
+18 open items, grouped by theme. ID links to the full entry further down this file. A critical/non-critical triage pass (below) went through every item using the criterion "does this undermine real AML/CTF compliance capability" — items that did (DPMS's actively-wrong instruction, the missing alert→case bridge) are fixed and moved to Resolved; items that are gaps or feature debt rather than wrong behaviour stay parked here, several with a deeper investigation confirming why a quick fix isn't safe.
 
-*(P35, "most of the app is unreachable via a real browser session" — the critical item that briefly sat at the top of this list — is resolved. See Resolved below. P12 and P25 — the AML Program wizard step and the missing MonitoringRule UI — are also resolved, per your direction; see Resolved below.)*
+*(P35, "most of the app is unreachable via a real browser session" — the critical item that briefly sat at the top of this list — is resolved. See Resolved below. P12 and P25 — the AML Program wizard step and the missing MonitoringRule UI — are also resolved, per your direction; see Resolved below. P19 — Conveyancers sharing Real Estate's template — is also resolved; see Resolved below.)*
 
 ### A. Architecture — duplicate/competing systems (each needs a design decision, not a quick fix — see the "Resolved" entries below for why the seemingly-obvious fixes turned out not to be safe)
 
@@ -21,7 +21,6 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 ### B. Industry template content — Google Drive vs. code (the 8-sector review, largest body of work)
 | ID | Sector | Headline finding | Effort |
 |---|---|---|---|
-| P19 | Conveyancers | Shares Real Estate's template; real risk is trust-account/PEXA, not sales-side | New `conveyancer.py` module |
 | P17 | Remittance | Missing AUSTRAC's #1 typology (third-party sender) entirely | Content rewrite |
 | P18 | VASP | Missing proliferation financing, VASP-to-VASP diligence, unhosted-wallet verification (Travel Rule threshold itself already fixed) | Content rewrite |
 | P20 | Legal | TMP/SMR/Sanctions/PEP procedures entirely unset; LPP theme absent | Content rewrite |
@@ -83,8 +82,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 
 Reading the open items as a roadmap rather than a flat list:
 
-1. **Rewrite the remaining industry templates from the real VERIGO document library (P17–P20, P22–P23), suggested order:**
-   - **Conveyancers first** — needs its own module (currently borrows Real Estate's), and the real content already fully read this session.
+1. **Rewrite the remaining industry templates from the real VERIGO document library (P17–P18, P20, P22–P23) — Conveyancers (P19) is done, see Resolved below.**
    - **Remittance and VASP** — Tranche 1, most mature/detailed real reference material, and Remittance in particular is missing AUSTRAC's #1-ranked typology for the sector outright.
    - **Legal, Accountants, Real Estate** — Tranche 2, all three have substantial real content already read and compared; can be sequenced by whichever industry you expect to onboard first.
    - **DPMS's remaining depth** — the actively-wrong instruction is already fixed; bring the rest of the sector (gemstone/watch thresholds, remaining TMP rules, a real risk library) up to the other sectors' level whenever this batch is picked up.
@@ -203,11 +201,7 @@ The full VERIGO AML/CTF template library (8 industry sectors × up to 9 document
 **Why parked:** Same reasoning as P17 — real content-authoring work, your sign-off wanted before implementing beyond the threshold fix.
 **Detail:** Full comparison in this session's research; `app/templates/aml/industries/vasp.py`, `app/templates/risk/industries/vasp.py`.
 
-### P19 — Conveyancers currently reuse the Real Estate Agent template; real documents show materially different content
-**Status:** Parked pending your go-ahead — confirms this is a real gap, not just a labelling shortcut.
-**What:** `app/templates/aml/factory.py` maps `IndustryType.conveyancers` to the `real_estate` module ("shares real_estate template"). The real Conveyancer document suite is built around a fundamentally different ML vehicle than a real estate agent's — a statutory trust account and the PEXA/Sympli e-conveyancing settlement platform — versus a real estate agent's front-line cash/negotiation/listing exposure. AUSTRAC's top-3 conveyancing STR typologies (third-party trust receipts, overpayment/refund fraud, settlement-account-change fraud) have no equivalent in the shared `real_estate.py` template, nor does any FIRB-specific procedure, subdivision/common-beneficial-ownership ECDD, or the state trust-account licensing legislation (Conveyancers Licensing Act NSW, Conveyancers Act VIC, Settlement Agents Act WA, Land Agents Act SA) a real conveyancer operates under.
-**Why parked:** Deciding to build a dedicated `conveyancer.py` module (rather than continue sharing `real_estate.py`) is a real scoping decision with follow-on work (new factory.py mapping, new risk template) — your sign-off wanted first.
-**Detail:** Full comparison in this session's research; `app/templates/aml/factory.py`'s industry mapping; `app/templates/aml/industries/real_estate.py`.
+*(P19, Conveyancers reusing the Real Estate template, is resolved — see Resolved below.)*
 
 ### P20 — Legal Professionals code template: Transaction Monitoring, SMR, Sanctions, and LPP-interface content entirely absent
 **Status:** Parked pending your go-ahead.
@@ -491,3 +485,9 @@ Because neither `Enum(ControlStatus)` column passes `name=`, SQLAlchemy derives 
 **Why this needs your go-ahead rather than being fixed now:** a real fix needs a new Alembic migration — giving one of the two columns (most likely `governance_controls.py`'s, since it's the live one) its own explicit, distinct Postgres enum type name, then migrating the column over. That's a schema change to a live table, which this session's standing instructions say needs sign-off, and it's outside what P12/P25 asked for.
 **Why this is flagged as urgent rather than just parked:** if the real production database was built from the same migration chain (rather than having organically accumulated a `controlstatus` type with the right values from a different history), **new customer signups could be failing in production right now.** Worth checking directly — try registering a brand-new organisation against production, or query production's `controlstatus` enum values (`SELECT enum_range(NULL::controlstatus)`) and compare against `governance_controls.py`'s `ControlStatus` — before anything else on this list.
 **Detail:** `app/models/aml_solution.py:65,414`; `app/models/governance_controls.py:118,261`; `app/services/org_service.py`'s `_seed_aml_solution_and_risk_framework()`.
+
+### P19 — Conveyancers now has its own dedicated AML/risk template
+**Parked:** 2026-09-08, as "confirmed real gap, needs your go-ahead for a new module." **Resolved:** 2026-09-10, per your direction ("Industry template rewrites" selected as the priority).
+**What changed:** New `app/templates/aml/industries/conveyancers.py` and `app/templates/risk/industries/conveyancers.py`, built from Verigo's own real Conveyancer document suite (`VERIGO_CONVEYANCER_AMLCTF_Template_v1`, KYC/ECDD/TMP/SMR/Sanctions Guidelines, RATP Addendum M-10, and the ISO 31000 Risk Matrix, read directly from the source documents this session) — covering trust-account monitoring and approval workflow (third-party receipts, overpayment/refund, settlement account changes — AUSTRAC's ranked #1/#2/#3 typologies for this sector), PEXA/Sympli e-conveyancing platform controls, FIRB verification for foreign purchasers, SMSF/LRBA-specific CDD, subdivision/development common-beneficial-ownership risk, and the State/Territory trust-account licensing regimes that run alongside AML/CTF obligations. `factory.py`'s industry mapping (both AML and risk) now points `IndustryType.conveyancers` at its own module instead of `real_estate`.
+**Verified:** live — registered a fresh org, selected `industry_type=conveyancers`, confirmed the seeded AML program has 22/22 sections populated (previously fell through to real_estate's generic sales-side content) and the risk framework carries the correct conveyancer-specific category weights (customer 0.25, transaction 0.25 — reflecting that the real matrix's highest-scoring risk, third-party trust account funds, is a transaction-category risk) and factor counts. Targeted test subset (115 tests covering onboarding/industry-selection/aml-program/risk-framework) passes; mypy and ruff clean.
+**Detail:** `app/templates/aml/industries/conveyancers.py`; `app/templates/risk/industries/conveyancers.py`; `app/templates/aml/factory.py` and `app/templates/risk/factory.py`'s industry mappings.
