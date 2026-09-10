@@ -2219,6 +2219,7 @@ async def bulk_import_customers(
     org_id = org_id_for(current_user)
     created = []
     skipped = []
+    remaining_capacity = billing_service.remaining_customer_capacity(db, org_id)
 
     for i, row in enumerate(rows):
         full_name = row.get("full_name", "").strip()
@@ -2226,6 +2227,17 @@ async def bulk_import_customers(
 
         if not full_name:
             errors.append(f"Row {i + 2}: full_name is required")
+            continue
+
+        if remaining_capacity is not None and remaining_capacity <= 0:
+            skipped.append(
+                {
+                    "full_name": full_name,
+                    "email": email,
+                    "reason": "Your plan's customer limit has been reached. "
+                    "Upgrade your plan to import more customers.",
+                }
+            )
             continue
 
         # Duplicate email check within org
@@ -2320,6 +2332,8 @@ async def bulk_import_customers(
                 "status": "draft",
             }
         )
+        if remaining_capacity is not None:
+            remaining_capacity -= 1
 
     db.commit()
 

@@ -23,6 +23,7 @@ from app.models.screening import (
     ScreeningStatus,
     ScreeningType,
 )
+from app.services import billing_service
 from app.services.sanctions_screening import screen_name
 
 INVITE_EXPIRY_DAYS = 7
@@ -72,6 +73,12 @@ def create_session(
     created_by=None,
     batch_id=None,
 ):
+    # This always creates a draft Customer below (see comment further down),
+    # so it's a real customer-creation path and must respect the same plan
+    # cap as customers.py::create_customer -- both the single-invite route
+    # and bulk_create_sessions() (which calls this in a loop) go through here.
+    billing_service.enforce_customer_limit(db, organisation_id, industry_id)
+
     token = secrets.token_urlsafe(32)
     expires = datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS)
     session = OnboardingSession(
@@ -281,6 +288,9 @@ def submit_onboarding(db, session, ip_address=None):
         else None
     )
     if customer is None:
+        billing_service.enforce_customer_limit(
+            db, session.organisation_id, session.industry_id
+        )
         customer = Customer(
             customer_ref=f"CUST-{uuid.uuid4().hex[:10].upper()}",
             org_id=session.organisation_id,

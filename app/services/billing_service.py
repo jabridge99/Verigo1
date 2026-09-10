@@ -370,24 +370,42 @@ def _plan_limits(db: Session, org_id: str, industry_id: Optional[str] = None) ->
     return info["limits"] if info else FREE_TRIAL_LIMITS
 
 
+def _customer_capacity(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> tuple:
+    """Return (limit, current_count, remaining). remaining is None when the
+    plan's customer limit is unlimited (-1)."""
+    from app.models.customer import Customer
+
+    limit = _plan_limits(db, org_id, industry_id)["customers"]
+    current = db.query(Customer).filter(Customer.org_id == org_id).count()
+    remaining = None if limit < 0 else max(0, limit - current)
+    return limit, current, remaining
+
+
 def enforce_customer_limit(
     db: Session, org_id: str, industry_id: Optional[str] = None
 ) -> None:
     """Raise if creating one more customer would exceed the org's plan cap."""
     from fastapi import HTTPException
 
-    from app.models.customer import Customer
-
-    limit = _plan_limits(db, org_id, industry_id)["customers"]
-    if limit < 0:
-        return
-    current = db.query(Customer).filter(Customer.org_id == org_id).count()
-    if current >= limit:
+    limit, _current, remaining = _customer_capacity(db, org_id, industry_id)
+    if remaining is not None and remaining <= 0:
         raise HTTPException(
             403,
             f"Your plan's customer limit ({limit}) has been reached. "
             "Upgrade your plan to onboard more customers.",
         )
+
+
+def remaining_customer_capacity(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> Optional[int]:
+    """None = unlimited. Used by bulk flows (CSV import, bulk onboarding
+    invites) that need to cap how many rows they process rather than fail
+    the whole request outright the way a single-record create does."""
+    _limit, _current, remaining = _customer_capacity(db, org_id, industry_id)
+    return remaining
 
 
 def enforce_user_limit(
