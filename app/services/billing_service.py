@@ -476,6 +476,43 @@ def enforce_org_creation_limit(db: Session, user) -> None:
         )
 
 
+def record_api_call(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> None:
+    """Increment this org's api_calls_month counter for the current UTC
+    calendar month and raise once its plan's cap is exceeded. Only call
+    this for requests authenticated via an API key (app/api/deps.py's
+    get_current_user, X-API-Key branch) -- api_calls_month is the
+    "Webhooks & API access" plan feature (external integration usage), not
+    ordinary browser/JWT session traffic, which is never metered here."""
+    from fastapi import HTTPException
+
+    from app.models.billing import ApiUsageCounter
+
+    if not org_id:
+        return
+
+    period = datetime.now(timezone.utc).strftime("%Y-%m")
+    counter = (
+        db.query(ApiUsageCounter)
+        .filter(ApiUsageCounter.org_id == org_id, ApiUsageCounter.period == period)
+        .first()
+    )
+    if counter is None:
+        counter = ApiUsageCounter(org_id=org_id, period=period, count=0)
+        db.add(counter)
+    counter.count += 1
+    db.commit()
+
+    limit = _plan_limits(db, org_id, industry_id)["api_calls_month"]
+    if limit >= 0 and counter.count > limit:
+        raise HTTPException(
+            429,
+            f"Your plan's API call limit ({limit}/month) has been reached. "
+            "Upgrade your plan for a higher limit.",
+        )
+
+
 # ── Price resolution ───────────────────────────────────────────────────────────
 
 

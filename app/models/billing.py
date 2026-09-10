@@ -400,6 +400,30 @@ class StripePriceMapping(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class ApiUsageCounter(Base):
+    """Tracks API-key-authenticated calls per org per UTC calendar month, for
+    enforcing PLAN_CATALOGUE's api_calls_month limit (see
+    billing_service.py's record_api_call()). Only requests authenticated via
+    an API key count here -- normal browser/JWT session traffic is never
+    metered, since api_calls_month represents the "Webhooks & API access"
+    plan feature (external integration usage), not ordinary app usage.
+    One row per (org_id, period); period is "YYYY-MM" so a new month just
+    starts a new row rather than needing a scheduled reset job."""
+
+    __tablename__ = "api_usage_counters"
+    __table_args__ = (
+        UniqueConstraint("org_id", "period", name="uq_api_usage_org_period"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(String(100), index=True, nullable=False)
+    period = Column(String(7), nullable=False)  # "YYYY-MM"
+    count = Column(Integer, default=0, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
 class SubscriptionAddon(Base):
     """Enterprise add-on purchase — gates access to partially-built/sales-gated
     providers (e.g. Elliptic, TRM Labs crypto wallet screening) independent of
