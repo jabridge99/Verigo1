@@ -20,7 +20,15 @@ from datetime import date, datetime, timezone
 from typing import Any, List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -116,6 +124,7 @@ from app.schemas.customer import (
     WalletScreeningResponse,
 )
 from app.services import audit_service, billing_service
+from app.services.api_key_service import dispatch_event_background
 from app.services.customer_risk_engine import (
     assess_customer_risk,
     risk_level_from_score,
@@ -125,6 +134,7 @@ from app.services.risk_matrix_service import (
     compute_final_approval_score,
     compute_question_score,
 )
+from app.worker import add_background_task
 
 log = logging.getLogger("verigo.api.customers")
 router = APIRouter(prefix="/customers", tags=["Customers"])
@@ -286,6 +296,7 @@ def _customer_checklist_summary(customer_id: str, org_id: str, db: Session) -> d
 @router.post("", response_model=CustomerResponse, status_code=201)
 def create_customer(
     payload: CustomerCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
@@ -370,6 +381,19 @@ def create_customer(
         customer.id,
         customer_context(customer),
         triggered_by=current_user.id,
+    )
+
+    add_background_task(
+        background_tasks,
+        dispatch_event_background,
+        "customer.created",
+        {
+            "customer_id": customer.id,
+            "customer_ref": customer.customer_ref,
+            "customer_type": payload.customer_type.value,
+            "full_name": customer.full_name,
+        },
+        oid,
     )
 
     log.info("Customer created: %s org=%s", customer.customer_ref, oid)

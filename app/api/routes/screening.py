@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -61,8 +61,10 @@ from app.models.screening import (
 from app.models.user import User
 from app.services import audit_service
 from app.services import billing_service as billing_svc
+from app.services.api_key_service import dispatch_event_background
 from app.services.identity_verification_service import compute_identity_score
 from app.services.sanctions_screening import screen_name
+from app.worker import add_background_task
 
 router = APIRouter(prefix="/screening", tags=["Screening Hub"])
 
@@ -445,6 +447,7 @@ async def quick_screen(
 @router.post("/run", status_code=201)
 async def run_screening(
     payload: ScreeningRunRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
@@ -472,6 +475,7 @@ async def run_screening(
 
     created_records = []
     matched_record_ids = []
+    alerts_for_webhook = []
     for stype in payload.screening_types:
         result = await _screen(
             stype,
@@ -523,12 +527,29 @@ async def run_screening(
             )
             db.add(alert)
             matched_record_ids.append(record.id)
+            alerts_for_webhook.append(alert)
 
         created_records.append(record)
 
     db.commit()
     for r in created_records:
         db.refresh(r)
+
+    for alert in alerts_for_webhook:
+        db.refresh(alert)
+        add_background_task(
+            background_tasks,
+            dispatch_event_background,
+            "aml_alert.created",
+            {
+                "alert_id": alert.id,
+                "customer_id": alert.customer_id,
+                "severity": alert.severity.value,
+                "alert_type": alert.alert_type,
+                "summary": alert.summary,
+            },
+            org_id,
+        )
 
     for r in created_records:
         _log(
@@ -1099,10 +1120,13 @@ async def screen_crypto_wallet(
     """
     Screen a crypto wallet address for sanctions/risk exposure.
 
-    Routes to the configured CRYPTO_PROVIDER (currently: Chainalysis's free
-    sanctions-only oracle — direct OFAC/UN/EU/UK address matches, no
-    cluster-level risk scoring or exposure percentages). Falls back to
-    simulation mode if no provider is configured.
+    Routes to the configured CRYPTO_PROVIDER. Default ("internal", or
+    unset) is OFAC's self-hosted sanctioned-address list (free, no API
+    key) — direct OFAC-only address matches, no cluster-level risk
+    scoring or exposure percentages. Chainalysis's free sanctions-only
+    oracle and paid providers (Elliptic, TRM Labs — enterprise add-on
+    required) are also available. Falls back to simulation mode only if
+    CRYPTO_PROVIDER is explicitly set to a provider not yet implemented.
 
     DISCLAIMER: Wallet risk scores are data inputs only.
     The platform does not make compliance determinations about crypto transactions.
