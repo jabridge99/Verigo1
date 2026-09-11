@@ -258,7 +258,10 @@ class GovernanceControl(Base):
 
     # ── Status & effectiveness ────────────────────────────────────────────────
     status = Column(
-        Enum(ControlStatus), default=ControlStatus.active, nullable=False, index=True
+        Enum(ControlStatus, name="governance_control_status"),
+        default=ControlStatus.active,
+        nullable=False,
+        index=True,
     )
     effectiveness = Column(
         Enum(ControlEffectiveness),

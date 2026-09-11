@@ -411,7 +411,9 @@ class Control(Base):
     owner = Column(String)  # user id responsible for this control
 
     status = Column(
-        Enum(ControlStatus), default=ControlStatus.not_tested, nullable=False
+        Enum(ControlStatus, name="legacy_control_status"),
+        default=ControlStatus.not_tested,
+        nullable=False,
     )
     last_tested_date = Column(Date)
     next_test_date = Column(Date)
