@@ -372,7 +372,9 @@ class RiskAssessmentRun(Base):
     assessment_period_start = Column(Date)
     assessment_period_end = Column(Date)
     status = Column(
-        Enum(AssessmentStatus), default=AssessmentStatus.draft, nullable=False
+        Enum(AssessmentStatus, name="risk_assessment_run_status"),
+        default=AssessmentStatus.draft,
+        nullable=False,
     )
     trigger = Column(
         String(100)

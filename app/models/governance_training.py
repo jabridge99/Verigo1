@@ -251,7 +251,7 @@ class GovernanceTrainingRecord(Base):
 
     # ── Status (CALCULATED — do not set manually) ─────────────────────────────
     status = Column(
-        Enum(TrainingStatus),
+        Enum(TrainingStatus, name="governance_training_status"),
         default=TrainingStatus.assigned,
         nullable=False,
         index=True,

@@ -197,7 +197,10 @@ class ScreeningAlert(Base):
 
     severity = Column(Enum(AlertSeverity), nullable=False)
     status = Column(
-        Enum(AlertStatus), default=AlertStatus.open, nullable=False, index=True
+        Enum(AlertStatus, name="screening_alert_status"),
+        default=AlertStatus.open,
+        nullable=False,
+        index=True,
     )
     alert_type = Column(String(100))  # pep_match | sanctions_hit | adverse_media | etc.
     summary = Column(Text, nullable=False)
@@ -359,7 +362,9 @@ class AdverseMediaResult(Base):
     is_confirmed_match = Column(Boolean, default=False)
     is_false_positive = Column(Boolean, default=False)
 
-    review_status = Column(Enum(AlertStatus), default=AlertStatus.open)
+    review_status = Column(
+        Enum(AlertStatus, name="screening_alert_status"), default=AlertStatus.open
+    )
     reviewed_by = Column(String)
     reviewed_at = Column(DateTime(timezone=True))
     reviewer_notes = Column(Text)

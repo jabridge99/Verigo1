@@ -306,9 +306,12 @@ class ReviewRecommendation(Base):
     org_id = Column(String, nullable=False)
 
     description = Column(Text, nullable=False)
-    priority = Column(Enum(RecommendationPriority), nullable=False)
+    priority = Column(
+        Enum(RecommendationPriority, name="review_recommendation_priority"),
+        nullable=False,
+    )
     status = Column(
-        Enum(RecommendationStatus),
+        Enum(RecommendationStatus, name="review_recommendation_status"),
         default=RecommendationStatus.open,
         nullable=False,
         index=True,

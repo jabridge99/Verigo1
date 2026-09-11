@@ -303,7 +303,9 @@ class RiskAssessment(Base):
     title = Column(String(255), nullable=False)
     assessment_date = Column(Date, nullable=False)
     status = Column(
-        Enum(AssessmentStatus), default=AssessmentStatus.draft, nullable=False
+        Enum(AssessmentStatus, name="legacy_risk_assessment_status"),
+        default=AssessmentStatus.draft,
+        nullable=False,
     )
 
     # Risk scoring (1–5 scale)
@@ -461,7 +463,9 @@ class TrainingRecord(Base):
     description = Column(Text)
 
     status = Column(
-        Enum(TrainingStatus), default=TrainingStatus.not_started, nullable=False
+        Enum(TrainingStatus, name="legacy_training_status"),
+        default=TrainingStatus.not_started,
+        nullable=False,
     )
     due_date = Column(Date)
     completed_date = Column(Date)

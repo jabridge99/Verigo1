@@ -347,7 +347,10 @@ class TransactionAlert(Base):
     category = Column(Enum(AlertCategory), nullable=False, index=True)
     severity = Column(Enum(AlertSeverity), nullable=False, index=True)
     status = Column(
-        Enum(AlertStatus), default=AlertStatus.generated, nullable=False, index=True
+        Enum(AlertStatus, name="transaction_alert_status"),
+        default=AlertStatus.generated,
+        nullable=False,
+        index=True,
     )
 
     # ── Source ────────────────────────────────────────────────────────────────

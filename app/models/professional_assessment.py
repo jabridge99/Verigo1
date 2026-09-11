@@ -308,7 +308,7 @@ class ProfessionalAssessment(Base):
     )
     matter_description = Column(Text)  # Brief description of the matter/engagement
     status = Column(
-        Enum(AssessmentStatus),
+        Enum(AssessmentStatus, name="professional_assessment_status"),
         default=AssessmentStatus.draft,
         nullable=False,
         index=True,
@@ -410,7 +410,10 @@ class SOFAssessment(Base):
     evidence_types = Column(JSON, default=list)  # ["bank_statement", "payslip", ...]
 
     # Review outcome
-    review_outcome = Column(Enum(ReviewOutcome), default=ReviewOutcome.not_reviewed)
+    review_outcome = Column(
+        Enum(ReviewOutcome, name="professional_review_outcome"),
+        default=ReviewOutcome.not_reviewed,
+    )
     reviewer_id = Column(String)
     review_date = Column(DateTime(timezone=True))
     review_notes = Column(Text)
@@ -453,7 +456,10 @@ class SOWAssessment(Base):
     # Review outcome
     review_notes = Column(Text)
     risk_assessment = Column(Text)  # Reviewer's written risk assessment
-    review_outcome = Column(Enum(ReviewOutcome), default=ReviewOutcome.not_reviewed)
+    review_outcome = Column(
+        Enum(ReviewOutcome, name="professional_review_outcome"),
+        default=ReviewOutcome.not_reviewed,
+    )
     reviewer_id = Column(String)
     review_date = Column(DateTime(timezone=True))
 
@@ -489,7 +495,10 @@ class TransactionPurposeAssessment(Base):
 
     evidence_refs = Column(JSON, default=list)
     review_notes = Column(Text)
-    review_outcome = Column(Enum(ReviewOutcome), default=ReviewOutcome.not_reviewed)
+    review_outcome = Column(
+        Enum(ReviewOutcome, name="professional_review_outcome"),
+        default=ReviewOutcome.not_reviewed,
+    )
     reviewer_id = Column(String)
     review_date = Column(DateTime(timezone=True))
 
@@ -596,7 +605,8 @@ class InvestmentLegitimacyAssessment(Base):
     supporting_documentation = Column(JSON, default=list)  # document refs
     review_outcome = Column(Text)
     review_outcome_status = Column(
-        Enum(ReviewOutcome), default=ReviewOutcome.not_reviewed
+        Enum(ReviewOutcome, name="professional_review_outcome"),
+        default=ReviewOutcome.not_reviewed,
     )
     reviewer_id = Column(String)
     review_date = Column(DateTime(timezone=True))

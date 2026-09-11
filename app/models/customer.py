@@ -105,7 +105,9 @@ class Customer(Base):
         index=True,
     )
     customer_type = Column(
-        Enum(CustomerType), nullable=False, default=CustomerType.individual
+        Enum(CustomerType, name="master_customer_type"),
+        nullable=False,
+        default=CustomerType.individual,
     )
     status = Column(
         Enum(CustomerStatus), default=CustomerStatus.draft, nullable=False, index=True
@@ -543,7 +545,7 @@ class CustomerReview(Base):
     review_date = Column(Date, nullable=False)
     next_review_date = Column(Date)
     reviewed_by = Column(String, nullable=False)
-    outcome = Column(Enum(ReviewOutcome))
+    outcome = Column(Enum(ReviewOutcome, name="customer_review_outcome"))
     outcome_notes = Column(Text)
     documents_reviewed = Column(JSON)  # list of document IDs checked
     risk_score_before = Column(Float)
@@ -571,7 +573,11 @@ class CustomerNote(Base):
     )
     org_id = Column(String, nullable=False, index=True)
 
-    note_type = Column(Enum(NoteType), default=NoteType.general, nullable=False)
+    note_type = Column(
+        Enum(NoteType, name="customer_note_type"),
+        default=NoteType.general,
+        nullable=False,
+    )
     content = Column(Text, nullable=False)
     is_confidential = Column(Boolean, default=False)  # mlro-only visibility
     created_by = Column(String, nullable=False)
