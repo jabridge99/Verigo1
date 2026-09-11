@@ -21,10 +21,15 @@ from app.db.database import Base
 
 
 class BillingPlan(str, enum.Enum):
-    starter = "starter"  # $59/mo — see PLAN_CATALOGUE for current pricing
-    professional = "professional"  # $79/mo
-    enterprise = "enterprise"  # $299/mo
-    vvip = "vvip"  # custom pricing
+    # Enum member names are the stable DB/API identifiers and are NOT
+    # renamed on a repricing -- only PLAN_CATALOGUE's "name"/pricing/limits
+    # change. starter = "Compliance" ($299/mo), professional = "Scale"
+    # ($799/mo), enterprise = "Enterprise" ($2,999+/mo) -- see
+    # PLAN_CATALOGUE for current pricing/display names.
+    starter = "starter"
+    professional = "professional"
+    enterprise = "enterprise"
+    vvip = "vvip"  # custom pricing, negotiated outside the self-serve ladder
     free_trial = "free_trial"
 
 
@@ -53,6 +58,7 @@ class InvoiceStatus(str, enum.Enum):
 
 class AddonKey(str, enum.Enum):
     enterprise_crypto_screening = "enterprise_crypto_screening"
+    independent_review = "independent_review"
 
 
 class AddonStatus(str, enum.Enum):
@@ -60,10 +66,13 @@ class AddonStatus(str, enum.Enum):
     canceled = "canceled"
 
 
-# ── Enterprise add-on catalogue ─────────────────────────────────────────────────
-# Add-ons unlock providers that are partially built (unverified response schema)
-# or sales-gated (no self-serve API access) — sold separately from the base plan
-# so tenants aren't charged for capability they haven't opted into.
+# ── Add-on catalogue ─────────────────────────────────────────────────────────
+# Two different kinds of add-on live here: enterprise_crypto_screening
+# unlocks providers that are partially built (unverified response schema)
+# or sales-gated (no self-serve API access); independent_review is a human
+# service (an annual AML/CTF independent review, delivered by a dedicated
+# review team separate from the platform build team), not a software
+# feature -- unlocks_providers is deliberately empty for it.
 
 ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
     AddonKey.enterprise_crypto_screening: {
@@ -77,6 +86,23 @@ ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
         "unlocks_providers": ["elliptic", "trm_labs"],
         "requires_plan": [BillingPlan.enterprise, BillingPlan.vvip],
     },
+    AddonKey.independent_review: {
+        "name": "Annual Independent Review",
+        "monthly_aud": None,  # TBA -- priced separately, not yet set
+        "description": (
+            "An annual AML/CTF independent review conducted by Verigo's "
+            "dedicated review team, separate from the platform's own "
+            "compliance-build side -- satisfies the periodic independent "
+            "review AUSTRAC guidance expects of reporting entities."
+        ),
+        "unlocks_providers": [],
+        "requires_plan": [
+            BillingPlan.starter,
+            BillingPlan.professional,
+            BillingPlan.enterprise,
+            BillingPlan.vvip,
+        ],
+    },
 }
 
 
@@ -84,57 +110,60 @@ ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
 
 PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
     BillingPlan.starter: {
-        "name": "Starter",
-        "monthly_aud": 59.00,
-        "annual_aud": 599.00,
+        "name": "Compliance",
+        "monthly_aud": 299.00,
+        "annual_aud": 2_990.00,  # 10 months for the price of 12
         "features": [
-            "Up to 500 customers",
-            "1 user per tenant",
-            "AML transaction monitoring",
+            "Full AML/CTF program for 1 industry, no watermark",
+            "Up to 100 customers",
+            "1-2 users per tenant",
+            "Real sanctions & PEP screening",
+            "Live regulatory updates included",
             "KYC/KYB onboarding",
             "AUSTRAC TTR & IFTI reporting",
             "Email notifications",
             "Document vault (5 GB)",
-            "1,000 API calls / month",
-            "Standard support",
+            "Email support",
         ],
-        "limits": {"customers": 500, "users": 1, "api_calls_month": 1_000},
+        "limits": {"customers": 100, "users": 2, "api_calls_month": 500},
     },
     BillingPlan.professional: {
-        "name": "Professional",
-        "monthly_aud": 79.00,
-        "annual_aud": 799.00,
+        "name": "Scale",
+        "monthly_aud": 799.00,
+        "annual_aud": 7_990.00,
         "features": [
-            "Up to 5,000 customers",
-            "3 users per tenant",
+            "Everything in Compliance",
+            "Up to 1,000 customers",
+            "5 users per tenant",
+            "Transaction monitoring & case management",
             "Advanced rule builder",
             "ECDD assessments",
-            "MLRO case management",
             "Webhooks & API access",
             "Document vault (15 GB)",
             "5,000 API calls / month",
             "Analytics dashboard",
             "Priority support",
         ],
-        "limits": {"customers": 5_000, "users": 3, "api_calls_month": 5_000},
+        "limits": {"customers": 1_000, "users": 5, "api_calls_month": 5_000},
     },
     BillingPlan.enterprise: {
         "name": "Enterprise",
-        "monthly_aud": 299.00,
-        "annual_aud": 2_999.00,
+        "monthly_aud": 2_999.00,
+        "annual_aud": 29_990.00,
         "features": [
+            "Everything in Scale",
             "Unlimited customers",
-            "5 users per tenant",
+            "Multi-entity / multi-brand",
             "White-label branding",
             "Custom domain",
             "Multi-tenant management",
             "Dedicated MLRO support",
             "Document vault (50 GB)",
-            "10,000 API calls / month",
+            "Unlimited API calls",
             "SLA 99.9% uptime",
             "Dedicated account manager",
         ],
-        "limits": {"customers": -1, "users": 5, "api_calls_month": 10_000},
+        "limits": {"customers": -1, "users": -1, "api_calls_month": -1},
     },
     BillingPlan.vvip: {
         "name": "VVIP",
@@ -167,9 +196,17 @@ FREE_TRIAL_LIMITS: dict[str, int] = {
 # ── Default feature catalogue (seed data, derived from PLAN_CATALOGUE) ─────────
 # code -> (label, category)
 FEATURE_DEFINITIONS = {
+    "customers_100": ("Up to 100 customers", "limits"),
+    "customers_1000": ("Up to 1,000 customers", "limits"),
+    "customers_unlimited": ("Unlimited customers", "limits"),
+    # Superseded by customers_100/customers_1000 after the tier repricing
+    # (Compliance/Scale replacing Starter/Professional) -- left defined,
+    # not deleted, since seed_feature_catalog() only inserts missing
+    # (plan, feature_code) toggle rows and never updates/removes existing
+    # ones; an environment that already seeded these keeps them as
+    # harmless disabled rows rather than orphaned unknown codes.
     "customers_500": ("Up to 500 customers", "limits"),
     "customers_5000": ("Up to 5,000 customers", "limits"),
-    "customers_unlimited": ("Unlimited customers", "limits"),
     "aml_monitoring": ("AML transaction monitoring", "core"),
     "kyc_kyb_onboarding": ("KYC/KYB onboarding", "core"),
     "austrac_reporting": ("AUSTRAC TTR & IFTI reporting", "core"),
@@ -202,7 +239,7 @@ FEATURE_DEFINITIONS = {
 DEFAULT_PLAN_FEATURES = {
     BillingPlan.free_trial: [],
     BillingPlan.starter: [
-        "customers_500",
+        "customers_100",
         "aml_monitoring",
         "kyc_kyb_onboarding",
         "austrac_reporting",
@@ -213,7 +250,7 @@ DEFAULT_PLAN_FEATURES = {
         "full_risk_assessment",
     ],
     BillingPlan.professional: [
-        "customers_5000",
+        "customers_1000",
         "advanced_rule_builder",
         "ecdd_assessments",
         "mlro_case_management",

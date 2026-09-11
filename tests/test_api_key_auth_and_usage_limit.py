@@ -91,17 +91,17 @@ def test_api_key_calls_blocked_once_plan_cap_reached(
             subscription_id=f"sub_{uuid.uuid4().hex[:10]}",
             industry_id=admin_user.org_id,
             organisation_id=admin_user.org_id,
-            plan=BillingPlan.starter,  # 1,000/month
+            plan=BillingPlan.starter,  # 500/month
             interval=BillingInterval.monthly,
             status=SubscriptionStatus.active,
         )
     )
     # Pre-seed the counter one short of the cap so the test doesn't need
-    # 1,000 real requests to prove the block fires.
+    # 500 real requests to prove the block fires.
     from datetime import datetime, timezone
 
     period = datetime.now(timezone.utc).strftime("%Y-%m")
-    db.add(ApiUsageCounter(org_id=admin_user.org_id, period=period, count=999))
+    db.add(ApiUsageCounter(org_id=admin_user.org_id, period=period, count=499))
     db.commit()
 
     raw_key = _create_api_key(client, admin_headers)

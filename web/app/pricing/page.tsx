@@ -39,32 +39,31 @@ async function getPlans() {
     href: '/start-trial',
   },
   {
-    name: 'Starter',
+    name: 'Compliance',
     price: formatAud(starter.annual_aud),
     period: starter.annual_aud != null ? '/yr' : '',
     billing: starter.annual_aud != null ? 'billed annually' : '',
-    badge: null,
-    description: 'For small reporting entities building their first AML/CTF programme.',
-    highlight: false,
+    badge: 'Cheapest real compliance program in Australia',
+    description: 'The fastest way to a real, complete AML/CTF program — right-sized for a small reporting entity.',
+    highlight: true,
     features: [
-      { label: 'Up to 500 customers', included: true },
-      { label: '1 user per tenant', included: true },
+      { label: 'Full AML/CTF program for 1 industry, no watermark', included: true },
+      { label: 'Up to 100 customers', included: true },
+      { label: '1–2 users per tenant', included: true },
+      { label: 'Live regulatory updates included', included: true },
       { label: 'Document vault (5 GB)', included: true },
-      { label: '1,000 API calls / month', included: true },
-      { label: '1 industry compliance pack', included: true },
+      { label: '500 API calls / month', included: true },
       { label: 'KYC identity verification', included: true },
       { label: 'KYB business verification', included: true },
-      { label: 'AML/CTF Program — basic reference template', included: true, note: true },
       { label: 'SMR & TTR reporting', included: true },
+      { label: 'IFTI IN & OUT reporting', included: true },
       { label: 'AML transaction monitoring', included: true },
       { label: 'Essential integrations (Email, Cloud Storage)', included: true },
       { label: 'Enhanced due diligence (EDD)', included: true },
       { label: 'Sanctions screening (OFAC, UN, EU, DFAT, UK HMT)', included: true },
       { label: 'PEP screening', included: true },
       { label: 'Adverse media monitoring', included: true },
-      { label: 'IFTI IN & OUT reporting', included: false },
       { label: 'IFTI bulk import', included: false },
-      { label: 'Report review & MLRO sign-off', included: false },
       { label: 'Case management', included: false },
       { label: 'Workflow automation', included: false },
       { label: 'AML data connectors', included: false },
@@ -73,23 +72,19 @@ async function getPlans() {
     href: '/start-trial',
   },
   {
-    name: 'Professional',
+    name: 'Scale',
     price: formatAud(professional.annual_aud),
     period: professional.annual_aud != null ? '/yr' : '',
     billing: professional.annual_aud != null ? 'billed annually' : '',
-    badge: 'Most Popular',
-    description: 'For growing compliance teams with full AUSTRAC reporting obligations.',
-    highlight: true,
+    badge: null,
+    description: 'For growing compliance teams that have outgrown Compliance’s capacity.',
+    highlight: false,
     features: [
-      { label: 'Up to 5,000 customers', included: true },
-      { label: '3 users per tenant', included: true },
+      { label: 'Everything in Compliance', included: true },
+      { label: 'Up to 1,000 customers', included: true },
+      { label: '5 users per tenant', included: true },
       { label: '5,000 API calls / month', included: true },
-      { label: '1 industry compliance pack', included: true },
-      { label: 'KYC + KYB verification', included: true },
-      { label: 'AML/CTF Program — basic reference template', included: true, note: true },
       { label: 'IFTI IN, OUT & bulk import', included: true },
-      { label: 'SMR & TTR reporting', included: true },
-      { label: 'Sanctions, PEP + adverse media', included: true },
       { label: 'Advanced rule builder', included: true },
       { label: 'ECDD assessments', included: true },
       { label: 'MLRO case management', included: true },
@@ -98,6 +93,7 @@ async function getPlans() {
       { label: 'Document vault (15 GB)', included: true },
       { label: 'Analytics dashboard', included: true },
       { label: 'AML data connectors', included: true },
+      { label: 'Priority support', included: true },
     ],
     cta: 'Start Free Trial',
     href: '/start-trial',
@@ -111,10 +107,10 @@ async function getPlans() {
     description: 'For reporting groups, financial institutions, and SaaS resellers.',
     highlight: false,
     features: [
+      { label: 'Everything in Scale', included: true },
       { label: 'Unlimited customers', included: true },
-      { label: '5 users per tenant', included: true },
-      { label: '10,000 API calls / month', included: true },
-      { label: '1 industry compliance pack', included: true },
+      { label: 'Unlimited users', included: true },
+      { label: 'Unlimited API calls', included: true },
       { label: 'KYC, KYB + beneficial ownership', included: true },
       { label: 'AML/CTF Program — tailored to your industry', included: true },
       { label: 'Full IFTI, SMR, TTR suite', included: true },
@@ -126,8 +122,8 @@ async function getPlans() {
       { label: '99.9% uptime SLA', included: true },
       { label: 'Dedicated account manager', included: true },
     ],
-    cta: 'Start Free Trial',
-    href: '/start-trial',
+    cta: 'Talk to sales',
+    href: '/contact',
   },
   {
     name: 'VVIP',
@@ -152,15 +148,15 @@ async function getPlans() {
 
 type CellValue = true | false | string
 
-// Columns: Free Trial, Starter, Professional, Enterprise, VVIP — matches
+// Columns: Free Trial, Compliance, Scale, Enterprise, VVIP — matches
 // plans[] order above, which mirrors the backend PLAN_CATALOGUE.
 const compareGroups: { group: string; rows: { feature: string; tooltip?: string; values: CellValue[] }[] }[] = [
   {
     group: 'Platform',
     rows: [
-      { feature: 'Customer limit', values: ['10', '500', '5,000', 'Unlimited', 'Unlimited'] },
-      { feature: 'Users per tenant', values: ['1', '1', '3', '5', 'Custom'] },
-      { feature: 'API calls / month', values: ['—', '1,000', '5,000', '10,000', 'Custom'] },
+      { feature: 'Customer limit', values: ['10', '100', '1,000', 'Unlimited', 'Unlimited'] },
+      { feature: 'Users per tenant', values: ['1', '2', '5', 'Unlimited', 'Custom'] },
+      { feature: 'API calls / month', values: ['—', '500', '5,000', 'Unlimited', 'Custom'] },
       { feature: 'Industry compliance pack', values: ['1 pack (trial)', '1 pack', '1 pack', '1 pack', '1 pack'] },
       { feature: 'AML/CTF Program', tooltip: 'Basic reference template preloaded. Tailoring to your specific business is an additional service.', values: ['Reference only', 'Reference only', 'Reference only', 'Tailored', 'Tailored'] },
       { feature: 'Annual review workflow', values: [true, true, true, true, true] },
@@ -349,10 +345,11 @@ export default async function PricingPage() {
           <div className="flex items-start gap-3 bg-amber-50 ring-1 ring-amber-200 rounded-2xl px-5 py-4 mb-8">
             <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-amber-800 text-sm leading-relaxed">
-              <span className="font-semibold">† AML/CTF Program — basic reference template only.</span>{' '}
-              Every Free Trial, Starter, and Professional plan includes a preloaded industry reference template to help you get started.
-              Each business must tailor its own AML/CTF Program to reflect its specific operations, customer types, and risk profile.
-              Program tailoring and review services are available as an additional engagement — <Link href="/contact" className="underline hover:text-amber-900">contact us</Link> to discuss.
+              <span className="font-semibold">† Free Trial — basic reference template only.</span>{' '}
+              The trial shows a preview of your industry's program; every paid plan (Compliance and above) unlocks the
+              full, real document. Every business must still tailor its own AML/CTF Program to reflect its specific
+              operations, customer types, and risk profile — program tailoring and our Annual Independent Review
+              service are available as a separate engagement — <Link href="/contact" className="underline hover:text-amber-900">contact us</Link> to discuss.
             </p>
           </div>
 

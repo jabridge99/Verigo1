@@ -79,7 +79,7 @@ def test_upgrading_plan_raises_customer_limit(client, db):
     reg = _register(client, db)
     for _ in range(10):
         _create_customer(client, reg["headers"])
-    _upgrade(db, reg["org_id"], BillingPlan.starter)  # limit: 500
+    _upgrade(db, reg["org_id"], BillingPlan.starter)  # limit: 100
 
     resp = client.post(
         "/api/v1/customers/",
@@ -119,7 +119,7 @@ def test_free_trial_user_limit_is_enforced(client, db):
 
 def test_upgrading_plan_raises_user_limit(client, db):
     owner = _register(client, db)
-    _upgrade(db, owner["org_id"], BillingPlan.professional)  # limit: 3 users
+    _upgrade(db, owner["org_id"], BillingPlan.professional)  # limit: 5 users
     invitee_email = f"invitee-{uuid.uuid4().hex[:8]}@test.com"
     client.post(
         "/api/v1/auth/register",
