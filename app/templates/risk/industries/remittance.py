@@ -274,8 +274,7 @@ def get_library() -> RiskLibrary:
                 category_type="regulatory",
                 name="Sanctioned person, entity or jurisdiction dealing",
                 description=(
-                    "Sender, beneficiary or corridor matched against a "
-                    "sanctions list."
+                    "Sender, beneficiary or corridor matched against a sanctions list."
                 ),
                 suggested_likelihood=2,
                 suggested_consequence=5,

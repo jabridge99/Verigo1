@@ -47,6 +47,15 @@ def upgrade() -> None:
     if bind.dialect.name == "postgresql":
         for value in ("under_review", "approved", "acknowledged", "rejected"):
             op.execute(f"ALTER TYPE iftistatus ADD VALUE IF NOT EXISTS '{value}'")
+        # IFTIStatus.ready was removed from the model (old set: draft/ready/
+        # submitted -> new set: draft/under_review/approved/submitted/
+        # acknowledged/rejected). Postgres enum values can't be dropped, so
+        # 'ready' still exists in the type -- but any existing row left at
+        # that value would fail to hydrate under the new Python enum
+        # (LookupError). Migrate it forward to its natural successor state.
+        op.execute(
+            "UPDATE ifti_records SET status = 'under_review' WHERE status = 'ready'"
+        )
 
     inspector = sa.inspect(bind)
     columns = {c["name"] for c in inspector.get_columns("ifti_records")}

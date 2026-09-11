@@ -437,14 +437,54 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
 
     # Add IFTI-specific and remittance-specific controls
     extra_controls = [
-        {"control_ref": "CTL-010", "title": "IFTI-DRA Reporting — Outgoing Transfers", "control_type": "detective", "risk_area": "ifti_reporting"},
-        {"control_ref": "CTL-011", "title": "IFTI-DRA Reporting — Incoming Transfers", "control_type": "detective", "risk_area": "ifti_reporting"},
-        {"control_ref": "CTL-012", "title": "Travel Rule Information Transmission", "control_type": "preventive", "risk_area": "travel_rule"},
-        {"control_ref": "CTL-013", "title": "Sub-Agent Due Diligence and Monitoring", "control_type": "preventive", "risk_area": "agent_oversight"},
-        {"control_ref": "CTL-014", "title": "Third-Party Sender Identification and ECDD (CR-02)", "control_type": "preventive", "risk_area": "third_party_sender"},
-        {"control_ref": "CTL-015", "title": "Beneficiary Verification Before Fund Release", "control_type": "preventive", "risk_area": "beneficiary_screening"},
-        {"control_ref": "CTL-016", "title": "Remittance Corridor Risk Assessment", "control_type": "preventive", "risk_area": "corridor_risk"},
-        {"control_ref": "CTL-017", "title": "TMP Rules Schedule — General + Remittance-Specific Rules", "control_type": "detective", "risk_area": "transaction_monitoring"},
+        {
+            "control_ref": "CTL-010",
+            "title": "IFTI-DRA Reporting — Outgoing Transfers",
+            "control_type": "detective",
+            "risk_area": "ifti_reporting",
+        },
+        {
+            "control_ref": "CTL-011",
+            "title": "IFTI-DRA Reporting — Incoming Transfers",
+            "control_type": "detective",
+            "risk_area": "ifti_reporting",
+        },
+        {
+            "control_ref": "CTL-012",
+            "title": "Travel Rule Information Transmission",
+            "control_type": "preventive",
+            "risk_area": "travel_rule",
+        },
+        {
+            "control_ref": "CTL-013",
+            "title": "Sub-Agent Due Diligence and Monitoring",
+            "control_type": "preventive",
+            "risk_area": "agent_oversight",
+        },
+        {
+            "control_ref": "CTL-014",
+            "title": "Third-Party Sender Identification and ECDD (CR-02)",
+            "control_type": "preventive",
+            "risk_area": "third_party_sender",
+        },
+        {
+            "control_ref": "CTL-015",
+            "title": "Beneficiary Verification Before Fund Release",
+            "control_type": "preventive",
+            "risk_area": "beneficiary_screening",
+        },
+        {
+            "control_ref": "CTL-016",
+            "title": "Remittance Corridor Risk Assessment",
+            "control_type": "preventive",
+            "risk_area": "corridor_risk",
+        },
+        {
+            "control_ref": "CTL-017",
+            "title": "TMP Rules Schedule — General + Remittance-Specific Rules",
+            "control_type": "detective",
+            "risk_area": "transaction_monitoring",
+        },
     ]
 
     t._policies = copy.deepcopy(BASE_POLICIES) + [

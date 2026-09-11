@@ -469,7 +469,10 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
             "policy_type": "transaction_monitoring",
         },
         {"title": "Self-Hosted Wallet Policy", "policy_type": "kyc"},
-        {"title": "Mixing/Tumbling and Privacy Coin ECDD Policy", "policy_type": "ecdd"},
+        {
+            "title": "Mixing/Tumbling and Privacy Coin ECDD Policy",
+            "policy_type": "ecdd",
+        },
         {"title": "VASP Counterparty Due Diligence Policy", "policy_type": "kyc"},
     ]
     t._controls = copy.deepcopy(BASE_CONTROLS) + extra_controls
