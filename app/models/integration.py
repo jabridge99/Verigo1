@@ -140,6 +140,10 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Global identity verification, KYB, and transaction monitoring platform",
+        "required_credentials": [
+            {"key": "app_token", "label": "App Token", "secret": True},
+            {"key": "secret_key", "label": "Secret Key", "secret": True},
+        ],
     },
     {
         "slug": "frankieone",
@@ -172,6 +176,9 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Real-time AML data and transaction monitoring",
+        "required_credentials": [
+            {"key": "api_key", "label": "API Key", "secret": True},
+        ],
     },
     {
         "slug": "opensanctions",
@@ -188,6 +195,9 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "enterprise_api",
         "auth": "api_key",
         "description": "Cryptocurrency transaction monitoring and wallet screening",
+        "required_credentials": [
+            {"key": "api_key", "label": "API Key", "secret": True},
+        ],
     },
     {
         "slug": "elliptic",
@@ -196,6 +206,10 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "enterprise_api",
         "auth": "api_key",
         "description": "Blockchain analytics and crypto risk scoring",
+        "required_credentials": [
+            {"key": "api_key", "label": "API Key", "secret": True},
+            {"key": "api_secret", "label": "API Secret", "secret": True},
+        ],
     },
     {
         "slug": "trmlabs",
@@ -221,6 +235,13 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "free_api",
         "auth": "api_key",
         "description": "Australian Business Number and entity lookup",
+        "required_credentials": [
+            {
+                "key": "guid",
+                "label": "ABR Web Services GUID (free — register at abr.business.gov.au/Tools/WebServices)",
+                "secret": True,
+            },
+        ],
     },
     {
         "slug": "asic",
@@ -418,6 +439,23 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "free_api",
         "auth": "api_key",
         "description": "Transactional email (alerts, reminders, notifications)",
+        "required_credentials": [
+            {
+                "key": "smtp_host",
+                "label": "SMTP Host (SendGrid: smtp.sendgrid.net)",
+                "secret": False,
+            },
+            {
+                "key": "smtp_username",
+                "label": 'SMTP Username (SendGrid: literally "apikey")',
+                "secret": False,
+            },
+            {
+                "key": "smtp_password",
+                "label": "SMTP Password / API Key",
+                "secret": True,
+            },
+        ],
     },
     {
         "slug": "ses",
@@ -426,6 +464,15 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Amazon Simple Email Service",
+        "required_credentials": [
+            {
+                "key": "smtp_host",
+                "label": "SES SMTP Endpoint (e.g. email-smtp.us-east-1.amazonaws.com)",
+                "secret": False,
+            },
+            {"key": "smtp_username", "label": "SES SMTP Username", "secret": False},
+            {"key": "smtp_password", "label": "SES SMTP Password", "secret": True},
+        ],
     },
     {
         "slug": "twilio_sms",
@@ -434,6 +481,10 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Programmable SMS for compliance alerts",
+        "required_credentials": [
+            {"key": "account_sid", "label": "Account SID", "secret": False},
+            {"key": "auth_token", "label": "Auth Token", "secret": True},
+        ],
     },
     {
         "slug": "ms_teams",

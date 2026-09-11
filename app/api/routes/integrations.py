@@ -14,7 +14,6 @@ All decisions remain with the reporting entity.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -38,8 +37,9 @@ from app.models.integration import (
     OrgIntegration,
 )
 from app.models.user import User
-from app.services.crypto import encrypt_credentials
+from app.services.crypto import decrypt_credentials, encrypt_credentials
 from app.services.integration_monitor import migrate_legacy_connectors, run_expiry_check
+from app.services.integration_verify import verify_credentials
 
 router = APIRouter(prefix="/integrations", tags=["Integration Hub"])
 
@@ -60,7 +60,7 @@ class IntegrationEnable(BaseModel):
     config: dict = Field(
         default_factory=dict, description="Non-sensitive configuration"
     )
-    credential_expires_at: Optional[datetime] = Field(
+    credential_expires_at: datetime | None = Field(
         None, description="Vendor-stated API key expiry, if known"
     )
 
@@ -71,7 +71,7 @@ class OAuthCallback(BaseModel):
 
 
 class IntegrationUpdate(BaseModel):
-    config: Optional[dict] = None
+    config: dict | None = None
 
 
 class CredentialRotation(BaseModel):
@@ -79,17 +79,24 @@ class CredentialRotation(BaseModel):
         ..., description="New credentials to replace existing"
     )
     reason: str = Field(..., min_length=5)
-    credential_expires_at: Optional[datetime] = None
+    credential_expires_at: datetime | None = None
 
 
 # ── Seed provider catalog ─────────────────────────────────────────────────────
 
 
 def _seed_providers(db: Session):
-    """Ensure the platform provider catalog is populated (idempotent)."""
-    count = db.query(IntegrationProvider).count()
-    if count >= len(PROVIDER_CATALOG):
-        return
+    """
+    Ensure the platform provider catalog is populated (idempotent), and
+    backfill `required_credentials` on rows seeded before a catalog entry
+    defined one -- e.g. an already-running deployment that seeded Sumsub
+    before this field existed would otherwise keep showing the generic
+    single "API Key" field forever, never picking up the real app_token/
+    secret_key split. Only touches `required_credentials`, and only when
+    the catalog entry defines it and the stored value differs -- every
+    other field on an existing row (name, description, is_featured, etc.)
+    is left as an operator may have customised it.
+    """
     for p in PROVIDER_CATALOG:
         existing = (
             db.query(IntegrationProvider)
@@ -108,14 +115,20 @@ def _seed_providers(db: Session):
                     description=p["description"],
                     is_active=True,
                     is_featured=p.get("featured", False),
+                    required_credentials=p.get("required_credentials", []),
                 )
             )
+        elif (
+            "required_credentials" in p
+            and existing.required_credentials != p["required_credentials"]
+        ):
+            existing.required_credentials = p["required_credentials"]
     db.commit()
 
 
 def _audit(
     org_id: str,
-    integration_id: Optional[str],
+    integration_id: str | None,
     provider_slug: str,
     event_type: str,
     success: bool,
@@ -165,7 +178,7 @@ def _integration_dict(i: OrgIntegration, include_credentials: bool = False) -> d
 
 
 def _provider_dict(
-    p: IntegrationProvider, org_integration: Optional[OrgIntegration] = None
+    p: IntegrationProvider, org_integration: OrgIntegration | None = None
 ) -> dict:
     d = {
         "id": p.id,
@@ -193,9 +206,9 @@ def _provider_dict(
 
 @router.get("/catalog")
 def list_catalog(
-    category: Optional[IntegrationCategory] = Query(None),
-    integration_type: Optional[IntegrationType] = Query(None),
-    search: Optional[str] = Query(None, max_length=100),
+    category: IntegrationCategory | None = Query(None),
+    integration_type: IntegrationType | None = Query(None),
+    search: str | None = Query(None, max_length=100),
     featured_only: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
@@ -289,7 +302,7 @@ def get_provider(
 @router.get("")
 def list_org_integrations(
     enabled_only: bool = Query(False),
-    category: Optional[IntegrationCategory] = Query(None),
+    category: IntegrationCategory | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
@@ -437,22 +450,29 @@ def disable_integration(
 
 
 @router.post("/{slug}/test")
-def test_connection(
+async def test_connection(
     slug: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
     """
-    Confirm credentials were saved for this integration.
+    Test this integration's stored credentials.
 
-    No provider in this catalog has a real connectivity check wired up
-    (see PARKING_LOT.md P45) -- this never calls the provider, so it must
-    never report health_status=healthy or a "connection validated" message;
-    doing so previously let this endpoint claim a working integration
-    (e.g. real-time sanctions screening) when nothing had actually been
-    verified. It reports health_status=unknown either way and only
-    confirms whether something was stored.
+    For the providers listed in app.services.integration_verify.VERIFIERS
+    (Sumsub, ComplyAdvantage, Chainalysis, Elliptic, ABR, Twilio SMS,
+    SendGrid/SES via SMTP), this makes one real, read-only call against
+    that vendor's actual API using the org's own stored credentials and
+    reports a genuinely earned health_status=healthy or =down. This tests
+    only whether *these specific credentials* work against the vendor --
+    it never changes what VeriGo's own platform-wide screening/KYC/email
+    pipelines use (app.config.settings), which is a separate, deliberately
+    untouched configuration surface.
+
+    Every other provider in the catalog has no real check wired up (see
+    PARKING_LOT.md P45) and keeps reporting health_status=unknown -- it
+    must never claim "connected" for a provider nothing has verified.
     """
+    _seed_providers(db)
     org_id = org_id_for(current_user)
     integration = (
         db.query(OrgIntegration)
@@ -469,26 +489,43 @@ def test_connection(
 
     now = datetime.now(timezone.utc)
     has_credentials = bool(integration.credentials_encrypted)
-    message = (
-        "Credentials saved. Live connection verification isn't built yet for "
-        "any provider in this catalog -- this only confirms something was "
-        "stored, not that it works."
-        if has_credentials
-        else "No credentials configured."
-    )
+
+    if not has_credentials:
+        test_passed = False
+        message = "No credentials configured."
+        health_status = IntegrationHealthStatus.unknown
+    else:
+        real_result = await verify_credentials(
+            slug, decrypt_credentials(integration.credentials_encrypted)
+        )
+        if real_result is None:
+            test_passed = True
+            message = (
+                "Credentials saved. Live connection verification isn't built "
+                "yet for this provider -- this only confirms something was "
+                "stored, not that it works."
+            )
+            health_status = IntegrationHealthStatus.unknown
+        else:
+            test_passed, message = real_result
+            health_status = (
+                IntegrationHealthStatus.healthy
+                if test_passed
+                else IntegrationHealthStatus.down
+            )
 
     integration.last_tested_at = now
-    integration.last_test_result = has_credentials
+    integration.last_test_result = test_passed
     integration.last_test_message = message
     integration.last_health_check_at = now
-    integration.health_status = IntegrationHealthStatus.unknown
+    integration.health_status = health_status
 
     _audit(
         org_id,
         integration.id,
         slug,
         "tested",
-        has_credentials,
+        test_passed,
         message,
         current_user.id,
         db,
@@ -497,7 +534,7 @@ def test_connection(
 
     return {
         "slug": slug,
-        "test_passed": has_credentials,
+        "test_passed": test_passed,
         "message": message,
         "health_status": integration.health_status.value,
         "tested_at": now.isoformat(),
@@ -722,7 +759,7 @@ def migrate_legacy_connectors_route(
 
 @router.get("/audit-log")
 def integration_audit_log(
-    slug: Optional[str] = Query(None),
+    slug: str | None = Query(None),
     limit: int = Query(default=50, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
