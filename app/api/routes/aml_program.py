@@ -52,7 +52,7 @@ from app.models.aml_solution import (
     RiskAssessment,
 )
 from app.models.user import User
-from app.services import audit_service
+from app.services import audit_service, billing_service
 
 router = APIRouter(prefix="/aml-program", tags=["AML/CTF Program"])
 
@@ -267,8 +267,22 @@ def _section_completion(p: AMLProgram) -> dict:
     }
 
 
-def _program_dict(p: AMLProgram, include_sections: bool = False) -> dict:
-    d = {
+# Sections shown in full even without the full_aml_program plan feature --
+# enough to show the program is real and complete, not the substance a
+# reporting entity would actually need to operate on (CDD/monitoring/
+# sanctions/SMR/TTR procedures etc. stay locked). Mirrors the same
+# preview-vs-full distinction organisations.py's _program_response() (the
+# other AML program system, AmlProgramRecord) already enforces via
+# billing_service.is_feature_enabled(..., "full_aml_program") -- this
+# endpoint's include_sections=true previously returned every section's
+# full text to any analyst+ user regardless of plan.
+_PREVIEW_SECTIONS = {"overview", "scope"}
+
+
+def _program_dict(
+    p: AMLProgram, include_sections: bool = False, full_access: bool = True
+) -> dict:
+    d: dict = {
         "id": p.id,
         "org_id": p.org_id,
         "solution_id": p.solution_id,
@@ -293,7 +307,7 @@ def _program_dict(p: AMLProgram, include_sections: bool = False) -> dict:
         "austrac_registration_expiry": p.austrac_registration_expiry,
     }
     if include_sections:
-        d["sections"] = {
+        sections: dict = {
             "overview": p.overview,
             "scope": p.scope,
             "designated_services": p.designated_services,
@@ -323,6 +337,15 @@ def _program_dict(p: AMLProgram, include_sections: bool = False) -> dict:
             "record_keeping": p.record_keeping,
             "independent_review": p.independent_review,
         }
+        if not full_access:
+            d["locked_sections"] = sorted(
+                k for k in sections if k not in _PREVIEW_SECTIONS
+            )
+            sections = {
+                k: (v if k in _PREVIEW_SECTIONS else None) for k, v in sections.items()
+            }
+            d["is_preview"] = True
+        d["sections"] = sections
     return d
 
 
@@ -356,6 +379,11 @@ def _assessment_dict(a: RiskAssessment) -> dict:
 # ── Program CRUD ──────────────────────────────────────────────────────────────
 
 
+def _has_full_program_access(db: Session, current_user: User, org_id: str) -> bool:
+    plan = billing_service.current_plan(db, current_user.industry_id, org_id)
+    return billing_service.is_feature_enabled(db, plan, "full_aml_program")
+
+
 @router.get("")
 def get_active_program(
     include_sections: bool = Query(False),
@@ -366,7 +394,9 @@ def get_active_program(
     Get the currently active AML/CTF Program.
 
     Returns document structure with section completion tracker.
-    Set include_sections=true to retrieve all narrative content.
+    Set include_sections=true to retrieve all narrative content -- gated
+    on the org's plan (full_aml_program feature), same as the
+    AmlProgramRecord/organisations.py system.
 
     DISCLAIMER: The platform provides program document management only.
     """
@@ -389,8 +419,11 @@ def get_active_program(
             "disclaimer": DISCLAIMER,
         }
 
+    full_access = (
+        _has_full_program_access(db, current_user, org_id) if include_sections else True
+    )
     return {
-        "active_program": _program_dict(program, include_sections),
+        "active_program": _program_dict(program, include_sections, full_access),
         "required_sections": REQUIRED_SECTIONS,
         "disclaimer": DISCLAIMER,
     }
@@ -973,8 +1006,11 @@ def get_program(
     """Get a specific program version."""
     org_id = org_id_for(current_user)
     program = _get_program(program_id, org_id, db)
+    full_access = (
+        _has_full_program_access(db, current_user, org_id) if include_sections else True
+    )
     return {
-        "program": _program_dict(program, include_sections),
+        "program": _program_dict(program, include_sections, full_access),
         "disclaimer": DISCLAIMER,
     }
 
