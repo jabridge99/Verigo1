@@ -13,7 +13,6 @@ Results from third-party providers are not compliance determinations.
 All decisions remain with the reporting entity.
 """
 
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
@@ -39,7 +38,7 @@ from app.models.integration import (
     OrgIntegration,
 )
 from app.models.user import User
-from app.services.crypto import decrypt_secret, encrypt_credentials, encrypt_secret
+from app.services.crypto import encrypt_credentials
 from app.services.integration_monitor import migrate_legacy_connectors, run_expiry_check
 
 router = APIRouter(prefix="/integrations", tags=["Integration Hub"])
@@ -444,10 +443,15 @@ def test_connection(
     current_user: User = Depends(require_compliance_or_above),
 ):
     """
-    Test the integration connection using stored credentials.
+    Confirm credentials were saved for this integration.
 
-    Returns connection status. In production this would make a live
-    test API call to the provider. Currently returns a validated-config response.
+    No provider in this catalog has a real connectivity check wired up
+    (see PARKING_LOT.md P45) -- this never calls the provider, so it must
+    never report health_status=healthy or a "connection validated" message;
+    doing so previously let this endpoint claim a working integration
+    (e.g. real-time sanctions screening) when nothing had actually been
+    verified. It reports health_status=unknown either way and only
+    confirms whether something was stored.
     """
     org_id = org_id_for(current_user)
     integration = (
@@ -464,32 +468,27 @@ def test_connection(
         raise HTTPException(409, "Integration is disabled. Enable it before testing.")
 
     now = datetime.now(timezone.utc)
-    # Placeholder: in production, call provider health endpoint
-    test_passed = bool(integration.credentials_encrypted)
+    has_credentials = bool(integration.credentials_encrypted)
     message = (
-        "Connection validated (credentials present)."
-        if test_passed
+        "Credentials saved. Live connection verification isn't built yet for "
+        "any provider in this catalog -- this only confirms something was "
+        "stored, not that it works."
+        if has_credentials
         else "No credentials configured."
     )
 
     integration.last_tested_at = now
-    integration.last_test_result = test_passed
+    integration.last_test_result = has_credentials
     integration.last_test_message = message
     integration.last_health_check_at = now
-    integration.health_status = (
-        IntegrationHealthStatus.healthy if test_passed else IntegrationHealthStatus.down
-    )
-    if test_passed:
-        integration.consecutive_failures = 0
-    else:
-        integration.consecutive_failures = (integration.consecutive_failures or 0) + 1
+    integration.health_status = IntegrationHealthStatus.unknown
 
     _audit(
         org_id,
         integration.id,
         slug,
         "tested",
-        test_passed,
+        has_credentials,
         message,
         current_user.id,
         db,
@@ -498,7 +497,7 @@ def test_connection(
 
     return {
         "slug": slug,
-        "test_passed": test_passed,
+        "test_passed": has_credentials,
         "message": message,
         "health_status": integration.health_status.value,
         "tested_at": now.isoformat(),
@@ -555,12 +554,17 @@ def start_oauth(
 ):
     """
     Begin an OAuth2 connection for a provider whose auth_type is oauth2.
-    Returns an authorize_url the frontend redirects the user to. The
-    provider redirects back to the frontend, which posts the resulting
-    code + state to /oauth/callback.
+
+    No provider's real OAuth2 app (client_id/secret, redirect URI, actual
+    authorize endpoint) is configured for any provider in this catalog yet
+    (see PARKING_LOT.md P45) -- this previously returned a fake
+    authorize_url on a non-existent `*.example` domain, and the frontend
+    never even sent the user there: it called /oauth/callback directly
+    with a synthetic code, which unconditionally marked the integration
+    "healthy" and "connected". Refusing here instead, so nothing can ever
+    silently fabricate a connected integration.
     """
     _seed_providers(db)
-    org_id = org_id_for(current_user)
 
     provider = (
         db.query(IntegrationProvider)
@@ -572,31 +576,11 @@ def start_oauth(
     if provider.auth_type != AuthType.oauth2:
         raise HTTPException(409, f"Provider '{slug}' does not use OAuth2.")
 
-    state = secrets.token_urlsafe(24)
-    integration = (
-        db.query(OrgIntegration)
-        .filter(
-            OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id
-        )
-        .first()
+    raise HTTPException(
+        501,
+        f"OAuth2 connection for '{slug}' isn't implemented yet. "
+        "No provider in this catalog has a real OAuth2 app configured.",
     )
-    if not integration:
-        integration = OrgIntegration(
-            id=f"int_{uuid4().hex[:10]}",
-            org_id=org_id,
-            provider_id=provider.id,
-            provider_slug=slug,
-            is_enabled=False,
-            health_status=IntegrationHealthStatus.unknown,
-        )
-        db.add(integration)
-    integration.oauth_state = state
-    db.commit()
-
-    # Real implementation would build the provider's actual OAuth2 authorize
-    # endpoint (client_id, redirect_uri, scope) from per-provider config.
-    authorize_url = f"https://oauth.{slug}.example/authorize?state={state}"
-    return {"authorize_url": authorize_url, "state": state}
 
 
 @router.post("/{slug}/oauth/callback")
@@ -606,55 +590,19 @@ def complete_oauth(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    """Exchange the OAuth2 code for tokens and enable the integration."""
-    org_id = org_id_for(current_user)
-    provider = (
-        db.query(IntegrationProvider).filter(IntegrationProvider.slug == slug).first()
-    )
-    if not provider:
-        raise HTTPException(404, f"Provider '{slug}' not found.")
+    """
+    Exchange the OAuth2 code for tokens and enable the integration.
 
-    integration = (
-        db.query(OrgIntegration)
-        .filter(
-            OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id
-        )
-        .first()
+    Unreachable via the normal flow now that /oauth/authorize always
+    refuses (see its docstring) -- kept refusing here too, defensively, so
+    a stale oauth_state row from before this fix (or a direct API call)
+    can never fabricate a "connected" integration either.
+    """
+    raise HTTPException(
+        501,
+        f"OAuth2 connection for '{slug}' isn't implemented yet. "
+        "No provider in this catalog has a real OAuth2 app configured.",
     )
-    if not integration or not integration.oauth_state:
-        raise HTTPException(409, "No OAuth flow in progress for this provider.")
-    if integration.oauth_state != payload.state:
-        raise HTTPException(400, "Invalid or expired OAuth state.")
-
-    # Real implementation calls the provider's token endpoint with `code`.
-    # Mocked here: derive a stand-in token pair from the authorization code.
-    now = datetime.now(timezone.utc)
-    integration.oauth_access_token_encrypted = encrypt_secret(f"access:{payload.code}")
-    integration.oauth_refresh_token_encrypted = encrypt_secret(
-        f"refresh:{payload.code}"
-    )
-    integration.oauth_expires_at = now + timedelta(hours=1)
-    integration.oauth_state = None
-    integration.is_enabled = True
-    integration.enabled_by = current_user.id
-    integration.health_status = IntegrationHealthStatus.healthy
-    integration.last_tested_at = now
-    integration.last_test_result = True
-    integration.last_test_message = "OAuth2 connection established."
-
-    _audit(
-        org_id,
-        integration.id,
-        slug,
-        "oauth_connected",
-        True,
-        f"OAuth2 connected by {current_user.id}",
-        current_user.id,
-        db,
-    )
-    db.commit()
-    db.refresh(integration)
-    return _integration_dict(integration)
 
 
 @router.get("/monitoring")
