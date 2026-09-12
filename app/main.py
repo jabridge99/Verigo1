@@ -61,6 +61,7 @@ from app.api.routes.risk_assessment import router as risk_assessment_router
 from app.api.routes.risk_matrix_config import router as risk_matrix_config_router
 from app.api.routes.rule_builder import router as rule_builder_router
 from app.api.routes.screening import router as screening_router
+from app.api.routes.smr_decision_log import router as smr_decision_log_router
 from app.api.routes.tasks import router as tasks_router
 from app.api.routes.training_triggers import router as training_triggers_router
 from app.config import settings
@@ -109,6 +110,7 @@ from app.models import (
     risk_matrix_config,  # noqa: F401
     screening,  # noqa: F401
     security_event,  # noqa: F401
+    smr_decision_log,  # noqa: F401
     task,  # noqa: F401
     tenant,  # noqa: F401
     training_trigger,  # noqa: F401
@@ -314,6 +316,7 @@ app.include_router(compliance_calendar_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1")
 app.include_router(org_config_router, prefix="/api/v1")
 app.include_router(professional_assessment_router, prefix="/api/v1")
+app.include_router(smr_decision_log_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(risk_matrix_config_router, prefix="/api/v1")
 app.include_router(integrations_router, prefix="/api/v1")

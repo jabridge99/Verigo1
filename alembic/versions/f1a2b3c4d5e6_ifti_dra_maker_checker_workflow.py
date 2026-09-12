@@ -50,11 +50,20 @@ def upgrade() -> None:
         # IFTIStatus.ready was removed from the model (old set: draft/ready/
         # submitted -> new set: draft/under_review/approved/submitted/
         # acknowledged/rejected). Postgres enum values can't be dropped, so
-        # 'ready' still exists in the type -- but any existing row left at
-        # that value would fail to hydrate under the new Python enum
-        # (LookupError). Migrate it forward to its natural successor state.
+        # 'ready' still exists in the type on a database that predates this
+        # migration -- but any existing row left at that value would fail
+        # to hydrate under the new Python enum (LookupError). Migrate it
+        # forward to its natural successor state.
+        # Cast to text rather than comparing 'ready' directly against the
+        # enum column: on a database built fresh from the current models
+        # (Base.metadata.create_all(), e.g. this repo's own baseline
+        # migration), 'ready' was never a member of the type at all, and
+        # Postgres validates an enum literal comparison at parse time --
+        # `status = 'ready'` would raise InvalidTextRepresentation before a
+        # single row is even scanned. `status::text = 'ready'` matches rows
+        # on an old database and is a safe no-op everywhere else.
         op.execute(
-            "UPDATE ifti_records SET status = 'under_review' WHERE status = 'ready'"
+            "UPDATE ifti_records SET status = 'under_review' WHERE status::text = 'ready'"
         )
 
     inspector = sa.inspect(bind)

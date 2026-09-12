@@ -425,6 +425,13 @@ from app.models.screening import (
     CryptoNetwork as ScreeningCryptoNetwork,
 )
 from app.models.security_event import SecurityEvent
+from app.models.smr_decision_log import (
+    SMRContinueDealings,
+    SMRDecisionLog,
+    SMRDecisionOutcome,
+    SMRMatterSource,
+    SMRSuspicionType,
+)
 from app.models.task import Task, TaskEvent, TaskPriority, TaskStatus, TaskType
 from app.models.tenant import IndustryTenant
 from app.models.training_trigger import (
@@ -846,6 +853,12 @@ __all__ = [
     "EntityScope",
     # Security events
     "SecurityEvent",
+    # SMR Internal Decision Log (P24)
+    "SMRDecisionLog",
+    "SMRMatterSource",
+    "SMRSuspicionType",
+    "SMRDecisionOutcome",
+    "SMRContinueDealings",
     # Multi-tenancy (legacy industry-tenant record)
     "IndustryTenant",
     # Usage-based billing
