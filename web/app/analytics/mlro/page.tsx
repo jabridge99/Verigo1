@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Briefcase, AlertTriangle, Shield, FileText, Clock } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { DonutChart, KPI, StatTile } from "../_components/charts";
@@ -25,10 +25,10 @@ export default function MLROAnalyticsPage() {
   const load = useCallback(async () => {
     try {
       const [cs, fl, rp, pr] = await Promise.all([
-        fetch(`${API}/api/v1/analytics/cases/open-stats`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/transactions/flagged-stats`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/reports/stats`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/customers/pending-reviews`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/cases/open-stats`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/transactions/flagged-stats`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/reports/stats`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/analytics/customers/pending-reviews`, { credentials: "include" }),
       ]);
       if (!cs.ok) throw new Error("api");
       setD({ cases: await cs.json(), flagged: await fl.json(), reports: await rp.json(), pendingReviews: await pr.json() });

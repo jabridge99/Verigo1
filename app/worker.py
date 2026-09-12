@@ -78,20 +78,19 @@ async def send_reminder_emails(org_id: str, item_ids: List[str]) -> None:
     )
     try:
         from app.db.database import SessionLocal
-        from app.services.email_service import send_email  # type: ignore
+        from app.models.user import User
+        from app.services.email_service import send_compliance_notification
 
         db = SessionLocal()
         try:
-            from app.models.compliance_calendar import (
-                ComplianceCalendar,  # type: ignore
-            )
+            from app.models.compliance_calendar import ComplianceCalendarItem
 
             for item_id in item_ids:
                 item = (
-                    db.query(ComplianceCalendar)
+                    db.query(ComplianceCalendarItem)
                     .filter(
-                        ComplianceCalendar.id == item_id,
-                        ComplianceCalendar.org_id == org_id,
+                        ComplianceCalendarItem.id == item_id,
+                        ComplianceCalendarItem.org_id == org_id,
                     )
                     .first()
                 )
@@ -99,16 +98,31 @@ async def send_reminder_emails(org_id: str, item_ids: List[str]) -> None:
                     log.debug("[worker] reminder item not found: %s", item_id)
                     continue
 
+                assignee = (
+                    db.query(User).filter_by(id=item.assigned_to).first()
+                    if item.assigned_to
+                    else None
+                )
+                if not assignee or not assignee.email:
+                    log.debug(
+                        "[worker] reminder item %s has no assigned user with an "
+                        "email — skipping",
+                        item_id,
+                    )
+                    continue
+
                 try:
-                    await send_email(
-                        to=item.assigned_to_email
-                        if hasattr(item, "assigned_to_email")
-                        else "",
-                        subject=f"[Verigo] Compliance reminder: {getattr(item, 'title', item_id)}",
+                    title = f"Compliance reminder: {item.title}"
+                    send_compliance_notification(
+                        to=assignee.email,
+                        full_name=assignee.full_name or assignee.email,
+                        subject=f"[Verigo] {title}",
+                        title=title,
                         body=(
-                            f"This is a reminder that the following compliance item is due:\n\n"
-                            f"  {getattr(item, 'title', item_id)}\n"
-                            f"  Due: {getattr(item, 'due_date', 'N/A')}\n\n"
+                            f"This is a reminder that the following compliance item "
+                            f"is due:\n\n"
+                            f"  {item.title}\n"
+                            f"  Due: {item.due_date}\n\n"
                             f"Log in to Verigo to view and complete this item."
                         ),
                     )

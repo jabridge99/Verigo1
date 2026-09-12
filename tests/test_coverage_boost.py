@@ -10,7 +10,6 @@ import pytest
 
 from app.models.organisation import IndustryType, Organisation
 
-
 # ── Template seeding (AML solution + risk framework) ────────────────────────
 
 ALL_INDUSTRIES = list(IndustryType)
@@ -94,78 +93,21 @@ def test_compute_ecdd_score_and_recommendation():
 # ── sanctions_screening ──────────────────────────────────────────────────────
 
 
-def test_screen_name_match_and_no_match():
+@pytest.mark.asyncio
+async def test_screen_name_match_and_no_match():
     from app.services.sanctions_screening import screen_name, screen_transaction
 
-    result = screen_name("John Doe Sanction")
+    # "Al-Qaeda" is one of InternalSanctionsProvider's real DFAT entries
+    # (app/integrations/sanctions/internal.py) -- the default SANCTIONS_PROVIDER.
+    result = await screen_name("Al-Qaeda")
     assert result["match_found"] is True
-    assert result["matches"][0]["list"] == "OFAC"
+    assert result["matches"][0]["list"] == "DFAT_AU"
 
-    result_clean = screen_name("Totally Unrelated Person")
+    result_clean = await screen_name("Totally Unrelated Person")
     assert result_clean["match_found"] is False
 
-    assert screen_transaction("")["match_found"] is False
-    assert screen_transaction("Jane Criminal")["match_found"] is True
-
-
-# ── risk_scoring ──────────────────────────────────────────────────────────
-
-
-def test_score_customer_and_levels():
-    from app.services.risk_scoring import score_customer, score_to_level
-
-    high_risk_customer = types.SimpleNamespace(
-        country_of_residence="AF",
-        nationality="KP",
-        industry=types.SimpleNamespace(value="vasp"),
-        is_pep=True,
-        source_of_funds=None,
-    )
-    score = score_customer(high_risk_customer)
-    assert score == 100.0
-    assert score_to_level(score) == "critical"
-
-    low_risk_customer = types.SimpleNamespace(
-        country_of_residence="AU",
-        nationality="AU",
-        industry=types.SimpleNamespace(value="retail"),
-        is_pep=False,
-        source_of_funds="salary",
-    )
-    low_score = score_customer(low_risk_customer)
-    assert low_score == 0.0
-    assert score_to_level(low_score) == "low"
-
-    assert score_to_level(45) == "medium"
-    assert score_to_level(70) == "high"
-
-
-def test_score_transaction_alerts():
-    from app.services.risk_scoring import score_transaction
-
-    big_txn = types.SimpleNamespace(amount=15_000, counterparty_country="KP")
-    near_threshold_txns = [types.SimpleNamespace(amount=7_500) for _ in range(3)]
-    many_recent = near_threshold_txns + [
-        types.SimpleNamespace(amount=100) for _ in range(8)
-    ]
-
-    result = score_transaction(
-        big_txn, customer_risk_score=50.0, recent_transactions=many_recent
-    )
-    assert result["is_suspicious"] == 1
-    assert result["risk_score"] > 0
-    alert_types = {a[0] for a in result["alerts"]}
-    assert "large_transaction" in alert_types
-    assert "structuring" in alert_types
-    assert "high_risk_country" in alert_types
-    assert "velocity_breach" in alert_types
-
-    small_txn = types.SimpleNamespace(amount=50, counterparty_country=None)
-    clean_result = score_transaction(
-        small_txn, customer_risk_score=0.0, recent_transactions=[]
-    )
-    assert clean_result["is_suspicious"] == 0
-    assert clean_result["alerts"] == []
+    assert (await screen_transaction(""))["match_found"] is False
+    assert (await screen_transaction("Taliban"))["match_found"] is True
 
 
 # ── identity_verification ──────────────────────────────────────────────────
@@ -173,6 +115,7 @@ def test_score_transaction_alerts():
 
 def test_verify_document_matches_and_mismatches():
     from datetime import date
+
     from app.services.identity_verification import (
         compute_kyc_identity_score,
         verify_document,
@@ -502,7 +445,7 @@ def test_plan_pricing_override(db):
     from app.services import billing_service as svc
 
     default = svc.get_plan_pricing(db, BillingPlan.starter)
-    assert default["monthly_aud"] == 59.00
+    assert default["monthly_aud"] == 299.00
 
     updated = svc.update_plan_pricing(
         db, BillingPlan.starter, 349.00, None, "admin@test.com"
@@ -609,8 +552,8 @@ def test_cancel_subscription_branches(db):
 
 
 def test_create_checkout_session_mock_mode(db):
-    from app.schemas.billing import CheckoutSessionRequest
     from app.models.billing import BillingInterval, BillingPlan
+    from app.schemas.billing import CheckoutSessionRequest
     from app.services import billing_service as svc
 
     svc.create_trial(db, "org-checkout")
@@ -1207,7 +1150,10 @@ def test_customer_risk_engine_individual_dimension_branches():
     txn_result = score_transaction_risk(expected_monthly_volume_aud=500_000)
     assert txn_result.factors.get("medium_monthly_volume") == 25.0
 
-    assert _level(50.0) == "medium"
+    # Boundaries now come from the shared ISO 31000-derived percentage scale
+    # (risk_engine.risk_rating_pct: low<=20, medium<=48, high<=76) rather
+    # than this engine's own retired 33/66/85 thresholds.
+    assert _level(50.0) == "high"
     assert _level(70.0) == "high"
 
     assert cdd_level_from_gateway("cdd", 5.0).value == "simplified"

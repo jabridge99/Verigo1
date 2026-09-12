@@ -1,17 +1,25 @@
 'use client'
 
+import { apiFetch, storeSession, type AuthUser } from '@/lib/auth'
+
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 export interface RegisterResult {
   user_id: string
+  org_id: string
   email: string
   full_name: string
+  role: AuthUser['role']
+  industry_id?: string
+  is_super_admin?: boolean
+  access_token: string
   dev_verify_email_token?: string
 }
 
 export interface Organisation {
-  org_id: string
+  id: string
   name: string
+  industry_type?: string
   industry_id?: string
   risk_profile?: 'low' | 'standard' | 'high'
   abn?: string
@@ -53,18 +61,33 @@ export async function registerAccount(opts: {
   email: string
   password: string
   full_name: string
+  organisation_name?: string
 }): Promise<RegisterResult> {
-  const r = await fetch(`${API}/api/v1/auth/register`, {
+  const r = await apiFetch(`${API}/api/v1/auth/register`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(opts),
   })
-  return asJson(r)
+  const data: RegisterResult = await asJson(r)
+  if (data.access_token) {
+    storeSession(
+      {
+        user_id: data.user_id,
+        email: data.email,
+        full_name: data.full_name,
+        role: data.role,
+        industry_id: data.industry_id,
+        is_super_admin: data.is_super_admin,
+      },
+      data.access_token,
+    )
+  }
+  return data
 }
 
 export async function confirmEmailVerification(token: string): Promise<void> {
-  const r = await fetch(`${API}/api/v1/auth/email/verify/confirm`, {
+  const r = await apiFetch(`${API}/api/v1/auth/email/verify/confirm`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -74,12 +97,12 @@ export async function confirmEmailVerification(token: string): Promise<void> {
 }
 
 export async function listMyOrganisations(): Promise<Organisation[]> {
-  const r = await fetch(`${API}/api/v1/organisations`, { credentials: 'include' })
+  const r = await apiFetch(`${API}/api/v1/organisations`, { credentials: 'include' })
   return asJson(r)
 }
 
 export async function createOrganisation(name: string): Promise<Organisation> {
-  const r = await fetch(`${API}/api/v1/organisations`, {
+  const r = await apiFetch(`${API}/api/v1/organisations`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -89,7 +112,7 @@ export async function createOrganisation(name: string): Promise<Organisation> {
 }
 
 export async function updateOrganisation(orgId: string, fields: Partial<Organisation>): Promise<Organisation> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}`, {
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -102,6 +125,21 @@ export async function setOrganisationIndustry(orgId: string, industryId: string)
   return updateOrganisation(orgId, { industry_id: industryId })
 }
 
+// Sets the org's real AUSTRAC industry (industry_type) and re-seeds its
+// AML/CTF Program + Risk Framework from the matching Compliance Pack --
+// distinct from setOrganisationIndustry() above, which only sets the
+// unrelated free-text industry_id field. This is what the onboarding
+// wizard's "choose your industry" step should call.
+export async function selectIndustry(orgId: string, industryType: string): Promise<Organisation> {
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/select-industry`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ industry_type: industryType }),
+  })
+  return asJson(r)
+}
+
 export async function setOrganisationRiskProfile(
   orgId: string,
   riskProfile: 'low' | 'standard' | 'high'
@@ -110,11 +148,42 @@ export async function setOrganisationRiskProfile(
 }
 
 export async function generateAmlProgram(orgId: string): Promise<AmlProgram> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/generate`, {
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/aml-program/generate`, {
     method: 'POST',
     credentials: 'include',
   })
   return asJson(r)
+}
+
+// The organisation's real AML/CTF Program document (app/api/routes/aml_program.py),
+// auto-drafted from the industry template as soon as an industry is selected --
+// distinct from the AmlProgram/generateAmlProgram() checklist above, which is a
+// separate, versioned deliverable with its own export/QR-verification workflow
+// (see web/app/aml-program/page.tsx). This document has no preview/paywall concept.
+export interface AmlProgramSectionCompletion {
+  sections: Record<string, boolean>
+  completed: number
+  total: number
+  completion_pct: number
+}
+
+export interface AmlProgramDocument {
+  id: string
+  status: string
+  version: number
+  risk_appetite?: string
+  section_completion: AmlProgramSectionCompletion
+}
+
+// Uses /versions (not GET /aml-program, which only returns an *active*
+// program) because a freshly-seeded program is still a draft at this point
+// in onboarding -- nobody has reviewed/activated it yet. /versions returns
+// every version regardless of status, newest first, so the most recent one
+// is the org's real, just-seeded program document.
+export async function getLatestAmlProgramDocument(): Promise<AmlProgramDocument | null> {
+  const r = await apiFetch(`${API}/api/v1/aml-program/versions?page_size=1`, { credentials: 'include' })
+  const data = await asJson(r)
+  return data.versions?.[0] ?? null
 }
 
 export interface RiskFactor {
@@ -135,7 +204,7 @@ export interface RiskAssessment {
 }
 
 export async function generateRiskAssessment(orgId: string): Promise<RiskAssessment> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/risk-assessment/generate`, {
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/risk-assessment/generate`, {
     method: 'POST',
     credentials: 'include',
   })
@@ -173,17 +242,17 @@ export interface ProgramHealth {
 }
 
 export async function listAmlProgramVersions(orgId: string): Promise<AmlProgramVersionList> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/versions`, { credentials: 'include' })
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/aml-program/versions`, { credentials: 'include' })
   return asJson(r)
 }
 
 export async function getAmlProgramVersion(orgId: string, version: number): Promise<AmlProgramVersionDetail> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/versions/${version}`, { credentials: 'include' })
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/aml-program/versions/${version}`, { credentials: 'include' })
   return asJson(r)
 }
 
 export async function exportAmlProgram(orgId: string, reason: string): Promise<void> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/export`, {
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/aml-program/export`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -193,12 +262,12 @@ export async function exportAmlProgram(orgId: string, reason: string): Promise<v
 }
 
 export async function getAmlProgramHealth(orgId: string): Promise<ProgramHealth> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/health`, { credentials: 'include' })
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/aml-program/health`, { credentials: 'include' })
   return asJson(r)
 }
 
 export async function acknowledgeAmlAccountability(orgId: string): Promise<void> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-accountability/ack`, {
+  const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/aml-accountability/ack`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -223,7 +292,7 @@ export interface FirstCustomerInput {
 }
 
 export async function createFirstCustomer(payload: FirstCustomerInput): Promise<{ customer_id: string; full_name: string }> {
-  const r = await fetch(`${API}/api/v1/customers/`, {
+  const r = await apiFetch(`${API}/api/v1/customers/`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

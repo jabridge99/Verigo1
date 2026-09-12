@@ -25,6 +25,7 @@ No rule match constitutes a determination of suspicious activity or criminal con
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -40,7 +41,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -196,7 +197,9 @@ class MonitoringRule(Base):
     alert_severity = Column(
         Enum(AlertSeverity), nullable=False, default=AlertSeverity.medium
     )
-    alert_score = Column(Float, default=50.0)  # base score added when rule fires
+    alert_score: Mapped[Optional[float]] = Column(
+        Float, default=50.0
+    )  # base score added when rule fires
     alert_title_template = Column(String(500))  # template with {amount}, {country} etc.
 
     # Lookback window for frequency/velocity rules
@@ -218,7 +221,7 @@ class MonitoringRule(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    condition_groups = relationship(
+    condition_groups: Mapped[list["RuleConditionGroup"]] = relationship(
         "RuleConditionGroup",
         back_populates="rule",
         cascade="all, delete-orphan",
@@ -246,7 +249,7 @@ class RuleConditionGroup(Base):
     description = Column(String(255))  # human label for this group
 
     rule = relationship("MonitoringRule", back_populates="condition_groups")
-    conditions = relationship(
+    conditions: Mapped[list["RuleCondition"]] = relationship(
         "RuleCondition",
         back_populates="group",
         cascade="all, delete-orphan",
@@ -344,7 +347,10 @@ class TransactionAlert(Base):
     category = Column(Enum(AlertCategory), nullable=False, index=True)
     severity = Column(Enum(AlertSeverity), nullable=False, index=True)
     status = Column(
-        Enum(AlertStatus), default=AlertStatus.generated, nullable=False, index=True
+        Enum(AlertStatus, name="transaction_alert_status"),
+        default=AlertStatus.generated,
+        nullable=False,
+        index=True,
     )
 
     # ── Source ────────────────────────────────────────────────────────────────
@@ -353,7 +359,9 @@ class TransactionAlert(Base):
     rules_matched = Column(JSON, default=list)  # [rule_id, ...] all rules that matched
 
     # ── Score ──────────────────────────────────────────────────────────────────
-    alert_score = Column(Float, default=0.0)  # combined weighted score
+    alert_score: Mapped[Optional[float]] = Column(
+        Float, default=0.0
+    )  # combined weighted score
     score_breakdown = Column(JSON, default=dict)  # {signal: contribution}
 
     # ── Description ───────────────────────────────────────────────────────────
@@ -406,14 +414,20 @@ class TransactionAlert(Base):
 
     # ── AUSTRAC/FATF Risk Matrix ───────────────────────────────────────────────
     # Computed by risk_matrix_service.compute_risk_matrix() during run_monitoring().
-    risk_matrix_score = Column(Float)  # 0–100 weighted composite
+    risk_matrix_score: Mapped[Optional[float]] = Column(
+        Float
+    )  # 0–100 weighted composite
     risk_matrix_level = Column(String(20))  # low | medium | high | critical
     risk_matrix_detail = Column(JSON)  # full per-dimension breakdown
 
     # ── Pre-Approval Custom Questions ─────────────────────────────────────────
     # Populated after compliance officer answers org approval questions.
-    question_score = Column(Float)  # 0–100 (% compliant answers)
-    final_approval_score = Column(Float)  # alert_score * base_wt + question_risk * q_wt
+    question_score: Mapped[Optional[float]] = Column(
+        Float
+    )  # 0–100 (% compliant answers)
+    final_approval_score: Mapped[Optional[float]] = Column(
+        Float
+    )  # alert_score * base_wt + question_risk * q_wt
     approval_score_detail = Column(
         JSON
     )  # breakdown dict from compute_final_approval_score

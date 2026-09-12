@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.models.organisation import Organisation
 from app.models.risk_engine import (
     RiskCategory,
+    RiskCategoryType,
     RiskFactor,
     RiskFramework,
     RiskLibraryFactor,
@@ -35,7 +36,7 @@ INDUSTRY_MODULE_MAP = {
     "bullion_dealers": "other",
     # ── Tranche 2 ─────────────────────────────────────────────────────────────
     "accountants": "accounting",
-    "conveyancers": "real_estate",
+    "conveyancers": "conveyancers",
     "legal_professionals": "legal",
     "real_estate": "real_estate",
     "precious_metals": "other",
@@ -115,7 +116,7 @@ def seed_risk_framework(
         cat = RiskCategory(
             framework_id=framework.id,
             org_id=org.id,
-            category_type=cat_type,
+            category_type=RiskCategoryType(cat_type),
             name=category_labels.get(cat_type, cat_type.title()),
             description=f"Risk factors related to {cat_type} exposure.",
             weight=weight,
@@ -138,7 +139,7 @@ def seed_risk_framework(
             db.add(
                 RiskLibraryFactor(
                     industry=library.industry,
-                    category_type=lf.category_type,
+                    category_type=RiskCategoryType(lf.category_type),
                     factor_ref=lf.ref,
                     factor_name=lf.name,
                     description=lf.description,

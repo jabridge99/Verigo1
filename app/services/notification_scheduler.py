@@ -36,7 +36,7 @@ def run_all_deadline_checks(db: Session) -> dict:
     Master entry point — run all deadline checks and return a summary.
     Called by the scheduled endpoint or a background worker.
     """
-    results = {}
+    results: dict[str, int | str] = {}
     results["smr_deadlines"] = check_smr_deadlines(db)
     results["ifti_deadlines"] = check_ifti_deadlines(db)
     results["ttr_deadlines"] = check_ttr_deadlines(db)
@@ -72,7 +72,7 @@ def check_smr_deadlines(db: Session) -> int:
         pending_smrs = (
             db.query(SMRReport)
             .filter(
-                SMRReport.status.in_([ReportStatus.draft, ReportStatus.pending_review]),
+                SMRReport.status.in_([ReportStatus.draft, ReportStatus.under_review]),
             )
             .all()
         )
@@ -106,9 +106,7 @@ def check_ifti_deadlines(db: Session) -> int:
         pending = (
             db.query(IFTIReport)
             .filter(
-                IFTIReport.status.in_(
-                    [ReportStatus.draft, ReportStatus.pending_review]
-                ),
+                IFTIReport.status.in_([ReportStatus.draft, ReportStatus.under_review]),
             )
             .all()
         )
@@ -149,7 +147,7 @@ def check_ttr_deadlines(db: Session) -> int:
         pending = (
             db.query(TTRReport)
             .filter(
-                TTRReport.status.in_([ReportStatus.draft, ReportStatus.pending_review]),
+                TTRReport.status.in_([ReportStatus.draft, ReportStatus.under_review]),
             )
             .all()
         )
@@ -412,18 +410,18 @@ def check_independent_review_due(db: Session) -> int:
         due_reviews = (
             db.query(IndependentReview)
             .filter(
-                IndependentReview.target_completion.isnot(None),
-                IndependentReview.target_completion <= in_30_days,
-                IndependentReview.target_completion >= today,
+                IndependentReview.target_completion_date.isnot(None),
+                IndependentReview.target_completion_date <= in_30_days,
+                IndependentReview.target_completion_date >= today,
                 IndependentReview.status.notin_(
-                    [ReviewStatus.completed, ReviewStatus.cancelled]
+                    [ReviewStatus.completed, ReviewStatus.archived]
                 ),
             )
             .all()
         )
 
         for review in due_reviews:
-            days_remaining = (review.target_completion - today).days
+            days_remaining = (review.target_completion_date - today).days
             if days_remaining not in (1, 7, 14, 30):
                 continue
             notifier.notify_independent_review_due(

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { apiFetch as authFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${API}${path}`, {
+  const res = await authFetch(`${API}${path}`, {
     ...opts,
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(opts?.headers || {}) },
@@ -82,27 +83,6 @@ function ConnectionWizard({
     ? provider.required_credentials
     : [{ key: "api_key", label: "API Key", secret: true }];
 
-  const startOAuth = async () => {
-    setSaving(true);
-    setErr("");
-    try {
-      const r = await apiFetch(`/api/v1/integrations/${provider.slug}/oauth/authorize`, { method: "POST" });
-      // In production this would window.location to r.authorize_url and the
-      // provider would redirect back with ?code=&state=. Mocked here with a
-      // synthetic code so the round trip can be demonstrated end-to-end.
-      const code = `demo_${Date.now()}`;
-      await apiFetch(`/api/v1/integrations/${provider.slug}/oauth/callback`, {
-        method: "POST",
-        body: JSON.stringify({ code, state: r.state }),
-      });
-      onDone();
-      onClose();
-    } catch (e: unknown) {
-      setErr(String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const saveAndTest = async () => {
     if (creds.some((c) => !fields[c.key]?.trim())) {
@@ -143,15 +123,12 @@ function ConnectionWizard({
         {isOAuth ? (
           <div className="space-y-4">
             <p className="text-sm text-gray-300">
-              {provider.name} uses OAuth2. You&apos;ll be redirected to sign in and grant
-              VeriGo access; no API key is stored.
+              {provider.name} uses OAuth2. This isn&apos;t set up yet &mdash; there&apos;s no
+              real OAuth2 app registered with {provider.name} for VeriGo to connect
+              through, so there&apos;s nothing to click through to.
             </p>
             <div className="flex gap-3">
-              <button onClick={onClose} className="flex-1 py-2 bg-gray-700 rounded text-sm">Cancel</button>
-              <button onClick={startOAuth} disabled={saving}
-                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold disabled:opacity-50">
-                {saving ? "Connecting…" : `Connect with ${provider.name}`}
-              </button>
+              <button onClick={onClose} className="flex-1 py-2 bg-gray-700 rounded text-sm">Close</button>
             </div>
           </div>
         ) : step === 1 ? (
@@ -191,8 +168,8 @@ function ConnectionWizard({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className={`rounded-lg px-4 py-3 text-sm ${testResult?.test_passed ? "bg-green-900/30 text-green-300" : "bg-red-900/30 text-red-300"}`}>
-              {testResult?.test_passed ? "✓ " : "✗ "} {testResult?.message}
+            <div className={`rounded-lg px-4 py-3 text-sm ${testResult?.test_passed ? "bg-gray-800 text-gray-300" : "bg-red-900/30 text-red-300"}`}>
+              {testResult?.test_passed ? "ⓘ " : "✗ "} {testResult?.message}
             </div>
             <button onClick={() => { onDone(); onClose(); }}
               className="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold">

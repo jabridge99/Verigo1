@@ -13,9 +13,7 @@ Results from third-party providers are not compliance determinations.
 All decisions remain with the reporting entity.
 """
 
-import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -39,8 +37,9 @@ from app.models.integration import (
     OrgIntegration,
 )
 from app.models.user import User
-from app.services.crypto import decrypt_secret, encrypt_credentials, encrypt_secret
+from app.services.crypto import decrypt_credentials, encrypt_credentials
 from app.services.integration_monitor import migrate_legacy_connectors, run_expiry_check
+from app.services.integration_verify import verify_credentials
 
 router = APIRouter(prefix="/integrations", tags=["Integration Hub"])
 
@@ -61,7 +60,7 @@ class IntegrationEnable(BaseModel):
     config: dict = Field(
         default_factory=dict, description="Non-sensitive configuration"
     )
-    credential_expires_at: Optional[datetime] = Field(
+    credential_expires_at: datetime | None = Field(
         None, description="Vendor-stated API key expiry, if known"
     )
 
@@ -72,7 +71,7 @@ class OAuthCallback(BaseModel):
 
 
 class IntegrationUpdate(BaseModel):
-    config: Optional[dict] = None
+    config: dict | None = None
 
 
 class CredentialRotation(BaseModel):
@@ -80,17 +79,24 @@ class CredentialRotation(BaseModel):
         ..., description="New credentials to replace existing"
     )
     reason: str = Field(..., min_length=5)
-    credential_expires_at: Optional[datetime] = None
+    credential_expires_at: datetime | None = None
 
 
 # ── Seed provider catalog ─────────────────────────────────────────────────────
 
 
 def _seed_providers(db: Session):
-    """Ensure the platform provider catalog is populated (idempotent)."""
-    count = db.query(IntegrationProvider).count()
-    if count >= len(PROVIDER_CATALOG):
-        return
+    """
+    Ensure the platform provider catalog is populated (idempotent), and
+    backfill `required_credentials` on rows seeded before a catalog entry
+    defined one -- e.g. an already-running deployment that seeded Sumsub
+    before this field existed would otherwise keep showing the generic
+    single "API Key" field forever, never picking up the real app_token/
+    secret_key split. Only touches `required_credentials`, and only when
+    the catalog entry defines it and the stored value differs -- every
+    other field on an existing row (name, description, is_featured, etc.)
+    is left as an operator may have customised it.
+    """
     for p in PROVIDER_CATALOG:
         existing = (
             db.query(IntegrationProvider)
@@ -109,14 +115,20 @@ def _seed_providers(db: Session):
                     description=p["description"],
                     is_active=True,
                     is_featured=p.get("featured", False),
+                    required_credentials=p.get("required_credentials", []),
                 )
             )
+        elif (
+            "required_credentials" in p
+            and existing.required_credentials != p["required_credentials"]
+        ):
+            existing.required_credentials = p["required_credentials"]
     db.commit()
 
 
 def _audit(
     org_id: str,
-    integration_id: Optional[str],
+    integration_id: str | None,
     provider_slug: str,
     event_type: str,
     success: bool,
@@ -166,7 +178,7 @@ def _integration_dict(i: OrgIntegration, include_credentials: bool = False) -> d
 
 
 def _provider_dict(
-    p: IntegrationProvider, org_integration: Optional[OrgIntegration] = None
+    p: IntegrationProvider, org_integration: OrgIntegration | None = None
 ) -> dict:
     d = {
         "id": p.id,
@@ -194,9 +206,9 @@ def _provider_dict(
 
 @router.get("/catalog")
 def list_catalog(
-    category: Optional[IntegrationCategory] = Query(None),
-    integration_type: Optional[IntegrationType] = Query(None),
-    search: Optional[str] = Query(None, max_length=100),
+    category: IntegrationCategory | None = Query(None),
+    integration_type: IntegrationType | None = Query(None),
+    search: str | None = Query(None, max_length=100),
     featured_only: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
@@ -290,7 +302,7 @@ def get_provider(
 @router.get("")
 def list_org_integrations(
     enabled_only: bool = Query(False),
-    category: Optional[IntegrationCategory] = Query(None),
+    category: IntegrationCategory | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
@@ -438,17 +450,29 @@ def disable_integration(
 
 
 @router.post("/{slug}/test")
-def test_connection(
+async def test_connection(
     slug: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
     """
-    Test the integration connection using stored credentials.
+    Test this integration's stored credentials.
 
-    Returns connection status. In production this would make a live
-    test API call to the provider. Currently returns a validated-config response.
+    For the providers listed in app.services.integration_verify.VERIFIERS
+    (Sumsub, ComplyAdvantage, Chainalysis, Elliptic, ABR, Twilio SMS,
+    SendGrid/SES via SMTP), this makes one real, read-only call against
+    that vendor's actual API using the org's own stored credentials and
+    reports a genuinely earned health_status=healthy or =down. This tests
+    only whether *these specific credentials* work against the vendor --
+    it never changes what VeriGo's own platform-wide screening/KYC/email
+    pipelines use (app.config.settings), which is a separate, deliberately
+    untouched configuration surface.
+
+    Every other provider in the catalog has no real check wired up (see
+    PARKING_LOT.md P45) and keeps reporting health_status=unknown -- it
+    must never claim "connected" for a provider nothing has verified.
     """
+    _seed_providers(db)
     org_id = org_id_for(current_user)
     integration = (
         db.query(OrgIntegration)
@@ -464,25 +488,37 @@ def test_connection(
         raise HTTPException(409, "Integration is disabled. Enable it before testing.")
 
     now = datetime.now(timezone.utc)
-    # Placeholder: in production, call provider health endpoint
-    test_passed = bool(integration.credentials_encrypted)
-    message = (
-        "Connection validated (credentials present)."
-        if test_passed
-        else "No credentials configured."
-    )
+    has_credentials = bool(integration.credentials_encrypted)
+
+    if not has_credentials:
+        test_passed = False
+        message = "No credentials configured."
+        health_status = IntegrationHealthStatus.unknown
+    else:
+        real_result = await verify_credentials(
+            slug, decrypt_credentials(integration.credentials_encrypted)
+        )
+        if real_result is None:
+            test_passed = True
+            message = (
+                "Credentials saved. Live connection verification isn't built "
+                "yet for this provider -- this only confirms something was "
+                "stored, not that it works."
+            )
+            health_status = IntegrationHealthStatus.unknown
+        else:
+            test_passed, message = real_result
+            health_status = (
+                IntegrationHealthStatus.healthy
+                if test_passed
+                else IntegrationHealthStatus.down
+            )
 
     integration.last_tested_at = now
     integration.last_test_result = test_passed
     integration.last_test_message = message
     integration.last_health_check_at = now
-    integration.health_status = (
-        IntegrationHealthStatus.healthy if test_passed else IntegrationHealthStatus.down
-    )
-    if test_passed:
-        integration.consecutive_failures = 0
-    else:
-        integration.consecutive_failures = (integration.consecutive_failures or 0) + 1
+    integration.health_status = health_status
 
     _audit(
         org_id,
@@ -555,12 +591,17 @@ def start_oauth(
 ):
     """
     Begin an OAuth2 connection for a provider whose auth_type is oauth2.
-    Returns an authorize_url the frontend redirects the user to. The
-    provider redirects back to the frontend, which posts the resulting
-    code + state to /oauth/callback.
+
+    No provider's real OAuth2 app (client_id/secret, redirect URI, actual
+    authorize endpoint) is configured for any provider in this catalog yet
+    (see PARKING_LOT.md P45) -- this previously returned a fake
+    authorize_url on a non-existent `*.example` domain, and the frontend
+    never even sent the user there: it called /oauth/callback directly
+    with a synthetic code, which unconditionally marked the integration
+    "healthy" and "connected". Refusing here instead, so nothing can ever
+    silently fabricate a connected integration.
     """
     _seed_providers(db)
-    org_id = org_id_for(current_user)
 
     provider = (
         db.query(IntegrationProvider)
@@ -572,31 +613,11 @@ def start_oauth(
     if provider.auth_type != AuthType.oauth2:
         raise HTTPException(409, f"Provider '{slug}' does not use OAuth2.")
 
-    state = secrets.token_urlsafe(24)
-    integration = (
-        db.query(OrgIntegration)
-        .filter(
-            OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id
-        )
-        .first()
+    raise HTTPException(
+        501,
+        f"OAuth2 connection for '{slug}' isn't implemented yet. "
+        "No provider in this catalog has a real OAuth2 app configured.",
     )
-    if not integration:
-        integration = OrgIntegration(
-            id=f"int_{uuid4().hex[:10]}",
-            org_id=org_id,
-            provider_id=provider.id,
-            provider_slug=slug,
-            is_enabled=False,
-            health_status=IntegrationHealthStatus.unknown,
-        )
-        db.add(integration)
-    integration.oauth_state = state
-    db.commit()
-
-    # Real implementation would build the provider's actual OAuth2 authorize
-    # endpoint (client_id, redirect_uri, scope) from per-provider config.
-    authorize_url = f"https://oauth.{slug}.example/authorize?state={state}"
-    return {"authorize_url": authorize_url, "state": state}
 
 
 @router.post("/{slug}/oauth/callback")
@@ -606,55 +627,19 @@ def complete_oauth(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
-    """Exchange the OAuth2 code for tokens and enable the integration."""
-    org_id = org_id_for(current_user)
-    provider = (
-        db.query(IntegrationProvider).filter(IntegrationProvider.slug == slug).first()
-    )
-    if not provider:
-        raise HTTPException(404, f"Provider '{slug}' not found.")
+    """
+    Exchange the OAuth2 code for tokens and enable the integration.
 
-    integration = (
-        db.query(OrgIntegration)
-        .filter(
-            OrgIntegration.org_id == org_id, OrgIntegration.provider_id == provider.id
-        )
-        .first()
+    Unreachable via the normal flow now that /oauth/authorize always
+    refuses (see its docstring) -- kept refusing here too, defensively, so
+    a stale oauth_state row from before this fix (or a direct API call)
+    can never fabricate a "connected" integration either.
+    """
+    raise HTTPException(
+        501,
+        f"OAuth2 connection for '{slug}' isn't implemented yet. "
+        "No provider in this catalog has a real OAuth2 app configured.",
     )
-    if not integration or not integration.oauth_state:
-        raise HTTPException(409, "No OAuth flow in progress for this provider.")
-    if integration.oauth_state != payload.state:
-        raise HTTPException(400, "Invalid or expired OAuth state.")
-
-    # Real implementation calls the provider's token endpoint with `code`.
-    # Mocked here: derive a stand-in token pair from the authorization code.
-    now = datetime.now(timezone.utc)
-    integration.oauth_access_token_encrypted = encrypt_secret(f"access:{payload.code}")
-    integration.oauth_refresh_token_encrypted = encrypt_secret(
-        f"refresh:{payload.code}"
-    )
-    integration.oauth_expires_at = now + timedelta(hours=1)
-    integration.oauth_state = None
-    integration.is_enabled = True
-    integration.enabled_by = current_user.id
-    integration.health_status = IntegrationHealthStatus.healthy
-    integration.last_tested_at = now
-    integration.last_test_result = True
-    integration.last_test_message = "OAuth2 connection established."
-
-    _audit(
-        org_id,
-        integration.id,
-        slug,
-        "oauth_connected",
-        True,
-        f"OAuth2 connected by {current_user.id}",
-        current_user.id,
-        db,
-    )
-    db.commit()
-    db.refresh(integration)
-    return _integration_dict(integration)
 
 
 @router.get("/monitoring")
@@ -774,7 +759,7 @@ def migrate_legacy_connectors_route(
 
 @router.get("/audit-log")
 def integration_audit_log(
-    slug: Optional[str] = Query(None),
+    slug: str | None = Query(None),
     limit: int = Query(default=50, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),

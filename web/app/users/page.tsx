@@ -3,8 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Users, Plus, Search, Shield, CheckCircle, XCircle, Clock, AlertTriangle, X, Save } from 'lucide-react'
 import clsx from 'clsx'
-import { getStoredUser } from '@/lib/auth'
-
+import { getStoredUser, apiFetch } from '@/lib/auth'
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 interface AppUser {
@@ -65,7 +64,7 @@ export default function UsersPage() {
       return
     }
     setCurrentUser(stored)
-    fetch(`${API}/api/v1/auth/users`, { credentials: 'include' })
+    apiFetch(`${API}/api/v1/auth/users`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(d => d && setUsers(d))
       .catch(() => {})
@@ -81,9 +80,9 @@ export default function UsersPage() {
     const action = u.status === 'active' ? 'suspend' : 'activate'
     try {
       if (action === 'suspend') {
-        await fetch(`${API}/api/v1/auth/users/${u.user_id}/suspend`, { method: 'POST', credentials: 'include' })
+        await apiFetch(`${API}/api/v1/auth/users/${u.user_id}/suspend`, { method: 'POST', credentials: 'include' })
       } else {
-        await fetch(`${API}/api/v1/auth/users/${u.user_id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) })
+        await apiFetch(`${API}/api/v1/auth/users/${u.user_id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) })
       }
     } catch {}
     const newStatus = action === 'suspend' ? 'suspended' : 'active'
@@ -94,7 +93,7 @@ export default function UsersPage() {
   async function createUser() {
     setSaving(true)
     try {
-      const r = await fetch(`${API}/api/v1/auth/users`, {
+      const r = await apiFetch(`${API}/api/v1/auth/users`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

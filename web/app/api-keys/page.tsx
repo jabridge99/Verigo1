@@ -5,7 +5,7 @@ import {
   Key, Plus, Trash2, Eye, EyeOff, Copy, Check, Webhook,
   Globe, AlertTriangle, CheckCircle, XCircle, Play, ChevronDown, ChevronUp,
 } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -108,8 +108,8 @@ export default function APIKeysPage() {
     setLoading(true);
     try {
       const [kr, wr] = await Promise.all([
-        fetch(`${API}/api/v1/api-keys`, { credentials: "include" }),
-        fetch(`${API}/api/v1/webhooks`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/api-keys`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/webhooks`, { credentials: "include" }),
       ]);
       if (!kr.ok || !wr.ok) throw new Error("api");
       setKeys(await kr.json());
@@ -124,7 +124,7 @@ export default function APIKeysPage() {
   const createKey = async () => {
     if (!keyName.trim()) return;
     try {
-      const res = await fetch(`${API}/api/v1/api-keys`, {
+      const res = await apiFetch(`${API}/api/v1/api-keys`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -143,14 +143,14 @@ export default function APIKeysPage() {
   const revokeKey = async (key_id: string) => {
     setKeys(prev => prev.map(k => k.key_id === key_id ? { ...k, status: "revoked" } : k));
     try {
-      await fetch(`${API}/api/v1/api-keys/${key_id}`, { method: "DELETE", credentials: "include" });
+      await apiFetch(`${API}/api/v1/api-keys/${key_id}`, { method: "DELETE", credentials: "include" });
     } catch {}
   };
 
   const createWebhook = async () => {
     if (!whName.trim() || !whUrl.trim() || whEvents.length === 0) return;
     try {
-      const res = await fetch(`${API}/api/v1/webhooks`, {
+      const res = await apiFetch(`${API}/api/v1/webhooks`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -171,13 +171,13 @@ export default function APIKeysPage() {
   const deleteWebhook = async (webhook_id: string) => {
     setWebhooks(prev => prev.filter(w => w.webhook_id !== webhook_id));
     try {
-      await fetch(`${API}/api/v1/webhooks/${webhook_id}`, { method: "DELETE", credentials: "include" });
+      await apiFetch(`${API}/api/v1/webhooks/${webhook_id}`, { method: "DELETE", credentials: "include" });
     } catch {}
   };
 
   const testWebhook = async (webhook_id: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/webhooks/${webhook_id}/test`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/webhooks/${webhook_id}/test`, { method: "POST", credentials: "include" });
       const data = await res.json();
       setTestResults(prev => ({ ...prev, [webhook_id]: data.success }));
     } catch {

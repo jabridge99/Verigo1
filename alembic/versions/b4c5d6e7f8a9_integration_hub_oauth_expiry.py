@@ -11,43 +11,52 @@ Revises: e5f6a7b8c9d0
 Create Date: 2026-06-23 00:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'b4c5d6e7f8a9'
-down_revision: Union[str, None] = 'e5f6a7b8c9d0'
+revision: str = "b4c5d6e7f8a9"
+down_revision: Union[str, None] = "e5f6a7b8c9d0"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        'org_integrations', sa.Column('credential_expires_at', sa.DateTime(timezone=True), nullable=True)
-    )
-    op.add_column(
-        'org_integrations', sa.Column('oauth_state', sa.String(length=100), nullable=True)
-    )
-    op.add_column(
-        'org_integrations', sa.Column('oauth_access_token_encrypted', sa.Text(), nullable=True)
-    )
-    op.add_column(
-        'org_integrations', sa.Column('oauth_refresh_token_encrypted', sa.Text(), nullable=True)
-    )
-    op.add_column(
-        'org_integrations', sa.Column('oauth_expires_at', sa.DateTime(timezone=True), nullable=True)
-    )
-    op.add_column(
-        'compliance_calendar', sa.Column('integration_id', sa.String(), nullable=True)
-    )
+    # Guarded: on a database created fresh via the f73383da4e36 baseline
+    # (create_all() against the *current* model, which already declares
+    # these columns), they already exist. On a database that predates that
+    # baseline, this migration is what adds them.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    org_integration_columns = {
+        c["name"] for c in inspector.get_columns("org_integrations")
+    }
+    for name, coltype in (
+        ("credential_expires_at", sa.DateTime(timezone=True)),
+        ("oauth_state", sa.String(length=100)),
+        ("oauth_access_token_encrypted", sa.Text()),
+        ("oauth_refresh_token_encrypted", sa.Text()),
+        ("oauth_expires_at", sa.DateTime(timezone=True)),
+    ):
+        if name not in org_integration_columns:
+            op.add_column("org_integrations", sa.Column(name, coltype, nullable=True))
+
+    calendar_columns = {c["name"] for c in inspector.get_columns("compliance_calendar")}
+    if "integration_id" not in calendar_columns:
+        op.add_column(
+            "compliance_calendar",
+            sa.Column("integration_id", sa.String(), nullable=True),
+        )
 
 
 def downgrade() -> None:
-    op.drop_column('compliance_calendar', 'integration_id')
-    op.drop_column('org_integrations', 'oauth_expires_at')
-    op.drop_column('org_integrations', 'oauth_refresh_token_encrypted')
-    op.drop_column('org_integrations', 'oauth_access_token_encrypted')
-    op.drop_column('org_integrations', 'oauth_state')
-    op.drop_column('org_integrations', 'credential_expires_at')
+    op.drop_column("compliance_calendar", "integration_id")
+    op.drop_column("org_integrations", "oauth_expires_at")
+    op.drop_column("org_integrations", "oauth_refresh_token_encrypted")
+    op.drop_column("org_integrations", "oauth_access_token_encrypted")
+    op.drop_column("org_integrations", "oauth_state")
+    op.drop_column("org_integrations", "credential_expires_at")

@@ -8,7 +8,15 @@ Scores:
   4. Channel Risk      — online vs branch, introduced, third-party reliance
   5. Transaction Risk  — expected volume, value, frequency, cross-border
 
-Weighted combination → overall score → decision gateway (CDD or EDD).
+Weighted combination → overall score (0-100) → decision gateway (CDD or EDD).
+
+Rating boundaries (low/medium/high/critical) come from
+app.services.risk_engine.risk_rating_pct() — the shared ISO 31000-derived
+thresholds used across every risk-scoring module in this codebase, not a
+separate scale defined here (see STRUCTURE_REVIEW.md §C3 for why that
+mattered: this engine and others used to each hardcode their own cut
+points, so the same customer could be rated differently depending which
+engine scored them).
 
 All country lists are illustrative starting points. Replace with live FATF/DFAT feeds.
 """
@@ -18,6 +26,7 @@ from typing import Optional
 
 from app.models.customer import CDDLevel, Customer, RiskLevel
 from app.models.customer_workflow import EDDTrigger
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD, risk_rating_pct
 
 # ── Country Risk Lists (seed data — override with live feeds) ─────────────────
 
@@ -124,13 +133,6 @@ DEFAULT_WEIGHTS = {
     "geographic": 0.20,
     "channel": 0.15,
     "transaction": 0.10,
-}
-
-RISK_THRESHOLDS = {
-    "low": 33.0,
-    "medium": 66.0,
-    "high": 85.0,
-    # > high → critical
 }
 
 
@@ -340,7 +342,7 @@ def score_transaction_risk(
         elif expected_monthly_volume_aud >= 100_000:
             score += 25.0
             factors["medium_monthly_volume"] = 25.0
-        elif expected_monthly_volume_aud >= 10_000:
+        elif expected_monthly_volume_aud >= TTR_CTR_THRESHOLD_AUD:
             score += 10.0
             factors["threshold_monthly_volume"] = 10.0
 
@@ -349,7 +351,7 @@ def score_transaction_risk(
             score += 25.0
             factors["high_single_transaction"] = 25.0
             flags["is_high_value"] = True
-        elif expected_max_transaction_aud >= 10_000:
+        elif expected_max_transaction_aud >= TTR_CTR_THRESHOLD_AUD:
             score += 10.0
             factors["threshold_single_transaction"] = 10.0
 
@@ -394,7 +396,7 @@ def _determine_gateway(
         edd_triggers.append(EDDTrigger.complex_ownership.value)
     if product_r.flags.get("crypto"):
         edd_triggers.append(EDDTrigger.crypto_exposure.value)
-    if overall_score > RISK_THRESHOLDS["medium"]:
+    if risk_rating_pct(overall_score) in ("high", "critical"):
         edd_triggers.append(EDDTrigger.high_risk_score.value)
 
     edd_triggers = list(set(edd_triggers))  # deduplicate
@@ -403,13 +405,7 @@ def _determine_gateway(
 
 
 def _level(score: float) -> str:
-    if score <= RISK_THRESHOLDS["low"]:
-        return "low"
-    if score <= RISK_THRESHOLDS["medium"]:
-        return "medium"
-    if score <= RISK_THRESHOLDS["high"]:
-        return "high"
-    return "critical"
+    return risk_rating_pct(score)
 
 
 # ── Main Entry Point ───────────────────────────────────────────────────────────
@@ -485,6 +481,15 @@ def assess_customer_risk(
     )
     overall = _clamp(overall)
 
+    # A confirmed sanctions match already forces the EDD gateway below, but
+    # on its own that left the *numeric* score/level exactly where the
+    # weighted dimensions put it — a sanctions match could be diluted by
+    # otherwise-low dimension scores and not read as critical. A confirmed
+    # match is definitionally the most severe outcome, so it forces the
+    # score to 100 (critical) outright, not just the workflow gateway.
+    if is_sanctions_match:
+        overall = 100.0
+
     gateway, triggers = _determine_gateway(
         overall, c_result, p_result, g_result, is_pep, is_sanctions_match
     )
@@ -506,7 +511,7 @@ def assess_customer_risk(
 def cdd_level_from_gateway(gateway: str, overall_score: float) -> CDDLevel:
     if gateway == "edd":
         return CDDLevel.enhanced
-    if overall_score <= RISK_THRESHOLDS["low"]:
+    if risk_rating_pct(overall_score) == "low":
         return CDDLevel.simplified
     return CDDLevel.standard
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Bell, CheckCheck, AlertTriangle, Info, FileText, UserCheck, Shield, Zap, Clock } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -91,7 +91,7 @@ export default function NotificationsPage() {
   const fetchNotifs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/notifications?limit=100`, {
+      const res = await apiFetch(`${API}/api/v1/notifications?limit=100`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("api error");
@@ -107,7 +107,7 @@ export default function NotificationsPage() {
   const markRead = async (notif_id: string) => {
     setNotifs(prev => prev.map(n => n.notif_id === notif_id ? { ...n, read: true } : n));
     try {
-      await fetch(`${API}/api/v1/notifications/${notif_id}/read`, {
+      await apiFetch(`${API}/api/v1/notifications/${notif_id}/read`, {
         method: "POST", credentials: "include",
       });
     } catch {}
@@ -116,7 +116,7 @@ export default function NotificationsPage() {
   const markAllRead = async () => {
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
     try {
-      await fetch(`${API}/api/v1/notifications/read-all`, {
+      await apiFetch(`${API}/api/v1/notifications/read-all`, {
         method: "POST", credentials: "include",
       });
     } catch {}

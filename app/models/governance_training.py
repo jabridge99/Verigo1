@@ -25,6 +25,7 @@ DISCLAIMER: This module is a governance tooling aid only.
 from __future__ import annotations
 
 import enum
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -41,7 +42,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -147,7 +148,7 @@ class TrainingCourse(Base):
 
     # ── Assessment ────────────────────────────────────────────────────────────
     has_assessment = Column(Boolean, default=False)
-    pass_mark = Column(Float)  # e.g. 80.0 for 80%
+    pass_mark: Mapped[Optional[float]] = Column(Float)  # e.g. 80.0 for 80%
     max_attempts = Column(Integer, default=3)
     issues_certificate = Column(Boolean, default=False)
 
@@ -237,8 +238,10 @@ class GovernanceTrainingRecord(Base):
     # = completion_date + course.expiry_months (calculated on save)
 
     # ── Assessment result ─────────────────────────────────────────────────────
-    score = Column(Float)  # 0–100
-    pass_mark_applied = Column(Float)  # copy of course.pass_mark at time of completion
+    score: Mapped[Optional[float]] = Column(Float)  # 0–100
+    pass_mark_applied: Mapped[Optional[float]] = Column(
+        Float
+    )  # copy of course.pass_mark at time of completion
     passed = Column(Boolean)
     attempt_number = Column(Integer, default=1)
 
@@ -248,7 +251,7 @@ class GovernanceTrainingRecord(Base):
 
     # ── Status (CALCULATED — do not set manually) ─────────────────────────────
     status = Column(
-        Enum(TrainingStatus),
+        Enum(TrainingStatus, name="governance_training_status"),
         default=TrainingStatus.assigned,
         nullable=False,
         index=True,
@@ -267,7 +270,9 @@ class GovernanceTrainingRecord(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    course = relationship("TrainingCourse", back_populates="records")
+    course: Mapped["TrainingCourse"] = relationship(
+        "TrainingCourse", back_populates="records"
+    )
     assignment = relationship(
         "TrainingAssignment", back_populates="records", foreign_keys=[assignment_id]
     )
@@ -326,7 +331,7 @@ class TrainingAssignment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     course = relationship("TrainingCourse", back_populates="assignments")
-    records = relationship(
+    records: Mapped[list["GovernanceTrainingRecord"]] = relationship(
         "GovernanceTrainingRecord",
         back_populates="assignment",
         foreign_keys="GovernanceTrainingRecord.assignment_id",
@@ -369,7 +374,7 @@ Training Health Score (0-100):
 # STANDARD COURSE SEEDS
 # ══════════════════════════════════════════════════════════════════════════════
 
-STANDARD_TRAINING_COURSES = [
+STANDARD_TRAINING_COURSES: list[dict[str, Any]] = [
     {
         "course_code": "TRN-IND-001",
         "name": "AML/CTF Induction Training",

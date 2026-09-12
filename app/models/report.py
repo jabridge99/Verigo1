@@ -21,6 +21,7 @@ Decisions to lodge reports with AUSTRAC remain entirely with the reporting entit
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -37,7 +38,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 from app.models.customer_workflow import EDDTrigger
@@ -179,10 +180,10 @@ class IFTIReport(Base):
     # Core transfer
     date_received = Column(Date, nullable=False)
     date_available = Column(Date)
-    total_amount = Column(Float, nullable=False)
+    total_amount: Mapped[float] = Column(Float, nullable=False)
     currency = Column(String(3), nullable=False, default="AUD")
-    amount_aud = Column(Float)
-    exchange_rate = Column(Float)
+    amount_aud: Mapped[Optional[float]] = Column(Float)
+    exchange_rate: Mapped[Optional[float]] = Column(Float)
     transfer_type = Column(String(50), default="Money")
     transfer_reference = Column(String(100))
 
@@ -280,7 +281,7 @@ class TTRReport(Base):
     priority = Column(Enum(ReportPriority), default=ReportPriority.normal)
 
     transaction_date = Column(Date, nullable=False)
-    total_amount = Column(Float, nullable=False)
+    total_amount: Mapped[float] = Column(Float, nullable=False)
     currency = Column(String(3), default="AUD")
     transaction_type = Column(String(50))  # cash_in | cash_out | combined
 
@@ -461,7 +462,7 @@ class SMRReport(Base):
 
     # Retained for legacy association — use txn_details for structured AUSTRAC output
     transaction_ids = Column(JSON, default=list)
-    total_amount = Column(Float)
+    total_amount: Mapped[Optional[float]] = Column(Float)
     currency = Column(String(3), default="AUD")
 
     # ── <additionalDetails> — MANDATORY ─────────────────────────────────────────
@@ -564,7 +565,7 @@ class ECDDRecord(Base):
     investment_legitimacy_notes = Column(Text)
     analyst_notes = Column(Text)
 
-    enhanced_risk_score = Column(Float, default=0.0)
+    enhanced_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
     recommendation = Column(String(20))  # approve | monitor | reject
     status = Column(
         Enum(ECDDStatus), default=ECDDStatus.pending, nullable=False, index=True
@@ -618,7 +619,7 @@ class FilingRegisterEntry(Base):
 
     period_start = Column(Date)
     period_end = Column(Date)
-    amount_aud = Column(Float)
+    amount_aud: Mapped[Optional[float]] = Column(Float)
 
     status = Column(
         String(20), nullable=False, default="submitted"

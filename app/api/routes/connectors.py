@@ -8,7 +8,6 @@ rows into the Hub.
 """
 
 from datetime import datetime
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -34,27 +33,27 @@ router = APIRouter(prefix="/connectors", tags=["Connector Marketplace"])
 class ConnectorCreate(BaseModel):
     provider: ConnectorProvider
     credentials: dict  # plaintext — accepted once, immediately encrypted
-    label: Optional[str] = None
+    label: str | None = None
     is_default: bool = False
 
 
 class ConnectorUpdate(BaseModel):
-    credentials: Optional[dict] = None
-    label: Optional[str] = None
-    is_default: Optional[bool] = None
+    credentials: dict | None = None
+    label: str | None = None
+    is_default: bool | None = None
 
 
 class ConnectorResponse(BaseModel):
     credential_id: str
     industry_id: str
     provider: ConnectorProvider
-    label: Optional[str]
-    key_hint: Optional[str]
+    label: str | None
+    key_hint: str | None
     status: ConnectorStatus
     is_default: bool
-    last_tested_at: Optional[datetime]
-    last_error: Optional[str]
-    created_at: Optional[datetime]
+    last_tested_at: datetime | None
+    last_error: str | None
+    created_at: datetime | None
 
     class Config:
         from_attributes = True
@@ -75,18 +74,19 @@ def list_providers():
     }
 
 
-@router.get("/", response_model=List[ConnectorResponse])
+@router.get("/", response_model=list[ConnectorResponse])
 def list_connectors(
-    provider: Optional[ConnectorProvider] = None,
+    provider: ConnectorProvider | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = (
-        current_user.org_id
-        if current_user.role != UserRole.admin
-        else current_user.org_id
+    return get_credentials(
+        db,
+        current_user.org_id,
+        provider=provider,
+        organisation_id=current_user.primary_organisation_id,
     )
 
 

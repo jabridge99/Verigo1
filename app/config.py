@@ -86,6 +86,9 @@ class Settings(BaseSettings):
 
     # ── Session cookie ───────────────────────────────────────────────────────
     session_cookie_name: str = "tvg_session"
+    # Double-submit CSRF token — NOT httpOnly (the frontend must be able to
+    # read it and echo it back as a header); see set_csrf_cookie().
+    csrf_cookie_name: str = "tvg_csrf"
 
     # ── Master admin (seeded on startup if set, idempotent) ────────────────────
     master_admin_email: str = ""
@@ -137,6 +140,12 @@ class Settings(BaseSettings):
     # Sanctions screening: internal | complyadvantage | worldcheck
     sanctions_provider: str = "internal"
     complyadvantage_api_key: str = ""
+    # InternalSanctionsProvider: fetch and cache the real DFAT/OFAC/UN
+    # consolidated lists from their official free sources instead of using
+    # the tiny built-in seed. Off by default so dev/test runs never depend
+    # on those government sites being reachable or fast -- enable in
+    # production once the fetchers have been verified against live traffic.
+    sanctions_live_lists_enabled: bool = False
     # PEP screening: stub | complyadvantage | worldcheck
     pep_provider: str = "stub"
     # Identity verification (KYC/KYB): internal | sumsub

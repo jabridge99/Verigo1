@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,8 @@ from app.config import settings
 from app.db.database import get_db
 from app.integrations.base import ProviderRejectedError, ProviderUnavailableError
 from app.integrations.crypto import get_provider as get_crypto_provider
+from app.integrations.pep import get_provider as get_pep_provider
+from app.integrations.sanctions import get_provider as get_sanctions_provider
 from app.models.customer import Customer, CustomerStatus
 from app.models.onboarding import OnboardingSession, SessionStatus
 from app.models.screening import (
@@ -57,11 +59,44 @@ from app.models.screening import (
     WalletRiskCategory,
 )
 from app.models.user import User
+from app.services import audit_service
 from app.services import billing_service as billing_svc
+from app.services.api_key_service import dispatch_event_background
 from app.services.identity_verification_service import compute_identity_score
 from app.services.sanctions_screening import screen_name
+from app.worker import add_background_task
 
 router = APIRouter(prefix="/screening", tags=["Screening Hub"])
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    org_id: Optional[str],
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Screening Hub audit trail. Sanctions/PEP/adverse-media/crypto-wallet
+    screening decisions -- and the identity-verification decision that
+    gates a customer's KYC status -- are exactly the "who did it, why"
+    record this platform's other AML/CTF domains already write.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state=after_state,
+        notes=notes,
+    )
+
 
 DISCLAIMER = (
     "Screening results are data inputs to the compliance workflow only. "
@@ -95,7 +130,7 @@ class QuickScreenRequest(BaseModel):
 
 
 class BatchScreeningRequest(BaseModel):
-    customer_ids: List[str] = Field(..., min_items=1, max_items=50)
+    customer_ids: List[str] = Field(..., min_length=1, max_length=50)
     screening_types: List[ScreeningType]
     provider: ScreeningProvider = ScreeningProvider.internal
 
@@ -197,8 +232,11 @@ def _simulate_screening(
     provider: ScreeningProvider,
 ) -> dict:
     """
-    Placeholder — production integrates with the selected provider via Integration Hub.
-    Returns a structured result with status and match details.
+    Fallback for screening types with no real provider layer yet: watchlist,
+    adverse_media, regulatory, law_enforcement, ubo_adverse, manual_review.
+    Sanctions/PEP (and their ubo_* variants) are real -- see
+    _run_real_screening() below -- routed through app.integrations.sanctions
+    / app.integrations.pep instead of this placeholder.
     """
     return {
         "status": ScreeningStatus.clear,
@@ -206,8 +244,129 @@ def _simulate_screening(
         "match_score": None,
         "match_details": None,
         "provider_reference": f"SIM-{uuid4().hex[:8].upper()}",
-        "note": "Simulation only — wire to Integration Hub for live provider calls.",
+        "note": "Simulation only — no provider integration exists yet for this screening type.",
     }
+
+
+_SANCTIONS_TYPES = {ScreeningType.sanctions, ScreeningType.ubo_sanctions}
+_PEP_TYPES = {ScreeningType.pep, ScreeningType.ubo_pep}
+
+
+def _sanctions_result_to_dict(result) -> dict:
+    top = result.matches[0] if result.matches else None
+    return {
+        "status": (
+            ScreeningStatus.potential_match
+            if result.is_match
+            else ScreeningStatus.clear
+        ),
+        "match_count": len(result.matches),
+        "match_score": top.match_score if top else None,
+        "match_details": {
+            "matches": [
+                {
+                    "list_name": m.list_name,
+                    "match_name": m.match_name,
+                    "match_score": m.match_score,
+                    "program": m.program,
+                }
+                for m in result.matches
+            ],
+            "lists_checked": result.lists_checked,
+        }
+        if result.matches
+        else None,
+        "provider_reference": f"{result.provider.upper()}-{uuid4().hex[:8]}",
+        "note": f"Screened via {result.provider} sanctions provider.",
+    }
+
+
+def _pep_result_to_dict(result) -> dict:
+    top = result.matches[0] if result.matches else None
+    return {
+        "status": (
+            ScreeningStatus.potential_match if result.is_pep else ScreeningStatus.clear
+        ),
+        "match_count": len(result.matches),
+        "match_score": top.match_score if top else None,
+        "match_details": {
+            "matches": [
+                {
+                    "match_name": m.match_name,
+                    "match_score": m.match_score,
+                    "pep_tier": m.pep_tier,
+                    "position": m.position,
+                    "country": m.country,
+                }
+                for m in result.matches
+            ]
+        }
+        if result.matches
+        else None,
+        "provider_reference": f"{result.provider.upper()}-{uuid4().hex[:8]}",
+        "note": f"Screened via {result.provider} PEP provider.",
+    }
+
+
+async def _run_real_screening(
+    screening_type: ScreeningType,
+    entity_name: str,
+    entity_dob: Optional[str] = None,
+    entity_nationality: Optional[str] = None,
+) -> Optional[dict]:
+    """
+    Routes sanctions/PEP screening types to their real provider (see
+    app.integrations.sanctions / app.integrations.pep, selected by the
+    SANCTIONS_PROVIDER / PEP_PROVIDER settings). Returns None for any other
+    screening_type, or if the configured provider itself isn't usable
+    (e.g. "worldcheck", not yet implemented) -- callers fall back to
+    _simulate_screening() in that case.
+    """
+    if screening_type in _SANCTIONS_TYPES:
+        try:
+            sanctions_provider = get_sanctions_provider()
+        except (NotImplementedError, ProviderUnavailableError):
+            return None
+        try:
+            sanctions_result = await sanctions_provider.screen(
+                entity_name, dob=entity_dob, country=entity_nationality
+            )
+        except ProviderRejectedError as exc:
+            raise HTTPException(502, str(exc))
+        return _sanctions_result_to_dict(sanctions_result)
+
+    if screening_type in _PEP_TYPES:
+        try:
+            pep_provider = get_pep_provider()
+        except (NotImplementedError, ProviderUnavailableError):
+            return None
+        try:
+            pep_result = await pep_provider.screen(
+                entity_name, dob=entity_dob, country=entity_nationality
+            )
+        except ProviderRejectedError as exc:
+            raise HTTPException(502, str(exc))
+        return _pep_result_to_dict(pep_result)
+
+    return None
+
+
+async def _screen(
+    screening_type: ScreeningType,
+    entity_name: str,
+    provider: ScreeningProvider,
+    entity_dob: Optional[str] = None,
+    entity_nationality: Optional[str] = None,
+) -> dict:
+    """Real screening for sanctions/PEP, simulation for every other type."""
+    real = await _run_real_screening(
+        screening_type, entity_name, entity_dob, entity_nationality
+    )
+    return (
+        real
+        if real is not None
+        else _simulate_screening(screening_type, entity_name, provider)
+    )
 
 
 def _severity_for_type(
@@ -226,7 +385,7 @@ _QUICK_SCREEN_CATEGORIES = {"sanctions", "pep", "adverse_media", "company", "add
 
 
 @router.post("/quick-screen")
-def quick_screen(
+async def quick_screen(
     payload: QuickScreenRequest,
     current_user: User = Depends(require_analyst_or_above),
 ):
@@ -253,7 +412,7 @@ def quick_screen(
         }
 
     if category == "sanctions":
-        result = screen_name(payload.query)
+        result = await screen_name(payload.query)
         return {
             "category": "sanctions",
             "query": payload.query,
@@ -268,7 +427,7 @@ def quick_screen(
         "adverse_media": ScreeningType.adverse_media,
         "company": ScreeningType.regulatory,
     }
-    result = _simulate_screening(
+    result = await _screen(
         type_map[category], payload.query, ScreeningProvider.internal
     )
     return {
@@ -286,8 +445,9 @@ def quick_screen(
 
 
 @router.post("/run", status_code=201)
-def run_screening(
+async def run_screening(
     payload: ScreeningRunRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
 ):
@@ -297,8 +457,11 @@ def run_screening(
     Each type creates a separate ScreeningRecord (append-only).
     Matches above threshold automatically raise ScreeningAlerts.
 
-    In production, routes to the enabled Integration Hub provider for this category.
-    Currently runs in simulation mode — results are placeholders.
+    Sanctions/PEP (and their ubo_* variants) route to the real configured
+    provider (SANCTIONS_PROVIDER / PEP_PROVIDER — see app/config.py).
+    Every other screening type (watchlist, adverse_media, regulatory,
+    law_enforcement, ubo_adverse, manual_review) has no provider integration
+    yet and still runs in simulation mode.
 
     DISCLAIMER: Screening results are not compliance determinations.
     """
@@ -312,8 +475,15 @@ def run_screening(
 
     created_records = []
     matched_record_ids = []
+    alerts_for_webhook = []
     for stype in payload.screening_types:
-        result = _simulate_screening(stype, entity_name, payload.provider)
+        result = await _screen(
+            stype,
+            entity_name,
+            payload.provider,
+            payload.entity_dob,
+            payload.entity_nationality,
+        )
 
         record = ScreeningRecord(
             id=f"scr_{uuid4().hex[:12]}",
@@ -357,12 +527,45 @@ def run_screening(
             )
             db.add(alert)
             matched_record_ids.append(record.id)
+            alerts_for_webhook.append(alert)
 
         created_records.append(record)
 
     db.commit()
     for r in created_records:
         db.refresh(r)
+
+    for alert in alerts_for_webhook:
+        db.refresh(alert)
+        add_background_task(
+            background_tasks,
+            dispatch_event_background,
+            "aml_alert.created",
+            {
+                "alert_id": alert.id,
+                "customer_id": alert.customer_id,
+                "severity": alert.severity.value,
+                "alert_type": alert.alert_type,
+                "summary": alert.summary,
+            },
+            org_id,
+        )
+
+    for r in created_records:
+        _log(
+            db,
+            current_user,
+            org_id,
+            "screening_record",
+            r.id,
+            action="screening_run",
+            after_state={
+                "customer_id": customer.id,
+                "screening_type": r.screening_type.value,
+                "status": r.status.value,
+                "match_count": r.match_count,
+            },
+        )
 
     if matched_record_ids:
         from app.models.automation_rule import RuleEventType
@@ -422,7 +625,7 @@ def list_screening_records(
     records = (
         q.order_by(ScreeningRecord.screened_at.desc())
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
 
@@ -581,7 +784,7 @@ def list_alerts(
     alerts = (
         q.order_by(ScreeningAlert.created_at.desc())
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
     return {"alerts": [_alert_dict(a) for a in alerts], "count": len(alerts)}
@@ -609,7 +812,7 @@ def get_screening_record(
 
 
 @router.post("/{record_id}/re-screen", status_code=201)
-def re_screen(
+async def re_screen(
     record_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
@@ -630,8 +833,12 @@ def re_screen(
     if not original:
         raise HTTPException(404, "Screening record not found.")
 
-    result = _simulate_screening(
-        original.screening_type, original.entity_name or "", original.provider
+    result = await _screen(
+        original.screening_type,
+        original.entity_name or "",
+        original.provider,
+        original.entity_dob,
+        original.entity_nationality,
     )
 
     new_record = ScreeningRecord(
@@ -655,6 +862,19 @@ def re_screen(
     db.add(new_record)
     db.commit()
     db.refresh(new_record)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "screening_record",
+        new_record.id,
+        action="screening_rescreened",
+        after_state={
+            "original_record_id": record_id,
+            "status": new_record.status.value,
+            "match_count": new_record.match_count,
+        },
+    )
     return {
         "message": "Re-screening record created.",
         "record": _record_dict(new_record),
@@ -758,6 +978,16 @@ def review_alert(
 
     db.commit()
     db.refresh(alert)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "screening_alert",
+        alert.id,
+        action=f"screening_alert_{action}",
+        after_state={"status": alert.status.value},
+        notes=payload.notes,
+    )
     return {
         "alert": _alert_dict(alert),
         "disclaimer": DISCLAIMER,
@@ -787,6 +1017,15 @@ def assign_alert(
     alert.assigned_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(alert)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "screening_alert",
+        alert.id,
+        action="screening_alert_assigned",
+        after_state={"assigned_to": assigned_to},
+    )
     return _alert_dict(alert)
 
 
@@ -794,7 +1033,7 @@ def assign_alert(
 
 
 @router.post("/batch", status_code=202)
-def batch_screen(
+async def batch_screen(
     payload: BatchScreeningRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_compliance_or_above),
@@ -826,7 +1065,7 @@ def batch_screen(
     for customer in customers:
         entity_name = getattr(customer, "full_name", None) or customer.id
         for stype in payload.screening_types:
-            result = _simulate_screening(stype, entity_name, payload.provider)
+            result = await _screen(stype, entity_name, payload.provider)
             record = ScreeningRecord(
                 id=f"scr_{uuid4().hex[:12]}",
                 org_id=org_id,
@@ -847,6 +1086,19 @@ def batch_screen(
             records_created += 1
 
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "screening_batch",
+        f"batch_{uuid4().hex[:12]}",
+        action="screening_batch_run",
+        after_state={
+            "customer_ids": [c.id for c in customers],
+            "screening_types": [t.value for t in payload.screening_types],
+            "records_created": records_created,
+        },
+    )
     return {
         "customers_screened": len(customers),
         "records_created": records_created,
@@ -868,10 +1120,13 @@ async def screen_crypto_wallet(
     """
     Screen a crypto wallet address for sanctions/risk exposure.
 
-    Routes to the configured CRYPTO_PROVIDER (currently: Chainalysis's free
-    sanctions-only oracle — direct OFAC/UN/EU/UK address matches, no
-    cluster-level risk scoring or exposure percentages). Falls back to
-    simulation mode if no provider is configured.
+    Routes to the configured CRYPTO_PROVIDER. Default ("internal", or
+    unset) is OFAC's self-hosted sanctioned-address list (free, no API
+    key) — direct OFAC-only address matches, no cluster-level risk
+    scoring or exposure percentages. Chainalysis's free sanctions-only
+    oracle and paid providers (Elliptic, TRM Labs — enterprise add-on
+    required) are also available. Falls back to simulation mode only if
+    CRYPTO_PROVIDER is explicitly set to a provider not yet implemented.
 
     DISCLAIMER: Wallet risk scores are data inputs only.
     The platform does not make compliance determinations about crypto transactions.
@@ -971,6 +1226,20 @@ async def screen_crypto_wallet(
     db.add(screening)
     db.commit()
     db.refresh(screening)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "crypto_wallet_screening",
+        screening.id,
+        action="crypto_wallet_screened",
+        after_state={
+            "customer_id": payload.customer_id,
+            "network": screening.network.value,
+            "risk_category": screening.risk_category.value,
+            "status": screening.status.value,
+        },
+    )
 
     return {
         "id": screening.id,
@@ -1063,6 +1332,19 @@ def record_adverse_media(
     db.add(result)
     db.commit()
     db.refresh(result)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "adverse_media_result",
+        result.id,
+        action="adverse_media_recorded",
+        after_state={
+            "customer_id": result.customer_id,
+            "category": result.category.value,
+            "headline": result.headline,
+        },
+    )
 
     return {
         "id": result.id,
@@ -1151,6 +1433,16 @@ def review_adverse_media(
 
     db.commit()
     db.refresh(result)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "adverse_media_result",
+        result.id,
+        action=f"adverse_media_{action}",
+        after_state={"review_status": result.review_status.value},
+        notes=notes,
+    )
     return {
         "id": result.id,
         "is_confirmed_match": result.is_confirmed_match,
@@ -1301,4 +1593,16 @@ def decide_customer_identity_score(
 
     db.commit()
     result["customer_status"] = customer.status.value
+    _log(
+        db,
+        current_user,
+        org_id,
+        "customer",
+        customer.id,
+        action="identity_score_decided",
+        after_state={
+            "decision": result["decision"],
+            "customer_status": customer.status.value,
+        },
+    )
     return result

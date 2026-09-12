@@ -1,9 +1,21 @@
 """
-Professional Services AML Assessment Models.
+ECDD Case File / AML Assessment Models.
 
-Supports AML risk documentation for professional service providers:
-  Accountants, Tax Advisers, Lawyers, Conveyancers,
-  Trust & Company Service Providers, Real Estate Professionals.
+Originally scoped to 6 "professional services" industries (Accountants, Tax
+Advisers, Lawyers, Conveyancers, Trust & Company Service Providers, Real
+Estate Professionals) — the module name and class name are legacy from
+that era. As of PARKING_LOT.md P24, this is the platform's general-purpose
+structured ECDD Case File mechanism for ALL 8 industry sectors: `remittance`,
+`vasp` and `dpms` were added to `ProfessionalServiceType` (and their own
+`DEFAULT_CHECKLISTS` entries, grounded in the real ECDD triggers already
+documented in app/templates/aml/industries/{remittance,vasp,dpms}.py) so
+every sector can open a structured ECDD case rather than only narrating
+ECDD procedures in the AML Program's free-text fields. The class/module
+names are kept as-is to avoid an unforced rename across the API/service
+layer — "professional" no longer describes the full scope, but every real
+document reviewed this session (across all 8 sectors) treats the ECDD
+case file as the same shape: a trigger, a risk rating, measures applied,
+an approval workflow, and a documented outcome.
 
 Structure:
   ProfessionalAssessment      — top-level container per matter/customer
@@ -36,7 +48,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -50,6 +62,9 @@ class ProfessionalServiceType(str, enum.Enum):
     conveyancer = "conveyancer"
     tcsp = "tcsp"  # Trust & Company Service Provider
     real_estate = "real_estate"
+    remittance = "remittance"
+    vasp = "vasp"
+    dpms = "dpms"  # Dealers in Precious Metals & Stones
     other = "other"
 
 
@@ -273,6 +288,93 @@ DEFAULT_CHECKLISTS: dict[str, list[dict]] = {
             "label": "Escalation to Compliance Officer considered",
         },
     ],
+    "remittance": [
+        {
+            "key": "third_party_sender",
+            "label": "Third-party sender identified and full CDD completed (AUSTRAC STR Rank #1)",
+        },
+        {"key": "beneficiary_cdd", "label": "Beneficiary/transferee CDD completed"},
+        {
+            "key": "purpose_documented",
+            "label": "Purpose of remittance documented and plausible",
+        },
+        {
+            "key": "corridor_risk_reviewed",
+            "label": "Sending/receiving corridor checked against the corridor risk register",
+        },
+        {
+            "key": "structuring_reviewed",
+            "label": "Transaction history reviewed for structuring patterns",
+        },
+        {
+            "key": "sanctions_screened",
+            "label": "Transferor and beneficiary sanctions-screened",
+        },
+        {
+            "key": "escalation_considered",
+            "label": "Escalation to Compliance Officer considered",
+        },
+        {"key": "smr_considered", "label": "SMR assessment considered"},
+    ],
+    "vasp": [
+        {
+            "key": "blockchain_analytics_reviewed",
+            "label": "Blockchain analytics reviewed for mixing/tumbling/darknet/sanctioned-address exposure",
+        },
+        {
+            "key": "travel_rule_data_verified",
+            "label": "Travel Rule originator/beneficiary data verified and complete",
+        },
+        {
+            "key": "unhosted_wallet_verified",
+            "label": "Unhosted wallet ownership verified (where applicable)",
+        },
+        {
+            "key": "counterparty_vasp_dd",
+            "label": "VASP-to-VASP counterparty due diligence completed",
+        },
+        {
+            "key": "privacy_coin_reviewed",
+            "label": "Privacy coin (Monero/Zcash) usage assessed, if applicable",
+        },
+        {"key": "purpose_documented", "label": "Purpose of transaction documented"},
+        {
+            "key": "escalation_considered",
+            "label": "Escalation to Compliance Officer considered",
+        },
+        {"key": "smr_considered", "label": "SMR assessment considered"},
+    ],
+    "dpms": [
+        {
+            "key": "cash_threshold_reviewed",
+            "label": "Cash transaction checked against the AUD $10,000 CDD/TTR threshold (DPMS-01)",
+        },
+        {
+            "key": "provenance_verified",
+            "label": "Provenance of metals/stones verified; sanctioned-origin check completed",
+        },
+        {
+            "key": "structuring_reviewed",
+            "label": "Reviewed for structuring near the AUD $10,000 threshold",
+        },
+        {
+            "key": "buyback_pattern_reviewed",
+            "label": "Checked for rapid buy-back of a recently sold item",
+        },
+        {
+            "key": "director_signoff",
+            "label": "Director sign-off obtained for transactions >= AUD $100,000",
+        },
+        {
+            "key": "mule_purchaser_reviewed",
+            "label": "Assessed for mule-purchaser indicators (undisclosed third party)",
+        },
+        {
+            "key": "escalation_considered",
+            "label": "Escalation to Compliance Officer considered",
+        },
+        {"key": "smr_considered", "label": "SMR assessment considered"},
+    ],
 }
 
 
@@ -304,11 +406,13 @@ class ProfessionalAssessment(Base):
     case_id = Column(String, ForeignKey("cases.id"), nullable=True, index=True)
 
     professional_service_type = Column(
-        Enum(ProfessionalServiceType), nullable=False, index=True
+        Enum(ProfessionalServiceType, name="professionalservicetype"),
+        nullable=False,
+        index=True,
     )
     matter_description = Column(Text)  # Brief description of the matter/engagement
     status = Column(
-        Enum(AssessmentStatus),
+        Enum(AssessmentStatus, name="professional_assessment_status"),
         default=AssessmentStatus.draft,
         nullable=False,
         index=True,
@@ -339,37 +443,39 @@ class ProfessionalAssessment(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    sof_assessment = relationship(
+    sof_assessment: Mapped["SOFAssessment | None"] = relationship(
         "SOFAssessment",
         back_populates="assessment",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    sow_assessment = relationship(
+    sow_assessment: Mapped["SOWAssessment | None"] = relationship(
         "SOWAssessment",
         back_populates="assessment",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    purpose_assessment = relationship(
+    purpose_assessment: Mapped["TransactionPurposeAssessment | None"] = relationship(
         "TransactionPurposeAssessment",
         back_populates="assessment",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    tax_risk_assessment = relationship(
+    tax_risk_assessment: Mapped["TaxRiskAssessment | None"] = relationship(
         "TaxRiskAssessment",
         back_populates="assessment",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    investment_assessment = relationship(
-        "InvestmentLegitimacyAssessment",
-        back_populates="assessment",
-        uselist=False,
-        cascade="all, delete-orphan",
+    investment_assessment: Mapped["InvestmentLegitimacyAssessment | None"] = (
+        relationship(
+            "InvestmentLegitimacyAssessment",
+            back_populates="assessment",
+            uselist=False,
+            cascade="all, delete-orphan",
+        )
     )
-    checklist = relationship(
+    checklist: Mapped["ProfessionalJudgmentChecklist | None"] = relationship(
         "ProfessionalJudgmentChecklist",
         back_populates="assessment",
         uselist=False,
@@ -408,7 +514,10 @@ class SOFAssessment(Base):
     evidence_types = Column(JSON, default=list)  # ["bank_statement", "payslip", ...]
 
     # Review outcome
-    review_outcome = Column(Enum(ReviewOutcome), default=ReviewOutcome.not_reviewed)
+    review_outcome = Column(
+        Enum(ReviewOutcome, name="professional_review_outcome"),
+        default=ReviewOutcome.not_reviewed,
+    )
     reviewer_id = Column(String)
     review_date = Column(DateTime(timezone=True))
     review_notes = Column(Text)
@@ -451,7 +560,10 @@ class SOWAssessment(Base):
     # Review outcome
     review_notes = Column(Text)
     risk_assessment = Column(Text)  # Reviewer's written risk assessment
-    review_outcome = Column(Enum(ReviewOutcome), default=ReviewOutcome.not_reviewed)
+    review_outcome = Column(
+        Enum(ReviewOutcome, name="professional_review_outcome"),
+        default=ReviewOutcome.not_reviewed,
+    )
     reviewer_id = Column(String)
     review_date = Column(DateTime(timezone=True))
 
@@ -487,7 +599,10 @@ class TransactionPurposeAssessment(Base):
 
     evidence_refs = Column(JSON, default=list)
     review_notes = Column(Text)
-    review_outcome = Column(Enum(ReviewOutcome), default=ReviewOutcome.not_reviewed)
+    review_outcome = Column(
+        Enum(ReviewOutcome, name="professional_review_outcome"),
+        default=ReviewOutcome.not_reviewed,
+    )
     reviewer_id = Column(String)
     review_date = Column(DateTime(timezone=True))
 
@@ -594,7 +709,8 @@ class InvestmentLegitimacyAssessment(Base):
     supporting_documentation = Column(JSON, default=list)  # document refs
     review_outcome = Column(Text)
     review_outcome_status = Column(
-        Enum(ReviewOutcome), default=ReviewOutcome.not_reviewed
+        Enum(ReviewOutcome, name="professional_review_outcome"),
+        default=ReviewOutcome.not_reviewed,
     )
     reviewer_id = Column(String)
     review_date = Column(DateTime(timezone=True))

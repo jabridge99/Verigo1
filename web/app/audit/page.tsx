@@ -7,6 +7,7 @@ import {
   Activity,
 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -26,66 +27,84 @@ interface AuditLog {
   created_at?: string;
 }
 
+// Entity type strings as actually written by the backend (both audit tables
+// GET /audit/ merges — see app/api/routes/audit.py). Case-insensitive match
+// since the two underlying tables use different casing conventions
+// (snake_case in the legacy table, PascalCase in the newer one).
 const ENTITY_COLOR: Record<string, string> = {
-  report:     "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  alert:      "bg-red-500/20 text-red-300 border-red-500/30",
-  case:       "bg-purple-500/20 text-purple-300 border-purple-500/30",
-  customer:   "bg-teal-500/20 text-teal-300 border-teal-500/30",
-  ecdd:       "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  kyc:        "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-  transaction:"bg-slate-500/20 text-slate-300 border-slate-500/30",
+  ifti_report:  "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  ttr_report:   "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  smr_report:   "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  alert:        "bg-red-500/20 text-red-300 border-red-500/30",
+  case:         "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  customer:     "bg-teal-500/20 text-teal-300 border-teal-500/30",
+  ecdd_record:  "bg-amber-500/20 text-amber-300 border-amber-500/30",
+  document:     "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+  aml_program:  "bg-slate-500/20 text-slate-300 border-slate-500/30",
+  organisation: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+  user:         "bg-pink-500/20 text-pink-300 border-pink-500/30",
 };
 
 const ENTITY_ICON: Record<string, React.ElementType> = {
-  report:     FileText,
-  alert:      AlertTriangle,
-  case:       ClipboardList,
-  customer:   User,
-  ecdd:       Shield,
-  kyc:        CheckCircle,
-  transaction:Activity,
+  ifti_report:  FileText,
+  ttr_report:   FileText,
+  smr_report:   FileText,
+  alert:        AlertTriangle,
+  case:         ClipboardList,
+  customer:     User,
+  ecdd_record:  Shield,
+  document:     CheckCircle,
+  aml_program:  Activity,
+  organisation: Shield,
+  user:         User,
 };
 
 const ROLE_COLOR: Record<string, string> = {
+  admin:     "text-red-400",
   mlro:      "text-purple-400",
   analyst:   "text-blue-400",
   system:    "text-slate-500",
   api:       "text-slate-400",
   compliance:"text-teal-400",
+  viewer:    "text-slate-400",
 };
 
-const DEMO_LOGS: AuditLog[] = [
-  { id: 1,  log_id: "LOG-DEMO000001", action: "report.submitted",       entity_type: "report",     entity_id: "RPT-DEMO00004", actor: "mlro@firm.com.au",       actor_role: "mlro",      before_state: { status: "approved" },      after_state: { status: "submitted", submitted_to: "AUSTRAC", reference: "REF-7A3B9C2D" }, notes: "SMR submitted to AUSTRAC within 3-day statutory deadline", created_at: new Date(Date.now() - 1800000).toISOString() },
-  { id: 2,  log_id: "LOG-DEMO000002", action: "alert.escalated",        entity_type: "alert",      entity_id: "ALT-DEMO00001", actor: "analyst@firm.com.au",    actor_role: "analyst",   before_state: { status: "open" },          after_state: { status: "escalated", escalated_to: "mlro@firm.com.au" },                        notes: "Sanctions match requires MLRO sign-off",                 created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 3,  log_id: "LOG-DEMO000003", action: "customer.risk_updated",  entity_type: "customer",   entity_id: "CUST-DEMO0003", actor: "system",                 actor_role: "system",    before_state: { risk_level: "high", risk_score: 72 }, after_state: { risk_level: "critical", risk_score: 95 }, notes: "Risk score updated after ECDD completion", created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: 4,  log_id: "LOG-DEMO000004", action: "case.status_changed",    entity_type: "case",       entity_id: "CASE-DEMO00001",actor: "mlro@firm.com.au",       actor_role: "mlro",      before_state: { status: "investigating" }, after_state: { status: "escalated" },              notes: "Critical sanctions case escalated to MLRO",              created_at: new Date(Date.now() - 10800000).toISOString() },
-  { id: 5,  log_id: "LOG-DEMO000005", action: "ecdd.completed",         entity_type: "ecdd",       entity_id: "ECDD-DEMO00001",actor: "compliance@firm.com.au", actor_role: "compliance",before_state: { status: "pending" },        after_state: { status: "completed", recommendation: "reject" },   notes: "ECDD assessment finalised — reject recommendation",      created_at: new Date(Date.now() - 14400000).toISOString() },
-  { id: 6,  log_id: "LOG-DEMO000006", action: "report.status_changed",  entity_type: "report",     entity_id: "RPT-DEMO00002", actor: "analyst@firm.com.au",    actor_role: "analyst",   before_state: { status: "draft" },         after_state: { status: "under_review" },                           notes: "TTR sent for MLRO review",                               created_at: new Date(Date.now() - 18000000).toISOString() },
-  { id: 7,  log_id: "LOG-DEMO000007", action: "alert.resolved",         entity_type: "alert",      entity_id: "ALT-DEMO00005", actor: "analyst@firm.com.au",    actor_role: "analyst",   before_state: { status: "open" },          after_state: { status: "resolved", resolution: "false_positive" }, notes: "Velocity alert — confirmed legitimate payroll run",       created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 8,  log_id: "LOG-DEMO000008", action: "customer.status_changed",entity_type: "customer",   entity_id: "CUST-DEMO0003", actor: "system",                 actor_role: "system",    before_state: { status: "active" },        after_state: { status: "suspended" },                              notes: "Account suspended — sanctions screening hit",            created_at: new Date(Date.now() - 90000000).toISOString() },
-  { id: 9,  log_id: "LOG-DEMO000009", action: "report.approved",        entity_type: "report",     entity_id: "RPT-DEMO00003", actor: "mlro@firm.com.au",       actor_role: "mlro",      before_state: { status: "under_review" },  after_state: { status: "approved", mlro_sign_off: true },          notes: "IFTI-E approved — MLRO sign-off complete",               created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: 10, log_id: "LOG-DEMO000010", action: "kyc.approved",           entity_type: "kyc",        entity_id: "KYC-DEMO00001", actor: "analyst@firm.com.au",    actor_role: "analyst",   before_state: { status: "under_review" },  after_state: { status: "approved", identity_score: 92 },           notes: "Identity verification passed — passport verified",       created_at: new Date(Date.now() - 259200000).toISOString() },
-  { id: 11, log_id: "LOG-DEMO000011", action: "case.opened",            entity_type: "case",       entity_id: "CASE-DEMO00002",actor: "analyst@firm.com.au",    actor_role: "analyst",   before_state: undefined,                        after_state: { status: "open", severity: "high" },                 notes: "New case opened — PEP structuring pattern",             created_at: new Date(Date.now() - 345600000).toISOString() },
-  { id: 12, log_id: "LOG-DEMO000012", action: "alert.dismissed",        entity_type: "alert",      entity_id: "ALT-DEMO00003", actor: "analyst@firm.com.au",    actor_role: "analyst",   before_state: { status: "open" },          after_state: { status: "dismissed" },                              notes: "Low-risk transaction — within normal pattern for customer",created_at: new Date(Date.now() - 432000000).toISOString() },
+const ENTITY_TYPES = [
+  "all","ifti_report","ttr_report","smr_report","alert","case","customer",
+  "ecdd_record","document","aml_program","organisation","user",
 ];
-
-const ENTITY_TYPES = ["all","report","alert","case","customer","ecdd","kyc","transaction"];
-const ACTOR_ROLES  = ["all","mlro","analyst","system","compliance","api"];
+const ACTOR_ROLES  = ["all","admin","mlro","compliance","analyst","viewer","system"];
 
 export default function AuditTrail() {
-  const [logs, setLogs] = useState<AuditLog[]>(DEMO_LOGS);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [search, setSearch] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
   const [selected, setSelected] = useState<AuditLog | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/audit/?limit=200`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setLogs(d); }
-    } catch {}
+      const res = await apiFetch(`${API}/api/v1/audit/?limit=200`, { credentials: "include" });
+      if (res.ok) {
+        const d: AuditLog[] = await res.json();
+        // The two underlying audit tables this endpoint merges use different
+        // casing conventions for entity_type (snake_case vs PascalCase) --
+        // normalise once here rather than at every lookup/comparison site.
+        setLogs(d.map(l => ({
+          ...l,
+          entity_type: (l.entity_type || "").toLowerCase(),
+          actor_role: l.actor_role ? l.actor_role.toLowerCase() : l.actor_role,
+        })));
+        setLoadError(false);
+      } else {
+        setLoadError(true);
+      }
+    } catch {
+      setLoadError(true);
+    }
     setLoading(false);
   }, []);
 
@@ -93,7 +112,7 @@ export default function AuditTrail() {
 
   const exportCSV = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/audit/export/csv`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/audit/export/csv`, { credentials: "include" });
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -201,7 +220,11 @@ export default function AuditTrail() {
           <div className="relative">
             <div className="absolute left-[19px] top-0 bottom-0 w-px bg-navy-700" />
             <div className="space-y-1">
-              {filtered.length === 0 && <div className="text-center py-16 text-slate-500">No log entries found</div>}
+              {filtered.length === 0 && (
+                <div className="text-center py-16 text-slate-500">
+                  {loadError ? "Failed to load audit log — check your connection and retry." : "No log entries found"}
+                </div>
+              )}
               {filtered.map(log => {
                 const Icon = ENTITY_ICON[log.entity_type] || Activity;
                 const isSelected = selected?.log_id === log.log_id;

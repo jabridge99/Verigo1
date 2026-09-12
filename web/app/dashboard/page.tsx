@@ -8,7 +8,7 @@ import {
   CheckCircle, Clock
 } from 'lucide-react'
 import clsx from 'clsx'
-import { getStoredUser, clearUser } from '@/lib/auth'
+import { getStoredUser, signOut, apiFetch } from '@/lib/auth'
 import type { AuthUser } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -87,7 +87,7 @@ export default function DashboardPage() {
     }
     setUser(stored)
 
-    fetch(`${API}/api/v1/dashboard/global`, { credentials: 'include' })
+    apiFetch(`${API}/api/v1/dashboard/global`, { credentials: 'include' })
       .then(res => (res.ok ? res.json() : Promise.reject()))
       .then(d => {
         setStats(prev => ({
@@ -102,7 +102,7 @@ export default function DashboardPage() {
       })
       .catch(() => {})
 
-    fetch(`${API}/api/v1/dashboard/compliance-score`, { credentials: 'include' })
+    apiFetch(`${API}/api/v1/dashboard/compliance-score`, { credentials: 'include' })
       .then(res => (res.ok ? res.json() : Promise.reject()))
       .then(d => {
         if (typeof d.compliance_score === 'number') {
@@ -111,7 +111,7 @@ export default function DashboardPage() {
       })
       .catch(() => {})
 
-    fetch(`${API}/api/v1/dashboard/trends/alerts`, { credentials: 'include' })
+    apiFetch(`${API}/api/v1/dashboard/trends/alerts`, { credentials: 'include' })
       .then(res => (res.ok ? res.json() : Promise.reject()))
       .then(d => {
         if (Array.isArray(d.data) && d.data.length) {
@@ -123,7 +123,7 @@ export default function DashboardPage() {
   }, [router])
 
   function logout() {
-    clearUser()
+    signOut()
     router.replace('/login')
   }
 

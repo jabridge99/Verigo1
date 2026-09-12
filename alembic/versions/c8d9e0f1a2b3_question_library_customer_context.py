@@ -18,20 +18,22 @@ Revises: b3c4d5e6f7a8
 Create Date: 2026-06-24 00:20:00.000000
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
-revision: str = 'c8d9e0f1a2b3'
-down_revision: Union[str, None] = 'b3c4d5e6f7a8'
+revision: str = "c8d9e0f1a2b3"
+down_revision: Union[str, None] = "b3c4d5e6f7a8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-question_context_enum = sa.Enum('transaction', 'customer', name='questioncontext')
+question_context_enum = sa.Enum("transaction", "customer", name="questioncontext")
 # `questionanswer` already exists in the DB (created earlier from
 # risk_matrix.py's QuestionAnswer model enum). create_type=False has no
 # effect on the generic sa.Enum — that flag only exists on the
@@ -40,82 +42,104 @@ question_context_enum = sa.Enum('transaction', 'customer', name='questioncontext
 # CREATE TYPE and collides with the existing type. Use postgresql.ENUM
 # explicitly so create_type=False is actually honoured.
 question_answer_enum = postgresql.ENUM(
-    'yes', 'no', 'not_applicable', name='questionanswer', create_type=False
+    "yes", "no", "not_applicable", name="questionanswer", create_type=False
 )
 
 
 def upgrade() -> None:
-    question_context_enum.create(op.get_bind(), checkfirst=True)
-    question_answer_enum.create(op.get_bind(), checkfirst=True)
+    # Guarded: on a database created fresh via the f73383da4e36 baseline
+    # (create_all() against the *current* model, which already declares
+    # this column/table), they already exist. On a database that predates
+    # that baseline, this migration is what adds them. The enum .create()
+    # calls are already checkfirst=True and safe to call unconditionally.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
-    op.add_column(
-        'org_approval_questions',
-        sa.Column(
-            'context',
-            question_context_enum,
-            nullable=False,
-            server_default='transaction',
-        ),
-    )
-    op.create_index(
-        'ix_org_approval_questions_context', 'org_approval_questions', ['context']
-    )
+    question_context_enum.create(bind, checkfirst=True)
+    question_answer_enum.create(bind, checkfirst=True)
+
+    oaq_columns = {c["name"] for c in inspector.get_columns("org_approval_questions")}
+    if "context" not in oaq_columns:
+        op.add_column(
+            "org_approval_questions",
+            sa.Column(
+                "context",
+                question_context_enum,
+                nullable=False,
+                server_default="transaction",
+            ),
+        )
+    oaq_indexes = {ix["name"] for ix in inspector.get_indexes("org_approval_questions")}
+    if "ix_org_approval_questions_context" not in oaq_indexes:
+        op.create_index(
+            "ix_org_approval_questions_context", "org_approval_questions", ["context"]
+        )
+
+    if "customer_question_responses" in inspector.get_table_names():
+        return
 
     op.create_table(
-        'customer_question_responses',
-        sa.Column('id', sa.String(), primary_key=True),
+        "customer_question_responses",
+        sa.Column("id", sa.String(), primary_key=True),
         sa.Column(
-            'customer_id',
+            "customer_id",
             sa.String(),
-            sa.ForeignKey('customers.id', ondelete='CASCADE'),
+            sa.ForeignKey("customers.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column(
-            'question_id',
+            "question_id",
             sa.String(),
-            sa.ForeignKey('org_approval_questions.id', ondelete='CASCADE'),
+            sa.ForeignKey("org_approval_questions.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column('org_id', sa.String(), nullable=False),
+        sa.Column("org_id", sa.String(), nullable=False),
         sa.Column(
-            'answer',
+            "answer",
             question_answer_enum,
             nullable=False,
         ),
-        sa.Column('notes', sa.Text(), nullable=True),
-        sa.Column('answered_by', sa.String(), nullable=False),
-        sa.Column('answered_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.UniqueConstraint('customer_id', 'question_id', name='uq_customer_question'),
+        sa.Column("notes", sa.Text(), nullable=True),
+        sa.Column("answered_by", sa.String(), nullable=False),
+        sa.Column(
+            "answered_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.UniqueConstraint("customer_id", "question_id", name="uq_customer_question"),
     )
     op.create_index(
-        'ix_customer_question_responses_customer_id',
-        'customer_question_responses',
-        ['customer_id'],
+        "ix_customer_question_responses_customer_id",
+        "customer_question_responses",
+        ["customer_id"],
     )
     op.create_index(
-        'ix_customer_question_responses_question_id',
-        'customer_question_responses',
-        ['question_id'],
+        "ix_customer_question_responses_question_id",
+        "customer_question_responses",
+        ["question_id"],
     )
     op.create_index(
-        'ix_customer_question_responses_org_id',
-        'customer_question_responses',
-        ['org_id'],
+        "ix_customer_question_responses_org_id",
+        "customer_question_responses",
+        ["org_id"],
     )
 
 
 def downgrade() -> None:
     op.drop_index(
-        'ix_customer_question_responses_org_id', table_name='customer_question_responses'
+        "ix_customer_question_responses_org_id",
+        table_name="customer_question_responses",
     )
     op.drop_index(
-        'ix_customer_question_responses_question_id', table_name='customer_question_responses'
+        "ix_customer_question_responses_question_id",
+        table_name="customer_question_responses",
     )
     op.drop_index(
-        'ix_customer_question_responses_customer_id', table_name='customer_question_responses'
+        "ix_customer_question_responses_customer_id",
+        table_name="customer_question_responses",
     )
-    op.drop_table('customer_question_responses')
+    op.drop_table("customer_question_responses")
 
-    op.drop_index('ix_org_approval_questions_context', table_name='org_approval_questions')
-    op.drop_column('org_approval_questions', 'context')
+    op.drop_index(
+        "ix_org_approval_questions_context", table_name="org_approval_questions"
+    )
+    op.drop_column("org_approval_questions", "context")
     question_context_enum.drop(op.get_bind(), checkfirst=True)

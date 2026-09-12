@@ -1,3 +1,10 @@
+from app.models.aml_program import (
+    AMLProgramItem,
+    AMLProgramRecord,
+    AMLProgramStatus,
+    AMLProgramVersion,
+    VersionRetrievalRequest,
+)
 from app.models.aml_solution import (
     AMLPolicy,
     AMLProgram,
@@ -16,6 +23,15 @@ from app.models.aml_solution import (
     TrainingRecord,
     TrainingStatus,
 )
+from app.models.api_key import (
+    APIKey,
+    APIKeyStatus,
+    WebhookDelivery,
+    WebhookEndpoint,
+    WebhookEvent,
+    WebhookStatus,
+)
+from app.models.audit import LegacyAuditLog
 from app.models.audit_log import AuditEventType, AuditLog
 from app.models.automation_rule import (
     ApprovalDecisionType,
@@ -37,6 +53,21 @@ from app.models.benchmark import (
     OrgMetricsSnapshot,
     SnapshotPeriod,
 )
+from app.models.billing import (
+    AddonKey,
+    AddonStatus,
+    BillingInterval,
+    BillingPlan,
+    Feature,
+    Invoice,
+    InvoiceStatus,
+    PlanFeatureToggle,
+    PlanPricing,
+    StripePriceMapping,
+    Subscription,
+    SubscriptionAddon,
+    SubscriptionStatus,
+)
 from app.models.board_report import (
     BoardReport,
     BoardReportStatus,
@@ -53,7 +84,9 @@ from app.models.case import (
     CaseStatus,
     CaseType,
     EvidenceType,
-    NoteType,
+)
+from app.models.case import (
+    NoteType as CaseNoteType,
 )
 from app.models.compliance_calendar import (
     CalendarItemStatus,
@@ -61,6 +94,11 @@ from app.models.compliance_calendar import (
     ComplianceCalendarItem,
     ComplianceReminder,
     ReminderStage,
+)
+from app.models.connector import (
+    ConnectorCredential,
+    ConnectorProvider,
+    ConnectorStatus,
 )
 from app.models.customer import (
     BeneficialOwner,
@@ -173,6 +211,15 @@ from app.models.governance_training import (
 from app.models.governance_training import (
     TrainingType as GovTrainingType,
 )
+from app.models.ifti import (
+    IFTIDirection as StandaloneIFTIDirection,
+)
+from app.models.ifti import (
+    IFTIRecord as StandaloneIFTIRecord,
+)
+from app.models.ifti import (
+    IFTIStatus as StandaloneIFTIStatus,
+)
 from app.models.ifti_e import IFTIEDirection, IFTIEMode, IFTIERecord, IFTIEStatus
 from app.models.ifti_receipt import IFTIReceipt, ReceiptStatus
 from app.models.independent_review import (
@@ -218,7 +265,9 @@ from app.models.marketplace import (
     VerificationIntegrationMode,
     VerificationOrder,
     VerificationOrderStatus,
-    VerificationProvider,
+)
+from app.models.marketplace import (
+    VerificationProvider as MarketplaceVerificationProvider,
 )
 from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.monitoring import (
@@ -236,6 +285,23 @@ from app.models.monitoring import (
     RuleStatus,
     TransactionAlert,
 )
+from app.models.notification import (
+    Notification,
+    NotificationPriority,
+    NotificationType,
+)
+from app.models.onboarding import (
+    CustomerType as OnboardingCustomerType,
+)
+from app.models.onboarding import (
+    ImportBatch,
+    ImportSource,
+    OnboardingAuditLog,
+    OnboardingSession,
+)
+from app.models.onboarding import (
+    SessionStatus as OnboardingSessionStatus,
+)
 from app.models.organisation import (
     CUSTOM_PACKAGE_INDUSTRIES,
     IndustryType,
@@ -251,14 +317,12 @@ from app.models.organisation import (
 )
 from app.models.professional_assessment import (
     AssessmentRiskRating,
-    AssessmentStatus,
     ChecklistType,
     InvestmentLegitimacyAssessment,
     OrgProfessionalChecklistTemplate,
     ProfessionalAssessment,
     ProfessionalJudgmentChecklist,
     ProfessionalServiceType,
-    ReviewOutcome,
     SOFAssessment,
     SOFSourceType,
     SOWAssessment,
@@ -267,9 +331,19 @@ from app.models.professional_assessment import (
     TransactionPurposeAssessment,
     TransactionPurposeType,
 )
+from app.models.professional_assessment import (
+    AssessmentStatus as ProfessionalAssessmentStatus,
+)
+from app.models.professional_assessment import (
+    ReviewOutcome as ProfessionalReviewOutcome,
+)
 from app.models.regulatory_recommendation import (
-    RecommendationPriority,
-    RecommendationStatus,
+    RecommendationPriority as RegulatoryRecommendationPriority,
+)
+from app.models.regulatory_recommendation import (
+    RecommendationStatus as RegulatoryRecommendationStatus,
+)
+from app.models.regulatory_recommendation import (
     RecommendationType,
     RegulatoryRecommendation,
 )
@@ -295,6 +369,11 @@ from app.models.reporting_group import (
     ReportingGroup,
     ReportingGroupMember,
     ReportingGroupStatus,
+)
+from app.models.retention import (
+    EntityScope,
+    LegalHold,
+    RetentionPolicy,
 )
 from app.models.risk_engine import (
     MitigationStatus,
@@ -327,9 +406,6 @@ from app.models.risk_matrix_config import (
 from app.models.screening import (
     AdverseMediaCategory,
     AdverseMediaResult,
-    AlertSeverity,
-    AlertStatus,
-    CryptoNetwork,
     CryptoWalletScreening,
     ScreeningAlert,
     ScreeningEntityType,
@@ -339,7 +415,25 @@ from app.models.screening import (
     ScreeningType,
     WalletRiskCategory,
 )
+from app.models.screening import (
+    AlertSeverity as ScreeningAlertSeverity,
+)
+from app.models.screening import (
+    AlertStatus as ScreeningAlertStatus,
+)
+from app.models.screening import (
+    CryptoNetwork as ScreeningCryptoNetwork,
+)
+from app.models.security_event import SecurityEvent
+from app.models.smr_decision_log import (
+    SMRContinueDealings,
+    SMRDecisionLog,
+    SMRDecisionOutcome,
+    SMRMatterSource,
+    SMRSuspicionType,
+)
 from app.models.task import Task, TaskEvent, TaskPriority, TaskStatus, TaskType
+from app.models.tenant import IndustryTenant
 from app.models.training_trigger import (
     SYSTEM_TRIGGER_RULES,
     AssessmentFlagStatus,
@@ -363,6 +457,11 @@ from app.models.transaction import (
     TransactionDirection,
     TransactionStatus,
     TransactionType,
+)
+from app.models.usage import (
+    UsageEventType,
+    UsageRecord,
+    UsageRecordStatus,
 )
 from app.models.user import MagicLinkToken, User, UserRole, UserStatus
 
@@ -449,9 +548,9 @@ __all__ = [
     "ScreeningStatus",
     "ScreeningProvider",
     "ScreeningEntityType",
-    "AlertSeverity",
-    "AlertStatus",
-    "CryptoNetwork",
+    "ScreeningAlertSeverity",
+    "ScreeningAlertStatus",
+    "ScreeningCryptoNetwork",
     "WalletRiskCategory",
     "AdverseMediaCategory",
     # Transactions
@@ -463,6 +562,7 @@ __all__ = [
     "TransactionDirection",
     "PaymentMethod",
     "DeliveryChannel",
+    "CryptoNetwork",
     # Monitoring
     "MonitoringRule",
     "RuleConditionGroup",
@@ -486,7 +586,7 @@ __all__ = [
     "CaseStatus",
     "CaseSeverity",
     "CaseOutcome",
-    "NoteType",
+    "CaseNoteType",
     "EvidenceType",
     "IFTIReport",
     "TTRReport",
@@ -516,8 +616,8 @@ __all__ = [
     # Regulatory Recommendations
     "RegulatoryRecommendation",
     "RecommendationType",
-    "RecommendationStatus",
-    "RecommendationPriority",
+    "RegulatoryRecommendationStatus",
+    "RegulatoryRecommendationPriority",
     # Risk Matrix & Pre-Approval Questions
     "OrgMonitoringConfig",
     "OrgApprovalQuestion",
@@ -536,13 +636,13 @@ __all__ = [
     "ProfessionalJudgmentChecklist",
     "OrgProfessionalChecklistTemplate",
     "ProfessionalServiceType",
-    "AssessmentStatus",
+    "ProfessionalAssessmentStatus",
     "AssessmentRiskRating",
     "SOFSourceType",
     "SOWSourceType",
     "TransactionPurposeType",
     "ChecklistType",
-    "ReviewOutcome",
+    "ProfessionalReviewOutcome",
     # Risk Matrix Config
     "OrgRiskFactor",
     "OrgRiskProfile",
@@ -628,7 +728,7 @@ __all__ = [
     "MitigationLibraryItem",
     "MitigationCategory",
     # Verification Marketplace
-    "VerificationProvider",
+    "MarketplaceVerificationProvider",
     "VerificationOrder",
     "VerificationCheckType",
     "VerificationIntegrationMode",
@@ -699,4 +799,70 @@ __all__ = [
     "Role",
     "new_role_id",
     "role_permissions",
+    # AML Program (org-level program record/versioning — distinct from AMLSolution)
+    "AMLProgramRecord",
+    "AMLProgramItem",
+    "AMLProgramVersion",
+    "AMLProgramStatus",
+    "VersionRetrievalRequest",
+    # API Keys & Webhooks
+    "APIKey",
+    "APIKeyStatus",
+    "WebhookEndpoint",
+    "WebhookDelivery",
+    "WebhookEvent",
+    "WebhookStatus",
+    # Legacy audit log (superseded by AuditLog; some consumers still read it)
+    "LegacyAuditLog",
+    # Billing
+    "BillingPlan",
+    "BillingInterval",
+    "SubscriptionStatus",
+    "InvoiceStatus",
+    "AddonKey",
+    "AddonStatus",
+    "Feature",
+    "PlanFeatureToggle",
+    "Subscription",
+    "Invoice",
+    "PlanPricing",
+    "StripePriceMapping",
+    "SubscriptionAddon",
+    # Connector credentials
+    "ConnectorCredential",
+    "ConnectorProvider",
+    "ConnectorStatus",
+    # IFTI-DRA standalone Excel module (distinct from the maker-checker IFTIReport)
+    "StandaloneIFTIDirection",
+    "StandaloneIFTIRecord",
+    "StandaloneIFTIStatus",
+    # Notifications
+    "Notification",
+    "NotificationType",
+    "NotificationPriority",
+    # Onboarding pipeline
+    "OnboardingSession",
+    "OnboardingSessionStatus",
+    "OnboardingAuditLog",
+    "ImportBatch",
+    "ImportSource",
+    "OnboardingCustomerType",
+    # Data retention
+    "RetentionPolicy",
+    "LegalHold",
+    "EntityScope",
+    # Security events
+    "SecurityEvent",
+    # SMR Internal Decision Log (P24)
+    "SMRDecisionLog",
+    "SMRMatterSource",
+    "SMRSuspicionType",
+    "SMRDecisionOutcome",
+    "SMRContinueDealings",
+    # Multi-tenancy (legacy industry-tenant record)
+    "IndustryTenant",
+    # Usage-based billing
+    "UsageRecord",
+    "UsageEventType",
+    "UsageRecordStatus",
 ]

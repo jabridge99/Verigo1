@@ -18,6 +18,7 @@ from app.models.organisation import (
 )
 from app.models.user import User
 from app.schemas.aml_program import (
+    AMLProgramItemResponse,
     AMLProgramResponse,
     AMLProgramVersionDetailResponse,
     AMLProgramVersionListResponse,
@@ -26,6 +27,7 @@ from app.schemas.aml_program import (
     ProgramHealthResponse,
 )
 from app.schemas.organisation import (
+    IndustrySelectRequest,
     MemberAdd,
     MemberResponse,
     MemberUpdate,
@@ -50,6 +52,7 @@ from app.services import (
 from app.services.auth_service import get_user_by_email
 from app.services.org_service import (
     SYSTEM_ROLE_TEMPLATES,
+    IndustryLockedError,
     add_user_to_organisation,
     create_organisation,
     get_membership,
@@ -57,6 +60,7 @@ from app.services.org_service import (
     get_user_organisations,
     has_org_permission,
 )
+from app.services.org_service import select_industry as _select_industry_service
 
 router = APIRouter(prefix="/organisations", tags=["Organisations"])
 
@@ -97,6 +101,7 @@ def create(
     current_user: User = Depends(_current_user),
     db: Session = Depends(get_db),
 ):
+    billing_service.enforce_org_creation_limit(db, current_user)
     org = create_organisation(
         db, payload.name, current_user, industry_id=payload.industry_id
     )
@@ -154,6 +159,45 @@ def update(
     return org
 
 
+@router.post("/{org_id}/select-industry", response_model=OrganisationResponse)
+def select_industry(
+    org_id: str,
+    payload: IndustrySelectRequest,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Stage 7: let the org actually pick its AUSTRAC industry — every org is
+    created as IndustryType.other (nothing upstream of this knows the real
+    one), so this re-seeds the AML/CTF Program and Risk Framework from the
+    correct industry template. Only allowed before anything's been
+    customised (see org_service.select_industry's docstring).
+    """
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    before_industry = org.industry_type
+    try:
+        _select_industry_service(db, org, payload.industry_type, current_user.id)
+    except IndustryLockedError as e:
+        raise HTTPException(409, str(e))
+    db.commit()
+    db.refresh(org)
+    if before_industry != org.industry_type:
+        audit_service.log_action(
+            db,
+            action="policy_updated",
+            entity_type="organisation",
+            entity_id=org.id,
+            actor=current_user.email,
+            actor_role=current_user.role.value if current_user.role else None,
+            industry_id=org.industry_id,
+            organisation_id=org.id,
+            before_state={"industry_type": before_industry.value},
+            after_state={"industry_type": org.industry_type.value},
+        )
+    return org
+
+
 # ── AML/CTF Program (Phase C self-service sign-up) ─────────────────────────────
 
 
@@ -171,7 +215,7 @@ def _program_response(db: Session, program) -> AMLProgramResponse:
             status=program.status,
             version=program.version,
             generated_at=program.generated_at,
-            items=items,
+            items=[AMLProgramItemResponse.model_validate(i) for i in items],
         )
     return AMLProgramResponse(
         program_id=program.program_id,
@@ -180,7 +224,10 @@ def _program_response(db: Session, program) -> AMLProgramResponse:
         status=program.status,
         version=program.version,
         generated_at=program.generated_at,
-        items=aml_program_service.to_preview_items(items),
+        items=[
+            AMLProgramItemResponse.model_validate(i)
+            for i in aml_program_service.to_preview_items(items)
+        ],
         is_preview=True,
         total_items=len(items),
     )
@@ -542,6 +589,7 @@ def add_member(
 ):
     org = _get_org_or_404(db, org_id)
     _require_permission(db, org, current_user, "org:manage")
+    billing_service.enforce_user_limit(db, org.id, org.industry_id)
     target = get_user_by_email(db, payload.email)
     if not target:
         raise HTTPException(404, "No user with that email")

@@ -17,10 +17,18 @@ AUSTRAC requirements:
 
 import logging
 from datetime import date, datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -69,6 +77,7 @@ from app.models.risk_matrix import (
 from app.models.screening import (
     CryptoWalletScreening,
     ScreeningAlert,
+    ScreeningEntityType,
     ScreeningRecord,
     ScreeningStatus,
     ScreeningType,
@@ -114,12 +123,18 @@ from app.schemas.customer import (
     WalletScreeningCreate,
     WalletScreeningResponse,
 )
-from app.services import audit_service
+from app.services import audit_service, billing_service
+from app.services.api_key_service import dispatch_event_background
+from app.services.customer_risk_engine import (
+    assess_customer_risk,
+    risk_level_from_score,
+)
 from app.services.risk_engine import inherent_risk, residual_risk
 from app.services.risk_matrix_service import (
     compute_final_approval_score,
     compute_question_score,
 )
+from app.worker import add_background_task
 
 log = logging.getLogger("verigo.api.customers")
 router = APIRouter(prefix="/customers", tags=["Customers"])
@@ -281,10 +296,12 @@ def _customer_checklist_summary(customer_id: str, org_id: str, db: Session) -> d
 @router.post("", response_model=CustomerResponse, status_code=201)
 def create_customer(
     payload: CustomerCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_analyst_or_above),
     db: Session = Depends(get_db),
 ):
     oid = org_id_for(current_user)
+    billing_service.enforce_customer_limit(db, oid)
 
     customer = Customer(
         org_id=oid,
@@ -364,6 +381,19 @@ def create_customer(
         customer.id,
         customer_context(customer),
         triggered_by=current_user.id,
+    )
+
+    add_background_task(
+        background_tasks,
+        dispatch_event_background,
+        "customer.created",
+        {
+            "customer_id": customer.id,
+            "customer_ref": customer.customer_ref,
+            "customer_type": payload.customer_type.value,
+            "full_name": customer.full_name,
+        },
+        oid,
     )
 
     log.info("Customer created: %s org=%s", customer.customer_ref, oid)
@@ -1066,7 +1096,7 @@ def trigger_screening(
             org_id=customer.org_id,
             customer_id=customer.id,
             screening_type=stype,
-            entity_type=payload.entity_type or "customer",
+            entity_type=ScreeningEntityType(payload.entity_type or "customer"),
             entity_id=entity_id,
             entity_name=entity_name,
             provider=payload.provider,
@@ -1314,39 +1344,27 @@ def rescore_customer(
     current_user: User = Depends(require_compliance_or_above),
     db: Session = Depends(get_db),
 ):
-    """Re-run risk scoring. Risk fields are set by engine only."""
+    """Re-run risk scoring via the full 5-dimension customer risk engine."""
     customer = _get_customer(customer_id, org_id_for(current_user), db)
-    before = {"risk_score": customer.risk_score, "risk_level": customer.risk_level}
+    before: dict[str, Any] = {
+        "risk_score": customer.risk_score,
+        "risk_level": customer.risk_level,
+    }
 
-    # Basic built-in scoring logic (replace with full engine call when ready)
-    score = 0.0
-    factors = {}
-
-    if customer.is_pep:
-        score += 40.0
-        factors["pep"] = 40.0
-    if customer.is_sanctions_match:
-        score = 100.0
-        factors["sanctions"] = 100.0
-    if customer.nationality in ("IR", "KP", "RU", "BY", "SY", "CU"):
-        score += 20.0
-        factors["high_risk_country"] = 20.0
-    if customer.cdd_level == CDDLevel.enhanced:
-        score += 10.0
-        factors["edd_flag"] = 10.0
-
-    score = min(score, 100.0)
-
-    def _level_for(s: float) -> RiskLevel:
-        if s >= 75:
-            return RiskLevel.critical
-        elif s >= 50:
-            return RiskLevel.high
-        elif s >= 25:
-            return RiskLevel.medium
-        return RiskLevel.low
-
-    base_level = _level_for(score)
+    result = assess_customer_risk(
+        customer,
+        is_pep=customer.is_pep,
+        is_sanctions_match=customer.is_sanctions_match,
+    )
+    score = result.overall_score
+    factors = {
+        "customer": result.customer_risk.score,
+        "product": result.product_risk.score,
+        "geographic": result.geographic_risk.score,
+        "channel": result.channel_risk.score,
+        "transaction": result.transaction_risk.score,
+    }
+    base_level = risk_level_from_score(score)
 
     # Checklist completion may nudge the score down by a small, capped amount
     # (never enough to flip an above-low rating to Low on its own — that
@@ -1357,7 +1375,6 @@ def rescore_customer(
         .all()
     )
     question_score = compute_question_score(responses) if responses else None
-    score = score
     if question_score is not None:
         config = (
             db.query(OrgMonitoringConfig)
@@ -1372,7 +1389,7 @@ def rescore_customer(
         )
         score = max(0.0, score - reduction)
 
-    level = _level_for(score)
+    level = risk_level_from_score(score)
     if base_level != RiskLevel.low and level == RiskLevel.low:
         # Checklist alone must never produce a Low Risk outcome.
         level = RiskLevel.medium
@@ -2226,6 +2243,7 @@ async def bulk_import_customers(
     org_id = org_id_for(current_user)
     created = []
     skipped = []
+    remaining_capacity = billing_service.remaining_customer_capacity(db, org_id)
 
     for i, row in enumerate(rows):
         full_name = row.get("full_name", "").strip()
@@ -2233,6 +2251,17 @@ async def bulk_import_customers(
 
         if not full_name:
             errors.append(f"Row {i + 2}: full_name is required")
+            continue
+
+        if remaining_capacity is not None and remaining_capacity <= 0:
+            skipped.append(
+                {
+                    "full_name": full_name,
+                    "email": email,
+                    "reason": "Your plan's customer limit has been reached. "
+                    "Upgrade your plan to import more customers.",
+                }
+            )
             continue
 
         # Duplicate email check within org
@@ -2327,6 +2356,8 @@ async def bulk_import_customers(
                 "status": "draft",
             }
         )
+        if remaining_capacity is not None:
+            remaining_capacity -= 1
 
     db.commit()
 

@@ -16,13 +16,13 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 def _industry(current_user: User, override: Optional[str]) -> Optional[str]:
-    if current_user.role == "admin" and override:
+    if current_user.is_super_admin and override:
         return override
     return current_user.org_id
 
 
-def _organisation(current_user: User, override: Optional[str]) -> Optional[int]:
-    if current_user.role == "admin" and override:
+def _organisation(current_user: User, override: Optional[str]) -> Optional[str]:
+    if current_user.is_super_admin and override:
         return None
     return getattr(current_user, "primary_organisation_id", None)
 

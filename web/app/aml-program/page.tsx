@@ -38,10 +38,10 @@ export default function AmlProgramPage() {
           setError('No organisation found.')
           return
         }
-        setOrgId(org.org_id)
+        setOrgId(org.id)
         const [v, h] = await Promise.all([
-          listAmlProgramVersions(org.org_id),
-          getAmlProgramHealth(org.org_id),
+          listAmlProgramVersions(org.id),
+          getAmlProgramHealth(org.id),
         ])
         setVersions(v.versions)
         setFullHistoryAvailable(v.full_history_available)

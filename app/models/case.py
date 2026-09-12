@@ -258,7 +258,9 @@ class CaseNote(Base):
     org_id = Column(String, nullable=False)
 
     note_type = Column(
-        Enum(NoteType), default=NoteType.investigation_note, nullable=False
+        Enum(NoteType, name="case_note_type"),
+        default=NoteType.investigation_note,
+        nullable=False,
     )
     content = Column(Text, nullable=False)
     is_confidential = Column(

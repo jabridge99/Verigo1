@@ -6,6 +6,7 @@ import {
   ChevronDown, ChevronRight, X, Save,
 } from "lucide-react"
 import clsx from "clsx"
+import { apiFetch } from "@/lib/auth"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
@@ -155,9 +156,9 @@ export default function RiskMatrixPage() {
     async function load() {
       try {
         const [fRes, pRes, vRes] = await Promise.all([
-          fetch(`${API}/api/v1/risk-matrix/factors?active_only=false`),
-          fetch(`${API}/api/v1/risk-matrix/profiles`),
-          fetch(`${API}/api/v1/risk-matrix/versions`),
+          apiFetch(`${API}/api/v1/risk-matrix/factors?active_only=false`),
+          apiFetch(`${API}/api/v1/risk-matrix/profiles`),
+          apiFetch(`${API}/api/v1/risk-matrix/versions`),
         ])
         if (!fRes.ok || !pRes.ok || !vRes.ok) throw new Error("fetch failed")
         const fData = await fRes.json()
@@ -191,7 +192,7 @@ export default function RiskMatrixPage() {
 
   async function saveFactor(factor: Factor, weight: number, isActive: boolean) {
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${API}/api/v1/risk-matrix/factors/${factor.id}?reason=${encodeURIComponent("Adjusted via Risk Matrix console")}`,
         { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weight, is_active: isActive }) }
       )
@@ -219,7 +220,7 @@ export default function RiskMatrixPage() {
 
   async function addFactor(cat: Category, payload: { factor_key: string; label: string; description: string; weight: number }) {
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${API}/api/v1/risk-matrix/factors?reason=${encodeURIComponent("Added via Risk Matrix console")}`,
         {
           method: "POST",
@@ -257,7 +258,7 @@ export default function RiskMatrixPage() {
 
   async function restoreDefaults(section: string) {
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${API}/api/v1/risk-matrix/restore-defaults?section=${section}&reason=${encodeURIComponent("Restored via Risk Matrix console")}`,
         { method: "POST" }
       )

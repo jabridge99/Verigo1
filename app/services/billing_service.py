@@ -28,6 +28,7 @@ from app.models.billing import (
     ADDON_CATALOGUE,
     DEFAULT_PLAN_FEATURES,
     FEATURE_DEFINITIONS,
+    FREE_TRIAL_LIMITS,
     PLAN_CATALOGUE,
     AddonKey,
     AddonStatus,
@@ -351,6 +352,165 @@ def is_active_subscriber(
     subscription lapses, access narrows to the latest version only."""
     sub = get_subscription(db, industry_id, organisation_id)
     return bool(sub and sub.status not in _INACTIVE_STATUSES)
+
+
+# ── Plan usage-limit enforcement ─────────────────────────────────────────────
+# PLAN_CATALOGUE's "limits" (customers/users/api_calls_month) were defined and
+# shown on the pricing page but never actually enforced anywhere in the app.
+# These three functions close that gap for the limits the plan explicitly
+# promises: per-org customer count, per-org user count, and the free-trial
+# "1 organisation" cap. A limit of -1 means unlimited. Each raises
+# HTTPException directly (rather than returning a bool) so every call site
+# gets the same clear upgrade-prompt message for free.
+
+
+def _plan_limits(db: Session, org_id: str, industry_id: Optional[str] = None) -> dict:
+    plan = current_plan(db, industry_id or "", org_id)
+    info = PLAN_CATALOGUE.get(plan)
+    return info["limits"] if info else FREE_TRIAL_LIMITS
+
+
+def _customer_capacity(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> tuple:
+    """Return (limit, current_count, remaining). remaining is None when the
+    plan's customer limit is unlimited (-1)."""
+    from app.models.customer import Customer
+
+    limit = _plan_limits(db, org_id, industry_id)["customers"]
+    current = db.query(Customer).filter(Customer.org_id == org_id).count()
+    remaining = None if limit < 0 else max(0, limit - current)
+    return limit, current, remaining
+
+
+def enforce_customer_limit(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> None:
+    """Raise if creating one more customer would exceed the org's plan cap."""
+    from fastapi import HTTPException
+
+    limit, _current, remaining = _customer_capacity(db, org_id, industry_id)
+    if remaining is not None and remaining <= 0:
+        raise HTTPException(
+            403,
+            f"Your plan's customer limit ({limit}) has been reached. "
+            "Upgrade your plan to onboard more customers.",
+        )
+
+
+def remaining_customer_capacity(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> Optional[int]:
+    """None = unlimited. Used by bulk flows (CSV import, bulk onboarding
+    invites) that need to cap how many rows they process rather than fail
+    the whole request outright the way a single-record create does."""
+    _limit, _current, remaining = _customer_capacity(db, org_id, industry_id)
+    return remaining
+
+
+def enforce_user_limit(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> None:
+    """Raise if adding one more member would exceed the org's plan cap."""
+    from fastapi import HTTPException
+
+    from app.models.organisation import MembershipStatus, OrganisationUser
+
+    limit = _plan_limits(db, org_id, industry_id)["users"]
+    if limit < 0:
+        return
+    current = (
+        db.query(OrganisationUser)
+        .filter(
+            OrganisationUser.organisation_id == org_id,
+            OrganisationUser.status == MembershipStatus.active,
+        )
+        .count()
+    )
+    if current >= limit:
+        raise HTTPException(
+            403,
+            f"Your plan's user limit ({limit}) has been reached. "
+            "Upgrade your plan to add more team members.",
+        )
+
+
+def enforce_org_creation_limit(db: Session, user) -> None:
+    """Free-trial accounts are limited to 1 organisation (the plan
+    catalogue's FREE/TRIAL tier). Once at least one organisation the user
+    owns has been upgraded to a paid plan, the cap no longer applies —
+    no paid tier's own description promises a further multi-organisation
+    limit to enforce, so this only ever blocks the free-trial case."""
+    from fastapi import HTTPException
+
+    from app.models.organisation import (
+        MembershipStatus,
+        Organisation,
+        OrganisationUser,
+    )
+    from app.services.org_service import get_system_role
+
+    owner_role = get_system_role(db, "owner")
+    if not owner_role:
+        return
+    owned = (
+        db.query(Organisation)
+        .join(OrganisationUser, OrganisationUser.organisation_id == Organisation.id)
+        .filter(
+            OrganisationUser.user_id == user.id,
+            OrganisationUser.role_id == owner_role.id,
+            OrganisationUser.status == MembershipStatus.active,
+        )
+        .all()
+    )
+    if not owned:
+        return
+    has_paid = any(
+        current_plan(db, o.industry_id, o.id) != BillingPlan.free_trial for o in owned
+    )
+    if not has_paid:
+        raise HTTPException(
+            403,
+            "Free trial accounts are limited to 1 organisation. "
+            "Upgrade a plan on your existing organisation to create another.",
+        )
+
+
+def record_api_call(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> None:
+    """Increment this org's api_calls_month counter for the current UTC
+    calendar month and raise once its plan's cap is exceeded. Only call
+    this for requests authenticated via an API key (app/api/deps.py's
+    get_current_user, X-API-Key branch) -- api_calls_month is the
+    "Webhooks & API access" plan feature (external integration usage), not
+    ordinary browser/JWT session traffic, which is never metered here."""
+    from fastapi import HTTPException
+
+    from app.models.billing import ApiUsageCounter
+
+    if not org_id:
+        return
+
+    period = datetime.now(timezone.utc).strftime("%Y-%m")
+    counter = (
+        db.query(ApiUsageCounter)
+        .filter(ApiUsageCounter.org_id == org_id, ApiUsageCounter.period == period)
+        .first()
+    )
+    if counter is None:
+        counter = ApiUsageCounter(org_id=org_id, period=period, count=0)
+        db.add(counter)
+    counter.count += 1
+    db.commit()
+
+    limit = _plan_limits(db, org_id, industry_id)["api_calls_month"]
+    if limit >= 0 and counter.count > limit:
+        raise HTTPException(
+            429,
+            f"Your plan's API call limit ({limit}/month) has been reached. "
+            "Upgrade your plan for a higher limit.",
+        )
 
 
 # ── Price resolution ───────────────────────────────────────────────────────────

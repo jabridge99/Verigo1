@@ -36,6 +36,7 @@ Benchmark metric glossary:
 from __future__ import annotations
 
 import enum
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -51,6 +52,7 @@ from sqlalchemy import (
     String,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -91,7 +93,7 @@ HIGHER_IS_BETTER = {
 }
 
 # Human-readable labels and descriptions
-METRIC_META = {
+METRIC_META: dict[str, dict[str, Any]] = {
     "smr_rate_per_1k": {
         "label": "SMR Rate (per 1,000 customers)",
         "unit": "per 1k",
@@ -258,12 +260,12 @@ class IndustryBenchmark(Base):
     # ── Aggregate statistics ──────────────────────────────────────────────────
     org_count = Column(Integer, nullable=False)
     mean = Column(Float)
-    std_dev = Column(Float)
-    minimum = Column(Float)
-    p25 = Column(Float)
-    median = Column(Float)
-    p75 = Column(Float)
-    maximum = Column(Float)
+    std_dev: Mapped[Optional[float]] = Column(Float)
+    minimum: Mapped[Optional[float]] = Column(Float)
+    p25: Mapped[Optional[float]] = Column(Float)
+    median: Mapped[Optional[float]] = Column(Float)
+    p75: Mapped[Optional[float]] = Column(Float)
+    maximum: Mapped[Optional[float]] = Column(Float)
 
     is_published = Column(Boolean, default=False)
     # False if org_count < MIN_ORG_COUNT_FOR_BENCHMARK

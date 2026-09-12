@@ -36,6 +36,7 @@ from app.models.risk_matrix_config import (
     RiskLevel,
 )
 from app.models.user import User
+from app.services import audit_service
 
 router = APIRouter(prefix="/risk-matrix", tags=["Risk Matrix Configuration"])
 
@@ -137,7 +138,7 @@ def _next_version(org_id: str, db: Session) -> int:
 
 def _record_version(
     org_id: str,
-    user_id: str,
+    current_user: User,
     change_type: str,
     change_summary: str,
     db: Session,
@@ -154,15 +155,30 @@ def _record_version(
             change_summary=change_summary,
             factors_snapshot=_snapshot_factors(org_id, db),
             profiles_snapshot=_snapshot_profiles(org_id, db),
-            changed_by=user_id,
+            changed_by=current_user.id,
             change_reason=reason or change_summary,
             previous_value=previous_value,
             new_value=new_value,
         )
     )
+    # OrgRiskMatrixVersion is a rich, domain-specific snapshot history
+    # (already queryable via GET /risk-matrix/versions), but was never
+    # written to the central audit trail -- so a change here was invisible
+    # from the one place (GET /audit/) a compliance officer otherwise
+    # looks for "what happened, who did it".
+    audit_service.log_action(
+        db,
+        action=f"risk_matrix_{change_type}",
+        entity_type="risk_matrix_config",
+        entity_id=org_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        notes=reason or change_summary,
+    )
 
 
-def _ensure_defaults(org_id: str, user_id: str, db: Session):
+def _ensure_defaults(org_id: str, current_user: User, db: Session):
     """Seed system factors + risk profiles if this org has no risk matrix yet."""
     existing = db.query(OrgRiskFactor).filter(OrgRiskFactor.org_id == org_id).count()
     if existing > 0:
@@ -174,7 +190,7 @@ def _ensure_defaults(org_id: str, user_id: str, db: Session):
                 OrgRiskFactor(
                     id=f"orf_{uuid4().hex[:10]}",
                     org_id=org_id,
-                    category=category,
+                    category=RiskFactorCategory(category),
                     factor_key=f["key"],
                     label=f["label"],
                     description=f["description"],
@@ -182,7 +198,7 @@ def _ensure_defaults(org_id: str, user_id: str, db: Session):
                     is_system=True,
                     is_active=True,
                     display_order=i,
-                    created_by=user_id,
+                    created_by=current_user.id,
                 )
             )
 
@@ -198,13 +214,17 @@ def _ensure_defaults(org_id: str, user_id: str, db: Session):
                 edd_required=prof["edd_required"],
                 enhanced_monitoring=prof["enhanced_monitoring"],
                 description=prof["description"],
-                updated_by=user_id,
+                updated_by=current_user.id,
             )
         )
 
     db.flush()
     _record_version(
-        org_id, user_id, "seeded_defaults", "System defaults seeded at first access", db
+        org_id,
+        current_user,
+        "seeded_defaults",
+        "System defaults seeded at first access",
+        db,
     )
 
 
@@ -223,7 +243,7 @@ def list_risk_factors(
     System factors are shown with is_system=True.
     """
     org_id = org_id_for(current_user)
-    _ensure_defaults(org_id, current_user.id, db)
+    _ensure_defaults(org_id, current_user, db)
     db.commit()
 
     q = db.query(OrgRiskFactor).filter(OrgRiskFactor.org_id == org_id)
@@ -263,7 +283,7 @@ def add_risk_factor(
     Maximum 20 factors per category. factor_key must be unique within org.
     """
     org_id = org_id_for(current_user)
-    _ensure_defaults(org_id, current_user.id, db)
+    _ensure_defaults(org_id, current_user, db)
 
     existing_key = (
         db.query(OrgRiskFactor)
@@ -294,7 +314,7 @@ def add_risk_factor(
         factor_key=payload.factor_key,
         label=payload.label,
         description=payload.description,
-        weight=payload.weight,
+        weight=payload.weight,  # type: ignore[arg-type]
         display_order=payload.display_order,
         is_system=False,
         is_active=True,
@@ -305,7 +325,7 @@ def add_risk_factor(
     db.flush()
     _record_version(
         org_id,
-        current_user.id,
+        current_user,
         "factor_added",
         f"Added factor '{payload.label}' to {payload.category.value}",
         db,
@@ -349,7 +369,7 @@ def update_risk_factor(
     db.flush()
     _record_version(
         org_id,
-        current_user.id,
+        current_user,
         "factor_updated",
         f"Updated factor '{f.label}'",
         db,
@@ -393,7 +413,7 @@ def delete_risk_factor(
     prev = _factor_dict(f)
     _record_version(
         org_id,
-        current_user.id,
+        current_user,
         "factor_deleted",
         f"Deleted custom factor '{f.label}'",
         db,
@@ -434,14 +454,14 @@ def rebalance_weights(
     updated = []
     for f in factors:
         if f.factor_key in payload.weights:
-            f.weight = payload.weights[f.factor_key]
+            f.weight = payload.weights[f.factor_key]  # type: ignore[assignment]
             f.updated_by = current_user.id
             updated.append(f.factor_key)
 
     db.flush()
     _record_version(
         org_id,
-        current_user.id,
+        current_user,
         "weights_rebalanced",
         f"Rebalanced {len(updated)} weights in {payload.category.value}",
         db,
@@ -469,7 +489,7 @@ def list_risk_profiles(
     Return the org's risk profile thresholds (score ranges per risk level).
     """
     org_id = org_id_for(current_user)
-    _ensure_defaults(org_id, current_user.id, db)
+    _ensure_defaults(org_id, current_user, db)
     db.commit()
 
     profiles = (
@@ -525,7 +545,7 @@ def update_risk_profile(
     db.flush()
     _record_version(
         org_id,
-        current_user.id,
+        current_user,
         "profile_updated",
         f"Updated {risk_level.value} risk profile thresholds",
         db,
@@ -604,7 +624,7 @@ def restore_defaults(
                         OrgRiskFactor(
                             id=f"orf_{uuid4().hex[:10]}",
                             org_id=org_id,
-                            category=cat,
+                            category=RiskFactorCategory(cat),
                             factor_key=default_f["key"],
                             label=default_f["label"],
                             description=default_f["description"],
@@ -619,7 +639,7 @@ def restore_defaults(
 
     if restore_section in ("profiles", "all"):
         for default_p in DEFAULT_RISK_PROFILES:
-            existing = (
+            existing_profile = (
                 db.query(OrgRiskProfile)
                 .filter(
                     OrgRiskProfile.org_id == org_id,
@@ -627,20 +647,22 @@ def restore_defaults(
                 )
                 .first()
             )
-            if existing:
-                existing.score_min = default_p["score_min"]
-                existing.score_max = default_p["score_max"]
-                existing.review_frequency_months = default_p["review_frequency_months"]
-                existing.edd_required = default_p["edd_required"]
-                existing.enhanced_monitoring = default_p["enhanced_monitoring"]
-                existing.description = default_p["description"]
-                existing.updated_by = current_user.id
+            if existing_profile:
+                existing_profile.score_min = default_p["score_min"]
+                existing_profile.score_max = default_p["score_max"]
+                existing_profile.review_frequency_months = default_p[
+                    "review_frequency_months"
+                ]
+                existing_profile.edd_required = default_p["edd_required"]
+                existing_profile.enhanced_monitoring = default_p["enhanced_monitoring"]
+                existing_profile.description = default_p["description"]
+                existing_profile.updated_by = current_user.id
         restored.append("profiles")
 
     db.flush()
     _record_version(
         org_id,
-        current_user.id,
+        current_user,
         "restored_defaults",
         f"Restored defaults: {', '.join(restored)}"
         + (f" (category: {category.value})" if category else ""),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   Briefcase, AlertTriangle, CheckCircle, Clock, Plus,
   Search, RefreshCw, Eye, ChevronRight, User, FileText,
@@ -8,6 +9,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -25,7 +27,18 @@ interface Case {
   notes?: string;
   created_at?: string;
   closed_at?: string;
+  outcome?: string;
+  outcome_notes?: string;
+  closure_reason?: string;
 }
+
+const CLOSE_STATUSES = [
+  "closed_no_action", "closed_smr_filed", "closed_referred", "closed_exited", "closed_no_smr",
+];
+const CASE_OUTCOMES = [
+  "no_suspicious_activity", "smr_filed", "referred_law_enforcement", "customer_exited",
+  "controls_enhanced", "edd_completed", "no_action_required", "other",
+];
 
 const SEV_COLOR: Record<string, string> = {
   low:      "bg-slate-500/20 text-slate-300 border-slate-500/30",
@@ -51,14 +64,6 @@ const STATUS_COLOR: Record<string, string> = {
   closed_no_smr:          "bg-teal-500/20 text-teal-300",
 };
 
-const DEMO_CASES: Case[] = [
-  { id: "case_demo00001", case_ref: "CASE-DEMO00001", customer_id: "3", title: "Sanctions Match — Ivan Petrov", description: "OFAC SDN list hit detected during transaction processing. Customer account suspended. Awaiting MLRO review and determination on SAR filing.", severity: "critical", status: "open", assigned_to: "mlro@firm.com.au", alert_ids: ["ALT-001", "ALT-003"], created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: "case_demo00002", case_ref: "CASE-DEMO00002", customer_id: "4", title: "PEP Structuring Pattern — Li Wei", description: "PEP customer identified structuring cash deposits across multiple branches. 6 transactions below $10k threshold over 48 hours. SMR filed.", severity: "high", status: "under_investigation", assigned_to: "analyst@firm.com.au", alert_ids: ["ALT-007", "ALT-008", "ALT-009"], created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: "case_demo00003", case_ref: "CASE-DEMO00003", customer_id: "2", title: "Velocity Breach — Acme Pty Ltd", description: "Corporate account exceeded 24h velocity threshold. 18 transactions totalling $412k. Business justification requested from RM.", severity: "medium", status: "decision", assigned_to: "compliance@firm.com.au", alert_ids: ["ALT-012"], created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: "case_demo00004", case_ref: "CASE-DEMO00004", customer_id: "1", title: "Cross-Border IFTI — Jane Smith", description: "Outbound IFTI to Iran flagged. IFTI-E report generated. Customer provided documentation. Under MLRO review.", severity: "high", status: "escalated", assigned_to: "mlro@firm.com.au", alert_ids: ["ALT-015"], created_at: new Date(Date.now() - 259200000).toISOString() },
-  { id: "case_demo00005", case_ref: "CASE-DEMO00005", customer_id: "5", title: "Periodic Review — Wei Zhang", description: "Annual EDD review completed. No adverse findings. Customer risk rating maintained at medium. Case closed.", severity: "low", status: "closed_no_action", assigned_to: "analyst@firm.com.au", alert_ids: [], created_at: new Date(Date.now() - 604800000).toISOString(), closed_at: new Date(Date.now() - 86400000).toISOString() },
-];
-
 const OBLIGATIONS = [
   { label: "TTR filing due", date: new Date(Date.now() + 86400000 * 2), type: "ttr", urgent: true },
   { label: "SMR — Ivan Petrov", date: new Date(Date.now() + 86400000 * 1), type: "smr", urgent: true },
@@ -69,14 +74,26 @@ const OBLIGATIONS = [
 
 type Tab = "cases" | "create" | "calendar" | "overview";
 
+interface LinkedAlert {
+  id: string;
+  alert_ref: string;
+  category: string;
+  severity: string;
+  status: string;
+}
+
 export default function MLRODashboard() {
   const [tab, setTab] = useState<Tab>("overview");
-  const [cases, setCases] = useState<Case[]>(DEMO_CASES);
+  const [cases, setCases] = useState<Case[]>([]);
   const [search, setSearch] = useState("");
   const [sevFilter, setSevFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState<Case | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [closeForm, setCloseForm] = useState<{
+    status: string; outcome: string; closure_reason: string; outcome_notes: string;
+  } | null>(null);
+  const [linkedAlerts, setLinkedAlerts] = useState<LinkedAlert[]>([]);
 
   const showToast = (type: "success" | "error", msg: string) => {
     setToast({ type, msg }); setTimeout(() => setToast(null), 4000);
@@ -84,23 +101,69 @@ export default function MLRODashboard() {
 
   const fetchCases = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/cases?limit=100`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setCases(d); }
-    } catch {}
+      const res = await apiFetch(`${API}/api/v1/cases?limit=100`, { credentials: "include" });
+      if (res.ok) { setCases(await res.json()); } else { showToast("error", "Failed to load cases"); }
+    } catch {
+      showToast("error", "Failed to load cases");
+    }
   }, []);
 
   useEffect(() => { fetchCases(); }, [fetchCases]);
+  useEffect(() => { setCloseForm(null); }, [selected?.id]);
+
+  useEffect(() => {
+    if (!selected) { setLinkedAlerts([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch(`${API}/api/v1/cases/${selected.id}/alerts`, { credentials: "include" });
+        if (!cancelled) setLinkedAlerts(res.ok ? await res.json() : []);
+      } catch {
+        if (!cancelled) setLinkedAlerts([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selected?.id]);
 
   const updateStatus = async (caseId: string, status: string) => {
     try {
-      await fetch(`${API}/api/v1/cases/${caseId}/status`, {
+      const res = await apiFetch(`${API}/api/v1/cases/${caseId}/status`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_status: status }),
       });
-    } catch {}
-    setCases(prev => prev.map(c => c.id === caseId ? { ...c, status } : c));
-    setSelected(prev => prev?.id === caseId ? { ...prev, status } : prev);
-    showToast("success", `Case moved to ${status.replace(/_/g, " ")}`);
+      if (!res.ok) { showToast("error", "Failed to update case status"); return; }
+      const updated = await res.json();
+      setCases(prev => prev.map(c => c.id === caseId ? { ...c, ...updated } : c));
+      setSelected(prev => prev?.id === caseId ? { ...prev, ...updated } : prev);
+      showToast("success", `Case moved to ${status.replace(/_/g, " ")}`);
+    } catch {
+      showToast("error", "Failed to update case status");
+    }
+  };
+
+  const submitClose = async () => {
+    if (!selected || !closeForm) return;
+    if (!closeForm.closure_reason.trim()) { showToast("error", "Closure reason is required"); return; }
+    try {
+      const res = await apiFetch(`${API}/api/v1/cases/${selected.id}/close`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: closeForm.status,
+          outcome: closeForm.outcome,
+          outcome_notes: closeForm.outcome_notes || undefined,
+          closure_reason: closeForm.closure_reason,
+        }),
+      });
+      if (!res.ok) { showToast("error", "Failed to close case"); return; }
+      const updated = await res.json();
+      const caseId = selected.id;
+      setCases(prev => prev.map(c => c.id === caseId ? { ...c, ...updated } : c));
+      setSelected(prev => prev?.id === caseId ? { ...prev, ...updated } : prev);
+      setCloseForm(null);
+      showToast("success", `Case closed — ${closeForm.status.replace(/_/g, " ")}`);
+    } catch {
+      showToast("error", "Failed to close case");
+    }
   };
 
   const filtered = cases.filter(c => {
@@ -110,12 +173,14 @@ export default function MLRODashboard() {
       && (statusFilter === "all" || c.status === statusFilter);
   });
 
+  const isClosed = (status: string) => (CLOSE_STATUSES as string[]).includes(status);
+
   const stats = {
     open: cases.filter(c => c.status === "open").length,
     investigating: cases.filter(c => c.status === "under_investigation").length,
     escalated: cases.filter(c => c.status === "escalated").length,
     critical: cases.filter(c => c.severity === "critical").length,
-    closed_this_week: cases.filter(c => c.status === "closed_no_action" && c.closed_at && Date.now() - new Date(c.closed_at).getTime() < 604800000).length,
+    closed_this_week: cases.filter(c => isClosed(c.status) && c.closed_at && Date.now() - new Date(c.closed_at).getTime() < 604800000).length,
   };
 
   const TABS = [
@@ -201,13 +266,13 @@ export default function MLRODashboard() {
               ))}
             </div>
 
-            {cases.filter(c => c.severity === "critical" && c.status !== "closed_no_action").length > 0 && (
+            {cases.filter(c => c.severity === "critical" && !isClosed(c.status)).length > 0 && (
               <div>
                 <h2 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-400" /> Critical cases requiring immediate attention
                 </h2>
                 <div className="space-y-2">
-                  {cases.filter(c => c.severity === "critical" && c.status !== "closed_no_action").map(c => (
+                  {cases.filter(c => c.severity === "critical" && !isClosed(c.status)).map(c => (
                     <div key={c.case_ref} className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 flex items-start justify-between gap-4 cursor-pointer hover:bg-red-500/10 transition-colors"
                       onClick={() => { setSelected(c); setTab("cases"); }}>
                       <div>
@@ -288,7 +353,7 @@ export default function MLRODashboard() {
                 </select>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
                   className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
-                  {["all","open","under_investigation","escalated","decision","closed_no_action"].map(v => (
+                  {["all","open","under_investigation","escalated","decision",...CLOSE_STATUSES].map(v => (
                     <option key={v} value={v}>{v === "all" ? "Status — All" : v.replace(/_/g," ")}</option>
                   ))}
                 </select>
@@ -355,9 +420,11 @@ export default function MLRODashboard() {
                     {[
                       { label: "Assigned to",  value: selected.assigned_to || "Unassigned" },
                       { label: "Customer ID",  value: `CUST-${selected.customer_id}` },
-                      { label: "Linked alerts",value: selected.alert_ids?.length ? selected.alert_ids.join(", ") : "None" },
+                      { label: "Linked alerts",value: linkedAlerts.length ? `${linkedAlerts.length} alert${linkedAlerts.length > 1 ? "s" : ""}` : "None" },
                       { label: "Opened",       value: selected.created_at ? new Date(selected.created_at).toLocaleDateString("en-AU") : "—" },
                       ...(selected.closed_at ? [{ label: "Closed", value: new Date(selected.closed_at).toLocaleDateString("en-AU") }] : []),
+                      ...(selected.outcome ? [{ label: "Outcome", value: selected.outcome.replace(/_/g, " ") }] : []),
+                      ...(selected.closure_reason ? [{ label: "Closure reason", value: selected.closure_reason }] : []),
                     ].map(({ label, value }) => (
                       <div key={label}>
                         <div className="text-slate-500 mb-0.5">{label}</div>
@@ -365,6 +432,22 @@ export default function MLRODashboard() {
                       </div>
                     ))}
                   </div>
+
+                  {linkedAlerts.length > 0 && (
+                    <div className="border-t border-navy-700 pt-4 space-y-2">
+                      <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Linked alerts</div>
+                      <div className="space-y-1.5">
+                        {linkedAlerts.map(a => (
+                          <Link key={a.id} href={`/monitoring?customer=${selected.customer_id ?? ""}`}
+                            className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-navy-700 bg-navy-900/40 hover:border-brand-500/40 transition-colors text-xs">
+                            <span className="font-mono text-slate-400">{a.alert_ref}</span>
+                            <span className="text-slate-300 capitalize">{a.category.replace(/_/g, " ")}</span>
+                            <span className={clsx("px-2 py-0.5 rounded-full font-medium border capitalize", SEV_COLOR[a.severity] || "")}>{a.severity}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="border-t border-navy-700 pt-4">
                     <div className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-3">Actions</div>
@@ -393,19 +476,63 @@ export default function MLRODashboard() {
                           <FileText className="w-3.5 h-3.5" /> MLRO Sign-off
                         </button>
                       )}
-                      {selected.status === "decision" && (
-                        <button onClick={() => updateStatus(selected.id, "closed_no_action")}
+                      {selected.status === "decision" && !closeForm && (
+                        <button onClick={() => setCloseForm({ status: "closed_no_action", outcome: "no_suspicious_activity", closure_reason: "", outcome_notes: "" })}
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/15 border border-teal-500/25 text-teal-300 text-xs font-medium hover:bg-teal-500/25 transition-colors">
                           <CheckCircle className="w-3.5 h-3.5" /> Close Case
                         </button>
                       )}
-                      {selected.status === "closed_no_action" && (
+                      {selected.status.startsWith("closed") && (
                         <div className="flex items-center gap-2 text-teal-400 text-sm">
                           <CheckCircle className="w-4 h-4" /> Case closed
                         </div>
                       )}
                     </div>
                   </div>
+
+                  {selected.status === "decision" && closeForm && (
+                    <div className="border-t border-navy-700 pt-4 space-y-3">
+                      <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Close case</div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Closing status *</label>
+                        <select className="field-input" value={closeForm.status}
+                          onChange={e => setCloseForm(f => f && { ...f, status: e.target.value })}>
+                          {CLOSE_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Outcome *</label>
+                        <select className="field-input" value={closeForm.outcome}
+                          onChange={e => setCloseForm(f => f && { ...f, outcome: e.target.value })}>
+                          {CASE_OUTCOMES.map(o => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Closure reason *</label>
+                        <textarea className="field-input min-h-[70px] resize-none"
+                          placeholder="Why is this case being closed…"
+                          value={closeForm.closure_reason}
+                          onChange={e => setCloseForm(f => f && { ...f, closure_reason: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Outcome notes</label>
+                        <textarea className="field-input min-h-[60px] resize-none"
+                          placeholder="Optional additional detail…"
+                          value={closeForm.outcome_notes}
+                          onChange={e => setCloseForm(f => f && { ...f, outcome_notes: e.target.value })} />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={submitClose}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/15 border border-teal-500/25 text-teal-300 text-xs font-medium hover:bg-teal-500/25 transition-colors">
+                          <CheckCircle className="w-3.5 h-3.5" /> Confirm close
+                        </button>
+                        <button onClick={() => setCloseForm(null)}
+                          className="px-3 py-2 rounded-lg border border-navy-600 text-slate-400 text-xs font-medium hover:bg-navy-700 transition-colors">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="border-t border-navy-700 pt-4 space-y-2">
                     <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
@@ -429,6 +556,7 @@ export default function MLRODashboard() {
               setTab("cases");
               setSelected(c);
             }}
+            onError={(msg) => showToast("error", msg)}
           />
         )}
 
@@ -475,7 +603,7 @@ export default function MLRODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cases.filter(c => c.status !== "closed_no_action").sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()).map(c => {
+                    {cases.filter(c => !isClosed(c.status)).sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()).map(c => {
                       const ageDays = c.created_at ? Math.floor((Date.now() - new Date(c.created_at).getTime()) / 86400000) : 0;
                       return (
                         <tr key={c.case_ref} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer" onClick={() => { setSelected(c); setTab("cases"); }}>
@@ -509,7 +637,12 @@ export default function MLRODashboard() {
   );
 }
 
-function CreateCaseForm({ onCreated }: { onCreated: (c: Case) => void }) {
+function CreateCaseForm({
+  onCreated, onError,
+}: {
+  onCreated: (c: Case) => void;
+  onError: (msg: string) => void;
+}) {
   const [form, setForm] = useState({
     customer_id: "", title: "", description: "",
     severity: "medium", assigned_to: "", created_by: "mlro@firm.com.au",
@@ -520,20 +653,14 @@ function CreateCaseForm({ onCreated }: { onCreated: (c: Case) => void }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/cases`, {
+      const res = await apiFetch(`${API}/api/v1/cases`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) { onError("Failed to create case"); return; }
       onCreated(await res.json());
     } catch {
-      onCreated({
-        id: `case_${Date.now()}`,
-        case_ref: `CASE-${Math.random().toString(36).slice(2,12).toUpperCase()}`,
-        customer_id: form.customer_id, title: form.title, description: form.description,
-        severity: form.severity, status: "open", assigned_to: form.assigned_to,
-        alert_ids: [], created_at: new Date().toISOString(),
-      });
+      onError("Failed to create case");
     } finally { setSubmitting(false); }
   };
 

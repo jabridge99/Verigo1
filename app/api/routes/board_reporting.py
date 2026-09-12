@@ -33,11 +33,39 @@ from app.models.board_report import (
     ReportPeriod,
 )
 from app.models.user import UserRole
+from app.services import audit_service
 from app.services.board_reporting_service import generate_snapshot
 
 log = logging.getLogger("tvg.board_reporting")
 
 router = APIRouter(prefix="/board-reports", tags=["Board & Executive Reporting"])
+
+
+def _log(
+    db: Session,
+    current_user,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Board report audit trail. Who created, approved, and distributed a
+    report to the Board -- the entity's own governance record of what
+    its Board was told -- had no audit coverage at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="board_report",
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=current_user.org_id,
+        after_state=after_state,
+        notes=notes,
+    )
+
 
 # ── Status transitions ────────────────────────────────────────────────────────
 
@@ -237,6 +265,16 @@ def create_report(
         report.report_ref,
         report.report_type,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_created",
+        after_state={
+            "report_ref": report.report_ref,
+            "report_type": report.report_type.value,
+        },
+    )
     return _report_dict(report, include_snapshot=True)
 
 
@@ -274,6 +312,12 @@ def regenerate_snapshot(
         "board_report.snapshot_regenerated org=%s ref=%s",
         current_user.org_id,
         report.report_ref,
+    )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_snapshot_regenerated",
     )
     return _report_dict(report, include_snapshot=True)
 
@@ -329,10 +373,18 @@ def update_report(
         raise HTTPException(
             409, f"Reports in '{report.status}' status cannot be edited"
         )
-    for field, value in body.model_dump(exclude_none=True).items():
+    changed = body.model_dump(exclude_none=True)
+    for field, value in changed.items():
         setattr(report, field, value)
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_updated",
+        after_state={k: str(v) for k, v in changed.items()},
+    )
     return _report_dict(report)
 
 
@@ -359,6 +411,14 @@ def submit_for_review(
         "board_report.submitted_for_review org=%s ref=%s",
         current_user.org_id,
         report.report_ref,
+    )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_submitted_for_review",
+        after_state={"status": report.status.value},
+        notes=notes,
     )
     return _report_dict(report)
 
@@ -388,6 +448,14 @@ def approve_report(
         report.report_ref,
         current_user.id,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_approved",
+        after_state={"status": report.status.value},
+        notes=approval_notes,
+    )
     return _report_dict(report)
 
 
@@ -408,6 +476,14 @@ def return_to_draft(
     report.review_notes = review_notes
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_returned_to_draft",
+        after_state={"status": report.status.value},
+        notes=review_notes,
+    )
     return _report_dict(report)
 
 
@@ -439,6 +515,17 @@ def distribute_report(
         report.report_ref,
         body.distributed_to,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_distributed",
+        after_state={
+            "status": report.status.value,
+            "distributed_to": body.distributed_to,
+        },
+        notes=body.distribution_notes,
+    )
     return _report_dict(report)
 
 
@@ -454,6 +541,13 @@ def archive_report(
     report.status = BoardReportStatus.archived
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_archived",
+        after_state={"status": report.status.value},
+    )
     return _report_dict(report)
 
 
@@ -518,6 +612,17 @@ def create_new_version(
         current_user.org_id,
         new_report.report_ref,
         new_report.version,
+    )
+    _log(
+        db,
+        current_user,
+        new_report.id,
+        action="board_report_new_version",
+        after_state={
+            "report_ref": new_report.report_ref,
+            "version": new_report.version,
+        },
+        notes=f"Supersedes {report_id}",
     )
     return _report_dict(new_report, include_snapshot=True)
 
@@ -769,6 +874,102 @@ def export_html(
   </tbody>
 </table>"""
 
+    # ── CO Quarterly Compliance Report sections ─────────────────────────────
+    # Only populated for report_type == "quarterly_compliance" -- aligns with
+    # the Verigo CO Quarterly Compliance Report template (VERIGO-GEN-COR).
+    # Other report types keep the sections above only.
+    co_quarterly_html = ""
+    if report.report_type.value == "quarterly_compliance":
+        smr_q = snap.get("smr_quarterly", {})
+        ttr_q = snap.get("ttr", {})
+        ecdd_q = snap.get("ecdd_quarterly", {})
+        sanctions_q = snap.get("sanctions_quarterly", {})
+        open_actions = snap.get("open_actions_prior_quarters", [])
+        ir_status = snap.get("independent_review_status", {})
+
+        smr_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("Suspicious matters escalated to CO this quarter", smr_q.get("escalated_to_co_period", 0))}
+    {_row("SMRs lodged with AUSTRAC this quarter", smr_q.get("lodged_period", 0))}
+    {_row("SMRs not lodged — cleared by CO", smr_q.get("cleared_not_lodged", 0))}
+    {_row("Terrorism-financing SMRs (24hr deadline)", smr_q.get("terrorism_smrs_period", 0))}
+    {_row("All terrorism SMRs submitted within 24 hours", "Yes" if smr_q.get("terrorism_all_within_24h") else "No" if smr_q.get("terrorism_smrs_period") else "N/A")}
+    {_row("Late SMRs (outside required timeframe)", smr_q.get("late_smrs", 0))}
+  </tbody>
+</table>"""
+
+        ttr_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("TTRs lodged this quarter", ttr_q.get("ttrs_lodged_period", 0))}
+    {_row("Total value of threshold transactions (AUD)", f"${ttr_q.get('total_value_aud', 0):,.2f}")}
+    {_row("Late TTRs (outside 10 business day deadline)", ttr_q.get("late_ttrs", 0))}
+    {_row("TTRs that also resulted in SMR lodgement", ttr_q.get("ttrs_also_smr", 0))}
+  </tbody>
+</table>"""
+
+        ecdd_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("New ECDD cases opened this quarter", ecdd_q.get("new_cases_opened", 0))}
+    {_row("ECDD cases approved — service proceeded", ecdd_q.get("approved", 0))}
+    {_row("ECDD cases declined — service refused", ecdd_q.get("declined", 0))}
+    {_row("ECDD cases still open at end of quarter", ecdd_q.get("still_open_end_of_quarter", 0))}
+  </tbody>
+</table>"""
+
+        sanctions_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("Total sanctions screens conducted this quarter", sanctions_q.get("total_screens_period", 0))}
+    {_row("Possible matches identified", sanctions_q.get("possible_matches", 0))}
+    {_row("False positives determined", sanctions_q.get("false_positives", 0))}
+    {_row("Confirmed sanctions matches", sanctions_q.get("confirmed_matches", 0))}
+  </tbody>
+</table>"""
+
+        if open_actions:
+            open_actions_rows = "".join(
+                _row(a["title"], a["due_date"], a["status"].replace("_", " ").title())
+                for a in open_actions
+            )
+        else:
+            open_actions_rows = _row("No open actions from prior quarters", "—", "—")
+        open_actions_html = f"""
+<table>
+  <thead><tr><th>Action Item</th><th>Due Date</th><th>Status</th></tr></thead>
+  <tbody>{open_actions_rows}</tbody>
+</table>"""
+
+        program_updates_html = f"""
+<table>
+  <thead><tr><th>Item</th><th>Status</th></tr></thead>
+  <tbody>
+    {_row("Independent review — status", (ir_status.get("status") or "Not yet conducted").replace("_", " ").title())}
+    {_row("Independent review — reviewer", ir_status.get("reviewer") or "—")}
+    {_row("Independent review — report date", ir_status.get("report_date") or "—")}
+  </tbody>
+</table>
+<p style="font-size:9pt;color:#888;margin-top:6px;">AML/CTF Program currency, AUSTRAC enrolment status, new AUSTRAC guidance, legislative changes, and AUSTRAC feedback are not yet tracked as structured data — record them in this report's Executive Summary / MLRO Commentary.</p>"""
+
+        co_quarterly_html = "".join(
+            [
+                _section("SMR Activity (Detail)", smr_quarterly_html),
+                _section("TTR Activity", ttr_quarterly_html),
+                _section("ECDD Activity", ecdd_quarterly_html),
+                _section(
+                    "Sanctions Screening Activity (Detail)", sanctions_quarterly_html
+                ),
+                _section("Open Actions from Prior Quarters", open_actions_html),
+                _section("Program and Regulatory Updates", program_updates_html),
+            ]
+        )
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -854,6 +1055,8 @@ def export_html(
 {_section("Independent Review", independent_review_html)}
 
 {_section("Regulatory Reporting", regulatory_reporting_html)}
+
+{co_quarterly_html}
 
 {risk_html and _section("Risk Indicators", risk_html) or ""}
 

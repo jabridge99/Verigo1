@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiFetch as authFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function apiFetch(path: string) {
-  const res = await fetch(`${API}${path}`, { credentials: "include" });
+  const res = await authFetch(`${API}${path}`, { credentials: "include" });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }

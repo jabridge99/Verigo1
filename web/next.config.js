@@ -19,7 +19,7 @@ const nextConfig = {
       },
       {
         source: '/packs',
-        destination: '/industry',
+        destination: '/industries',
         permanent: false,
       },
       {

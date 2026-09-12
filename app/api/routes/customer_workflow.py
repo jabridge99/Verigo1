@@ -55,6 +55,7 @@ from app.schemas.customer_workflow import (
     WorkflowEventResponse,
     WorkflowResponse,
 )
+from app.services import audit_service
 from app.services.customer_risk_engine import (
     assess_customer_risk,
     cdd_level_from_gateway,
@@ -137,11 +138,30 @@ def _transition(
         actor_id=actor.id,
         actor_role=actor.role.value,
         comments=comments,
-        metadata=metadata or {},
+        event_metadata=metadata or {},
         occurred_at=datetime.now(timezone.utc),
     )
     db.add(event)
     workflow.state = to_state
+    # CustomerWorkflowEvent is already an immutable per-workflow history
+    # (GET .../workflow/events), but was never written to the central audit
+    # trail -- every one of the 9 onboarding phases' transitions (data
+    # collection, verification, screening, EDD, final decision, periodic
+    # review) was invisible from GET /audit/, the one place a compliance
+    # officer otherwise looks for "what happened, who did it". Centralising
+    # the call here covers every transition uniformly, run_risk_assessment()/
+    # approve_edd()/final_decision() already write directly to AuditLog
+    # (app.models.audit_log, also merged into GET /audit/) alongside this.
+    audit_service.log_action(
+        db,
+        action=f"customer_workflow_{action.value}",
+        entity_type="customer_workflow",
+        entity_id=workflow.id,
+        actor=actor.email,
+        actor_role=actor.role.value if actor.role else None,
+        organisation_id=workflow.org_id,
+        notes=comments,
+    )
 
 
 # ── GET workflow ──────────────────────────────────────────────────────────────
@@ -188,6 +208,15 @@ def assign_workflow(
         workflow.sla_due_date = payload.sla_due_date
     db.commit()
     db.refresh(workflow)
+    audit_service.log_action(
+        db,
+        action="customer_workflow_assigned",
+        entity_type="customer_workflow",
+        entity_id=workflow.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=workflow.org_id,
+    )
     return workflow
 
 

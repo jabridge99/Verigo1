@@ -80,7 +80,7 @@ def request_old_version(
 
     if settings.master_admin_email:
         email_service.send_admin_retention_alert(
-            settings.master_admin_email, org.name, org.org_id, version, requested_by
+            settings.master_admin_email, org.name, org.id, version, requested_by
         )
 
     return target

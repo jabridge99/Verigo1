@@ -7,6 +7,7 @@ and optional premium service engagements (billed separately).
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -21,7 +22,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -146,7 +147,7 @@ class AMLProgram(Base):
     """
     The Organisation's AML/CTF Program document.
 
-    Under the AML/CTF Amendment Act 2024 and Rules 2025 (commencing 31 March 2026),
+    Under the AML/CTF Amendment Act 2024 and Rules 2025 (commencing 1 July 2026),
     reporting entities must maintain a SINGLE, CONSOLIDATED risk-based program.
     The previous Part A / Part B structure is LEGACY — applicable only to
     previously registered entities that adopted that format before the 2026 reform.
@@ -302,13 +303,15 @@ class RiskAssessment(Base):
     title = Column(String(255), nullable=False)
     assessment_date = Column(Date, nullable=False)
     status = Column(
-        Enum(AssessmentStatus), default=AssessmentStatus.draft, nullable=False
+        Enum(AssessmentStatus, name="legacy_risk_assessment_status"),
+        default=AssessmentStatus.draft,
+        nullable=False,
     )
 
     # Risk scoring (1–5 scale)
-    inherent_risk_score = Column(Float)
-    control_effectiveness_score = Column(Float)
-    residual_risk_score = Column(Float)
+    inherent_risk_score: Mapped[Optional[float]] = Column(Float)
+    control_effectiveness_score: Mapped[Optional[float]] = Column(Float)
+    residual_risk_score: Mapped[Optional[float]] = Column(Float)
 
     # Risk ratings by category
     customer_risk_rating = Column(String(20))  # low / medium / high
@@ -410,7 +413,9 @@ class Control(Base):
     owner = Column(String)  # user id responsible for this control
 
     status = Column(
-        Enum(ControlStatus), default=ControlStatus.not_tested, nullable=False
+        Enum(ControlStatus, name="legacy_control_status"),
+        default=ControlStatus.not_tested,
+        nullable=False,
     )
     last_tested_date = Column(Date)
     next_test_date = Column(Date)
@@ -458,7 +463,9 @@ class TrainingRecord(Base):
     description = Column(Text)
 
     status = Column(
-        Enum(TrainingStatus), default=TrainingStatus.not_started, nullable=False
+        Enum(TrainingStatus, name="legacy_training_status"),
+        default=TrainingStatus.not_started,
+        nullable=False,
     )
     due_date = Column(Date)
     completed_date = Column(Date)

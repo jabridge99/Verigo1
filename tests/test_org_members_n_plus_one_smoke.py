@@ -7,6 +7,14 @@ This test just confirms the endpoint still returns correct data for
 multiple members after the batching change.
 """
 
+import uuid
+
+from app.models.billing import (
+    BillingInterval,
+    BillingPlan,
+    Subscription,
+    SubscriptionStatus,
+)
 from app.services.auth_service import create_user
 from app.services.org_service import seed_permission_catalog_and_roles
 
@@ -24,6 +32,20 @@ def test_list_members_returns_all_members_with_correct_roles(
     )
     assert org_resp.status_code == 201, org_resp.text
     org_id = org_resp.json()["id"]
+
+    # Free-trial orgs are capped at 1 user; upgrade so a second member can
+    # be added (this test is about the list endpoint, not plan limits).
+    db.add(
+        Subscription(
+            subscription_id=f"sub_{uuid.uuid4().hex[:10]}",
+            industry_id=org_id,
+            organisation_id=org_id,
+            plan=BillingPlan.professional,
+            interval=BillingInterval.monthly,
+            status=SubscriptionStatus.active,
+        )
+    )
+    db.commit()
 
     create_user(
         db,

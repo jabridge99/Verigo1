@@ -71,6 +71,17 @@ TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 @pytest.fixture(scope="session", autouse=True)
 def create_tables():
     Base.metadata.create_all(bind=engine)
+    # POST /auth/register now always creates an OrganisationUser "owner"
+    # membership (app/services/org_service.py's attach_owner()), so the
+    # system role catalog must exist before any test hits that endpoint --
+    # mirrors what the real app's lifespan does once at startup. Seeded
+    # once here, committed directly against the engine (not a per-test
+    # rolled-back transaction), so it's visible to every test.
+    from app.services.org_service import seed_permission_catalog_and_roles
+
+    seed_session = TestingSession(bind=engine)
+    seed_permission_catalog_and_roles(seed_session)
+    seed_session.close()
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -119,6 +130,11 @@ def _make_user(db, role: UserRole, industry_id: str = None) -> User:
         status=UserStatus.active,
         org_id=industry_id,
         industry_id=industry_id,
+        # A real registered user has all three identity fields pointing at
+        # the same org (see app/services/org_service.py's attach_owner()) --
+        # match that here so this fixture doesn't understate what a real
+        # user looks like.
+        primary_organisation_id=industry_id,
     )
     db.add(user)
     db.commit()

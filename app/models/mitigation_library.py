@@ -13,6 +13,7 @@ custom additions/overrides.
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -27,7 +28,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 from app.models.governance_controls import ControlEffectiveness
@@ -63,7 +64,7 @@ class MitigationLibraryItem(Base):
 
     # Numeric weighting (0-1) used when combining multiple applied mitigations
     # into a control-effectiveness adjustment. Does not itself set a rating.
-    control_weighting = Column(Float, default=0.1)
+    control_weighting: Mapped[Optional[float]] = Column(Float, default=0.1)
     effectiveness_rating = Column(
         Enum(ControlEffectiveness), default=ControlEffectiveness.not_tested
     )

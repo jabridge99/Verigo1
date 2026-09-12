@@ -44,6 +44,7 @@ from app.services.auth_service import (
     TOKEN_BLACKLIST,
     authenticate_user,
     build_token_response,
+    clear_csrf_cookie,
     clear_session_cookie,
     consume_email_action_token,
     create_email_action_token,
@@ -53,7 +54,9 @@ from app.services.auth_service import (
     get_user_by_email,
     get_user_by_id,
     hash_password,
+    new_csrf_token,
     record_security_event,
+    set_csrf_cookie,
     set_session_cookie,
     verify_magic_link,
     verify_password,
@@ -80,12 +83,33 @@ def _decode_current_user(
     allow_mfa_pending: bool,
 ) -> User:
     raw: Optional[str] = None
+    via_cookie = False
     if authorization and authorization.startswith("Bearer "):
         raw = authorization.removeprefix("Bearer ").strip()
     elif settings.session_cookie_name in request.cookies:
         raw = request.cookies[settings.session_cookie_name]
+        via_cookie = True
     if not raw:
         raise HTTPException(401, "Not authenticated")
+
+    # CSRF (double-submit cookie): a request authenticated via the Bearer
+    # header can't have been forged cross-site (a third-party page has no
+    # way to read the victim's stored token), so it needs no check. One
+    # authenticated via the cookie alone -- which the browser attaches
+    # automatically, forged request or not -- must also echo the CSRF
+    # cookie's value as a header for any state-changing method; a forged
+    # request can get the cookie sent but, being cross-origin, can't read
+    # it to construct a matching header. GETs are exempt (assumed
+    # side-effect-free, per REST convention this API already follows).
+    if via_cookie and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        csrf_cookie = request.cookies.get(settings.csrf_cookie_name)
+        csrf_header = request.headers.get("X-CSRF-Token")
+        if (
+            not csrf_cookie
+            or not csrf_header
+            or not secrets.compare_digest(csrf_cookie, csrf_header)
+        ):
+            raise HTTPException(403, "CSRF token missing or invalid")
 
     payload = decode_token(raw)
     if not payload:
@@ -165,9 +189,12 @@ def register(
     # brand-new org and the lowest-privilege role; joining an existing org
     # requires the authenticated admin-only POST /auth/users flow instead.
     from app.models.organisation import IndustryType, Organisation
+    from app.services.org_service import attach_owner
 
     org = Organisation(
-        name=f"{payload.full_name}'s Organisation", industry_type=IndustryType.other
+        name=payload.organisation_name or f"{payload.full_name}'s Organisation",
+        industry_id=payload.industry_id,
+        industry_type=IndustryType.other,
     )
     db.add(org)
     db.flush()
@@ -178,7 +205,7 @@ def register(
             email=payload.email,
             full_name=payload.full_name,
             password=payload.password,
-            role=UserRole.analyst.value,
+            role=UserRole.analyst,
             org_id=org_id,
         )
     except IntegrityError:
@@ -195,17 +222,21 @@ def register(
         ip=_client_ip(request),
         meta={"email": user.email},
     )
-    if payload.organisation_name:
-        from app.services.org_service import create_organisation
-
-        create_organisation(
-            db, payload.organisation_name, user, industry_id=payload.industry_id
-        )
+    # Every self-registered user owns the org just created for them — give
+    # them the "owner" RBAC membership and default org pointers now, rather
+    # than only when a (never actually sent by the frontend) organisation_name
+    # was supplied. Without this, primary_organisation_id/industry_id stayed
+    # NULL for every real signup, which broke onboarding session creation,
+    # document/billing/storage scoping, and org member-management RBAC
+    # checks for every user who wasn't manually patched around it.
+    attach_owner(db, org, user)
+    db.commit()
 
     verify_token = create_email_action_token(db, user.email, "verify_email")
     record_security_event(db, "email_verification_requested", user.id)
     token = build_token_response(user)
     set_session_cookie(response, token["access_token"])
+    set_csrf_cookie(response, new_csrf_token())
     if not settings.is_production:
         token["dev_verify_email_token"] = verify_token
     return token
@@ -248,10 +279,12 @@ def login(
     if user.mfa_enabled:
         token = build_token_response(user, mfa_pending=True)
         set_session_cookie(response, token["access_token"])
+        set_csrf_cookie(response, new_csrf_token())
         return {**token, "mfa_required": True}
 
     token = build_token_response(user)
     set_session_cookie(response, token["access_token"])
+    set_csrf_cookie(response, new_csrf_token())
     return token
 
 
@@ -282,6 +315,12 @@ def logout(
         jti = payload.get("jti") if payload else None
         if jti:
             TOKEN_BLACKLIST.add(jti, ttl_seconds=ACCESS_TOKEN_EXPIRY_MINUTES * 60)
+
+    # clear_session_cookie/clear_csrf_cookie were previously imported but
+    # never called -- the browser kept sending the (now-blacklisted, so
+    # inert) cookies until they naturally expired.
+    clear_session_cookie(response)
+    clear_csrf_cookie(response)
     return {"detail": "Logged out successfully"}
 
 
@@ -582,7 +621,7 @@ def create_user_admin(
         email=payload.email,
         full_name=payload.full_name,
         password=payload.password or secrets.token_urlsafe(16),
-        role=(payload.role.value if payload.role else UserRole.analyst.value),
+        role=(payload.role if payload.role else UserRole.analyst),
         org_id=payload.org_id or current_user.org_id,
     )
     record_security_event(

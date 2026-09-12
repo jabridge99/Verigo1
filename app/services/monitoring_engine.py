@@ -37,6 +37,7 @@ from app.models.transaction import (
     Transaction,
     TransactionCryptoDetail,
 )
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ FATF_GREYLIST = frozenset(
 )
 SANCTIONED_COUNTRIES = frozenset({"IR", "KP", "RU", "BY", "SY", "CU", "SD"})
 
-TTR_THRESHOLD_AUD = 10_000.0
+TTR_THRESHOLD_AUD = TTR_CTR_THRESHOLD_AUD
 NEAR_THRESHOLD_PCT = 0.10  # within 10% of reporting threshold
 
 DEFAULT_SIGNAL_WEIGHTS: dict[str, float] = {
@@ -627,8 +628,17 @@ def _build_txn_context(
         "is_round_number": transaction.is_round_number,
         "is_structuring_suspect": transaction.is_structuring_suspect,
         "is_cash_intensive": transaction.is_cash_intensive,
-        "source_country": transaction.source_country,
-        "destination_country": transaction.destination_country,
+        # Transaction has two overlapping country-pair columns
+        # (source_country/destination_country alongside country_origin/
+        # country_destination -- see app/models/transaction.py). Behaviour
+        # scoring (_score_geographic) already checks all four; rule
+        # conditions only ever had these two keys to match against, so a
+        # transaction populated via the other pair (e.g. the frontend's
+        # manual transaction form, which sends country_destination) was
+        # invisible to any "high-risk jurisdiction" MonitoringRule.
+        "source_country": transaction.source_country or transaction.country_origin,
+        "destination_country": transaction.destination_country
+        or transaction.country_destination,
         "risk_score": transaction.risk_score,
         "behaviour_score": transaction.behaviour_score,
         # Customer fields
@@ -723,7 +733,7 @@ def calculate_alert_score(
     customer_risk_score: float,
     risk_matrix_score: float = 0.0,
     weights: Optional[dict[str, float]] = None,
-) -> tuple[float, dict[str, float]]:
+) -> tuple[float, dict[str, Any]]:
     """
     Composite alert score integrating AUSTRAC/FATF risk matrix:
       behaviour     default 30%

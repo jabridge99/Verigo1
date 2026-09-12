@@ -48,6 +48,9 @@ class TaskType(str, enum.Enum):
     submit_smr = "submit_smr"  # SMR lodgement task
     request_asic_extract = "request_asic_extract"  # Pull ASIC company extract
     internal_review = "internal_review"  # General internal review
+    compliance_task = (
+        "compliance_task"  # AML/CTF Program obligation — not tied to a case/customer
+    )
     other = "other"
 
 
