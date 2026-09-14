@@ -2,9 +2,12 @@
 Phase B — Organisation, membership, and role/permission management API.
 """
 
-from datetime import datetime, timezone
+import html as html_escape_module
+import urllib.parse
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user
@@ -385,6 +388,202 @@ def export_aml_program(
         after_state={"version": program.version, "is_preview": response.is_preview},
     )
     return response
+
+
+_WATERMARK_TEXT = "DRAFT — NOT VALID FOR AUSTRAC PURPOSES"
+_UNCONTROLLED_FOOTER = (
+    "PRINTED COPY — UNCONTROLLED, NOT VALID FOR REGULATORY PURPOSES; "
+    "REFER TO THE PLATFORM FOR THE CURRENT VERSION"
+)
+
+
+@router.get("/{org_id}/aml-program/export-html", response_class=HTMLResponse)
+def export_aml_program_html(
+    org_id: str,
+    reason: str,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Document-shaped export of the current AML program, suitable for saving
+    or printing to PDF from the browser.
+
+    Document-control policy (decided 2026-09-14, see the Monetisation
+    Playbook artifact):
+      - Unpaid/preview orgs get a dense, OCR-resistant tiled watermark
+        across every page; paid orgs get a clean export.
+      - Every export (paid or unpaid) is stamped with a 1-year validity
+        date computed from the moment of THIS download, not from when the
+        program was generated -- a document that sits unopened on the
+        platform stays current, but a copy someone actually took has a
+        visible use-by date.
+      - Printing is blocked by default via @media print; the one thing
+        that still renders on a print attempt is a full-page notice that
+        any printed copy is uncontrolled and not valid for regulatory
+        purposes, so a printed page can never be mistaken for the
+        authoritative, current record.
+    """
+    org = _get_org_or_404(db, org_id)
+    _require_permission(db, org, current_user, "org:manage")
+    if not reason or not reason.strip():
+        raise HTTPException(400, "An export reason is required")
+
+    program = aml_program_service.get_program(db, org)
+    if not program:
+        raise HTTPException(404, "No AML program generated yet")
+
+    items = aml_program_service.get_program_items(db, program)
+    plan = billing_service.current_plan(
+        db, program.industry_id, program.organisation_id
+    )
+    full_enabled = billing_service.is_feature_enabled(db, plan, "full_aml_program")
+
+    downloaded_at = datetime.now(timezone.utc)
+    expires_at = downloaded_at + timedelta(days=365)
+
+    audit_service.log_action(
+        db,
+        action="aml_program_export_html_downloaded",
+        entity_type="aml_program",
+        entity_id=program.program_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        industry_id=org.industry_id,
+        organisation_id=org.id,
+        notes=reason,
+        after_state={
+            "version": program.version,
+            "is_preview": not full_enabled,
+            "downloaded_at": downloaded_at.isoformat(),
+            "expires_at": expires_at.isoformat(),
+        },
+    )
+
+    if full_enabled:
+        rows = [
+            {
+                "category": i.category,
+                "title": i.title,
+                "description": i.description,
+                "review_frequency": i.review_frequency,
+                "is_required": i.is_required,
+                "locked": False,
+            }
+            for i in items
+        ]
+    else:
+        rows = aml_program_service.to_preview_items(items)
+
+    def _row(item: dict) -> str:
+        title = html_escape_module.escape(item["title"] or "")
+        if item["locked"]:
+            return (
+                f'<tr class="locked"><td>{html_escape_module.escape(item["category"])}</td>'
+                f'<td colspan="3"><em>{title} — upgrade to unlock this section</em></td></tr>'
+            )
+        description = html_escape_module.escape(item["description"] or "")
+        freq = html_escape_module.escape(item["review_frequency"] or "—")
+        required = "Required" if item["is_required"] else "Optional"
+        return (
+            f"<tr><td>{html_escape_module.escape(item['category'])}</td>"
+            f"<td>{title}</td><td>{description}</td><td>{freq}</td><td>{required}</td></tr>"
+        )
+
+    rows_html = "".join(_row(r) for r in rows)
+    org_name = html_escape_module.escape(org.name or "")
+
+    watermark_html = ""
+    if not full_enabled:
+        # A small tile, repeated by the browser's own background-repeat
+        # rather than one giant overlay -- the tile boundary runs straight
+        # through glyph strokes wherever it lands on the underlying text, so
+        # a screenshot-then-OCR pass sees the watermark's own strokes
+        # interleaved with the page's, not clean isolated text either OCR
+        # engine could confidently separate out. Encoded as a data: URI
+        # rather than referenced by DOM id (url(#id)) -- the latter is
+        # unreliable as a CSS background across browsers for inline SVG.
+        tile_svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="100">'
+            '<text x="-20" y="55" font-family="monospace" font-size="15" '
+            'fill="#b00020" fill-opacity="0.25" '
+            f'transform="rotate(-30 120 50)">{_WATERMARK_TEXT}</text>'
+            "</svg>"
+        )
+        tile_data_uri = "data:image/svg+xml," + urllib.parse.quote(tile_svg)
+        watermark_html = (
+            '<div class="watermark" aria-hidden="true" '
+            f"style=\"background-image:url('{tile_data_uri}')\"></div>"
+        )
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AML/CTF Program — {org_name}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1a1a2e; background: #fff; line-height: 1.5; position: relative; }}
+  .watermark {{ position: fixed; inset: 0; background-repeat: repeat; pointer-events: none; z-index: 9999; }}
+  .cover {{ background: linear-gradient(135deg, #0f3460 0%, #16213e 100%); color: #fff; padding: 48px; }}
+  .cover h1 {{ font-size: 22pt; font-weight: 700; margin-bottom: 8px; }}
+  .cover .meta {{ font-size: 10pt; opacity: 0.8; margin-top: 10px; }}
+  .badge {{ display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 9pt; font-weight: 700; letter-spacing: 1px; margin-top: 10px; }}
+  .badge.draft {{ background: #b00020; color: #fff; }}
+  .badge.final {{ background: #16a34a; color: #fff; }}
+  .validity {{ font-size: 9.5pt; opacity: 0.85; margin-top: 10px; }}
+  .content {{ padding: 32px 48px; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 9.5pt; }}
+  th {{ background: #0f3460; color: #fff; padding: 7px 10px; text-align: left; font-weight: 600; }}
+  td {{ padding: 6px 10px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }}
+  tr.locked td {{ color: #888; background: #f7f7f7; }}
+  .disclaimer {{ font-size: 8pt; color: #888; border-top: 1px solid #e0e0e0; padding-top: 12px; margin-top: 40px; font-style: italic; }}
+
+  /* Printing is disabled: on a print attempt, every real section is hidden
+     and only a full-page uncontrolled-copy notice renders, so a printed
+     page (or "print to PDF") can never carry the actual program content
+     or be mistaken for the current, authoritative record. */
+  .print-block-notice {{ display: none; }}
+  @media print {{
+    .watermark, .cover, .content {{ display: none !important; }}
+    .print-block-notice {{
+      display: block !important;
+      padding: 96px 48px;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      text-align: center;
+    }}
+    .print-block-notice h1 {{ font-size: 20pt; color: #b00020; margin-bottom: 16px; }}
+    .print-block-notice p {{ font-size: 12pt; color: #1a1a2e; }}
+  }}
+</style>
+</head>
+<body>
+{watermark_html}
+<div class="print-block-notice">
+  <h1>Printing disabled</h1>
+  <p>{_UNCONTROLLED_FOOTER}</p>
+  <p>Sign in to the platform to view the current version.</p>
+</div>
+<div class="cover">
+  <span class="badge {"final" if full_enabled else "draft"}">{"CURRENT" if full_enabled else _WATERMARK_TEXT}</span>
+  <h1>AML/CTF Program — {org_name}</h1>
+  <div class="meta">Version {program.version} &middot; Generated {program.generated_at}</div>
+  <div class="validity">This export is valid until {expires_at.date().isoformat()} (1 year from download).
+  After this date, re-export from the platform for the current version.</div>
+</div>
+<div class="content">
+  <table>
+    <thead><tr><th>Category</th><th>Control</th><th>Description</th><th>Review frequency</th><th>Status</th></tr></thead>
+    <tbody>{rows_html}</tbody>
+  </table>
+  <div class="disclaimer">
+    Exported {downloaded_at.date().isoformat()} &middot; This document is a point-in-time export.
+    Regenerate from the platform for the current, authoritative version.
+  </div>
+</div>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 @router.get("/{org_id}/aml-program/health", response_model=ProgramHealthResponse)

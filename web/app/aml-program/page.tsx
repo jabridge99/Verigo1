@@ -6,7 +6,7 @@ import {
   listMyOrganisations,
   listAmlProgramVersions,
   getAmlProgramVersion,
-  exportAmlProgram,
+  exportAmlProgramHtml,
   getAmlProgramHealth,
   type AmlProgramVersion,
   type AmlProgramVersionDetail,
@@ -72,11 +72,20 @@ export default function AmlProgramPage() {
       return
     }
     setExportBusy(true)
+    // Open the tab synchronously with the click, before the await below --
+    // otherwise most browsers treat window.open() as an unsolicited popup
+    // once it's past an async gap and block it.
+    const tab = window.open('', '_blank')
     try {
-      await exportAmlProgram(orgId, exportReason.trim())
+      const html = await exportAmlProgramHtml(orgId, exportReason.trim())
+      const blob = new Blob([html], { type: 'text/html' })
+      const url = URL.createObjectURL(blob)
+      if (tab) tab.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
       setExportDone(true)
       setExportReason('')
     } catch (e: unknown) {
+      if (tab) tab.close()
       setError(e instanceof Error ? e.message : 'Export failed.')
     } finally {
       setExportBusy(false)
@@ -243,7 +252,10 @@ export default function AmlProgramPage() {
                     <h3 className="font-semibold">Export complete</h3>
                   </div>
                   <p className="text-sm text-slate-400 mb-4">
-                    This export has been logged to your audit trail with the reason provided.
+                    The document opened in a new tab — print from there to save as PDF. It's valid
+                    for 1 year from today, and this download has been logged to your audit trail
+                    with the reason provided. Unpaid plans get a watermarked draft; printing is
+                    disabled to keep printed copies from being mistaken for the current version.
                   </p>
                   <div className="flex justify-end">
                     <button

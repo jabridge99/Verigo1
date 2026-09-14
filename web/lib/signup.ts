@@ -261,6 +261,24 @@ export async function exportAmlProgram(orgId: string, reason: string): Promise<v
   await asJson(r)
 }
 
+/**
+ * Downloads the document-controlled export (watermarked for unpaid orgs,
+ * 1-year validity stamp, print blocked) and returns it as HTML for the
+ * caller to open, e.g. via a Blob URL. See export_aml_program_html on the
+ * backend for the document-control policy this implements.
+ */
+export async function exportAmlProgramHtml(orgId: string, reason: string): Promise<string> {
+  const r = await apiFetch(
+    `${API}/api/v1/organisations/${orgId}/aml-program/export-html?reason=${encodeURIComponent(reason)}`,
+    { credentials: 'include' },
+  )
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Export failed')
+  }
+  return r.text()
+}
+
 export async function getAmlProgramHealth(orgId: string): Promise<ProgramHealth> {
   const r = await apiFetch(`${API}/api/v1/organisations/${orgId}/aml-program/health`, { credentials: 'include' })
   return asJson(r)
