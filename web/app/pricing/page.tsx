@@ -48,8 +48,8 @@ async function getPlans() {
     highlight: true,
     features: [
       { label: 'Full AML/CTF program for 1 industry, no watermark', included: true },
-      { label: 'Up to 100 customers', included: true },
-      { label: '1–2 users per tenant', included: true },
+      { label: 'Up to 50 customers', included: true },
+      { label: '1 seat', included: true },
       { label: 'Live regulatory updates included', included: true },
       { label: 'Document vault (5 GB)', included: true },
       { label: '500 API calls / month', included: true },
@@ -81,7 +81,7 @@ async function getPlans() {
     highlight: false,
     features: [
       { label: 'Everything in Compliance', included: true },
-      { label: 'Up to 1,000 customers', included: true },
+      { label: 'Up to 200 customers', included: true },
       { label: '5 users per tenant', included: true },
       { label: '5,000 API calls / month', included: true },
       { label: 'IFTI IN, OUT & bulk import', included: true },
@@ -108,7 +108,7 @@ async function getPlans() {
     highlight: false,
     features: [
       { label: 'Everything in Scale', included: true },
-      { label: 'Unlimited customers', included: true },
+      { label: 'Multi-entity / multi-brand, 500 customers', included: true },
       { label: 'Unlimited users', included: true },
       { label: 'Unlimited API calls', included: true },
       { label: 'KYC, KYB + beneficial ownership', included: true },

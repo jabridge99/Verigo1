@@ -84,6 +84,8 @@ ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
     AddonKey.enterprise_crypto_screening: {
         "name": "Enterprise Crypto Wallet Screening",
         "monthly_aud": 499.00,
+        "price_aud": 499.00,
+        "billing_interval": "month",
         "description": (
             "Unlocks enterprise-grade crypto wallet risk providers (Elliptic, "
             "TRM Labs) for cluster-level exposure scoring beyond the included "
@@ -94,7 +96,15 @@ ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
     },
     AddonKey.independent_review: {
         "name": "Annual Independent Review",
-        "monthly_aud": None,  # TBA -- priced separately, not yet set
+        "monthly_aud": None,  # no monthly equivalent -- billed annually, see price_aud
+        "price_aud": 1_650.00,  # priced 2026-09-14, per your direction
+        "billing_interval": "year",
+        # 20% off this price when the org has generated 3 Quarterly Compliance
+        # Reports in the trailing 12 months ("20% discount on annual review if
+        # conduct all 3 quarters") -- computed in addon_price()/purchase_addon(),
+        # not a static catalogue value.
+        "bundle_discount_pct": 20.0,
+        "bundle_discount_requires_quarterly_reports": 3,
         "description": (
             "An annual AML/CTF independent review conducted by Verigo's "
             "dedicated review team, separate from the platform's own "
@@ -111,7 +121,9 @@ ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
     },
     AddonKey.quarterly_compliance_report: {
         "name": "Quarterly Compliance Report",
-        "monthly_aud": None,  # TBA -- priced separately, not yet set
+        "monthly_aud": None,  # no monthly equivalent -- billed per quarter, see price_aud
+        "price_aud": 220.00,  # priced 2026-09-14, per your direction
+        "billing_interval": "quarter",
         "description": (
             "AUSTRAC-facing Quarterly Compliance Report generation — SMR/TTR/"
             "ECDD/sanctions detail with late-lodgement and terrorism-24h "
@@ -138,8 +150,8 @@ PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
         "annual_aud": 2_990.00,  # 10 months for the price of 12
         "features": [
             "Full AML/CTF program for 1 industry, no watermark",
-            "Up to 100 customers",
-            "1-2 users per tenant",
+            "Up to 50 customers",
+            "1 seat",
             "Real sanctions & PEP screening",
             "Live regulatory updates included",
             "KYC/KYB onboarding",
@@ -148,7 +160,12 @@ PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
             "Document vault (5 GB)",
             "Email support",
         ],
-        "limits": {"customers": 100, "users": 2, "api_calls_month": 500},
+        "limits": {
+            "customers": 50,
+            "users": 1,
+            "api_calls_month": 500,
+            "screening_checks_month": 100,
+        },
     },
     BillingPlan.professional: {
         "name": "Scale",
@@ -156,7 +173,7 @@ PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
         "annual_aud": 7_990.00,
         "features": [
             "Everything in Compliance",
-            "Up to 1,000 customers",
+            "Up to 200 customers",
             "5 users per tenant",
             "Transaction monitoring & case management",
             "Advanced rule builder",
@@ -167,7 +184,12 @@ PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
             "Analytics dashboard",
             "Priority support",
         ],
-        "limits": {"customers": 1_000, "users": 5, "api_calls_month": 5_000},
+        "limits": {
+            "customers": 200,
+            "users": 5,
+            "api_calls_month": 5_000,
+            "screening_checks_month": 400,
+        },
     },
     BillingPlan.enterprise: {
         "name": "Enterprise",
@@ -175,8 +197,7 @@ PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
         "annual_aud": 29_990.00,
         "features": [
             "Everything in Scale",
-            "Unlimited customers",
-            "Multi-entity / multi-brand",
+            "Multi-entity / multi-brand, 500 customers",
             "White-label branding",
             "Custom domain",
             "Multi-tenant management",
@@ -186,7 +207,12 @@ PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
             "SLA 99.9% uptime",
             "Dedicated account manager",
         ],
-        "limits": {"customers": -1, "users": -1, "api_calls_month": -1},
+        "limits": {
+            "customers": 500,
+            "users": -1,
+            "api_calls_month": -1,
+            "screening_checks_month": -1,
+        },
     },
     BillingPlan.vvip: {
         "name": "VVIP",
@@ -199,7 +225,12 @@ PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
             "Regulatory liaison support",
             "Custom integrations",
         ],
-        "limits": {"customers": -1, "users": -1, "api_calls_month": -1},
+        "limits": {
+            "customers": -1,
+            "users": -1,
+            "api_calls_month": -1,
+            "screening_checks_month": -1,
+        },
     },
 }
 
@@ -213,6 +244,7 @@ FREE_TRIAL_LIMITS: dict[str, int] = {
     "customers": 10,
     "users": 1,
     "api_calls_month": 250,
+    "screening_checks_month": 20,
 }
 
 

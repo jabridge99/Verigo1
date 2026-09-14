@@ -496,6 +496,66 @@ def enforce_org_creation_limit(db: Session, user) -> None:
         )
 
 
+def _screening_capacity(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> tuple:
+    """Return (limit, current_count_this_month, remaining) for real
+    (non-simulated) sanctions/PEP screening checks. remaining is None when
+    the plan's quota is unlimited (-1). Screening is included up to this
+    quota per plan, per calendar month -- not metered/pay-per-click -- per
+    your direction (2026-09-14)."""
+    from app.models.screening import ScreeningRecord, ScreeningType
+
+    real_types = (
+        ScreeningType.pep,
+        ScreeningType.sanctions,
+        ScreeningType.ubo_pep,
+        ScreeningType.ubo_sanctions,
+    )
+    limit = _plan_limits(db, org_id, industry_id).get("screening_checks_month", -1)
+    if limit < 0:
+        return limit, 0, None
+    period_start = datetime.now(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    current = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.org_id == org_id,
+            ScreeningRecord.screening_type.in_(real_types),
+            ScreeningRecord.created_at >= period_start,
+        )
+        .count()
+    )
+    remaining = max(0, limit - current)
+    return limit, current, remaining
+
+
+def enforce_screening_limit(
+    db: Session, org_id: str, additional: int = 1, industry_id: Optional[str] = None
+) -> None:
+    """Raise if running `additional` more real sanctions/PEP checks this
+    calendar month would exceed the org's plan quota. Simulated screening
+    types (watchlist, adverse_media, regulatory, law_enforcement, ubo_adverse,
+    manual_review) are never metered here -- only the types that route to a
+    real, cost-incurring provider (see _run_real_screening in
+    app/api/routes/screening.py). The free, self-hosted DFAT/OFAC/UN sanctions
+    lookup (quick_screen's screen_name()) isn't metered either -- it has no
+    vendor cost to protect against."""
+    from fastapi import HTTPException
+
+    if additional <= 0:
+        return
+    limit, current, remaining = _screening_capacity(db, org_id, industry_id)
+    if remaining is not None and additional > remaining:
+        raise HTTPException(
+            403,
+            f"Your plan's real screening limit ({limit}/month) would be "
+            f"exceeded by this request ({current} used this month, {remaining} "
+            "remaining). Upgrade your plan for a higher limit.",
+        )
+
+
 def record_api_call(
     db: Session, org_id: str, industry_id: Optional[str] = None
 ) -> None:
@@ -1086,6 +1146,8 @@ def addon_catalogue() -> List[dict]:
             "addon_key": key.value,
             "name": info["name"],
             "monthly_aud": info["monthly_aud"],
+            "price_aud": info["price_aud"],
+            "billing_interval": info["billing_interval"],
             "description": info["description"],
             "unlocks_providers": info["unlocks_providers"],
             "requires_plan": [p.value for p in info["requires_plan"]],
@@ -1125,6 +1187,58 @@ def addon_for_provider(provider_name: str) -> Optional[AddonKey]:
     return None
 
 
+_ADDON_STRIPE_RECURRING = {
+    "month": {"interval": "month", "interval_count": 1},
+    "quarter": {"interval": "month", "interval_count": 3},
+    "year": {"interval": "year", "interval_count": 1},
+}
+
+
+def _quarterly_reports_in_trailing_year(db: Session, org_id: str) -> int:
+    """Count of real Quarterly Compliance Reports (board_reporting.py's
+    BoardReportType.quarterly_compliance) generated for this org in the
+    trailing 12 months -- the qualifying signal for the Annual Independent
+    Review's bundle discount (see addon_price())."""
+    from app.models.board_report import BoardReport, BoardReportType
+
+    since = datetime.now(timezone.utc) - timedelta(days=365)
+    return (
+        db.query(BoardReport)
+        .filter(
+            BoardReport.org_id == org_id,
+            BoardReport.report_type == BoardReportType.quarterly_compliance,
+            BoardReport.created_at >= since,
+        )
+        .count()
+    )
+
+
+def addon_price(db: Session, org_id: str, addon_key: AddonKey) -> dict:
+    """Effective price for purchasing this add-on right now, applying the
+    Annual Independent Review's bundle discount once the org has actually
+    generated `bundle_discount_requires_quarterly_reports` Quarterly
+    Compliance Reports in the trailing 12 months -- tied to reports genuinely
+    produced, not just the quarterly add-on being toggled on."""
+    info = ADDON_CATALOGUE.get(addon_key)
+    if not info:
+        raise ValueError(f"Unknown add-on: {addon_key}")
+
+    base = info["price_aud"]
+    discount_pct = 0.0
+    required_quarters = info.get("bundle_discount_requires_quarterly_reports")
+    if base is not None and required_quarters:
+        if _quarterly_reports_in_trailing_year(db, org_id) >= required_quarters:
+            discount_pct = info.get("bundle_discount_pct", 0.0)
+
+    price = round(base * (1 - discount_pct / 100), 2) if base is not None else None
+    return {
+        "base_price_aud": base,
+        "discount_pct": discount_pct,
+        "price_aud": price,
+        "billing_interval": info["billing_interval"],
+    }
+
+
 def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> SubscriptionAddon:
     info = ADDON_CATALOGUE.get(addon_key)
     if not info:
@@ -1134,6 +1248,9 @@ def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> Subscriptio
     if not sub or sub.plan not in info["requires_plan"]:
         required = " or ".join(p.value for p in info["requires_plan"])
         raise ValueError(f"{info['name']} requires an active {required} plan")
+
+    pricing = addon_price(db, org_id, addon_key)
+    charge_aud = pricing["price_aud"]
 
     existing = (
         db.query(SubscriptionAddon)
@@ -1145,8 +1262,37 @@ def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> Subscriptio
     addon = existing or SubscriptionAddon(
         addon_id=_addon_id(), org_id=org_id, addon_key=addon_key
     )
+
+    stripe = _stripe()
+    if stripe and sub.stripe_customer_id and charge_aud:
+        # No pre-provisioned Stripe Price exists for add-ons (unlike the base
+        # plan's admin-pasted StripePriceMapping) -- price_data creates one
+        # inline, billed on the add-on's own recurring cadence (quarterly for
+        # the CO report, annual for the independent review) rather than
+        # forcing it onto the base subscription's interval.
+        recurring = _ADDON_STRIPE_RECURRING[info["billing_interval"]]
+        stripe_sub = stripe.Subscription.create(
+            customer=sub.stripe_customer_id,
+            items=[
+                {
+                    "price_data": {
+                        "currency": "aud",
+                        "product_data": {"name": info["name"]},
+                        "unit_amount": round(charge_aud * 100),
+                        "recurring": recurring,
+                    },
+                }
+            ],
+            metadata={"org_id": org_id, "addon_key": addon_key.value},
+        )
+        addon.stripe_subscription_id = stripe_sub.id
+    # Mock mode, or an org with no real Stripe customer yet (e.g. a
+    # super-admin-granted plan that never ran a real Checkout) -- record the
+    # entitlement locally without a charge, same fallback create_checkout_session
+    # and change_subscription_plan already use elsewhere in this file.
+
     addon.status = AddonStatus.active
-    addon.price_aud = info["monthly_aud"]
+    addon.price_aud = charge_aud
     addon.canceled_at = None
     db.add(addon)
     db.commit()
@@ -1166,6 +1312,15 @@ def cancel_addon(
     )
     if not addon:
         return None
+    stripe = _stripe()
+    if stripe and addon.stripe_subscription_id:
+        try:
+            stripe.Subscription.delete(addon.stripe_subscription_id)
+        except stripe.error.StripeError:
+            # Best-effort -- e.g. already canceled directly in the Stripe
+            # dashboard. The local row is the source of truth for gating
+            # (has_addon() only reads AddonStatus), so still cancel it here.
+            pass
     addon.status = AddonStatus.canceled
     addon.canceled_at = datetime.now(timezone.utc)
     db.commit()

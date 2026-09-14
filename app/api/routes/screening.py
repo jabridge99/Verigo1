@@ -468,6 +468,11 @@ async def run_screening(
     org_id = org_id_for(current_user)
     customer = _resolve_customer(payload.customer_id, org_id, db)
 
+    real_count = sum(
+        1 for stype in payload.screening_types if stype in _SANCTIONS_TYPES | _PEP_TYPES
+    )
+    billing_svc.enforce_screening_limit(db, org_id, additional=real_count)
+
     entity_id = payload.entity_id or customer.id
     entity_name = (
         payload.entity_name or getattr(customer, "full_name", None) or customer.id
@@ -833,6 +838,9 @@ async def re_screen(
     if not original:
         raise HTTPException(404, "Screening record not found.")
 
+    if original.screening_type in _SANCTIONS_TYPES | _PEP_TYPES:
+        billing_svc.enforce_screening_limit(db, org_id, additional=1)
+
     result = await _screen(
         original.screening_type,
         original.entity_name or "",
@@ -1060,6 +1068,13 @@ async def batch_screen(
 
     found_ids = {c.id for c in customers}
     missing = [cid for cid in payload.customer_ids if cid not in found_ids]
+
+    real_types_requested = sum(
+        1 for stype in payload.screening_types if stype in _SANCTIONS_TYPES | _PEP_TYPES
+    )
+    billing_svc.enforce_screening_limit(
+        db, org_id, additional=real_types_requested * len(customers)
+    )
 
     records_created = 0
     for customer in customers:

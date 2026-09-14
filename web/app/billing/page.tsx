@@ -784,9 +784,9 @@ function BillingContent() {
             {/* Plan cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {(plans.length ? plans : [
-                { plan: "starter", name: "Starter", monthly_aud: 59, annual_aud: 599, annual_discount_pct: 20, features: ["Up to 500 customers","AML monitoring","KYC/KYB","AUSTRAC reporting","Standard support"], limits: {} },
-                { plan: "professional", name: "Professional", monthly_aud: 79, annual_aud: 799, annual_discount_pct: 20, features: ["5,000 customers","Rule builder","ECDD","Case management","Webhooks & API","50 GB vault","Priority support"], limits: {} },
-                { plan: "enterprise", name: "Enterprise", monthly_aud: 299, annual_aud: 2999, annual_discount_pct: 20, features: ["Unlimited customers","White-label","Custom domain","Multi-tenant","500 GB vault","SLA 99.9%","Dedicated AM"], limits: {} },
+                { plan: "starter", name: "Compliance", monthly_aud: 299, annual_aud: 2990, annual_discount_pct: 20, features: ["Up to 50 customers","1 seat","Real sanctions & PEP screening","AUSTRAC reporting","Email support"], limits: {} },
+                { plan: "professional", name: "Scale", monthly_aud: 799, annual_aud: 7990, annual_discount_pct: 20, features: ["Up to 200 customers","5 seats","Rule builder","ECDD","Case management","Webhooks & API","15 GB vault","Priority support"], limits: {} },
+                { plan: "enterprise", name: "Enterprise", monthly_aud: 2999, annual_aud: 29990, annual_discount_pct: 20, features: ["Multi-entity / multi-brand, 500 customers","White-label","Custom domain","Multi-tenant","50 GB vault","SLA 99.9%","Dedicated AM"], limits: {} },
                 { plan: "vvip", name: "VVIP", monthly_aud: null, annual_aud: null, annual_discount_pct: 20, features: ["Everything in Enterprise","Custom SLA","On-site training","Regulatory liaison","Custom integrations"], limits: {} },
               ]).map(p => {
                 const isCurrent = sub?.plan === p.plan;

@@ -67,7 +67,9 @@ def test_addon_catalogue_lists_independent_review():
     catalogue = svc.addon_catalogue()
     entry = next(a for a in catalogue if a["addon_key"] == "independent_review")
     assert entry["unlocks_providers"] == []
-    assert entry["monthly_aud"] is None  # price TBA
+    assert entry["monthly_aud"] is None  # no monthly equivalent -- billed annually
+    assert entry["price_aud"] == 1_650.00
+    assert entry["billing_interval"] == "year"
     assert set(entry["requires_plan"]) == {
         "starter",
         "professional",
