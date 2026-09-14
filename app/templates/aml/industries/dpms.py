@@ -377,7 +377,7 @@ def get_template(risk_level: str = "medium") -> AMLTemplateBase:
     )
 
     t.ifti_procedures = (
-        "IFTI reporting does not apply to this Organisation's designated " "services."
+        "IFTI reporting does not apply to this Organisation's designated services."
     )
 
     t.transaction_monitoring = (
