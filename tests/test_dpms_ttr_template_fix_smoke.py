@@ -75,4 +75,6 @@ def test_bullion_dealers_gets_the_same_dpms_template(client, db):
     program = db.query(AMLProgram).filter_by(org_id=org_id).first()
     assert "must be declined" not in program.ttr_procedures
     assert "$10,000" in program.ttr_procedures
-    assert "sanctioned" in program.ttr_procedures.lower()
+    # Sanctioned-metals content now lives in the fuller sanctions_procedures
+    # section (P21 sector rewrite), not the cash/TTR section.
+    assert "sanctioned" in program.sanctions_procedures.lower()

@@ -33,13 +33,13 @@ INDUSTRY_MODULE_MAP = {
     # ── Tranche 1 ─────────────────────────────────────────────────────────────
     "remittance": "remittance",
     "vasp": "vasp",
-    "bullion_dealers": "other",
+    "bullion_dealers": "dpms",
     # ── Tranche 2 ─────────────────────────────────────────────────────────────
     "accountants": "accounting",
     "conveyancers": "conveyancers",
     "legal_professionals": "legal",
     "real_estate": "real_estate",
-    "precious_metals": "other",
+    "precious_metals": "dpms",
     "pubs_clubs": "other",
     # ── Custom-package industries (not primary target) ─────────────────────────
     "banking": "banking",
