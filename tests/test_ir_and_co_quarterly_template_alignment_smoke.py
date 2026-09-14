@@ -24,6 +24,20 @@ three report types.
 import uuid
 from datetime import date, timedelta
 
+from app.models.billing import AddonKey, AddonStatus, SubscriptionAddon
+
+
+def _grant_addon(db, org_id: str, addon_key: AddonKey) -> None:
+    db.add(
+        SubscriptionAddon(
+            addon_id=f"addon_test_{uuid.uuid4().hex[:10]}",
+            org_id=org_id,
+            addon_key=addon_key,
+            status=AddonStatus.active,
+        )
+    )
+    db.commit()
+
 
 def _create_review(client, headers, ref_suffix: str) -> str:
     resp = client.post(
@@ -44,8 +58,9 @@ def _create_review(client, headers, ref_suffix: str) -> str:
 
 
 def test_finding_category_accepts_sanctions_screening_and_austrac_enrolment(
-    client, compliance_headers
+    client, db, compliance_user, compliance_headers
 ):
+    _grant_addon(db, compliance_user.org_id, AddonKey.independent_review)
     review_id = _create_review(client, compliance_headers, "cat")
     for category in ("sanctions_screening", "austrac_enrolment"):
         resp = client.post(
@@ -66,6 +81,7 @@ def test_finding_category_accepts_sanctions_screening_and_austrac_enrolment(
 def test_independent_review_export_html_matches_template_sections(
     client, db, compliance_user, compliance_headers
 ):
+    _grant_addon(db, compliance_user.org_id, AddonKey.independent_review)
     review_id = _create_review(client, compliance_headers, "exp")
 
     resp = client.post(
@@ -134,7 +150,10 @@ def test_independent_review_export_html_matches_template_sections(
     assert "Director / Principal Acknowledgement" in body
 
 
-def test_co_quarterly_report_computes_template_sections(client, compliance_headers):
+def test_co_quarterly_report_computes_template_sections(
+    client, db, compliance_user, compliance_headers
+):
+    _grant_addon(db, compliance_user.org_id, AddonKey.quarterly_compliance_report)
     resp = client.post(
         "/api/v1/board-reports",
         json={

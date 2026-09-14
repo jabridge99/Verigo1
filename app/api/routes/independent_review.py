@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_roles
+from app.models.billing import AddonKey
 from app.models.independent_review import (
     ActionStatus,
     ActionType,
@@ -41,7 +42,7 @@ from app.models.independent_review import (
 )
 from app.models.organisation import Organisation
 from app.models.user import UserRole
-from app.services import audit_service
+from app.services import audit_service, billing_service
 
 log = logging.getLogger("tvg.independent_review")
 
@@ -382,6 +383,16 @@ def create_review(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(UserRole.compliance)),
 ):
+    if not billing_service.has_addon(
+        db, current_user.org_id or "", AddonKey.independent_review
+    ):
+        raise HTTPException(
+            402,
+            "Annual Independent Review requires the 'Annual Independent "
+            "Review' add-on. Purchase it via POST /billing/addons/"
+            "independent_review/purchase.",
+        )
+
     if (
         db.query(IndependentReview)
         .filter_by(org_id=current_user.org_id, review_ref=body.review_ref)

@@ -59,6 +59,7 @@ class InvoiceStatus(str, enum.Enum):
 class AddonKey(str, enum.Enum):
     enterprise_crypto_screening = "enterprise_crypto_screening"
     independent_review = "independent_review"
+    quarterly_compliance_report = "quarterly_compliance_report"
 
 
 class AddonStatus(str, enum.Enum):
@@ -67,12 +68,17 @@ class AddonStatus(str, enum.Enum):
 
 
 # ── Add-on catalogue ─────────────────────────────────────────────────────────
-# Two different kinds of add-on live here: enterprise_crypto_screening
+# Three different kinds of add-on live here: enterprise_crypto_screening
 # unlocks providers that are partially built (unverified response schema)
 # or sales-gated (no self-serve API access); independent_review is a human
 # service (an annual AML/CTF independent review, delivered by a dedicated
 # review team separate from the platform build team), not a software
 # feature -- unlocks_providers is deliberately empty for it.
+# quarterly_compliance_report gates the CO Quarterly Compliance Report
+# (BoardReportType.quarterly_compliance in board_reporting.py) -- a
+# software-generated deliverable, unlike independent_review's human
+# service, so it's priced and enforced the same way but doesn't carry the
+# "delivered by a dedicated review team" framing.
 
 ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
     AddonKey.enterprise_crypto_screening: {
@@ -94,6 +100,23 @@ ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
             "dedicated review team, separate from the platform's own "
             "compliance-build side -- satisfies the periodic independent "
             "review AUSTRAC guidance expects of reporting entities."
+        ),
+        "unlocks_providers": [],
+        "requires_plan": [
+            BillingPlan.starter,
+            BillingPlan.professional,
+            BillingPlan.enterprise,
+            BillingPlan.vvip,
+        ],
+    },
+    AddonKey.quarterly_compliance_report: {
+        "name": "Quarterly Compliance Report",
+        "monthly_aud": None,  # TBA -- priced separately, not yet set
+        "description": (
+            "AUSTRAC-facing Quarterly Compliance Report generation — SMR/TTR/"
+            "ECDD/sanctions detail with late-lodgement and terrorism-24h "
+            "tracking, open actions carried over from prior quarters, and "
+            "independent review status, board-ready in one export."
         ),
         "unlocks_providers": [],
         "requires_plan": [

@@ -27,6 +27,8 @@ GET /audit/?entity_type=...&entity_id=....
 import uuid
 from datetime import date, timedelta
 
+from app.models.billing import AddonKey, AddonStatus, SubscriptionAddon
+
 
 def _audit_actions(client, headers, entity_type: str, entity_id: str) -> set:
     resp = client.get(
@@ -129,6 +131,16 @@ def test_identity_score_decision_is_audited(client, compliance_headers):
 def test_independent_review_lifecycle_is_audited(
     client, db, compliance_user, compliance_headers
 ):
+    db.add(
+        SubscriptionAddon(
+            addon_id=f"addon_test_{uuid.uuid4().hex[:10]}",
+            org_id=compliance_user.org_id,
+            addon_key=AddonKey.independent_review,
+            status=AddonStatus.active,
+        )
+    )
+    db.commit()
+
     resp = client.post(
         "/api/v1/independent-reviews",
         json={

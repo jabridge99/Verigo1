@@ -593,24 +593,46 @@ function BillingContent() {
       return;
     }
     setCheckingOut(planKey);
+    // An org with an active/trialing/past-due subscription already has a
+    // real Stripe subscription — /checkout always creates a brand-new one,
+    // which would double-bill them. Route plan changes through
+    // /subscription/change-plan instead, which modifies the existing
+    // subscription in place.
+    const hasActiveSubscription =
+      sub && ["active", "trialing", "past_due"].includes(sub.status);
     try {
-      const res = await apiFetch(`${API}/api/v1/billing/checkout`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan: planKey,
-          interval,
-          success_url: `${APP_URL}/billing?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${APP_URL}/billing`,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      const { checkout_url } = await res.json();
-      window.location.href = checkout_url;
+      if (hasActiveSubscription) {
+        const res = await apiFetch(`${API}/api/v1/billing/subscription/change-plan`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: planKey, interval }),
+        });
+        if (!res.ok) throw new Error();
+        setSub(await res.json());
+      } else {
+        const res = await apiFetch(`${API}/api/v1/billing/checkout`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            plan: planKey,
+            interval,
+            success_url: `${APP_URL}/billing?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${APP_URL}/billing`,
+          }),
+        });
+        if (!res.ok) throw new Error();
+        const { checkout_url } = await res.json();
+        window.location.href = checkout_url;
+      }
     } catch {
-      // Mock mode — simulate redirect
-      alert(`[Demo] Would redirect to Stripe Checkout for ${planKey} ${interval} plan.`);
+      // Mock mode — simulate the outcome
+      alert(
+        hasActiveSubscription
+          ? `[Demo] Would change your plan to ${planKey} (${interval}).`
+          : `[Demo] Would redirect to Stripe Checkout for ${planKey} ${interval} plan.`
+      );
     } finally {
       setCheckingOut(null);
     }

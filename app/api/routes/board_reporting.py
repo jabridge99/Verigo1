@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_roles
+from app.models.billing import AddonKey
 from app.models.board_report import (
     BoardReport,
     BoardReportStatus,
@@ -33,7 +34,7 @@ from app.models.board_report import (
     ReportPeriod,
 )
 from app.models.user import UserRole
-from app.services import audit_service
+from app.services import audit_service, billing_service
 from app.services.board_reporting_service import generate_snapshot
 
 log = logging.getLogger("tvg.board_reporting")
@@ -207,6 +208,18 @@ def create_report(
     Create a new board report and auto-populate its snapshot from live compliance data.
     The snapshot is taken at creation time and stored immutably.
     """
+    if body.report_type == BoardReportType.quarterly_compliance and not (
+        billing_service.has_addon(
+            db, current_user.org_id or "", AddonKey.quarterly_compliance_report
+        )
+    ):
+        raise HTTPException(
+            402,
+            "The Quarterly Compliance Report requires the 'Quarterly "
+            "Compliance Report' add-on. Purchase it via POST /billing/"
+            "addons/quarterly_compliance_report/purchase.",
+        )
+
     if (
         db.query(BoardReport)
         .filter_by(org_id=current_user.org_id, report_ref=body.report_ref)

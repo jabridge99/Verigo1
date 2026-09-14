@@ -192,6 +192,30 @@ def get_system_role(db: Session, role_key: str) -> Optional[Role]:
     return db.query(Role).filter(Role.role_id == f"ROLE-SYS-{role_key.upper()}").first()
 
 
+def count_active_owners(db: Session, org_id: str) -> int:
+    """Count active memberships holding the "owner" role for this org.
+
+    Used to stop an org's last owner from being demoted, removed, or
+    suspended via the ordinary member-management endpoints — "admin"
+    members also hold every permission "owner" does (both are seeded with
+    the full "*" permission set), so without this check an admin could
+    strip the last owner and leave the org with no one who can transfer
+    ownership again through the product itself.
+    """
+    owner_role = get_system_role(db, "owner")
+    if not owner_role:
+        return 0
+    return (
+        db.query(OrganisationUser)
+        .filter(
+            OrganisationUser.organisation_id == org_id,
+            OrganisationUser.role_id == owner_role.id,
+            OrganisationUser.status == MembershipStatus.active,
+        )
+        .count()
+    )
+
+
 def attach_owner(db: Session, org: Organisation, owner: User) -> None:
     """
     Give `owner` an active "owner" membership on `org`, and — only if they

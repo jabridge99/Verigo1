@@ -64,6 +64,10 @@ class MemberUpdate(BaseModel):
     status: Optional[MembershipStatus] = None
 
 
+class TransferOwnershipRequest(BaseModel):
+    new_owner_user_id: str
+
+
 class MemberResponse(BaseModel):
     user_id: str
     email: str

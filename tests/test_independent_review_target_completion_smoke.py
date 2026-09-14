@@ -16,12 +16,23 @@ response dict, and fixed the scheduler check to use the real column name.
 
 from datetime import date, timedelta
 
+from app.models.billing import AddonKey, AddonStatus, SubscriptionAddon
 from app.models.independent_review import IndependentReview
 from app.services.notification_scheduler import check_independent_review_due
 from tests.conftest import _auth
 
 
-def test_create_review_persists_target_completion_date(client, compliance_user):
+def test_create_review_persists_target_completion_date(client, db, compliance_user):
+    db.add(
+        SubscriptionAddon(
+            addon_id="addon_test_ir_1",
+            org_id=compliance_user.org_id,
+            addon_key=AddonKey.independent_review,
+            status=AddonStatus.active,
+        )
+    )
+    db.commit()
+
     resp = client.post(
         "/api/v1/independent-reviews",
         headers=_auth(compliance_user),
@@ -39,7 +50,9 @@ def test_create_review_persists_target_completion_date(client, compliance_user):
     )
 
 
-def test_check_independent_review_due_does_not_swallow_a_due_review(db, compliance_user):
+def test_check_independent_review_due_does_not_swallow_a_due_review(
+    db, compliance_user
+):
     review = IndependentReview(
         org_id=compliance_user.org_id,
         created_by=compliance_user.id,

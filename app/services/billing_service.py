@@ -157,6 +157,26 @@ def get_stripe_price_id(
     return _ENV_PRICE_IDS.get((plan, interval), "")
 
 
+def _plan_interval_for_price(
+    db: Session, price_id: str
+) -> Optional[tuple[BillingPlan, BillingInterval]]:
+    """Reverse lookup of get_stripe_price_id() — resolve a Stripe Price ID
+    back to (plan, interval), so the webhook handler can sync a plan change
+    made directly in the Stripe Customer Portal (not just one made through
+    change_subscription_plan())."""
+    row = (
+        db.query(StripePriceMapping)
+        .filter(StripePriceMapping.stripe_price_id == price_id)
+        .first()
+    )
+    if row:
+        return row.plan, row.interval
+    for (plan, interval), pid in _ENV_PRICE_IDS.items():
+        if pid and pid == price_id:
+            return plan, interval
+    return None
+
+
 def list_stripe_price_mappings(db: Session) -> List[dict]:
     rows = {
         (r.plan, r.interval): r.stripe_price_id for r in db.query(StripePriceMapping)
@@ -720,6 +740,30 @@ def create_checkout_session(
     stripe = _stripe()
     price_id = get_stripe_price_id(db, req.plan, req.interval)
 
+    sub = get_subscription(db, industry_id, organisation_id)
+    if (
+        stripe
+        and sub
+        and sub.stripe_subscription_id
+        and sub.status
+        in (
+            SubscriptionStatus.active,
+            SubscriptionStatus.trialing,
+            SubscriptionStatus.past_due,
+        )
+    ):
+        # A Checkout Session in mode="subscription" always creates a NEW,
+        # separate Stripe subscription — it has no concept of "this org
+        # already has one, replace it." Letting an already-subscribed org
+        # through here would silently double-bill them (the old
+        # subscription is never cancelled). Existing subscribers changing
+        # plan must go through change_subscription_plan() instead, which
+        # modifies the existing Stripe subscription in place.
+        raise ValueError(
+            "This organisation already has an active subscription — use "
+            "change_subscription_plan() to change plan, not checkout."
+        )
+
     if not stripe or not price_id:
         # Mock mode — return placeholder
         return {
@@ -727,7 +771,6 @@ def create_checkout_session(
             "session_id": f"cs_mock_{uuid.uuid4().hex[:16]}",
         }
 
-    sub = get_subscription(db, industry_id, organisation_id)
     stripe_customer_id = sub.stripe_customer_id if sub else None
 
     metadata = {
@@ -760,6 +803,56 @@ def create_checkout_session(
         automatic_tax={"enabled": True},
     )
     return {"checkout_url": session.url, "session_id": session.id}
+
+
+def change_subscription_plan(
+    db: Session,
+    industry_id: str,
+    plan: BillingPlan,
+    interval: BillingInterval,
+    organisation_id: Optional[str] = None,
+) -> Subscription:
+    """
+    Upgrade or downgrade an org's EXISTING subscription in place, by
+    swapping the price on its current Stripe subscription — as opposed to
+    create_checkout_session(), which creates a brand-new Stripe
+    subscription every time and would double-bill an already-subscribed
+    org (see the guard at the top of that function).
+    """
+    sub = get_subscription(db, industry_id, organisation_id)
+    if not sub:
+        raise ValueError("No subscription found for this organisation")
+
+    stripe = _stripe()
+    price_id = get_stripe_price_id(db, plan, interval)
+
+    if not stripe or not sub.stripe_subscription_id or not price_id:
+        # Mock mode, or a free-trial org with no real Stripe subscription
+        # yet — just record the intended plan locally.
+        sub.plan = plan
+        sub.interval = interval
+        sub.base_price_aud = effective_price(sub, db)
+        db.commit()
+        db.refresh(sub)
+        return sub
+
+    stripe_sub = stripe.Subscription.retrieve(sub.stripe_subscription_id)
+    item_id = stripe_sub["items"]["data"][0]["id"]
+    stripe.Subscription.modify(
+        sub.stripe_subscription_id,
+        items=[{"id": item_id, "price": price_id}],
+        proration_behavior="create_prorations",
+    )
+    # The customer.subscription.updated webhook (_handle_subscription_updated)
+    # is the authoritative sync once Stripe processes the change, but update
+    # optimistically here too so the UI reflects the new plan immediately
+    # rather than waiting for the webhook round-trip.
+    sub.plan = plan
+    sub.interval = interval
+    sub.base_price_aud = effective_price(sub, db)
+    db.commit()
+    db.refresh(sub)
+    return sub
 
 
 def create_customer_portal(
@@ -867,6 +960,20 @@ def _handle_subscription_updated(db: Session, stripe_sub: dict):
     }
     sub.status = status_map.get(stripe_sub.get("status", ""), SubscriptionStatus.active)
     sub.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
+
+    # Sync plan/interval from the subscription's current price, so a plan
+    # change made directly in the Stripe Customer Portal (bypassing our own
+    # change_subscription_plan()) is still reflected here.
+    items = stripe_sub.get("items", {}).get("data", [])
+    if items:
+        price = items[0].get("price", {})
+        price_id = price.get("id")
+        if price_id:
+            resolved = _plan_interval_for_price(db, price_id)
+            if resolved:
+                sub.plan, sub.interval = resolved
+                sub.base_price_aud = effective_price(sub, db)
+
     if stripe_sub.get("current_period_start"):
         sub.current_period_start = datetime.fromtimestamp(
             stripe_sub["current_period_start"], tz=timezone.utc

@@ -36,6 +36,7 @@ from app.schemas.organisation import (
     OrganisationUpdate,
     PermissionResponse,
     RoleResponse,
+    TransferOwnershipRequest,
 )
 from app.schemas.risk_assessment import (
     AccountabilityAckRequest,
@@ -54,6 +55,7 @@ from app.services.org_service import (
     SYSTEM_ROLE_TEMPLATES,
     IndustryLockedError,
     add_user_to_organisation,
+    count_active_owners,
     create_organisation,
     get_membership,
     get_system_role,
@@ -616,12 +618,37 @@ def update_member(
     if not membership:
         raise HTTPException(404, "User is not a member of this organisation")
 
+    current_role = db.query(Role).filter(Role.id == membership.role_id).first()
+    is_sole_owner = (
+        current_role
+        and _role_key_for(current_role) == "owner"
+        and count_active_owners(db, org.id) <= 1
+    )
+
     if payload.role_key:
         role = get_system_role(db, payload.role_key)
         if not role:
             raise HTTPException(400, f"Unknown role: {payload.role_key}")
+        if is_sole_owner and _role_key_for(role) != "owner":
+            raise HTTPException(
+                409,
+                "Cannot change this member's role — they are the "
+                "organisation's only owner. Use POST "
+                f"/organisations/{org_id}/transfer-ownership to hand "
+                "ownership to another member first.",
+            )
         membership.role_id = role.id
-    if payload.status:
+    if payload.status and payload.status != MembershipStatus.active:
+        if is_sole_owner:
+            raise HTTPException(
+                409,
+                "Cannot suspend this member — they are the organisation's "
+                "only owner. Use POST "
+                f"/organisations/{org_id}/transfer-ownership to hand "
+                "ownership to another member first.",
+            )
+        membership.status = payload.status
+    elif payload.status:
         membership.status = payload.status
     db.commit()
     db.refresh(membership)
@@ -643,8 +670,79 @@ def remove_member(
     membership = get_membership(db, org.id, target.id)
     if not membership:
         raise HTTPException(404, "User is not a member of this organisation")
+
+    role = db.query(Role).filter(Role.id == membership.role_id).first()
+    if role and _role_key_for(role) == "owner" and count_active_owners(db, org.id) <= 1:
+        raise HTTPException(
+            409,
+            "Cannot remove this member — they are the organisation's "
+            "only owner. Use POST "
+            f"/organisations/{org_id}/transfer-ownership to hand "
+            "ownership to another member first.",
+        )
+
     db.delete(membership)
     db.commit()
+
+
+@router.post("/{org_id}/transfer-ownership", response_model=MemberResponse)
+def transfer_ownership(
+    org_id: str,
+    payload: TransferOwnershipRequest,
+    current_user: User = Depends(_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Hand "owner" to another active member of the organisation, demoting the
+    caller to "admin" (they keep full org access, just not the sole-owner
+    protections below). Only the CURRENT owner may initiate a transfer —
+    unlike ordinary role changes, this isn't available to "admin" members
+    even though they otherwise hold the same permissions, since ownership
+    transfer is a deliberate handover, not routine member management.
+    """
+    org = _get_org_or_404(db, org_id)
+    caller_membership = get_membership(db, org.id, current_user.id)
+    if not caller_membership:
+        raise HTTPException(403, "Not a member of this organisation")
+    caller_role = db.query(Role).filter(Role.id == caller_membership.role_id).first()
+    if not current_user.is_super_admin and (
+        not caller_role or _role_key_for(caller_role) != "owner"
+    ):
+        raise HTTPException(403, "Only the current owner can transfer ownership")
+
+    if payload.new_owner_user_id == current_user.id:
+        raise HTTPException(400, "You are already the owner")
+
+    new_owner_membership = get_membership(db, org.id, payload.new_owner_user_id)
+    if (
+        not new_owner_membership
+        or new_owner_membership.status != MembershipStatus.active
+    ):
+        raise HTTPException(
+            404, "New owner must be an active member of this organisation"
+        )
+
+    owner_role = get_system_role(db, "owner")
+    admin_role = get_system_role(db, "admin")
+    if not owner_role or not admin_role:
+        raise HTTPException(500, "Owner/admin system roles are not seeded")
+
+    new_owner_membership.role_id = owner_role.id
+    caller_membership.role_id = admin_role.id
+    db.commit()
+    db.refresh(new_owner_membership)
+
+    audit_service.log_action(
+        db,
+        action="organisation_ownership_transferred",
+        entity_type="organisation",
+        entity_id=org.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org.id,
+        notes=f"Ownership transferred to user_id={payload.new_owner_user_id}",
+    )
+    return _member_response(db, new_owner_membership)
 
 
 # ── Roles & permissions ─────────────────────────────────────────────────────
