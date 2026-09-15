@@ -32,6 +32,8 @@ pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 MAGIC_LINK_EXPIRY_MINUTES = 15
 ACCESS_TOKEN_EXPIRY_MINUTES = 60 * 4 if settings.is_production else 60 * 8
+FAILED_LOGIN_LOCK_THRESHOLD = 5
+FAILED_LOGIN_LOCK_MINUTES = 15
 
 
 # ── Password ──────────────────────────────────────────────────────────────────
@@ -183,11 +185,44 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
         # Perform dummy verify to prevent timing attacks
         pwd_ctx.dummy_verify()
         return None
+    # failed_login_count/locked_until existed on the model but nothing ever
+    # read or wrote them -- a distributed/low-and-slow credential-stuffing
+    # attack (a handful of attempts per account, from many IPs) was
+    # throttled by nothing at all, since RateLimitMiddleware's login limit
+    # is per-IP only. Lock the account itself once too many wrong passwords
+    # land in a row, independent of where they came from.
+    if user.locked_until and user.locked_until.replace(
+        tzinfo=timezone.utc
+    ) > datetime.now(timezone.utc):
+        pwd_ctx.dummy_verify()
+        return None
     if not verify_password(password, user.hashed_password):
+        user.failed_login_count = (user.failed_login_count or 0) + 1
+        if user.failed_login_count >= FAILED_LOGIN_LOCK_THRESHOLD:
+            user.locked_until = datetime.now(timezone.utc) + timedelta(
+                minutes=FAILED_LOGIN_LOCK_MINUTES
+            )
+        db.commit()
         return None
     if user.status != UserStatus.active:
         return None
+    if user.failed_login_count or user.locked_until:
+        user.failed_login_count = 0
+        user.locked_until = None
+        db.commit()
     return user
+
+
+def account_lock_remaining(user: User) -> Optional[int]:
+    """Minutes left on an active lockout, or None if not locked."""
+    if not user.locked_until:
+        return None
+    remaining = (
+        user.locked_until.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
+    ).total_seconds()
+    if remaining <= 0:
+        return None
+    return max(1, int(remaining // 60) + 1)
 
 
 def build_token_response(user: User, mfa_pending: bool = False) -> dict:

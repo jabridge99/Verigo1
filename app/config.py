@@ -218,9 +218,16 @@ class Settings(BaseSettings):
                     f"{self.environment} — wildcard '*' combined with "
                     f"allow_credentials is unsafe"
                 )
-        if self.environment == "production":
+            # Same "not local dev" reasoning as the CORS check above — this
+            # previously only fired for environment=="production", so a
+            # staging deploy left at the default secret would sign valid
+            # auth tokens for anyone who reads the (public) source default.
             if self.secret_key == "change-me-in-production":
-                raise ValueError("SECRET_KEY must be changed in production")
+                raise ValueError(
+                    f"SECRET_KEY must be changed in {self.environment} — the "
+                    f"insecure default lets anyone forge valid auth tokens"
+                )
+        if self.environment == "production":
             if self.database_url.startswith("sqlite"):
                 raise ValueError(
                     "SQLite is not supported in production — set DATABASE_URL to a "

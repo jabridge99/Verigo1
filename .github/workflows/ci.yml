@@ -59,6 +59,31 @@ jobs:
           pip install mypy types-python-jose types-python-dateutil
           mypy app/ --ignore-missing-imports --no-strict-optional
 
+      - name: Dependency vulnerability scan (pip-audit)
+        if: matrix.python-version == '3.11'
+        run: |
+          pip install pip-audit
+          # Three known, currently-unfixable-without-a-larger-change findings
+          # are ignored here rather than silently allowed to fail CI forever —
+          # each is tracked in PARKING_LOT.md with the reason it isn't fixed
+          # yet:
+          #  - PYSEC-2026-1325 (ecdsa): transitive python-jose dependency,
+          #    never exercised (this app signs JWTs with HS256, not ECDSA).
+          #  - PYSEC-2026-1845 (pytest): dev-only tool, no production
+          #    exposure; the fix needs a pytest 9 + pytest-asyncio 1.x major
+          #    bump across the whole test suite.
+          #  - starlette (PYSEC-2026-1943/1941/161/2281/2280/249/248): fixing
+          #    requires a fastapi major bump, which itself requires a
+          #    pydantic 2.7 -> 2.x-latest bump — real regression risk across
+          #    every route/schema, deserves its own dedicated pass.
+          pip-audit -r requirements.txt \
+            --ignore-vuln PYSEC-2026-1325 \
+            --ignore-vuln PYSEC-2026-1845 \
+            --ignore-vuln PYSEC-2026-1943 --ignore-vuln PYSEC-2026-1941 \
+            --ignore-vuln PYSEC-2026-161 --ignore-vuln PYSEC-2026-2281 \
+            --ignore-vuln PYSEC-2026-2280 --ignore-vuln PYSEC-2026-249 \
+            --ignore-vuln PYSEC-2026-248
+
       - name: Run tests
         run: |
           pip install pytest-cov
@@ -96,6 +121,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Dependency vulnerability scan (npm audit)
+        if: matrix.node-version == '20'
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Lint
         run: npm run lint

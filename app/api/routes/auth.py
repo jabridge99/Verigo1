@@ -42,6 +42,7 @@ from app.schemas.user import (
 from app.services import audit_service
 from app.services.auth_service import (
     TOKEN_BLACKLIST,
+    account_lock_remaining,
     authenticate_user,
     build_token_response,
     clear_csrf_cookie,
@@ -182,6 +183,11 @@ def register(
 ):
     if get_user_by_email(db, payload.email):
         raise HTTPException(409, "Email already registered")
+    # /me/change-password and /password-reset/confirm both enforce a
+    # 12-char minimum; registration never did, so a self-registered account
+    # could set a 1-character password unless caught here too.
+    if len(payload.password) < 12:
+        raise HTTPException(400, "Password must be at least 12 characters")
     # Public, unauthenticated endpoint — payload.org_id / payload.role must
     # never be trusted. Without an admin/invite check, honoring a caller-
     # supplied org_id+role would let anyone register as "admin" inside an
@@ -253,6 +259,16 @@ def login(
     db: Session = Depends(get_db),
 ):
     ip = _client_ip(request)
+    existing = get_user_by_email(db, payload.email)
+    lock_minutes = account_lock_remaining(existing) if existing else None
+    if lock_minutes is not None:
+        record_security_event(db, "login_blocked_locked", existing.id, ip=ip)
+        log.warning("Login blocked (locked account): %s from %s", payload.email, ip)
+        raise HTTPException(
+            423,
+            f"Account temporarily locked after repeated failed attempts. "
+            f"Try again in {lock_minutes} minute(s).",
+        )
     user = authenticate_user(db, payload.email, payload.password)
     if not user:
         record_security_event(
