@@ -141,9 +141,24 @@ class Customer(Base):
     crs_applicable = Column(Boolean, default=False)
 
     # ── Business / KYB ───────────────────────────────────────────────────────
-    # Stored in BusinessDetail child record; FK set after flush
+    # Stored in BusinessDetail child record; FK set after flush.
+    # use_alter=True: customer_business_details.customer_id FKs back to
+    # customers.id, making this a genuine circular FK pair. SQLAlchemy's
+    # own create_all()/drop_all() can't topologically sort a real cycle
+    # without one side marked use_alter (deferred to an ALTER TABLE
+    # statement) -- Alembic's migration chain already applies fine against
+    # Postgres since each ALTER TABLE ADD CONSTRAINT there is independent,
+    # but create_all()/drop_all() (what the test suite uses) previously hit
+    # a CircularDependencyError the moment it ran against real Postgres FK
+    # enforcement; SQLite's DDL is loose enough to never surface it.
     business_detail_id = Column(
-        String, ForeignKey("customer_business_details.id"), nullable=True
+        String,
+        ForeignKey(
+            "customer_business_details.id",
+            use_alter=True,
+            name="fk_customers_business_detail_id",
+        ),
+        nullable=True,
     )
 
     # ── Contact ──────────────────────────────────────────────────────────────
