@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     # so rotating the JWT secret doesn't strand stored credentials.
     storage_encryption_key: str = ""
 
+    # ── KYC identity-number encryption (P51) ────────────────────────────────
+    # Encrypts Customer/BeneficialOwner tax_identification_number/id_number
+    # at rest. Deliberately a SEPARATE key from storage_encryption_key --
+    # KYC identity numbers are a more sensitive data class than connector
+    # credentials and should be rotatable independently. Falls back to a key
+    # derived from secret_key if unset, same dev-convenience pattern as
+    # storage_encryption_key; set this explicitly in production.
+    kyc_encryption_key: str = ""
+
     # ── Email ─────────────────────────────────────────────────────────────────
     # console (dev logging) | smtp | resend
     email_backend: str = "console"

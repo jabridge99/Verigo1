@@ -28,6 +28,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+from app.services.crypto import EncryptedKycString
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -136,7 +137,10 @@ class Customer(Base):
     employer_name = Column(String(255))
     employer_address = Column(String(500))
     tax_residency_country = Column(String(2))
-    tax_identification_number = Column(String(50))  # TFN/TIN
+    # P51: encrypted at rest via app.services.crypto.EncryptedKycString --
+    # 255, not 50, to hold the Fernet-encrypted token (~165 chars incl.
+    # the "kyc:" prefix), not just the raw digits.
+    tax_identification_number = Column(EncryptedKycString(255))  # TFN/TIN
     fatca_applicable = Column(Boolean, default=False)
     crs_applicable = Column(Boolean, default=False)
 
@@ -420,7 +424,8 @@ class BeneficialOwner(Base):
     country_of_residence = Column(String(2))
     country_of_birth = Column(String(2))
     tax_residency_country = Column(String(2))
-    tax_identification_number = Column(String(50))
+    # P51: encrypted at rest, same as Customer.tax_identification_number above.
+    tax_identification_number = Column(EncryptedKycString(255))
 
     address_line1 = Column(String(255))
     address_line2 = Column(String(255))
@@ -430,7 +435,8 @@ class BeneficialOwner(Base):
     country = Column(String(2), default="AU")
 
     id_type = Column(String(50))
-    id_number = Column(String(50))
+    # P51: encrypted at rest, same as tax_identification_number above.
+    id_number = Column(EncryptedKycString(255))
     id_issuing_country = Column(String(2))
     id_expiry = Column(Date)
 

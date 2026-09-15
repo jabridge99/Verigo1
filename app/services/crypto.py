@@ -1,28 +1,34 @@
 """
-Field-level encryption for sensitive values stored at rest (e.g. tenant
-storage credentials). Uses Fernet (AES-128-CBC + HMAC) keyed off
-STORAGE_ENCRYPTION_KEY, falling back to a key derived from SECRET_KEY so
-encryption still works out of the box in dev — set STORAGE_ENCRYPTION_KEY
-explicitly in production so credentials survive a JWT secret rotation.
+Field-level encryption for sensitive values stored at rest. Uses Fernet
+(AES-128-CBC + HMAC), each keyed off its own dedicated setting so different
+sensitivity classes can be rotated independently:
+  - storage_encryption_key -> tenant storage/connector credentials
+  - kyc_encryption_key     -> Customer/BeneficialOwner identity numbers (P51)
+Each falls back to a key derived from SECRET_KEY when unset, so encryption
+still works out of the box in dev — set the dedicated key explicitly in
+production so a JWT secret rotation doesn't strand encrypted data.
 """
 
 import base64
 import hashlib
 
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import String
+from sqlalchemy.types import TypeDecorator
 
 from app.config import settings
 
 ENC_PREFIX = "enc:"
+KYC_ENC_PREFIX = "kyc:"
 
 
-def _derive_key() -> bytes:
-    raw = settings.storage_encryption_key or settings.secret_key
+def _derive_key(raw: str) -> bytes:
     digest = hashlib.sha256(raw.encode()).digest()
     return base64.urlsafe_b64encode(digest)
 
 
-_fernet = Fernet(_derive_key())
+_fernet = Fernet(_derive_key(settings.storage_encryption_key or settings.secret_key))
+_kyc_fernet = Fernet(_derive_key(settings.kyc_encryption_key or settings.secret_key))
 
 
 def encrypt_secret(plain: str) -> str:
@@ -55,3 +61,52 @@ def encrypt_credentials(data: dict) -> dict:
 
 def decrypt_credentials(data: dict) -> dict:
     return {k: decrypt_secret(v) for k, v in (data or {}).items()}
+
+
+def encrypt_kyc_field(plain: str) -> str:
+    """Encrypt a KYC identity-number field (tax_identification_number, id_number)."""
+    if plain is None or plain == "":
+        return plain
+    token = _kyc_fernet.encrypt(plain.encode()).decode()
+    return f"{KYC_ENC_PREFIX}{token}"
+
+
+def decrypt_kyc_field(value: str) -> str:
+    if value is None or not value.startswith(KYC_ENC_PREFIX):
+        return value
+    token = value[len(KYC_ENC_PREFIX) :]
+    try:
+        return _kyc_fernet.decrypt(token.encode()).decode()
+    except InvalidToken:
+        raise ValueError(
+            "Stored KYC field could not be decrypted — encryption key may have changed"
+        )
+
+
+def is_kyc_encrypted(value) -> bool:
+    return isinstance(value, str) and value.startswith(KYC_ENC_PREFIX)
+
+
+class EncryptedKycString(TypeDecorator):
+    """
+    A String column that transparently encrypts on write and decrypts on
+    read via encrypt_kyc_field()/decrypt_kyc_field() -- applied at the ORM
+    layer (not at individual call sites) so every write path is covered
+    automatically, including bulk dict-spread construction (e.g.
+    `BeneficialOwner(**payload.model_dump())`), not just the call sites
+    that were found by searching for the field name.
+
+    Fernet ciphertext is non-deterministic (embeds a random IV + timestamp),
+    so this column can never be used in an equality filter/WHERE clause --
+    confirmed no code in this app does that for the identity-number fields
+    this is applied to before adopting this type.
+    """
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return encrypt_kyc_field(value)
+
+    def process_result_value(self, value, dialect):
+        return decrypt_kyc_field(value)

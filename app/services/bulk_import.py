@@ -212,7 +212,7 @@ IMPORT_FIELDS = [
         False,
         "123456789",
         "",
-        "Individual TFN. Note: do not store TFN in plain text in production systems.",
+        "Individual TFN. Encrypted at rest (P51).",
     ),
     (
         "abn",
