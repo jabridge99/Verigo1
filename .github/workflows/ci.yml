@@ -63,26 +63,19 @@ jobs:
         if: matrix.python-version == '3.11'
         run: |
           pip install pip-audit
-          # Three known, currently-unfixable-without-a-larger-change findings
+          # Two known, currently-unfixable-without-a-larger-change findings
           # are ignored here rather than silently allowed to fail CI forever —
           # each is tracked in PARKING_LOT.md with the reason it isn't fixed
-          # yet:
+          # yet. (starlette's 7 CVEs, previously ignored here too, are fixed
+          # as of the fastapi 0.111->0.141.1 / pydantic 2.7->2.13 bump — P48.)
           #  - PYSEC-2026-1325 (ecdsa): transitive python-jose dependency,
           #    never exercised (this app signs JWTs with HS256, not ECDSA).
           #  - PYSEC-2026-1845 (pytest): dev-only tool, no production
           #    exposure; the fix needs a pytest 9 + pytest-asyncio 1.x major
           #    bump across the whole test suite.
-          #  - starlette (PYSEC-2026-1943/1941/161/2281/2280/249/248): fixing
-          #    requires a fastapi major bump, which itself requires a
-          #    pydantic 2.7 -> 2.x-latest bump — real regression risk across
-          #    every route/schema, deserves its own dedicated pass.
           pip-audit -r requirements.txt \
             --ignore-vuln PYSEC-2026-1325 \
-            --ignore-vuln PYSEC-2026-1845 \
-            --ignore-vuln PYSEC-2026-1943 --ignore-vuln PYSEC-2026-1941 \
-            --ignore-vuln PYSEC-2026-161 --ignore-vuln PYSEC-2026-2281 \
-            --ignore-vuln PYSEC-2026-2280 --ignore-vuln PYSEC-2026-249 \
-            --ignore-vuln PYSEC-2026-248
+            --ignore-vuln PYSEC-2026-1845
 
       - name: Run tests
         run: |
