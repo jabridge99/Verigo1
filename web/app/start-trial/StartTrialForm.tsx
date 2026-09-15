@@ -1,12 +1,41 @@
 'use client'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CheckCircle, ArrowRight, Shield, Phone } from 'lucide-react'
+import { CheckCircle, ArrowRight, Shield, Phone, Loader2, AlertCircle } from 'lucide-react'
 import { industries, CUSTOM_PACKAGE_INDUSTRIES, type IndustryId } from '@/lib/industries'
+import { registerAccount } from '@/lib/signup'
 
 export default function StartTrialForm() {
+  const router = useRouter()
   const [selectedIndustry, setSelectedIndustry] = useState('')
   const needsCustomPackage = CUSTOM_PACKAGE_INDUSTRIES.has(selectedIndustry as IndustryId)
+
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [companyName, setCompanyName] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const result = await registerAccount({
+        email,
+        password,
+        full_name: `${firstName} ${lastName}`.trim(),
+        organisation_name: companyName || undefined,
+      })
+      router.push(`/onboarding-setup?org=${result.org_id}`)
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to create account')
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="grid md:grid-cols-2 gap-16 items-start">
@@ -44,24 +73,24 @@ export default function StartTrialForm() {
       {/* Right column — form */}
       <div className="pub-card">
         <h2 className="text-xl font-bold text-slate-900 mb-6">Create your account</h2>
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">First name</label>
-              <input type="text" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Jane" />
+              <input type="text" required value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Jane" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Last name</label>
-              <input type="text" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Smith" />
+              <input type="text" required value={lastName} onChange={e => setLastName(e.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Smith" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Work email</label>
-            <input type="email" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="jane@company.com.au" />
+            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="jane@company.com.au" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Company name</label>
-            <input type="text" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Acme Pty Ltd" />
+            <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Acme Pty Ltd" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Industry</label>
@@ -93,10 +122,16 @@ export default function StartTrialForm() {
             <>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
-                <input type="password" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Minimum 12 characters" />
+                <input type="password" required minLength={12} value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Minimum 12 characters" />
               </div>
-              <button type="submit" className="pub-btn-primary w-full justify-center py-3">
-                Create Account & Start Trial <ArrowRight className="w-4 h-4" />
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                  <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
+              <button type="submit" disabled={loading} className="pub-btn-primary w-full justify-center py-3 disabled:opacity-50">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create Account & Start Trial <ArrowRight className="w-4 h-4" /></>}
               </button>
             </>
           )}

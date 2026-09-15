@@ -52,7 +52,9 @@ from app.schemas.transaction import (
     TransactionUpdate,
 )
 from app.schemas.transaction_receipt import TransactionReceipt, build_receipt
+from app.services.audit_service import log_action
 from app.services.monitoring_engine import run_monitoring
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 from app.services.risk_matrix_service import (
     compute_final_approval_score,
     compute_question_score,
@@ -81,7 +83,7 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    """Record a new transaction. Risk scoring and monitoring are handled separately."""
+    """Record a new transaction. Automatically runs the monitoring engine against it."""
     org_id = org_id_for(current_user)
 
     # Verify customer belongs to org
@@ -146,6 +148,31 @@ def create_transaction(
         triggered_by=current_user.id,
     )
 
+    # Real monitoring pipeline (MonitoringRule + behaviour-signal scoring --
+    # distinct from the automation rules above). Was never actually called
+    # here despite this route's own /run-monitoring sibling endpoint
+    # docstring claiming it happens "automatically...in production" --
+    # every transaction sat unscored unless something separately called
+    # that endpoint afterward.
+    run_monitoring(txn, customer, db)
+    db.commit()
+
+    log_action(
+        db,
+        action="transaction_recorded",
+        entity_type="transaction",
+        entity_id=txn.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={
+            "transaction_ref": txn.transaction_ref,
+            "amount": str(txn.amount),
+            "currency": txn.currency,
+            "customer_id": txn.customer_id,
+        },
+    )
+
     return txn
 
 
@@ -198,7 +225,8 @@ def update_transaction(
     current_user: User = Depends(require_compliance_or_above),
 ):
     """Update non-risk fields. Risk fields are engine-only and cannot be patched."""
-    txn = _get_transaction_or_404(txn_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    txn = _get_transaction_or_404(txn_id, org_id, db)
 
     if txn.status == TransactionStatus.completed:
         raise HTTPException(
@@ -206,12 +234,23 @@ def update_transaction(
             detail="Completed transactions are immutable.",
         )
 
-    for k, v in payload.model_dump(exclude_none=True).items():
+    changed_fields = payload.model_dump(exclude_none=True)
+    for k, v in changed_fields.items():
         setattr(txn, k, v)
 
     txn.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(txn)
+    log_action(
+        db,
+        action="transaction_updated",
+        entity_type="transaction",
+        entity_id=txn.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={k: str(v) for k, v in changed_fields.items()},
+    )
     return txn
 
 
@@ -223,8 +262,9 @@ def run_monitoring_on_transaction(
 ):
     """
     Manually trigger the monitoring engine against a specific transaction.
-    This is automatically triggered on transaction creation in production;
-    this endpoint supports re-evaluation and backfill use cases.
+    This runs automatically on transaction creation (POST /transactions);
+    this endpoint supports re-evaluation and backfill use cases (e.g. after
+    a rule is edited, or for transactions imported before this existed).
 
     DISCLAIMER: Alerts generated are indicators for human review only.
     """
@@ -380,7 +420,7 @@ def get_transaction_summary(
     )
 
     amount_aud = txn.amount_aud or txn.amount
-    TTR_THRESHOLD = 10_000.0
+    TTR_THRESHOLD = TTR_CTR_THRESHOLD_AUD
 
     return {
         "transaction_id": txn.id,

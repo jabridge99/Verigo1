@@ -10,6 +10,7 @@ to support integrity verification.
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -24,7 +25,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -69,10 +70,10 @@ class IFTIReceipt(Base):
     # Transfer core
     transfer_date = Column(Date, nullable=False)
     direction = Column(String(10), nullable=False)  # incoming | outgoing
-    total_amount = Column(Float, nullable=False)
+    total_amount: Mapped[float] = Column(Float, nullable=False)
     currency = Column(String(3), nullable=False)
-    amount_aud = Column(Float)
-    exchange_rate = Column(Float)
+    amount_aud: Mapped[Optional[float]] = Column(Float)
+    exchange_rate: Mapped[Optional[float]] = Column(Float)
     transfer_reference = Column(String(100))
     transfer_type = Column(String(50), default="Money")
 

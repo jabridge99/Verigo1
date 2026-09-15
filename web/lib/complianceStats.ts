@@ -3,6 +3,7 @@
 // Backed by the existing GET /api/v1/dashboard/global aggregate endpoint.
 
 import { useEffect, useState } from "react"
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
@@ -24,7 +25,7 @@ export function useComplianceStats(): ComplianceStats {
   const [stats, setStats] = useState<ComplianceStats>(DEMO_COMPLIANCE_STATS)
 
   useEffect(() => {
-    fetch(`${API}/api/v1/dashboard/global`, { credentials: "include" })
+    apiFetch(`${API}/api/v1/dashboard/global`, { credentials: "include" })
       .then(res => (res.ok ? res.json() : Promise.reject()))
       .then(d => {
         setStats({

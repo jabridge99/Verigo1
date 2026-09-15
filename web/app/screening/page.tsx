@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Zap, Shield, User, Search, Building2, MapPin, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -44,7 +45,7 @@ export default function ScreeningHubPage() {
     setError(null);
     setResult(null);
     try {
-      const res = await fetch(`${API}/api/v1/screening/quick-screen`, {
+      const res = await apiFetch(`${API}/api/v1/screening/quick-screen`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

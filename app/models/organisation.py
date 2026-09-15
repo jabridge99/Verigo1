@@ -14,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -33,7 +33,7 @@ class IndustryType(str, enum.Enum):
     vasp = "vasp"  # Virtual asset service providers
     bullion_dealers = "bullion_dealers"  # Bullion dealers
 
-    # ── Tranche 2 (commenced 31 March 2026) ───────────────────────────────────
+    # ── Tranche 2 (commenced 1 July 2026; AUSTRAC enrolment deadline 31 March 2026) ──
     accountants = "accountants"  # Accountants
     conveyancers = "conveyancers"  # Conveyancers
     legal_professionals = "legal_professionals"  # Legal professionals
@@ -177,7 +177,9 @@ class Role(Base):
     is_system = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    permissions = relationship("Permission", secondary=role_permissions)
+    permissions: Mapped[list["Permission"]] = relationship(
+        "Permission", secondary=role_permissions
+    )
 
 
 class OrganisationUser(Base):

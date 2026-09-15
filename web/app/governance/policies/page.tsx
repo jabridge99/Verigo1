@@ -6,6 +6,7 @@ import {
   History, ShieldCheck, ArrowRight, Archive,
 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -118,7 +119,7 @@ export default function PoliciesPage() {
 
   const fetchPolicies = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/governance/policies`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setPolicies(d); }
     } catch {}
   }, []);
@@ -127,7 +128,7 @@ export default function PoliciesPage() {
 
   const fetchVersions = async (policyId: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies/${policyId}/versions`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/governance/policies/${policyId}/versions`, { credentials: "include" });
       if (res.ok) setVersions(await res.json());
       else setVersions([]);
     } catch { setVersions([]); }
@@ -137,7 +138,7 @@ export default function PoliciesPage() {
 
   const runWorkflowAction = async (policy: Policy, action: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies/${policy.id}/workflow`, {
+      const res = await apiFetch(`${API}/api/v1/governance/policies/${policy.id}/workflow`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
@@ -426,7 +427,7 @@ function CreatePolicyForm({ onCreated }: { onCreated: (p: Policy) => void }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies`, {
+      const res = await apiFetch(`${API}/api/v1/governance/policies`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,

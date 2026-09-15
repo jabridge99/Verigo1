@@ -110,7 +110,8 @@ class RegulatoryRecommendation(Base):
     # Classification
     recommendation_type = Column(Enum(RecommendationType), nullable=False, index=True)
     priority = Column(
-        Enum(RecommendationPriority), default=RecommendationPriority.normal
+        Enum(RecommendationPriority, name="regulatory_recommendation_priority"),
+        default=RecommendationPriority.normal,
     )
     source = Column(
         Enum(RecommendationSource), default=RecommendationSource.monitoring_engine
@@ -129,7 +130,7 @@ class RegulatoryRecommendation(Base):
 
     # Workflow
     status = Column(
-        Enum(RecommendationStatus),
+        Enum(RecommendationStatus, name="regulatory_recommendation_status"),
         default=RecommendationStatus.pending,
         nullable=False,
         index=True,

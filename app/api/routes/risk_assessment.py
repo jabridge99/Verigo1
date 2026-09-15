@@ -20,7 +20,7 @@ Governance disclaimer is displayed on every response and acknowledged on approva
 
 import logging
 from datetime import date, datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -47,9 +47,11 @@ from app.models.risk_engine import (
     RiskFactorScore,
     RiskFramework,
     RiskMitigation,
+    RiskRating,
     RiskScoreHistory,
 )
 from app.models.user import User
+from app.services import audit_service
 from app.services.control_effectiveness import governance_rating_to_score
 from app.services.risk_engine import (
     inherent_risk,
@@ -76,6 +78,35 @@ def _get_framework(org_id: str, db: Session) -> RiskFramework:
     if not fw:
         raise HTTPException(404, "Risk framework not found — complete onboarding first")
     return fw
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    notes: str = None,
+) -> None:
+    """
+    create_assessment()/submit_assessment()/approve_assessment() below
+    already write directly to AuditLog (app.models.audit_log, merged into
+    GET /audit/ -- see app/api/routes/audit.py), but framework configuration
+    (category weights, custom factors), factor scoring, and the mitigation
+    library had no audit coverage of any kind. AuditEventType has no values
+    for those, so this uses the free-text audit_service.log_action() path
+    (a second, also-merged table) instead of stretching that enum.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        notes=notes,
+    )
 
 
 def _get_run(run_id: str, org_id: str, db: Session) -> RiskAssessmentRun:
@@ -264,6 +295,7 @@ def update_category_weights(
     # Normalise
     fw.category_weights = {k: round(v / total, 4) for k, v in weights.items()}
     db.commit()
+    _log(db, current_user, "risk_framework", fw.id, "risk_category_weights_updated")
     return {"category_weights": fw.category_weights}
 
 
@@ -351,6 +383,14 @@ def add_custom_factor(
     )
     db.add(factor)
     db.commit()
+    # _log() below issues its own db.commit(), which (default
+    # expire_on_commit=True) expires every attribute on `factor` again.
+    # Returning an ORM object with no response_model serialises via a
+    # vars()-based fallback that doesn't trigger SQLAlchemy's normal
+    # lazy-reload-on-access, so it silently produced `{}` unless refresh()
+    # is the very last DB call before return -- see risk_assessment.py's
+    # create_mitigation_library_item() history for the same bug.
+    _log(db, current_user, "risk_factor", factor.id, "risk_factor_added", notes=name)
     db.refresh(factor)
     return factor
 
@@ -526,7 +566,7 @@ def list_factor_scores(
         q = q.filter(RiskFactorScore.factor_id.in_(valid_factor_ids))
 
     if unscored_only:
-        q = q.filter(RiskFactorScore.likelihood == None)
+        q = q.filter(RiskFactorScore.likelihood.is_(None))
 
     scores = q.all()
     result = []
@@ -611,7 +651,7 @@ def score_factor(
         raise HTTPException(404, "Factor score record not found")
 
     # Capture previous for history
-    prev = {
+    prev: dict[str, Any] = {
         "likelihood": fs.likelihood,
         "consequence": fs.consequence,
         "control_effectiveness": fs.control_effectiveness,
@@ -647,12 +687,12 @@ def score_factor(
     if fs.likelihood and fs.consequence:
         inh = inherent_risk(fs.likelihood, fs.consequence)
         fs.inherent_risk_score = inh
-        fs.inherent_rating = risk_rating(inh)
+        fs.inherent_rating = RiskRating(risk_rating(inh))
 
         if fs.control_effectiveness:
             res = residual_risk(inh, fs.control_effectiveness)
             fs.residual_risk_score = res
-            fs.residual_rating = risk_rating(res)
+            fs.residual_rating = RiskRating(risk_rating(res))
 
     # Handle override
     if override_residual_score is not None:
@@ -663,7 +703,7 @@ def score_factor(
         fs.score_override = True
         fs.override_residual_score = override_residual_score
         fs.override_justification = override_justification
-        fs.residual_rating = risk_rating(override_residual_score)
+        fs.residual_rating = RiskRating(risk_rating(override_residual_score))
 
     fs.scored_by = current_user.id
     fs.scored_at = datetime.now(timezone.utc)
@@ -702,6 +742,14 @@ def score_factor(
 
     db.commit()
     db.refresh(fs)
+    _log(
+        db,
+        current_user,
+        "risk_factor_score",
+        fs.id,
+        "risk_factor_scored",
+        notes=comments,
+    )
     return {
         "factor_score_id": fs.id,
         "likelihood": fs.likelihood,
@@ -734,8 +782,8 @@ def recalculate_scores(
     run.category_scores = scores["category_scores"]
     run.overall_inherent_risk_score = scores["overall_inherent"]
     run.overall_residual_risk_score = scores["overall_residual"]
-    run.overall_inherent_rating = risk_rating(scores["overall_inherent"])
-    run.overall_residual_rating = risk_rating(scores["overall_residual"])
+    run.overall_inherent_rating = RiskRating(risk_rating(scores["overall_inherent"]))
+    run.overall_residual_rating = RiskRating(risk_rating(scores["overall_residual"]))
 
     db.commit()
     return {
@@ -775,6 +823,13 @@ def update_narrative(
     if action_items is not None:
         run.action_items = action_items
     db.commit()
+    _log(
+        db,
+        current_user,
+        "risk_assessment_run",
+        run_id,
+        "risk_assessment_narrative_updated",
+    )
     return {"status": "updated"}
 
 
@@ -810,6 +865,16 @@ def add_mitigation(
     )
     db.add(mit)
     db.commit()
+    # refresh() must be the last DB call before return -- see
+    # add_custom_factor()'s comment above for why.
+    _log(
+        db,
+        current_user,
+        "risk_mitigation",
+        mit.id,
+        "risk_mitigation_added",
+        notes=mitigation_action,
+    )
     db.refresh(mit)
     return mit
 
@@ -851,6 +916,16 @@ def update_mitigation(
     if status == MitigationStatus.completed:
         mit.completed_at = datetime.now(timezone.utc)
     db.commit()
+    # refresh() must be the last DB call before return -- see
+    # add_custom_factor()'s comment above for why.
+    _log(
+        db,
+        current_user,
+        "risk_mitigation",
+        mit.id,
+        "risk_mitigation_updated",
+        notes=completion_notes,
+    )
     db.refresh(mit)
     return mit
 
@@ -902,8 +977,8 @@ def submit_assessment(
     run.category_scores = scores["category_scores"]
     run.overall_inherent_risk_score = scores["overall_inherent"]
     run.overall_residual_risk_score = scores["overall_residual"]
-    run.overall_inherent_rating = risk_rating(scores["overall_inherent"])
-    run.overall_residual_rating = risk_rating(scores["overall_residual"])
+    run.overall_inherent_rating = RiskRating(risk_rating(scores["overall_inherent"]))
+    run.overall_residual_rating = RiskRating(risk_rating(scores["overall_residual"]))
     run.status = AssessmentStatus.completed
     run.reviewed_by = current_user.id
 
@@ -1080,6 +1155,16 @@ def create_mitigation_library_item(
     )
     db.add(item)
     db.commit()
+    # refresh() must be the last DB call before return -- see
+    # add_custom_factor()'s comment above for why.
+    _log(
+        db,
+        current_user,
+        "mitigation_library_item",
+        item.id,
+        "mitigation_library_item_created",
+        notes=name,
+    )
     db.refresh(item)
     return item
 
@@ -1115,5 +1200,14 @@ def update_mitigation_library_item(
     if is_active is not None:
         item.is_active = is_active
     db.commit()
+    # refresh() must be the last DB call before return -- see
+    # add_custom_factor()'s comment above for why.
+    _log(
+        db,
+        current_user,
+        "mitigation_library_item",
+        item.id,
+        "mitigation_library_item_updated",
+    )
     db.refresh(item)
     return item

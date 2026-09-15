@@ -6,6 +6,7 @@ import {
   BarChart3, Users, BookOpen, RotateCcw, FileBadge, ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -101,9 +102,9 @@ export default function TrainingPage() {
   const fetchAll = useCallback(async () => {
     try {
       const [cRes, rRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/governance/training/courses`, { credentials: "include" }),
-        fetch(`${API}/api/v1/governance/training/records`, { credentials: "include" }),
-        fetch(`${API}/api/v1/governance/training/dashboard`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/governance/training/courses`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/governance/training/records`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/governance/training/dashboard`, { credentials: "include" }),
       ]);
       if (cRes.ok) { const d = await cRes.json(); if (d.courses?.length) setCourses(d.courses); }
       if (rRes.ok) { const d = await rRes.json(); if (d.records?.length) setRecords(d.records); }
@@ -115,7 +116,7 @@ export default function TrainingPage() {
 
   const fetchReport = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/compliance-report`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/governance/training/compliance-report`, { credentials: "include" });
       if (res.ok) { setReport(await res.json()); return; }
     } catch {}
     setReport({
@@ -136,7 +137,7 @@ export default function TrainingPage() {
       const url = industry
         ? `${API}/api/v1/governance/training/courses/seed-industry-pack?industry=${industry}`
         : `${API}/api/v1/governance/training/courses/seed-industry-pack`;
-      const res = await fetch(url, { method: "POST", credentials: "include" });
+      const res = await apiFetch(url, { method: "POST", credentials: "include" });
       if (res.ok) {
         const d = await res.json();
         showToast("success", d.message || "Pack seeded.");
@@ -149,7 +150,7 @@ export default function TrainingPage() {
 
   const seedStandard = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/courses/seed`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/governance/training/courses/seed`, { method: "POST", credentials: "include" });
       if (res.ok) { const d = await res.json(); showToast("success", d.message || "Standard courses seeded."); fetchAll(); return; }
     } catch {}
     showToast("success", "Standard courses seeded (demo).");
@@ -157,7 +158,7 @@ export default function TrainingPage() {
 
   const completeRecord = async (r: TrainingRecord, score: number) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/complete`, {
+      const res = await apiFetch(`${API}/api/v1/governance/training/records/${r.id}/complete`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ completion_date: new Date().toISOString().slice(0, 10), score }),
       });
@@ -169,7 +170,7 @@ export default function TrainingPage() {
 
   const retakeRecord = async (r: TrainingRecord) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/retake`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/governance/training/records/${r.id}/retake`, { method: "POST", credentials: "include" });
       if (res.ok) { const updated = await res.json(); setRecords(prev => prev.map(x => x.id === r.id ? updated : x)); showToast("success", "Retake initiated."); return; }
     } catch {}
     showToast("success", "Retake initiated (demo).");
@@ -178,7 +179,7 @@ export default function TrainingPage() {
   const renewRecord = async (r: TrainingRecord) => {
     const dueDate = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/renew?due_date=${dueDate}`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/governance/training/records/${r.id}/renew?due_date=${dueDate}`, { method: "POST", credentials: "include" });
       if (res.ok) { const created = await res.json(); setRecords(prev => [created, ...prev]); showToast("success", "Renewal cycle created."); return; }
     } catch {}
     showToast("success", "Renewal cycle created (demo).");
@@ -446,7 +447,7 @@ function AssignTab({ courses, onAssigned }: { courses: Course[]; onAssigned: () 
       trigger: "manual",
     };
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/assignments`, {
+      const res = await apiFetch(`${API}/api/v1/governance/training/assignments`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });

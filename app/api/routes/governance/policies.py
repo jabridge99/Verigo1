@@ -24,7 +24,7 @@ from app.api.deps import (
     require_compliance_or_above,
 )
 from app.db.database import get_db
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.governance import (
     ALLOWED_TRANSITIONS,
     POLICY_NUMBER_PREFIX,
@@ -286,10 +286,11 @@ def update_policy(
         AuditLog(
             org_id=policy.org_id,
             actor_id=current_user.id,
+            event_type=AuditEventType.other,
             action="governance.policy.update",
-            entity_type="Policy",
-            entity_id=policy.id,
-            detail={
+            object_type="Policy",
+            object_id=policy.id,
+            new_value={
                 "fields_updated": list(payload.model_dump(exclude_none=True).keys())
             },
         )
@@ -379,10 +380,15 @@ def policy_workflow_action(
         AuditLog(
             org_id=policy.org_id,
             actor_id=current_user.id,
+            event_type=(
+                AuditEventType.policy_approved
+                if payload.action == "publish"
+                else AuditEventType.other
+            ),
             action=f"governance.policy.{payload.action}",
-            entity_type="Policy",
-            entity_id=policy.id,
-            detail={"from": from_status.value, "to": to_status.value},
+            object_type="Policy",
+            object_id=policy.id,
+            new_value={"from": from_status.value, "to": to_status.value},
         )
     )
     db.commit()

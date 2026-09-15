@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
@@ -366,7 +366,7 @@ def get_training_gap_report(db: Session, org_id: str) -> dict:
         .all()
     )
 
-    gaps = []
+    gaps: list[dict[str, Any]] = []
     for user in users:
         user_records = (
             db.query(GovernanceTrainingRecord)

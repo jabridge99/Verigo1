@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Upload, AlertCircle, CheckCircle, Download } from "lucide-react";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -34,7 +35,7 @@ export default function BulkUpload({ industryId, onComplete }: Props) {
     form.append("industry_id", industryId);
     form.append("file", file);
     try {
-      const res = await fetch(`${API}/api/v1/onboarding${endpoint}`, { method: "POST", credentials: "include", body: form });
+      const res = await apiFetch(`${API}/api/v1/onboarding${endpoint}`, { method: "POST", credentials: "include", body: form });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setResult(data);

@@ -12,8 +12,7 @@ import {
 import clsx from "clsx";
 import { DEMO_CUSTOMERS, getCustomerProfile } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
-import { getStoredUser } from "@/lib/auth";
-
+import { getStoredUser, apiFetch } from "@/lib/auth";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const RISK_COLOR: Record<string, string> = {
@@ -138,8 +137,8 @@ export default function CustomerDetailPage() {
     setLoading(true);
     try {
       const [wr, tr] = await Promise.all([
-        fetch(`${API}/api/v1/customers/${id}/workspace`, { credentials: "include" }),
-        fetch(`${API}/api/v1/customers/${id}/timeline?limit=100`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/customers/${id}/workspace`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/customers/${id}/timeline?limit=100`, { credentials: "include" }),
       ]);
       if (!wr.ok) throw new Error("api");
       setWs(await wr.json());
@@ -165,7 +164,7 @@ export default function CustomerDetailPage() {
     if (overrideForm.classification) body.classification = overrideForm.classification;
     if (overrideForm.monitoring_level) body.monitoring_level = overrideForm.monitoring_level;
     try {
-      const res = await fetch(`${API}/api/v1/customers/${id}/override`, {
+      const res = await apiFetch(`${API}/api/v1/customers/${id}/override`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });

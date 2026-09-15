@@ -11,7 +11,7 @@ from sqlalchemy import (
     String,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -46,7 +46,9 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     full_name = Column(String(255), nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.analyst)
+    role: Mapped[UserRole] = Column(
+        Enum(UserRole), nullable=False, default=UserRole.analyst
+    )
     status = Column(Enum(UserStatus), default=UserStatus.active, nullable=False)
     industry_id = Column(String(100))  # tenant scope
     tenant_id = Column(String(60))

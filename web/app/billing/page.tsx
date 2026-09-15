@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, ExternalLink, AlertTriangle,
   Calendar, Receipt, Settings, ArrowRight, Sparkles, Database, Lock,
 } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -150,7 +150,7 @@ function MyStoragePanel({ plan }: { plan?: string }) {
 
   const load = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/storage/config`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/storage/config`, { credentials: "include" });
       if (!res.ok) return;
       const data = await res.json();
       setConfig(data);
@@ -161,7 +161,7 @@ function MyStoragePanel({ plan }: { plan?: string }) {
   const save = async () => {
     setSaving(true); setMsg("");
     try {
-      const res = await fetch(`${API}/api/v1/storage/config`, {
+      const res = await apiFetch(`${API}/api/v1/storage/config`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -175,7 +175,7 @@ function MyStoragePanel({ plan }: { plan?: string }) {
   };
 
   const disconnect = async () => {
-    await fetch(`${API}/api/v1/storage/config`, { method: "DELETE", credentials: "include" });
+    await apiFetch(`${API}/api/v1/storage/config`, { method: "DELETE", credentials: "include" });
     setConfig({ backend: "local", configured: false });
     setForm({ backend: "s3" });
     setMsg("Reverted to the platform default storage.");
@@ -243,7 +243,7 @@ function AdminStoragePanel() {
     if (!industryId) return;
     setMsg("");
     try {
-      const res = await fetch(`${API}/api/v1/storage/admin/${industryId}`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/storage/admin/${industryId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Tenant not found or lookup failed");
       const data = await res.json();
       setCurrent(data);
@@ -254,7 +254,7 @@ function AdminStoragePanel() {
   const save = async () => {
     setSaving(true); setMsg("");
     try {
-      const res = await fetch(`${API}/api/v1/storage/admin/${industryId}`, {
+      const res = await apiFetch(`${API}/api/v1/storage/admin/${industryId}`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -269,7 +269,7 @@ function AdminStoragePanel() {
 
   const clear = async () => {
     if (!industryId) return;
-    await fetch(`${API}/api/v1/storage/admin/${industryId}`, { method: "DELETE", credentials: "include" });
+    await apiFetch(`${API}/api/v1/storage/admin/${industryId}`, { method: "DELETE", credentials: "include" });
     setCurrent({ backend: "local", configured: false });
     setMsg("Reverted to the platform default storage.");
   };
@@ -331,7 +331,7 @@ function AdminPricingPanel({ sub, onUpdate }: { sub: Subscription | null; onUpda
       if (customMonthly) body.custom_monthly_aud = parseFloat(customMonthly);
       if (customAnnual)  body.custom_annual_aud  = parseFloat(customAnnual);
       if (discountPct)   body.annual_discount_pct = parseFloat(discountPct);
-      const res = await fetch(`${API}/api/v1/billing/admin/${industryId}`, {
+      const res = await apiFetch(`${API}/api/v1/billing/admin/${industryId}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -433,7 +433,7 @@ function FeatureToggleMatrix() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/billing/admin/features`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/billing/admin/features`, { credentials: "include" });
       if (!res.ok) throw new Error();
       setRows(await res.json());
     } catch {
@@ -448,7 +448,7 @@ function FeatureToggleMatrix() {
     setSavingKey(key);
     setRows(prev => prev.map(r => r.code === code ? { ...r, plans: { ...r.plans, [plan]: enabled } } : r));
     try {
-      const res = await fetch(`${API}/api/v1/billing/admin/features/${plan}/${code}`, {
+      const res = await apiFetch(`${API}/api/v1/billing/admin/features/${plan}/${code}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -572,9 +572,9 @@ function BillingContent() {
     setLoading(true);
     try {
       const [pr, sr, ir] = await Promise.all([
-        fetch(`${API}/api/v1/billing/plans?discount_pct=${interval === "annual" ? 20 : 0}`),
-        fetch(`${API}/api/v1/billing/subscription`, { credentials: "include" }),
-        fetch(`${API}/api/v1/billing/invoices`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/billing/plans?discount_pct=${interval === "annual" ? 20 : 0}`),
+        apiFetch(`${API}/api/v1/billing/subscription`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/billing/invoices`, { credentials: "include" }),
       ]);
       if (!pr.ok || !sr.ok) throw new Error("api");
       setPlans(await pr.json());
@@ -593,24 +593,46 @@ function BillingContent() {
       return;
     }
     setCheckingOut(planKey);
+    // An org with an active/trialing/past-due subscription already has a
+    // real Stripe subscription — /checkout always creates a brand-new one,
+    // which would double-bill them. Route plan changes through
+    // /subscription/change-plan instead, which modifies the existing
+    // subscription in place.
+    const hasActiveSubscription =
+      sub && ["active", "trialing", "past_due"].includes(sub.status);
     try {
-      const res = await fetch(`${API}/api/v1/billing/checkout`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan: planKey,
-          interval,
-          success_url: `${APP_URL}/billing?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${APP_URL}/billing`,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      const { checkout_url } = await res.json();
-      window.location.href = checkout_url;
+      if (hasActiveSubscription) {
+        const res = await apiFetch(`${API}/api/v1/billing/subscription/change-plan`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: planKey, interval }),
+        });
+        if (!res.ok) throw new Error();
+        setSub(await res.json());
+      } else {
+        const res = await apiFetch(`${API}/api/v1/billing/checkout`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            plan: planKey,
+            interval,
+            success_url: `${APP_URL}/billing?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${APP_URL}/billing`,
+          }),
+        });
+        if (!res.ok) throw new Error();
+        const { checkout_url } = await res.json();
+        window.location.href = checkout_url;
+      }
     } catch {
-      // Mock mode — simulate redirect
-      alert(`[Demo] Would redirect to Stripe Checkout for ${planKey} ${interval} plan.`);
+      // Mock mode — simulate the outcome
+      alert(
+        hasActiveSubscription
+          ? `[Demo] Would change your plan to ${planKey} (${interval}).`
+          : `[Demo] Would redirect to Stripe Checkout for ${planKey} ${interval} plan.`
+      );
     } finally {
       setCheckingOut(null);
     }
@@ -618,7 +640,7 @@ function BillingContent() {
 
   const openPortal = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/billing/portal?return_url=${encodeURIComponent(APP_URL + "/billing")}`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/billing/portal?return_url=${encodeURIComponent(APP_URL + "/billing")}`, { credentials: "include" });
       if (!res.ok) throw new Error();
       const { portal_url } = await res.json();
       window.location.href = portal_url;
@@ -629,7 +651,7 @@ function BillingContent() {
 
   const cancelSub = async () => {
     try {
-      await fetch(`${API}/api/v1/billing/subscription/cancel?at_period_end=true`, { method: "POST", credentials: "include" });
+      await apiFetch(`${API}/api/v1/billing/subscription/cancel?at_period_end=true`, { method: "POST", credentials: "include" });
       setSub(prev => prev ? { ...prev, cancel_at_period_end: true } : prev);
     } catch {
       setSub(prev => prev ? { ...prev, cancel_at_period_end: true } : prev);
@@ -762,9 +784,9 @@ function BillingContent() {
             {/* Plan cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {(plans.length ? plans : [
-                { plan: "starter", name: "Starter", monthly_aud: 59, annual_aud: 599, annual_discount_pct: 20, features: ["Up to 500 customers","AML monitoring","KYC/KYB","AUSTRAC reporting","Standard support"], limits: {} },
-                { plan: "professional", name: "Professional", monthly_aud: 79, annual_aud: 799, annual_discount_pct: 20, features: ["5,000 customers","Rule builder","ECDD","Case management","Webhooks & API","50 GB vault","Priority support"], limits: {} },
-                { plan: "enterprise", name: "Enterprise", monthly_aud: 299, annual_aud: 2999, annual_discount_pct: 20, features: ["Unlimited customers","White-label","Custom domain","Multi-tenant","500 GB vault","SLA 99.9%","Dedicated AM"], limits: {} },
+                { plan: "starter", name: "Compliance", monthly_aud: 299, annual_aud: 2990, annual_discount_pct: 20, features: ["Up to 50 customers","1 seat","Real sanctions & PEP screening","AUSTRAC reporting","Email support"], limits: {} },
+                { plan: "professional", name: "Scale", monthly_aud: 799, annual_aud: 7990, annual_discount_pct: 20, features: ["Up to 200 customers","5 seats","Rule builder","ECDD","Case management","Webhooks & API","15 GB vault","Priority support"], limits: {} },
+                { plan: "enterprise", name: "Enterprise", monthly_aud: 2999, annual_aud: 29990, annual_discount_pct: 20, features: ["Multi-entity / multi-brand, 500 customers","White-label","Custom domain","Multi-tenant","50 GB vault","SLA 99.9%","Dedicated AM"], limits: {} },
                 { plan: "vvip", name: "VVIP", monthly_aud: null, annual_aud: null, annual_discount_pct: 20, features: ["Everything in Enterprise","Custom SLA","On-site training","Regulatory liaison","Custom integrations"], limits: {} },
               ]).map(p => {
                 const isCurrent = sub?.plan === p.plan;
@@ -941,7 +963,7 @@ function AllSubscriptions() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/billing/admin/all`, {
+      const res = await apiFetch(`${API}/api/v1/billing/admin/all`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error();
@@ -956,7 +978,7 @@ function AllSubscriptions() {
   const act = async (industryId: string, action: "activate" | "terminate") => {
     setActing(`${industryId}:${action}`);
     try {
-      const res = await fetch(`${API}/api/v1/billing/admin/${industryId}/${action}`, {
+      const res = await apiFetch(`${API}/api/v1/billing/admin/${industryId}/${action}`, {
         method: "POST",
         credentials: "include",
       });

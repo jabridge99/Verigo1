@@ -23,6 +23,7 @@ from app.models.screening import (
     ScreeningStatus,
     ScreeningType,
 )
+from app.services import billing_service
 from app.services.sanctions_screening import screen_name
 
 INVITE_EXPIRY_DAYS = 7
@@ -72,6 +73,12 @@ def create_session(
     created_by=None,
     batch_id=None,
 ):
+    # This always creates a draft Customer below (see comment further down),
+    # so it's a real customer-creation path and must respect the same plan
+    # cap as customers.py::create_customer -- both the single-invite route
+    # and bulk_create_sessions() (which calls this in a loop) go through here.
+    billing_service.enforce_customer_limit(db, organisation_id, industry_id)
+
     token = secrets.token_urlsafe(32)
     expires = datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS)
     session = OnboardingSession(
@@ -236,7 +243,15 @@ def _parse_date(value):
         return None
 
 
-def submit_onboarding(db, session, ip_address=None):
+_SUBMITTED_STATUSES = {
+    SessionStatus.documents_submitted,
+    SessionStatus.verification_pending,
+    SessionStatus.completed,
+    SessionStatus.rejected,
+}
+
+
+async def submit_onboarding(db, session, ip_address=None):
     """
     Finishes the applicant's self-entry step (Step 1). This does NOT decide
     KYC pass/fail — a Customer record is created in `draft` status as the
@@ -244,12 +259,18 @@ def submit_onboarding(db, session, ip_address=None):
     identity score, see app.services.identity_verification_service) can
     promote it to `active`. Applicants stay out of the Customers list
     (see customers.py list_customers default filter) until that happens.
+
+    session.customer_id is set as soon as the session is created (see
+    create_session()) so ops-entered applicants have somewhere to attach
+    documents immediately, well before this function ever runs -- it is
+    NOT a signal that the applicant's own wizard submission already
+    happened, so idempotency is tracked via session.status instead.
     """
-    if session.customer_id:
-        return {"status": "already_completed", "customer_id": session.customer_id}
+    if session.status in _SUBMITTED_STATUSES:
+        return {"status": session.status, "customer_id": session.customer_id}
     data = session.collected_data or {}
 
-    sanctions = screen_name(session.applicant_name)
+    sanctions = await screen_name(session.applicant_name)
     session.sanctions_match = sanctions["match_found"]
     _log(
         db,
@@ -261,25 +282,37 @@ def submit_onboarding(db, session, ip_address=None):
         },
     )
 
-    customer = Customer(
-        customer_ref=f"CUST-{uuid.uuid4().hex[:10].upper()}",
-        org_id=session.organisation_id,
-        customer_type=MasterCustomerType.company
-        if session.customer_type == CustomerType.business
-        else MasterCustomerType.individual,
-        status=CustomerStatus.draft,
-        full_name=session.applicant_name,
-        date_of_birth=_parse_date(data.get("date_of_birth")),
-        nationality=(data.get("nationality") or "")[:2],
-        country_of_residence=(data.get("country_of_residence") or "AU")[:2],
-        email=session.applicant_email,
-        phone=session.applicant_phone or data.get("phone", ""),
-        occupation=data.get("occupation"),
-        source_of_funds=data.get("source_of_funds"),
-        is_pep=bool(data.get("is_pep")),
-        is_sanctions_match=sanctions["match_found"],
+    customer = (
+        db.query(Customer).filter(Customer.id == session.customer_id).first()
+        if session.customer_id
+        else None
     )
-    db.add(customer)
+    if customer is None:
+        billing_service.enforce_customer_limit(
+            db, session.organisation_id, session.industry_id
+        )
+        customer = Customer(
+            customer_ref=f"CUST-{uuid.uuid4().hex[:10].upper()}",
+            org_id=session.organisation_id,
+            customer_type=MasterCustomerType.company
+            if session.customer_type == CustomerType.business
+            else MasterCustomerType.individual,
+            status=CustomerStatus.draft,
+            full_name=session.applicant_name,
+            email=session.applicant_email,
+        )
+        db.add(customer)
+
+    customer.date_of_birth = _parse_date(data.get("date_of_birth")) or (
+        customer.date_of_birth
+    )
+    customer.nationality = (data.get("nationality") or "")[:2] or customer.nationality
+    customer.country_of_residence = (data.get("country_of_residence") or "AU")[:2]
+    customer.phone = session.applicant_phone or data.get("phone") or customer.phone
+    customer.occupation = data.get("occupation") or customer.occupation
+    customer.source_of_funds = data.get("source_of_funds") or customer.source_of_funds
+    customer.is_pep = bool(data.get("is_pep"))
+    customer.is_sanctions_match = sanctions["match_found"]
     db.flush()
 
     # Fold the quick name-screen into the unified ScreeningRecord table so
@@ -364,3 +397,17 @@ def send_reminder(db, session):
         {"reminder_number": session.reminders_sent, "email": session.applicant_email},
     )
     db.commit()
+
+
+def cancel_session(db, session, actor=None):
+    """Staff-initiated cancellation before the applicant finishes -- not a
+    KYC decision (see SessionStatus.rejected for that), just "we're no
+    longer pursuing this application"."""
+    if session.status in (SessionStatus.completed, SessionStatus.rejected):
+        raise ValueError(
+            f"Cannot cancel a session that is already {session.status.value}"
+        )
+    session.status = SessionStatus.abandoned
+    _log(db, session, "session_cancelled", {}, actor=actor or "system")
+    db.commit()
+    return session

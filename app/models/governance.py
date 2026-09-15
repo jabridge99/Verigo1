@@ -73,6 +73,9 @@ class PolicyType(str, enum.Enum):
     reporting_policy = "reporting_policy"  # SMR, TTR, IFTI
     record_keeping_policy = "record_keeping_policy"
 
+    # ── Assurance ─────────────────────────────────────────────────────────────
+    independent_review_policy = "independent_review_policy"
+
     # ── Governance & People ───────────────────────────────────────────────────
     training_policy = "training_policy"
     outsourcing_policy = "outsourcing_policy"
@@ -600,6 +603,7 @@ POLICY_NUMBER_PREFIX: dict[PolicyType, str] = {
     PolicyType.travel_rule_policy: "AML-TRVL",
     PolicyType.reporting_policy: "AML-RPT",
     PolicyType.record_keeping_policy: "AML-RK",
+    PolicyType.independent_review_policy: "AML-IR",
     PolicyType.training_policy: "AML-TRN",
     PolicyType.outsourcing_policy: "AML-OUT",
     PolicyType.whistleblower_policy: "GOV-WB",

@@ -35,7 +35,7 @@ def _require_super_admin(current_user: User = Depends(_ROLE_GATE)) -> User:
 _PRIV = _require_super_admin
 
 
-def _since(days: int) -> datetime:
+def _since(days: float) -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=days)
 
 
@@ -103,7 +103,7 @@ def security_summary(
         .filter(
             SecurityEvent.event_type == "login_failed",
             SecurityEvent.created_at >= since,
-            SecurityEvent.ip_address is not None,
+            SecurityEvent.ip_address.is_not(None),
             SecurityEvent.ip_address != "unknown",
         )
         .group_by(SecurityEvent.ip_address)
@@ -184,7 +184,7 @@ def role_change_audit(
     for e in events:
         meta = {}
         try:
-            meta = json.loads(e.metadata or "{}")
+            meta = json.loads(e.extra_metadata or "{}")
         except Exception:
             pass
         result.append(
@@ -239,7 +239,7 @@ def active_alerts(
         .filter(
             SecurityEvent.event_type == "login_failed",
             SecurityEvent.created_at >= since_1h,
-            SecurityEvent.ip_address is not None,
+            SecurityEvent.ip_address.is_not(None),
         )
         .group_by(SecurityEvent.ip_address)
         .having(func.count(SecurityEvent.id) > 20)

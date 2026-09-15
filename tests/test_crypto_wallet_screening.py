@@ -1,5 +1,6 @@
 """Tests for the Chainalysis free-tier crypto wallet sanctions screening
 integration and the /screening/crypto-wallet route."""
+
 import uuid
 
 import httpx
@@ -9,6 +10,7 @@ from app import config as config_module
 from app.integrations.base import ProviderUnavailableError
 from app.integrations.crypto import factory as crypto_factory
 from app.integrations.crypto.chainalysis import ChainalysisProvider
+from app.integrations.crypto.ofac_sdn import OFACSDNProvider
 from app.models.customer import Customer, CustomerStatus, CustomerType
 from app.models.screening import CryptoProvider, CryptoWalletScreening
 
@@ -29,6 +31,7 @@ def _make_customer(db, org_id):
 
 # ── ChainalysisProvider ──────────────────────────────────────────────────────
 
+
 def test_chainalysis_provider_requires_api_key():
     with pytest.raises(ProviderUnavailableError):
         ChainalysisProvider("")
@@ -40,6 +43,7 @@ async def test_chainalysis_screen_address_no_match(monkeypatch):
 
     class _Resp:
         status_code = 200
+
         def json(self):
             return {"identifications": []}
 
@@ -59,10 +63,16 @@ async def test_chainalysis_screen_address_match(monkeypatch):
 
     class _Resp:
         status_code = 200
+
         def json(self):
             return {
                 "identifications": [
-                    {"category": "sanctions", "name": "OFAC SDN", "description": "Lazarus Group", "url": None}
+                    {
+                        "category": "sanctions",
+                        "name": "OFAC SDN",
+                        "description": "Lazarus Group",
+                        "url": None,
+                    }
                 ]
             }
 
@@ -78,10 +88,15 @@ async def test_chainalysis_screen_address_match(monkeypatch):
 
 # ── factory ──────────────────────────────────────────────────────────────────
 
-def test_get_crypto_provider_raises_when_internal(monkeypatch):
+
+def test_get_crypto_provider_defaults_to_ofac_sdn_when_internal(monkeypatch):
+    # "internal" (the actual default) previously wasn't a registered case,
+    # so the factory raised and the route silently fell back to
+    # simulation. It now defaults to the free, no-API-key OFAC SDN
+    # provider instead.
     monkeypatch.setattr(config_module.settings, "crypto_provider", "internal")
-    with pytest.raises(NotImplementedError):
-        crypto_factory.get_provider()
+    provider = crypto_factory.get_provider()
+    assert isinstance(provider, OFACSDNProvider)
 
 
 def test_get_crypto_provider_returns_chainalysis_when_configured(monkeypatch):
@@ -98,10 +113,15 @@ def test_get_crypto_provider_returns_chainalysis_when_configured(monkeypatch):
         ("crypto_apis", [("cryptoapis_api_key", "test-key")]),
         ("scorechain", [("scorechain_api_key", "test-key")]),
         ("goplus", None),
-        ("elliptic", [("elliptic_api_key", "test-key"), ("elliptic_api_secret", "test-secret")]),
+        (
+            "elliptic",
+            [("elliptic_api_key", "test-key"), ("elliptic_api_secret", "test-secret")],
+        ),
     ],
 )
-def test_get_crypto_provider_returns_each_provider(monkeypatch, provider_name, extra_settings):
+def test_get_crypto_provider_returns_each_provider(
+    monkeypatch, provider_name, extra_settings
+):
     monkeypatch.setattr(config_module.settings, "crypto_provider", provider_name)
     for setting_name, value in extra_settings or []:
         monkeypatch.setattr(config_module.settings, setting_name, value)
@@ -111,23 +131,27 @@ def test_get_crypto_provider_returns_each_provider(monkeypatch, provider_name, e
 
 def test_crypto_apis_provider_requires_api_key():
     from app.integrations.crypto.crypto_apis import CryptoAPIsProvider
+
     with pytest.raises(ProviderUnavailableError):
         CryptoAPIsProvider("")
 
 
 def test_scorechain_provider_requires_api_key():
     from app.integrations.crypto.scorechain import ScorechainProvider
+
     with pytest.raises(ProviderUnavailableError):
         ScorechainProvider("")
 
 
 def test_goplus_provider_allows_no_api_key():
     from app.integrations.crypto.goplus import GoPlusProvider
+
     GoPlusProvider("")  # GoPlus has a free unauthenticated quota
 
 
 def test_elliptic_provider_requires_api_key_and_secret():
     from app.integrations.crypto.elliptic import EllipticProvider
+
     with pytest.raises(ProviderUnavailableError):
         EllipticProvider("", "")
     with pytest.raises(ProviderUnavailableError):
@@ -137,10 +161,12 @@ def test_elliptic_provider_requires_api_key_and_secret():
 @pytest.mark.asyncio
 async def test_elliptic_screen_address_match(monkeypatch):
     from app.integrations.crypto.elliptic import EllipticProvider
+
     provider = EllipticProvider("test-key", "test-secret")
 
     class _Resp:
         status_code = 200
+
         def json(self):
             return {"risk_score": 9, "type_category": ["sanctions"]}
 
@@ -157,10 +183,12 @@ async def test_elliptic_screen_address_match(monkeypatch):
 @pytest.mark.asyncio
 async def test_elliptic_screen_address_no_match(monkeypatch):
     from app.integrations.crypto.elliptic import EllipticProvider
+
     provider = EllipticProvider("test-key", "test-secret")
 
     class _Resp:
         status_code = 200
+
         def json(self):
             return {"risk_score": 1, "type_category": []}
 
@@ -174,9 +202,11 @@ async def test_elliptic_screen_address_no_match(monkeypatch):
 
 # ── OFACSDNProvider ──────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_ofac_sdn_unsupported_network_returns_clear():
     from app.integrations.crypto.ofac_sdn import OFACSDNProvider
+
     provider = OFACSDNProvider()
     result = await provider.screen_address("some-address", network="other")
     assert result.is_sanctioned is False
@@ -185,11 +215,13 @@ async def test_ofac_sdn_unsupported_network_returns_clear():
 @pytest.mark.asyncio
 async def test_ofac_sdn_matches_cached_address(monkeypatch):
     from app.integrations.crypto.ofac_sdn import OFACSDNProvider
+
     provider = OFACSDNProvider()
 
     class _Resp:
         status_code = 200
         text = "1BadAddress\n2AnotherAddress\n"
+
         def raise_for_status(self):
             pass
 
@@ -214,11 +246,13 @@ async def test_ofac_sdn_matches_cached_address(monkeypatch):
 @pytest.mark.asyncio
 async def test_ofac_sdn_no_match(monkeypatch):
     from app.integrations.crypto.ofac_sdn import OFACSDNProvider
+
     provider = OFACSDNProvider()
 
     class _Resp:
         status_code = 200
         text = "1BadAddress\n"
+
         def raise_for_status(self):
             pass
 
@@ -232,24 +266,49 @@ async def test_ofac_sdn_no_match(monkeypatch):
 
 # ── /screening/crypto-wallet route ──────────────────────────────────────────
 
-def test_crypto_wallet_route_falls_back_to_simulation_when_unconfigured(
+
+def test_crypto_wallet_route_defaults_to_real_ofac_sdn_provider(
     client, compliance_headers, compliance_user, db, monkeypatch
 ):
+    """crypto_provider's default ("internal") previously wasn't a
+    registered factory case, so every unconfigured org silently fell back
+    to simulation. It now maps to OFACSDNProvider -- free, no API key, no
+    enterprise add-on -- so this proves the default is real, not simulated."""
     monkeypatch.setattr(config_module.settings, "crypto_provider", "internal")
     customer = _make_customer(db, compliance_user.org_id)
+
+    class _Resp:
+        status_code = 200
+        text = "1SanctionedAddress\n"
+
+        def raise_for_status(self):
+            pass
+
+    async def _fake_get(self, url):
+        return _Resp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
     resp = client.post(
         "/api/v1/screening/crypto-wallet",
         json={
             "customer_id": customer.id,
-            "wallet_address": "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+            "wallet_address": "1SanctionedAddress",
             "network": "bitcoin",
         },
         headers=compliance_headers,
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["risk_score"] is None
-    assert "Simulation only" in body["risk_details"]["note"]
+    assert body["risk_score"] == 100.0
+    assert body["risk_category"] == "sanctioned"
+
+    screening = (
+        db.query(CryptoWalletScreening)
+        .filter(CryptoWalletScreening.wallet_address == "1SanctionedAddress")
+        .first()
+    )
+    assert screening.provider == CryptoProvider.ofac_sdn
 
 
 def test_crypto_wallet_route_uses_chainalysis_when_configured(
@@ -288,13 +347,17 @@ def test_crypto_wallet_route_uses_chainalysis_when_configured(
     assert body["risk_category"] == "sanctioned"
     assert body["sanctioned_exposure_pct"] == 100.0
 
-    screening = db.query(CryptoWalletScreening).filter(
-        CryptoWalletScreening.wallet_address == "0xSanctionedAddress"
-    ).first()
+    screening = (
+        db.query(CryptoWalletScreening)
+        .filter(CryptoWalletScreening.wallet_address == "0xSanctionedAddress")
+        .first()
+    )
     assert screening.provider == CryptoProvider.chainalysis
 
 
-def test_crypto_wallet_route_requires_compliance_role(client, analyst_headers, analyst_user, db):
+def test_crypto_wallet_route_requires_compliance_role(
+    client, analyst_headers, analyst_user, db
+):
     customer = _make_customer(db, analyst_user.org_id)
     resp = client.post(
         "/api/v1/screening/crypto-wallet",
@@ -309,6 +372,7 @@ def test_crypto_wallet_route_requires_compliance_role(client, analyst_headers, a
 
 
 # ── Enterprise add-on gating (Elliptic / TRM Labs) ────────────────────────────
+
 
 def test_crypto_wallet_route_requires_enterprise_addon_for_elliptic(
     client, compliance_headers, compliance_user, db, monkeypatch
@@ -342,7 +406,9 @@ def test_crypto_wallet_route_uses_elliptic_once_addon_purchased(
     sub = billing_svc.create_trial(db, compliance_user.org_id)
     sub.plan = BillingPlan.enterprise
     db.commit()
-    billing_svc.purchase_addon(db, compliance_user.org_id, AddonKey.enterprise_crypto_screening)
+    billing_svc.purchase_addon(
+        db, compliance_user.org_id, AddonKey.enterprise_crypto_screening
+    )
 
     class _FakeResult:
         is_sanctioned = True

@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -102,7 +103,7 @@ export default function ECDDDashboard() {
 
   const fetchRecords = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/reports/ecdd/`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/reports/ecdd/`, { credentials: "include" });
       if (res.ok) { const d = await res.json(); if (d.length) setRecords(d); }
     } catch {}
   }, []);
@@ -112,7 +113,7 @@ export default function ECDDDashboard() {
   const decideECDD = async (ecddId: string, status: string, decisionNotes: string) => {
     const now = new Date().toISOString();
     try {
-      const res = await fetch(`${API}/api/v1/reports/ecdd/${ecddId}/decision`, {
+      const res = await apiFetch(`${API}/api/v1/reports/ecdd/${ecddId}/decision`, {
         method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, decision_notes: decisionNotes }),
       });
@@ -519,7 +520,7 @@ function CustomerPicker({ value, onChange }: { value: { id: string; label: strin
     if (!query.trim() || query === value?.label) { setResults([]); return; }
     const handle = setTimeout(async () => {
       try {
-        const res = await fetch(`${API}/api/v1/customers/?search=${encodeURIComponent(query)}&limit=10`, { credentials: "include" });
+        const res = await apiFetch(`${API}/api/v1/customers/?search=${encodeURIComponent(query)}&limit=10`, { credentials: "include" });
         if (res.ok) {
           const d = await res.json();
           setResults(Array.isArray(d) ? d : d.items || []);
@@ -617,7 +618,7 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
     setError("");
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/reports/ecdd/`, {
+      const res = await apiFetch(`${API}/api/v1/reports/ecdd/`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customer_id: customer!.id, ...form }),
       });

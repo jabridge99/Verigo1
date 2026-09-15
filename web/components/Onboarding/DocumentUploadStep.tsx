@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { Upload, CheckCircle, AlertCircle, FileText } from "lucide-react";
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -32,14 +33,14 @@ export default function DocumentUploadStep({ sessions, onUploaded }: Props) {
     setError(null);
     const form = new FormData();
     form.append("file", file);
-    form.append("category", "identity");
+    form.append("category", "kyc");
     // Tied to the customer record (not the onboarding session) so the
     // document shows up on the customer's profile, where compliance does
     // the actual KYC review.
     form.append("entity_type", "customer");
     form.append("entity_id", selected.customer_id || selected.session_id);
     try {
-      const res = await fetch(`${API}/api/v1/documents`, { method: "POST", credentials: "include", body: form });
+      const res = await apiFetch(`${API}/api/v1/documents`, { method: "POST", credentials: "include", body: form });
       if (!res.ok) throw new Error(await res.text());
       setRecent(prev => [file.name, ...prev]);
       onUploaded(selected.session_id);

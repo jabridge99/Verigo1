@@ -19,6 +19,7 @@ All compliance decisions remain with the reporting entity.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -353,7 +354,7 @@ PSP_QUESTIONS = [
 ]
 
 
-ALL_TEMPLATES = {
+ALL_TEMPLATES: dict[str, list[dict[str, Any]]] = {
     "fatf_general_v1": FATF_GENERAL_QUESTIONS,
     "remittance_v1": REMITTANCE_QUESTIONS,
     "crypto_v1": CRYPTO_QUESTIONS,

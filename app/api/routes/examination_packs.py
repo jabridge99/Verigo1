@@ -32,9 +32,27 @@ from app.models.examination_pack import (
     ExaminationPackStatus,
 )
 from app.models.user import User
+from app.services import audit_service
 from app.services import examination_pack_service as svc
 
 router = APIRouter(prefix="/examination-packs", tags=["AUSTRAC Examination Pack"])
+
+
+def _log(db: Session, current_user: User, pack: ExaminationPack, action: str) -> None:
+    """
+    An examination pack is the evidence bundle handed to an AUSTRAC examiner
+    on arrival -- who generated, delivered, or archived it needs its own
+    queryable record, independent of the pack's own status/timestamp fields.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="examination_pack",
+        entity_id=pack.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=current_user.org_id,
+    )
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -80,6 +98,7 @@ def generate_pack(
         examiner_agency=body.examiner_agency,
         examination_ref=body.examination_ref,
     )
+    _log(db, current_user, pack, "examination_pack_generated")
     return _pack_to_dict(pack, include_snapshot=False)
 
 
@@ -182,6 +201,7 @@ def deliver_pack(
     pack.delivered_by = current_user.id
     pack.delivery_notes = body.delivery_notes
     db.commit()
+    _log(db, current_user, pack, "examination_pack_delivered")
     return _pack_to_dict(pack, include_snapshot=False)
 
 
@@ -196,6 +216,7 @@ def archive_pack(
         raise HTTPException(422, "Cannot archive a pack that is still generating")
     pack.status = ExaminationPackStatus.archived
     db.commit()
+    _log(db, current_user, pack, "examination_pack_archived")
     return {"archived": True, "pack_id": pack_id, "pack_ref": pack.pack_ref}
 
 

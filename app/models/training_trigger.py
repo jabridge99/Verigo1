@@ -30,6 +30,7 @@ Assessment outcome flow:
 from __future__ import annotations
 
 import enum
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -46,9 +47,12 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.governance_training import TrainingCourse
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ENUMS
@@ -205,7 +209,9 @@ class TrainingTriggerRule(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    course = relationship("TrainingCourse", foreign_keys=[course_id])
+    course: Mapped["TrainingCourse"] = relationship(
+        "TrainingCourse", foreign_keys=[course_id]
+    )
     trigger_logs = relationship(
         "TrainingTriggerLog", back_populates="rule", cascade="all, delete-orphan"
     )
@@ -383,8 +389,8 @@ class AssessmentOutcomeFlag(Base):
     course_id = Column(String, ForeignKey("training_courses.id"), nullable=False)
 
     # ── Assessment result ─────────────────────────────────────────────────────
-    score = Column(Float, nullable=False)
-    pass_mark = Column(Float, nullable=False)
+    score: Mapped[float] = Column(Float, nullable=False)
+    pass_mark: Mapped[float] = Column(Float, nullable=False)
     attempt_number = Column(Integer, nullable=False)
     course_name = Column(String(255))
 
@@ -423,7 +429,7 @@ class AssessmentOutcomeFlag(Base):
 # (seeded at org creation via seed_default_trigger_rules())
 # ══════════════════════════════════════════════════════════════════════════════
 
-SYSTEM_TRIGGER_RULES = [
+SYSTEM_TRIGGER_RULES: list[dict[str, Any]] = [
     {
         "name": "EDD Escalation → EDD Training",
         "event_type": TriggerEventType.edd_escalation,

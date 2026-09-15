@@ -10,6 +10,7 @@ Adverse media has its own table (article-level detail).
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -24,7 +25,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -141,7 +142,7 @@ class ScreeningRecord(Base):
         index=True,
     )
     match_count = Column(Float, default=0)
-    match_score = Column(Float)  # 0–100 fuzzy match confidence
+    match_score: Mapped[Optional[float]] = Column(Float)  # 0–100 fuzzy match confidence
     match_details = Column(JSON)  # structured match data
     provider_raw_response = Column(Text)  # full JSON from provider
 
@@ -161,7 +162,7 @@ class ScreeningRecord(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     customer = relationship("Customer", back_populates="screening_records")
-    alerts = relationship(
+    alerts: Mapped[list["ScreeningAlert"]] = relationship(
         "ScreeningAlert",
         back_populates="screening_record",
         cascade="all, delete-orphan",
@@ -196,7 +197,10 @@ class ScreeningAlert(Base):
 
     severity = Column(Enum(AlertSeverity), nullable=False)
     status = Column(
-        Enum(AlertStatus), default=AlertStatus.open, nullable=False, index=True
+        Enum(AlertStatus, name="screening_alert_status"),
+        default=AlertStatus.open,
+        nullable=False,
+        index=True,
     )
     alert_type = Column(String(100))  # pep_match | sanctions_hit | adverse_media | etc.
     summary = Column(Text, nullable=False)
@@ -280,16 +284,16 @@ class CryptoWalletScreening(Base):
     provider_reference = Column(String(255))
 
     # Risk results
-    risk_score = Column(Float)  # 0–100
+    risk_score: Mapped[Optional[float]] = Column(Float)  # 0–100
     risk_category = Column(Enum(WalletRiskCategory))
     risk_details = Column(JSON)
 
     # Exposure flags
-    sanctioned_exposure_pct = Column(Float, default=0.0)
-    darknet_exposure_pct = Column(Float, default=0.0)
-    mixer_exposure_pct = Column(Float, default=0.0)
-    high_risk_exchange_pct = Column(Float, default=0.0)
-    scam_exposure_pct = Column(Float, default=0.0)
+    sanctioned_exposure_pct: Mapped[Optional[float]] = Column(Float, default=0.0)
+    darknet_exposure_pct: Mapped[Optional[float]] = Column(Float, default=0.0)
+    mixer_exposure_pct: Mapped[Optional[float]] = Column(Float, default=0.0)
+    high_risk_exchange_pct: Mapped[Optional[float]] = Column(Float, default=0.0)
+    scam_exposure_pct: Mapped[Optional[float]] = Column(Float, default=0.0)
 
     # Transaction summary
     total_received_usd = Column(Float)
@@ -354,11 +358,13 @@ class AdverseMediaResult(Base):
     publication_date = Column(DateTime(timezone=True))
     jurisdiction = Column(String(2))
 
-    match_confidence = Column(Float)  # 0–100
+    match_confidence: Mapped[Optional[float]] = Column(Float)  # 0–100
     is_confirmed_match = Column(Boolean, default=False)
     is_false_positive = Column(Boolean, default=False)
 
-    review_status = Column(Enum(AlertStatus), default=AlertStatus.open)
+    review_status = Column(
+        Enum(AlertStatus, name="screening_alert_status"), default=AlertStatus.open
+    )
     reviewed_by = Column(String)
     reviewed_at = Column(DateTime(timezone=True))
     reviewer_notes = Column(Text)

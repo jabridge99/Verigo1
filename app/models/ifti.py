@@ -35,8 +35,11 @@ class IFTIDirection(str, enum.Enum):
 
 class IFTIStatus(str, enum.Enum):
     draft = "draft"
-    ready = "ready"
+    under_review = "under_review"
+    approved = "approved"
     submitted = "submitted"
+    acknowledged = "acknowledged"
+    rejected = "rejected"
 
 
 class IFTIRecord(Base):
@@ -223,9 +226,17 @@ class IFTIRecord(Base):
     reporter_job_title = Column(String(200))
     reporter_phone = Column(String(50))
     reporter_email = Column(String(200))
+    reporter_austrac_id = Column(String(50))
 
-    # ── Audit ─────────────────────────────────────────────────────────────────
+    # ── Maker-checker / workflow / audit ────────────────────────────────────
     created_by = Column(String(60))
+    reviewed_by = Column(String(60))
+    approved_by = Column(String(60))
+    approved_at = Column(DateTime(timezone=True))
+    rejected_reason = Column(String(500))
+    submission_reference = Column(String(100))
     submitted_at = Column(DateTime(timezone=True))
+    acknowledged_at = Column(DateTime(timezone=True))
+    due_date = Column(Date)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -4,7 +4,6 @@ Tests for IFTI report creation, status workflow, tenant isolation, and Excel exp
 
 import pytest
 
-
 IFTI_OUT_PAYLOAD = {
     "direction": "outgoing",
     "date_received": "01/06/2025",
@@ -37,11 +36,15 @@ class TestIFTICreate:
         assert resp.status_code == 401
 
     def test_analyst_cannot_create(self, client, analyst_headers):
-        resp = client.post("/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=analyst_headers)
+        resp = client.post(
+            "/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=analyst_headers
+        )
         assert resp.status_code == 403
 
     def test_compliance_can_create_out(self, client, compliance_headers):
-        resp = client.post("/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=compliance_headers)
+        resp = client.post(
+            "/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=compliance_headers
+        )
         assert resp.status_code == 201
         data = resp.json()
         assert data["direction"] == "outgoing"
@@ -49,12 +52,18 @@ class TestIFTICreate:
         assert data["ifti_id"].startswith("IFTI-")
 
     def test_compliance_can_create_in(self, client, compliance_headers):
-        resp = client.post("/api/v1/ifti/", json=IFTI_IN_PAYLOAD, headers=compliance_headers)
+        resp = client.post(
+            "/api/v1/ifti/", json=IFTI_IN_PAYLOAD, headers=compliance_headers
+        )
         assert resp.status_code == 201
         assert resp.json()["direction"] == "incoming"
 
-    def test_industry_id_set_from_session(self, client, compliance_user, compliance_headers):
-        resp = client.post("/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=compliance_headers)
+    def test_industry_id_set_from_session(
+        self, client, compliance_user, compliance_headers
+    ):
+        resp = client.post(
+            "/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=compliance_headers
+        )
         assert resp.status_code == 201
         assert resp.json()["industry_id"] == compliance_user.org_id
 
@@ -74,14 +83,16 @@ class TestIFTIList:
         assert resp.status_code == 401
 
     def test_tenant_isolation_on_list(self, client, db, compliance_headers):
-        from tests.conftest import _make_user, _auth
         from app.models.user import UserRole
+        from tests.conftest import _auth, _make_user
 
         other_user = _make_user(db, UserRole.compliance)
         other_headers = _auth(other_user)
 
         # Create record as other tenant
-        resp = client.post("/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=other_headers)
+        resp = client.post(
+            "/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=other_headers
+        )
         assert resp.status_code == 201
         other_ifti_id = resp.json()["ifti_id"]
 
@@ -97,48 +108,120 @@ class TestIFTIWorkflow:
         assert resp.status_code == 201
         return resp.json()["ifti_id"]
 
-    def test_mark_ready(self, client, compliance_headers):
+    def test_review_moves_to_under_review(self, client, compliance_headers):
         ifti_id = self._create(client, compliance_headers)
-        resp = client.post(f"/api/v1/ifti/{ifti_id}/ready", headers=compliance_headers)
+        resp = client.post(f"/api/v1/ifti/{ifti_id}/review", headers=compliance_headers)
         assert resp.status_code == 200
-        assert resp.json()["status"] == "ready"
+        assert resp.json()["status"] == "under_review"
 
     def _same_org_mlro_headers(self, db, compliance_user):
-        from tests.conftest import _auth, _make_user
         from app.models.user import UserRole
+        from tests.conftest import _auth, _make_user
 
         mlro_same_org = _make_user(
             db, UserRole.mlro, industry_id=compliance_user.org_id
         )
         return _auth(mlro_same_org)
 
-    def test_mark_submitted_requires_mlro(
+    def _reviewed_and_approved(
+        self, client, headers, mlro_headers, ifti_id=None, payload=None
+    ):
+        """Create (or reuse) -> review (compliance) -> approve (MLRO) -> approved."""
+        if ifti_id is None:
+            resp = client.post(
+                "/api/v1/ifti/", json=payload or IFTI_OUT_PAYLOAD, headers=headers
+            )
+            assert resp.status_code == 201, resp.text
+            ifti_id = resp.json()["ifti_id"]
+        resp = client.post(f"/api/v1/ifti/{ifti_id}/review", headers=headers)
+        assert resp.status_code == 200, resp.text
+        resp = client.post(f"/api/v1/ifti/{ifti_id}/approve", headers=mlro_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["status"] == "approved"
+        return ifti_id
+
+    def test_submit_requires_mlro(
         self, client, db, compliance_user, compliance_headers
     ):
         mlro_headers = self._same_org_mlro_headers(db, compliance_user)
-        ifti_id = self._create(client, compliance_headers)
+        ifti_id = self._reviewed_and_approved(
+            client,
+            compliance_headers,
+            mlro_headers,
+            payload={**IFTI_OUT_PAYLOAD, "reporter_austrac_id": "12345678"},
+        )
 
         # Compliance cannot submit
-        resp = client.post(f"/api/v1/ifti/{ifti_id}/submitted", headers=compliance_headers)
+        resp = client.post(f"/api/v1/ifti/{ifti_id}/submit", headers=compliance_headers)
         assert resp.status_code == 403
 
         # MLRO can submit
-        resp = client.post(f"/api/v1/ifti/{ifti_id}/submitted", headers=mlro_headers)
-        assert resp.status_code == 200
+        resp = client.post(f"/api/v1/ifti/{ifti_id}/submit", headers=mlro_headers)
+        assert resp.status_code == 200, resp.text
         assert resp.json()["status"] == "submitted"
 
-    def test_cannot_edit_submitted(self, client, db, compliance_user, compliance_headers):
+    def test_submit_fails_validation_without_reporter_austrac_id(
+        self, client, db, compliance_user, compliance_headers
+    ):
         mlro_headers = self._same_org_mlro_headers(db, compliance_user)
-        ifti_id = self._create(client, compliance_headers)
-        client.post(f"/api/v1/ifti/{ifti_id}/submitted", headers=mlro_headers)
+        # IFTI_OUT_PAYLOAD has no reporter_austrac_id
+        ifti_id = self._reviewed_and_approved(client, compliance_headers, mlro_headers)
 
-        resp = client.patch(f"/api/v1/ifti/{ifti_id}", json=IFTI_OUT_PAYLOAD, headers=compliance_headers)
+        resp = client.post(f"/api/v1/ifti/{ifti_id}/submit", headers=mlro_headers)
+        assert resp.status_code == 422
+
+        # Reject -> redraft -> fill the missing field -> resubmit the workflow
+        resp = client.post(
+            f"/api/v1/ifti/{ifti_id}/reject",
+            params={"reason": "Missing reporter AUSTRAC ID."},
+            headers=mlro_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            f"/api/v1/ifti/{ifti_id}/redraft", headers=compliance_headers
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["status"] == "draft"
+
+        r = client.patch(
+            f"/api/v1/ifti/{ifti_id}",
+            json={**IFTI_OUT_PAYLOAD, "reporter_austrac_id": "12345678"},
+            headers=compliance_headers,
+        )
+        assert r.status_code == 200, r.text
+        ifti_id = self._reviewed_and_approved(
+            client, compliance_headers, mlro_headers, ifti_id=ifti_id
+        )
+        resp = client.post(f"/api/v1/ifti/{ifti_id}/submit", headers=mlro_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["status"] == "submitted"
+
+    def _submitted(self, client, db, compliance_user, compliance_headers):
+        mlro_headers = self._same_org_mlro_headers(db, compliance_user)
+        ifti_id = self._reviewed_and_approved(
+            client,
+            compliance_headers,
+            mlro_headers,
+            payload={**IFTI_OUT_PAYLOAD, "reporter_austrac_id": "12345678"},
+        )
+        resp = client.post(f"/api/v1/ifti/{ifti_id}/submit", headers=mlro_headers)
+        assert resp.status_code == 200, resp.text
+        return ifti_id
+
+    def test_cannot_edit_submitted(
+        self, client, db, compliance_user, compliance_headers
+    ):
+        ifti_id = self._submitted(client, db, compliance_user, compliance_headers)
+
+        resp = client.patch(
+            f"/api/v1/ifti/{ifti_id}", json=IFTI_OUT_PAYLOAD, headers=compliance_headers
+        )
         assert resp.status_code == 400
 
-    def test_cannot_delete_submitted(self, client, db, compliance_user, compliance_headers):
-        mlro_headers = self._same_org_mlro_headers(db, compliance_user)
-        ifti_id = self._create(client, compliance_headers)
-        client.post(f"/api/v1/ifti/{ifti_id}/submitted", headers=mlro_headers)
+    def test_cannot_delete_submitted(
+        self, client, db, compliance_user, compliance_headers
+    ):
+        ifti_id = self._submitted(client, db, compliance_user, compliance_headers)
 
         resp = client.delete(f"/api/v1/ifti/{ifti_id}", headers=compliance_headers)
         assert resp.status_code == 400
@@ -157,7 +240,10 @@ class TestIFTIExport:
         client.post("/api/v1/ifti/", json=IFTI_OUT_PAYLOAD, headers=compliance_headers)
         resp = client.get("/api/v1/ifti/export/outgoing", headers=compliance_headers)
         assert resp.status_code == 200
-        assert resp.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        assert (
+            resp.headers["content-type"]
+            == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
         assert "X-Record-Count" in resp.headers
         # Verify it's a valid xlsx (PK zip magic bytes)
         assert resp.content[:4] == b"PK\x03\x04"
@@ -169,8 +255,9 @@ class TestIFTIExport:
         assert resp.content[:4] == b"PK\x03\x04"
 
     def test_export_empty_returns_404(self, client, db, compliance_headers):
-        from tests.conftest import _make_user, _auth
         from app.models.user import UserRole
+        from tests.conftest import _auth, _make_user
+
         # Use a tenant with no IFTI records
         empty_user = _make_user(db, UserRole.compliance)
         empty_headers = _auth(empty_user)

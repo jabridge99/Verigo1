@@ -8,6 +8,7 @@ import enum
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, String, func
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -51,9 +52,9 @@ class UsageRecord(Base):
         index=True,
     )
 
-    unit_cost_aud = Column(Float, nullable=False)
-    markup_pct = Column(Float, nullable=False, default=0.0)
-    billed_amount_aud = Column(Float, nullable=False)
+    unit_cost_aud: Mapped[float] = Column(Float, nullable=False)
+    markup_pct: Mapped[float] = Column(Float, nullable=False, default=0.0)
+    billed_amount_aud: Mapped[float] = Column(Float, nullable=False)
 
     invoiced = Column(Boolean, default=False, index=True)
     invoice_id = Column(String(60), index=True)

@@ -6,7 +6,7 @@ import {
   ChevronRight, ShieldAlert, Gavel, ListChecks,
 } from "lucide-react";
 import clsx from "clsx";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -142,8 +142,8 @@ export default function IndependentReviewPage() {
   const fetchReviews = useCallback(async () => {
     try {
       const [rRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/independent-reviews`, { credentials: "include" }),
-        fetch(`${API}/api/v1/independent-reviews/org-dashboard`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/independent-reviews`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/independent-reviews/org-dashboard`, { credentials: "include" }),
       ]);
       if (rRes.ok) { const d = await rRes.json(); if (d.items?.length) setReviews(d.items); }
       else throw new Error("api");
@@ -158,8 +158,8 @@ export default function IndependentReviewPage() {
     setSelectedFinding(null);
     try {
       const [dRes, fRes] = await Promise.all([
-        fetch(`${API}/api/v1/independent-reviews/${r.id}/dashboard`, { credentials: "include" }),
-        fetch(`${API}/api/v1/independent-reviews/${r.id}/findings`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/independent-reviews/${r.id}/dashboard`, { credentials: "include" }),
+        apiFetch(`${API}/api/v1/independent-reviews/${r.id}/findings`, { credentials: "include" }),
       ]);
       setDashboard(dRes.ok ? await dRes.json() : null);
       if (fRes.ok) { const d = await fRes.json(); setFindings(d.items?.length ? d.items : DEMO_FINDINGS); }
@@ -174,13 +174,13 @@ export default function IndependentReviewPage() {
     setSelectedFinding(f);
     if (!selected) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/recommendations`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/recommendations`, { credentials: "include" });
       const recs: Recommendation[] = res.ok ? (await res.json()).items ?? [] : [];
       setRecommendations(recs);
       const acts: Record<string, ActionItem[]> = {};
       await Promise.all(recs.map(async (rec) => {
         try {
-          const ar = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/recommendations/${rec.id}/actions`, { credentials: "include" });
+          const ar = await apiFetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/recommendations/${rec.id}/actions`, { credentials: "include" });
           acts[rec.id] = ar.ok ? (await ar.json()).items ?? [] : [];
         } catch { acts[rec.id] = []; }
       }));
@@ -193,7 +193,7 @@ export default function IndependentReviewPage() {
     const evidence = prompt("Closure evidence (required):");
     if (!evidence) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/close?closure_evidence=${encodeURIComponent(evidence)}`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/close?closure_evidence=${encodeURIComponent(evidence)}`, { method: "POST", credentials: "include" });
       if (res.ok) {
         const updated = await res.json();
         setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
@@ -206,7 +206,7 @@ export default function IndependentReviewPage() {
   const startRemediation = async (f: Finding) => {
     if (!selected) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/start-remediation`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/start-remediation`, { method: "POST", credentials: "include" });
       if (res.ok) {
         const updated = await res.json();
         setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
@@ -221,7 +221,7 @@ export default function IndependentReviewPage() {
     const response = prompt("Management response:");
     if (!response) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/submit-response?management_response=${encodeURIComponent(response)}`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/submit-response?management_response=${encodeURIComponent(response)}`, { method: "POST", credentials: "include" });
       if (res.ok) {
         const updated = await res.json();
         setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
@@ -233,7 +233,7 @@ export default function IndependentReviewPage() {
 
   const boardAcknowledge = async (r: Review) => {
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${r.id}/board-acknowledge`, { method: "POST", credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/independent-reviews/${r.id}/board-acknowledge`, { method: "POST", credentials: "include" });
       if (res.ok) {
         const updated = await res.json();
         setReviews(prev => prev.map(x => x.id === r.id ? updated : x));

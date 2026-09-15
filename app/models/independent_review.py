@@ -98,6 +98,11 @@ class FindingCategory(str, enum.Enum):
     record_keeping = "record_keeping"
     risk_assessment = "risk_assessment"
     policies_procedures = "policies_procedures"
+    # Two mandatory review areas named by the Verigo Independent Review
+    # Framework template (VERIGO-GEN-IRF-01) that had no dedicated category
+    # before this and would otherwise have to be filed under "other".
+    sanctions_screening = "sanctions_screening"
+    austrac_enrolment = "austrac_enrolment"
     other = "other"
 
 
@@ -187,6 +192,7 @@ class IndependentReview(Base):
     description = Column(Text)
     review_period_start = Column(Date)
     review_period_end = Column(Date)
+    target_completion_date = Column(Date, index=True)  # when the review itself is due
     areas_reviewed = Column(JSON, default=list)  # Free-text list of specific areas
 
     # ── Commissioning ─────────────────────────────────────────────────────────
@@ -300,9 +306,12 @@ class ReviewRecommendation(Base):
     org_id = Column(String, nullable=False)
 
     description = Column(Text, nullable=False)
-    priority = Column(Enum(RecommendationPriority), nullable=False)
+    priority = Column(
+        Enum(RecommendationPriority, name="review_recommendation_priority"),
+        nullable=False,
+    )
     status = Column(
-        Enum(RecommendationStatus),
+        Enum(RecommendationStatus, name="review_recommendation_status"),
         default=RecommendationStatus.open,
         nullable=False,
         index=True,

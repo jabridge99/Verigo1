@@ -86,6 +86,9 @@ class Settings(BaseSettings):
 
     # ── Session cookie ───────────────────────────────────────────────────────
     session_cookie_name: str = "tvg_session"
+    # Double-submit CSRF token — NOT httpOnly (the frontend must be able to
+    # read it and echo it back as a header); see set_csrf_cookie().
+    csrf_cookie_name: str = "tvg_csrf"
 
     # ── Master admin (seeded on startup if set, idempotent) ────────────────────
     master_admin_email: str = ""
@@ -137,6 +140,12 @@ class Settings(BaseSettings):
     # Sanctions screening: internal | complyadvantage | worldcheck
     sanctions_provider: str = "internal"
     complyadvantage_api_key: str = ""
+    # InternalSanctionsProvider: fetch and cache the real DFAT/OFAC/UN
+    # consolidated lists from their official free sources instead of using
+    # the tiny built-in seed. Off by default so dev/test runs never depend
+    # on those government sites being reachable or fast -- enable in
+    # production once the fetchers have been verified against live traffic.
+    sanctions_live_lists_enabled: bool = False
     # PEP screening: stub | complyadvantage | worldcheck
     pep_provider: str = "stub"
     # Identity verification (KYC/KYB): internal | sumsub
@@ -209,9 +218,16 @@ class Settings(BaseSettings):
                     f"{self.environment} — wildcard '*' combined with "
                     f"allow_credentials is unsafe"
                 )
-        if self.environment == "production":
+            # Same "not local dev" reasoning as the CORS check above — this
+            # previously only fired for environment=="production", so a
+            # staging deploy left at the default secret would sign valid
+            # auth tokens for anyone who reads the (public) source default.
             if self.secret_key == "change-me-in-production":
-                raise ValueError("SECRET_KEY must be changed in production")
+                raise ValueError(
+                    f"SECRET_KEY must be changed in {self.environment} — the "
+                    f"insecure default lets anyone forge valid auth tokens"
+                )
+        if self.environment == "production":
             if self.database_url.startswith("sqlite"):
                 raise ValueError(
                     "SQLite is not supported in production — set DATABASE_URL to a "

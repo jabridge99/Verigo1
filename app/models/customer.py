@@ -7,6 +7,7 @@ they are set only by the scoring engine or privileged compliance roles.
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -21,9 +22,10 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -94,9 +96,19 @@ class NoteType(str, enum.Enum):
 
 class Customer(Base):
     __tablename__ = "customers"
+    __table_args__ = (
+        # customer_ref is generated per-org (_next_customer_ref() counts only
+        # that org's existing customers), so it was never actually globally
+        # unique -- two different orgs onboarding their Nth customer of the
+        # same calendar year always generate the identical ref (e.g. both
+        # orgs' first customer ever both get "KYC-2026-00001"), which a
+        # global UNIQUE constraint on customer_ref alone would reject on the
+        # second org's insert. Scoped to match the generator's real intent.
+        UniqueConstraint("org_id", "customer_ref", name="uq_customer_org_ref"),
+    )
 
     id = Column(String, primary_key=True, default=lambda: f"cust_{uuid4().hex[:12]}")
-    customer_ref = Column(String(30), unique=True, nullable=False, index=True)
+    customer_ref = Column(String(30), nullable=False, index=True)
     org_id = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
@@ -104,7 +116,9 @@ class Customer(Base):
         index=True,
     )
     customer_type = Column(
-        Enum(CustomerType), nullable=False, default=CustomerType.individual
+        Enum(CustomerType, name="master_customer_type"),
+        nullable=False,
+        default=CustomerType.individual,
     )
     status = Column(
         Enum(CustomerStatus), default=CustomerStatus.draft, nullable=False, index=True
@@ -127,9 +141,24 @@ class Customer(Base):
     crs_applicable = Column(Boolean, default=False)
 
     # ── Business / KYB ───────────────────────────────────────────────────────
-    # Stored in BusinessDetail child record; FK set after flush
+    # Stored in BusinessDetail child record; FK set after flush.
+    # use_alter=True: customer_business_details.customer_id FKs back to
+    # customers.id, making this a genuine circular FK pair. SQLAlchemy's
+    # own create_all()/drop_all() can't topologically sort a real cycle
+    # without one side marked use_alter (deferred to an ALTER TABLE
+    # statement) -- Alembic's migration chain already applies fine against
+    # Postgres since each ALTER TABLE ADD CONSTRAINT there is independent,
+    # but create_all()/drop_all() (what the test suite uses) previously hit
+    # a CircularDependencyError the moment it ran against real Postgres FK
+    # enforcement; SQLite's DDL is loose enough to never surface it.
     business_detail_id = Column(
-        String, ForeignKey("customer_business_details.id"), nullable=True
+        String,
+        ForeignKey(
+            "customer_business_details.id",
+            use_alter=True,
+            name="fk_customers_business_detail_id",
+        ),
+        nullable=True,
     )
 
     # ── Contact ──────────────────────────────────────────────────────────────
@@ -155,7 +184,7 @@ class Customer(Base):
 
     # ── AML risk fields (set by engine / compliance only) ─────────────────────
     risk_level = Column(Enum(RiskLevel), default=RiskLevel.low, nullable=False)
-    risk_score = Column(Float, default=0.0, nullable=False)
+    risk_score: Mapped[float] = Column(Float, default=0.0, nullable=False)
     is_pep = Column(Boolean, default=False, nullable=False)
     pep_type = Column(Enum(PEPType), nullable=True)
     pep_details = Column(Text)
@@ -492,7 +521,7 @@ class CustomerRiskScoreHistory(Base):
     )
     org_id = Column(String, nullable=False, index=True)
 
-    risk_score = Column(Float, nullable=False)
+    risk_score: Mapped[float] = Column(Float, nullable=False)
     risk_level = Column(Enum(RiskLevel), nullable=False)
     cdd_level = Column(Enum(CDDLevel), nullable=False)
     scoring_factors = Column(JSON)  # breakdown of contributing factors
@@ -501,8 +530,8 @@ class CustomerRiskScoreHistory(Base):
     # inherent = likelihood x consequence, residual = inherent x CEF.
     # Nullable — populated only when the customer-level scoring run computes
     # a full breakdown; legacy rows and simple manual scores leave these null.
-    inherent_score = Column(Float)
-    residual_score = Column(Float)
+    inherent_score: Mapped[Optional[float]] = Column(Float)
+    residual_score: Mapped[Optional[float]] = Column(Float)
     control_effectiveness_score = Column(Integer)  # 1-5, see ControlEffectivenessScore
 
     trigger = Column(String(100))  # onboarding | periodic_review | event | manual
@@ -542,7 +571,7 @@ class CustomerReview(Base):
     review_date = Column(Date, nullable=False)
     next_review_date = Column(Date)
     reviewed_by = Column(String, nullable=False)
-    outcome = Column(Enum(ReviewOutcome))
+    outcome = Column(Enum(ReviewOutcome, name="customer_review_outcome"))
     outcome_notes = Column(Text)
     documents_reviewed = Column(JSON)  # list of document IDs checked
     risk_score_before = Column(Float)
@@ -570,7 +599,11 @@ class CustomerNote(Base):
     )
     org_id = Column(String, nullable=False, index=True)
 
-    note_type = Column(Enum(NoteType), default=NoteType.general, nullable=False)
+    note_type = Column(
+        Enum(NoteType, name="customer_note_type"),
+        default=NoteType.general,
+        nullable=False,
+    )
     content = Column(Text, nullable=False)
     is_confidential = Column(Boolean, default=False)  # mlro-only visibility
     created_by = Column(String, nullable=False)

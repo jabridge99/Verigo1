@@ -54,7 +54,10 @@ class OnboardingSession(Base):
     organisation_id = Column(
         String(36), ForeignKey("organisations.id", ondelete="CASCADE"), index=True
     )
-    customer_type = Column(Enum(CustomerType), default=CustomerType.individual)
+    customer_type = Column(
+        Enum(CustomerType, name="onboarding_customer_type"),
+        default=CustomerType.individual,
+    )
 
     applicant_name = Column(String(300), nullable=False)
     applicant_email = Column(String(300), nullable=False)

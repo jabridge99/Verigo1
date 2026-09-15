@@ -23,42 +23,119 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.models.aml_solution import (
-    AMLPolicy,
     AMLProgram,
     AMLService,
     AMLSolution,
-    Control,
-    ControlStatus,
-    PolicyStatus,
     ProgramStatus,
     RiskAppetite,
     ServiceStatus,
     ServiceType,
     SolutionStatus,
 )
-from app.models.organisation import Organisation
+from app.models.governance import (
+    POLICY_NUMBER_PREFIX,
+    Policy,
+    PolicyLifecycleStatus,
+    PolicyType,
+)
+from app.models.governance_controls import (
+    CONTROL_REF_PREFIX,
+    ControlMethod,
+    ControlRiskArea,
+    ControlStatus,
+    ControlType,
+    GovernanceControl,
+)
+from app.models.organisation import IndustryType, Organisation
 from app.templates.aml.base import AMLTemplateBase
 from app.templates.aml.risk_overlay import apply_overlay
 
 log = logging.getLogger("verigo.templates.aml")
 
+# ── Template free-text → governance-enum mapping ─────────────────────────────
+# BASE_POLICIES/BASE_CONTROLS and each industry's extra_policies/extra_controls
+# (app/templates/aml/base.py, app/templates/aml/industries/*.py) use free-text
+# policy_type/risk_area labels. GovernanceControl.risk_area and Policy.policy_type
+# are closed enums (P7/P11: seeding used to target the legacy, unused
+# Control/AMLPolicy models — see PARKING_LOT.md). Values with no precise enum
+# equivalent go to ControlRiskArea.custom (paired with risk_area_custom, which
+# preserves the original label) or PolicyType.other — never force-mapped to an
+# imprecise category.
+_POLICY_TYPE_MAP: dict[str, PolicyType] = {
+    "risk_assessment": PolicyType.risk_assessment_methodology,
+    "kyc": PolicyType.cdd_policy,
+    "source_of_funds": PolicyType.edd_policy,
+    "transaction_monitoring": PolicyType.transaction_monitoring_policy,
+    "reporting": PolicyType.reporting_policy,
+    "ifti": PolicyType.reporting_policy,  # reporting_policy covers SMR/TTR/IFTI
+    "record_keeping": PolicyType.record_keeping_policy,
+    "staff_training": PolicyType.training_policy,
+    "sanctions": PolicyType.sanctions_screening_policy,
+    "pep": PolicyType.pep_policy,
+    "independent_review": PolicyType.independent_review_policy,
+    "travel_rule": PolicyType.travel_rule_policy,
+    "third_party": PolicyType.outsourcing_policy,
+    "agent_oversight": PolicyType.outsourcing_policy,
+    # No dedicated category — genuinely industry-specific, mapped to "other"
+    # rather than forced into an imprecise category:
+    "trust_accounts": PolicyType.other,
+    "corporate_structures": PolicyType.other,
+    "correspondent_banking": PolicyType.other,
+    "virtual_asset": PolicyType.other,
+}
+
+_RISK_AREA_MAP: dict[str, ControlRiskArea] = {
+    "customer_identity": ControlRiskArea.cdd,
+    "customer_risk": ControlRiskArea.cdd,
+    "kyc": ControlRiskArea.cdd,
+    "source_of_funds": ControlRiskArea.edd,
+    "sanctions": ControlRiskArea.sanctions_screening,
+    "pep": ControlRiskArea.pep_screening,
+    "transaction_monitoring": ControlRiskArea.transaction_monitoring,
+    "reporting": ControlRiskArea.smr_reporting,
+    "staff_training": ControlRiskArea.training,
+    "record_keeping": ControlRiskArea.record_keeping,
+    "governance": ControlRiskArea.governance,
+    "ifti_reporting": ControlRiskArea.ifti_reporting,
+    "ttr_reporting": ControlRiskArea.ttr_reporting,
+    "travel_rule": ControlRiskArea.travel_rule,
+    "beneficial_ownership": ControlRiskArea.beneficial_ownership,
+    # No dedicated risk area — genuinely industry-specific, mapped to "custom"
+    # (with risk_area_custom preserving the original label) rather than forced
+    # into an imprecise category:
+    "trust_accounts": ControlRiskArea.custom,
+    "corporate_structures": ControlRiskArea.custom,
+    "correspondent_banking": ControlRiskArea.custom,
+    "high_value_transactions": ControlRiskArea.custom,
+    "product_risk": ControlRiskArea.custom,
+    "third_party": ControlRiskArea.custom,
+    "agent_oversight": ControlRiskArea.custom,
+}
+
+# Starter controls are seeded unconfigured, before any org customisation —
+# manual_review is a safe, universally-applicable placeholder method; the
+# compliance officer sets the real testing method when they configure each
+# control (mirrors what a human creating a control via POST /governance/
+# controls without picking a method would otherwise be forced to choose).
+_DEFAULT_CONTROL_METHOD = ControlMethod.manual_review
+
 # ── Industry → template module mapping ───────────────────────────────────────
 
 
-def _get_industry_template(industry: str, risk_level: str) -> AMLTemplateBase:
+def _get_industry_template(industry: IndustryType, risk_level: str) -> AMLTemplateBase:
     from app.models.organisation import IndustryType
 
     mapping = {
         # Tranche 1
         IndustryType.remittance: "remittance",
         IndustryType.vasp: "vasp",
-        IndustryType.bullion_dealers: "other",
+        IndustryType.bullion_dealers: "dpms",
         # Tranche 2
         IndustryType.accountants: "accounting",
-        IndustryType.conveyancers: "real_estate",  # shares real_estate template
+        IndustryType.conveyancers: "conveyancers",
         IndustryType.legal_professionals: "legal",
         IndustryType.real_estate: "real_estate",
-        IndustryType.precious_metals: "other",
+        IndustryType.precious_metals: "dpms",
         IndustryType.pubs_clubs: "other",
         # Custom-package industries — should not normally reach here
         IndustryType.banking: "banking",
@@ -181,32 +258,76 @@ def seed_aml_solution(
     db.add(program)
 
     # ── 3. Policies ───────────────────────────────────────────────────────────
+    # Seeded directly into the governance module (GovernanceControl/Policy) —
+    # the actively-developed system behind GET/POST /governance/controls and
+    # /governance/policies — rather than the legacy, UI-disconnected
+    # Control/AMLPolicy models (see PARKING_LOT.md P7/P11).
     policies_data = getattr(tmpl, "_policies", [])
-    for i, p in enumerate(policies_data):
-        policy = AMLPolicy(
+    policy_type_counts: dict[PolicyType, int] = {}
+    for p in policies_data:
+        policy_type = _POLICY_TYPE_MAP.get(p["policy_type"], PolicyType.other)
+        if policy_type not in policy_type_counts:
+            policy_type_counts[policy_type] = (
+                db.query(Policy)
+                .filter(Policy.org_id == org.id, Policy.policy_type == policy_type)
+                .count()
+            )
+        policy_type_counts[policy_type] += 1
+        policy_number = (
+            f"{POLICY_NUMBER_PREFIX.get(policy_type, 'GOV')}"
+            f"-{str(policy_type_counts[policy_type]).zfill(3)}"
+        )
+
+        policy = Policy(
             solution_id=solution.id,
             org_id=org.id,
+            policy_number=policy_number,
             title=p["title"],
-            policy_type=p["policy_type"],
-            version="1.0",
-            status=PolicyStatus.draft,
+            policy_type=policy_type,
+            status=PolicyLifecycleStatus.draft,
+            version_major=1,
+            version_minor=0,
             effective_date=date.today(),
             review_due_date=date.today().replace(year=date.today().year + 1),
+            document_owner=created_by,
             created_by=created_by,
         )
         db.add(policy)
 
     # ── 4. Controls ───────────────────────────────────────────────────────────
     controls_data = getattr(tmpl, "_controls", [])
+    risk_area_counts: dict[ControlRiskArea, int] = {}
     for c in controls_data:
-        control = Control(
+        risk_area_key = c.get("risk_area", "")
+        risk_area = _RISK_AREA_MAP.get(risk_area_key, ControlRiskArea.custom)
+        if risk_area not in risk_area_counts:
+            risk_area_counts[risk_area] = (
+                db.query(GovernanceControl)
+                .filter(
+                    GovernanceControl.org_id == org.id,
+                    GovernanceControl.risk_area == risk_area,
+                )
+                .count()
+            )
+        risk_area_counts[risk_area] += 1
+        control_ref = (
+            f"{CONTROL_REF_PREFIX.get(risk_area, 'CTL-GOV')}"
+            f"-{str(risk_area_counts[risk_area]).zfill(3)}"
+        )
+
+        control = GovernanceControl(
             solution_id=solution.id,
             org_id=org.id,
-            control_ref=c["control_ref"],
-            title=c["title"],
-            control_type=c.get("control_type", "preventive"),
-            risk_area=c.get("risk_area", ""),
-            status=ControlStatus.not_tested,
+            control_ref=control_ref,
+            name=c["title"],
+            control_type=ControlType(c.get("control_type", "preventive")),
+            risk_area=risk_area,
+            risk_area_custom=risk_area_key
+            if risk_area == ControlRiskArea.custom
+            else None,
+            control_owner=created_by,
+            control_method=_DEFAULT_CONTROL_METHOD,
+            status=ControlStatus.active,
             next_test_date=date.today() + timedelta(days=90),
             created_by=created_by,
         )
@@ -226,8 +347,9 @@ def seed_aml_solution(
                 "and registration as a reporting entity under the AML/CTF Act. "
                 "This includes reviewing your registration details, designated services "
                 "declaration, and compliance officer appointment notification.\n\n"
-                "Deadline: Registration must be completed before providing designated services. "
-                "For Tranche 2 entities, the reform commenced 31 March 2026."
+                "Deadline: Tranche 2 entities must enrol with AUSTRAC by 31 March 2026, "
+                "and have a compliant AML/CTF Program operational before the reform's "
+                "full obligations commence on 1 July 2026."
             ),
             deadline=date(2026, 7, 1),
             requested_by=created_by,

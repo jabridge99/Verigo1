@@ -77,7 +77,7 @@ def create_notification(
 def _try_email(db: Session, notif: Notification) -> None:
     from app.services import email_service as em
 
-    user: Optional[User] = db.query(User).filter(User.user_id == notif.user_id).first()
+    user: Optional[User] = db.query(User).filter(User.id == notif.user_id).first()
     if not user:
         return
 

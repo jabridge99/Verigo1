@@ -637,7 +637,7 @@ def list_assignments(
     assignments = (
         q.order_by(TrainingAssignment.created_at.desc())
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
     return {
@@ -724,7 +724,7 @@ def list_records(
     records = (
         q.order_by(GovernanceTrainingRecord.due_date)
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
 

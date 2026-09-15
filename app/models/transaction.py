@@ -18,6 +18,7 @@ remains the sole responsibility of the reporting entity.
 """
 
 import enum
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -34,7 +35,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -151,11 +152,13 @@ class Transaction(Base):
 
     # ── Value ─────────────────────────────────────────────────────────────────
     currency = Column(String(3), default="AUD", nullable=False)
-    amount = Column(Float, nullable=False)
-    amount_aud = Column(Float)  # AUD equivalent at time of transaction
-    exchange_rate = Column(Float)  # rate used for conversion
+    amount: Mapped[float] = Column(Float, nullable=False)
+    amount_aud: Mapped[Optional[float]] = Column(
+        Float
+    )  # AUD equivalent at time of transaction
+    exchange_rate: Mapped[Optional[float]] = Column(Float)  # rate used for conversion
     foreign_currency = Column(String(3))  # original currency if FX conversion
-    foreign_amount = Column(Float)
+    foreign_amount: Mapped[Optional[float]] = Column(Float)
 
     # ── Purpose & Narrative ───────────────────────────────────────────────────
     purpose = Column(String(500))
@@ -202,7 +205,9 @@ class Transaction(Base):
 
     # ── Risk (set by monitoring engine — never user-settable) ─────────────────
     risk_score = Column(Float, default=0.0, index=True)
-    behaviour_score = Column(Float, default=0.0)  # behaviour anomaly score
+    behaviour_score: Mapped[Optional[float]] = Column(
+        Float, default=0.0
+    )  # behaviour anomaly score
     geo_risk_score = Column(Float, default=0.0)
     alerts_generated = Column(Integer, default=0)
     rules_matched = Column(JSON, default=list)  # [rule_id, ...]
@@ -312,13 +317,13 @@ class CustomerBehaviourProfile(Base):
     org_id = Column(String, nullable=False, index=True)
 
     # ── Activity baselines ─────────────────────────────────────────────────────
-    avg_txn_per_day = Column(Float, default=0.0)
-    avg_txn_per_week = Column(Float, default=0.0)
-    avg_txn_per_month = Column(Float, default=0.0)
-    avg_txn_amount_aud = Column(Float, default=0.0)
-    max_txn_amount_aud = Column(Float, default=0.0)
-    total_volume_30d_aud = Column(Float, default=0.0)
-    total_volume_90d_aud = Column(Float, default=0.0)
+    avg_txn_per_day: Mapped[Optional[float]] = Column(Float, default=0.0)
+    avg_txn_per_week: Mapped[Optional[float]] = Column(Float, default=0.0)
+    avg_txn_per_month: Mapped[Optional[float]] = Column(Float, default=0.0)
+    avg_txn_amount_aud: Mapped[Optional[float]] = Column(Float, default=0.0)
+    max_txn_amount_aud: Mapped[Optional[float]] = Column(Float, default=0.0)
+    total_volume_30d_aud: Mapped[Optional[float]] = Column(Float, default=0.0)
+    total_volume_90d_aud: Mapped[Optional[float]] = Column(Float, default=0.0)
     total_txn_count_30d = Column(Integer, default=0)
     total_txn_count_90d = Column(Integer, default=0)
 

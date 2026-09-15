@@ -53,6 +53,7 @@ from app.models.professional_assessment import (
 )
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services import audit_service
 from app.services.professional_assessment_service import (
     DISCLAIMER,
     compute_assessment_risk_rating,
@@ -62,6 +63,28 @@ from app.services.professional_assessment_service import (
 router = APIRouter(
     prefix="/professional-assessments", tags=["Professional Assessments"]
 )
+
+
+def _log(
+    db: Session, current_user: User, assessment_id: str, action: str, notes: str = None
+) -> None:
+    """
+    A professional-services AML assessment (source of funds/wealth, tax
+    risk, investment legitimacy, the professional-judgment checklist) is a
+    real compliance record for accountants/lawyers/TCSPs -- had no audit
+    coverage at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="professional_assessment",
+        entity_id=assessment_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        notes=notes,
+    )
+
 
 ORG_CHECKLIST_DISCLAIMER = (
     "Checklists are compliance workflow tools only. "
@@ -473,6 +496,7 @@ def create_assessment(
     db.add(pa)
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_created")
     return _pa_dict(pa)
 
 
@@ -567,6 +591,7 @@ def update_assessment(
         setattr(pa, k, v)
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_updated")
     return _pa_dict(pa)
 
 
@@ -593,6 +618,13 @@ def complete_assessment(
     pa.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(pa)
+    _log(
+        db,
+        current_user,
+        pa.id,
+        "professional_assessment_completed",
+        notes=f"risk_rating={risk_rating.value}",
+    )
     return _pa_dict(pa, include_sections=True)
 
 
@@ -612,6 +644,13 @@ def escalate_assessment(
     pa.status = AssessmentStatus.escalated
     db.commit()
     db.refresh(pa)
+    _log(
+        db,
+        current_user,
+        pa.id,
+        "professional_assessment_escalated",
+        notes=payload.escalation_reason,
+    )
     return _pa_dict(pa)
 
 
@@ -635,6 +674,7 @@ def upsert_sof(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    sof: SOFAssessment
     if pa.sof_assessment:
         sof = pa.sof_assessment
         for k, v in payload.model_dump().items():
@@ -657,6 +697,7 @@ def upsert_sof(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_sof_updated")
     return _sof_dict(pa.sof_assessment)
 
 
@@ -693,6 +734,7 @@ def upsert_sow(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    sow: SOWAssessment
     if pa.sow_assessment:
         sow = pa.sow_assessment
         for k, v in payload.model_dump().items():
@@ -715,6 +757,7 @@ def upsert_sow(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_sow_updated")
     return _sow_dict(pa.sow_assessment)
 
 
@@ -746,6 +789,7 @@ def upsert_purpose(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    p: TransactionPurposeAssessment
     if pa.purpose_assessment:
         p = pa.purpose_assessment
         for k, v in payload.model_dump().items():
@@ -768,6 +812,7 @@ def upsert_purpose(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_purpose_updated")
     return _purpose_dict(pa.purpose_assessment)
 
 
@@ -822,6 +867,7 @@ def upsert_tax_risk(
     )
     indicator_count = sum(1 for v in standard_indicators if v) + custom_count
 
+    t: TaxRiskAssessment
     if pa.tax_risk_assessment:
         t = pa.tax_risk_assessment
         for k, v in data.items():
@@ -846,6 +892,7 @@ def upsert_tax_risk(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_tax_risk_updated")
     return _tax_dict(pa.tax_risk_assessment)
 
 
@@ -880,6 +927,7 @@ def upsert_investment(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    i: InvestmentLegitimacyAssessment
     if pa.investment_assessment:
         i = pa.investment_assessment
         for k, v in payload.model_dump().items():
@@ -902,6 +950,7 @@ def upsert_investment(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_investment_updated")
     return _inv_dict(pa.investment_assessment)
 
 
@@ -985,6 +1034,7 @@ def submit_checklist(
 
     update_map = {item.key: item for item in payload.items}
 
+    c: ProfessionalJudgmentChecklist
     if pa.checklist:
         c = pa.checklist
         existing = {it["key"]: it for it in (c.items or [])}
@@ -1028,7 +1078,7 @@ def submit_checklist(
             id=f"pjc_{uuid4().hex[:10]}",
             assessment_id=pa.id,
             org_id=pa.org_id,
-            checklist_type=ctype,
+            checklist_type=ChecklistType(ctype),
             items=items_list,
         )
         db.add(c)
@@ -1048,6 +1098,7 @@ def submit_checklist(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_checklist_submitted")
     return _checklist_dict(pa.checklist)
 
 
@@ -1177,6 +1228,15 @@ def upsert_checklist_template(
         db.add(existing)
 
     db.commit()
+    audit_service.log_action(
+        db,
+        action="professional_assessment_checklist_template_updated",
+        entity_type="professional_assessment_checklist_template",
+        entity_id=checklist_type.value,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+    )
     return {
         "checklist_type": checklist_type.value,
         "item_count": len(payload.items),
