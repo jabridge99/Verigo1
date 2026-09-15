@@ -63,19 +63,16 @@ jobs:
         if: matrix.python-version == '3.11'
         run: |
           pip install pip-audit
-          # Two known, currently-unfixable-without-a-larger-change findings
-          # are ignored here rather than silently allowed to fail CI forever —
-          # each is tracked in PARKING_LOT.md with the reason it isn't fixed
-          # yet. (starlette's 7 CVEs, previously ignored here too, are fixed
-          # as of the fastapi 0.111->0.141.1 / pydantic 2.7->2.13 bump — P48.)
+          # One known, currently-unfixable finding is ignored here rather
+          # than silently allowed to fail CI forever — tracked in
+          # PARKING_LOT.md. (starlette's 7 CVEs and pytest's CVE, both
+          # previously ignored here too, are fixed as of the fastapi
+          # 0.111->0.141.1/pydantic 2.7->2.13 bump (P48) and the pytest
+          # 8->9.1.1/pytest-asyncio 1.x bump (P49) respectively.)
           #  - PYSEC-2026-1325 (ecdsa): transitive python-jose dependency,
           #    never exercised (this app signs JWTs with HS256, not ECDSA).
-          #  - PYSEC-2026-1845 (pytest): dev-only tool, no production
-          #    exposure; the fix needs a pytest 9 + pytest-asyncio 1.x major
-          #    bump across the whole test suite.
-          pip-audit -r requirements.txt \
-            --ignore-vuln PYSEC-2026-1325 \
-            --ignore-vuln PYSEC-2026-1845
+          #    No fix version exists upstream.
+          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325
 
       - name: Run tests
         run: |
