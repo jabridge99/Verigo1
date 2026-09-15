@@ -9,6 +9,7 @@ import types
 import pytest
 
 from app.models.organisation import IndustryType, Organisation
+from tests.conftest import UserRole, _make_org, _make_user
 
 # ── Template seeding (AML solution + risk framework) ────────────────────────
 
@@ -24,8 +25,9 @@ def test_seed_aml_solution_for_every_industry_and_risk_level(db, industry, risk_
     db.add(org)
     db.commit()
     db.refresh(org)
+    user = _make_user(db, UserRole.admin, industry_id=org.id)
 
-    solution = seed_aml_solution(db, org, created_by="user_1", risk_level=risk_level)
+    solution = seed_aml_solution(db, org, created_by=user.id, risk_level=risk_level)
     db.commit()
 
     assert solution.org_id == org.id
@@ -36,12 +38,19 @@ def test_seed_aml_solution_for_every_industry_and_risk_level(db, industry, risk_
 def test_seed_risk_framework_for_every_industry(db, industry):
     from app.templates.risk.factory import seed_risk_framework
 
+    from app.models.aml_solution import AMLSolution
+
     org = Organisation(name=f"RiskOrg {industry.value}", industry_type=industry)
     db.add(org)
     db.commit()
     db.refresh(org)
+    user = _make_user(db, UserRole.admin, industry_id=org.id)
+    solution = AMLSolution(org_id=org.id, created_by=user.id)
+    db.add(solution)
+    db.commit()
+    db.refresh(solution)
 
-    framework = seed_risk_framework(db, org, solution_id="sol_1", created_by="user_1")
+    framework = seed_risk_framework(db, org, solution_id=solution.id, created_by=user.id)
     db.commit()
 
     assert framework.org_id == org.id
@@ -671,6 +680,14 @@ def test_seed_questionnaire_for_org_and_skip_logic(db):
         get_available_templates,
         seed_questionnaire_for_org,
     )
+
+    db.add_all(
+        [
+            Organisation(id="org-q1", name="Org Q1", industry_type=IndustryType.remittance),
+            Organisation(id="org-q2", name="Org Q2", industry_type=IndustryType.remittance),
+        ]
+    )
+    db.commit()
 
     result = seed_questionnaire_for_org(db, "org-q1", "remittance", created_by="user_1")
     assert result["seeded"] > 0

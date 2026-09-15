@@ -30,11 +30,20 @@ from app.models.board_report import (
     BoardReportType,
     ReportPeriod,
 )
+from app.models.customer import Customer, CustomerType
+from app.models.organisation import IndustryType, Organisation
 from app.models.screening import ScreeningEntityType, ScreeningRecord, ScreeningType
 from app.services import billing_service as svc
 
 
 def _upgrade(db, org_id: str, plan: BillingPlan) -> None:
+    if not db.query(Organisation).filter_by(id=org_id).first():
+        db.add(
+            Organisation(
+                id=org_id, name=f"Test Org {org_id}", industry_type=IndustryType.remittance
+            )
+        )
+        db.commit()
     db.add(
         Subscription(
             subscription_id=f"sub_{org_id}",
@@ -50,6 +59,18 @@ def _upgrade(db, org_id: str, plan: BillingPlan) -> None:
 
 def _add_screening_records(db, org_id: str, count: int, when=None) -> None:
     when = when or datetime.now(timezone.utc)
+    customer_id = f"cust_{org_id}"
+    if not db.query(Customer).filter_by(id=customer_id).first():
+        db.add(
+            Customer(
+                id=customer_id,
+                customer_ref=f"REF-{org_id}",
+                org_id=org_id,
+                customer_type=CustomerType.individual,
+                full_name="Test Customer",
+            )
+        )
+        db.commit()
     for i in range(count):
         db.add(
             ScreeningRecord(

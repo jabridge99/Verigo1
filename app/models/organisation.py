@@ -91,7 +91,9 @@ class Organisation(Base):
     id = Column(String, primary_key=True, default=lambda: f"org_{uuid4().hex[:12]}")
     name = Column(String(255), nullable=False)
     trading_name = Column(String(255))
-    abn = Column(String(11), unique=True)
+    # 20, not 11: the API accepts and round-trips the human-formatted ABN
+    # ("XX XXX XXX XXX", 14 chars) as entered, not just the 11 raw digits.
+    abn = Column(String(20), unique=True)
     acn = Column(String(9))
     austrac_id = Column(String(50))
     industry_type = Column(Enum(IndustryType), nullable=False)

@@ -1113,6 +1113,14 @@ def run_monitoring(
 
     # 6. Generate regulatory recommendations based on transaction signals + alerts
     if alerts:
+        # RegulatoryRecommendation.alert_id has no ORM relationship() to
+        # TransactionAlert (only a bare FK column), so the unit-of-work has
+        # no dependency edge telling it to insert alerts first -- SQLite
+        # doesn't enforce the FK so wrong ordering never surfaced there,
+        # but Postgres does. Flush now so the alert rows the recommendation
+        # rows reference actually exist before they're inserted.
+        db.flush()
+
         from app.services.recommendation_engine import generate_recommendations
 
         recommendations = generate_recommendations(transaction, customer, alerts, db)
