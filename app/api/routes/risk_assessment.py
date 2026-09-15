@@ -383,8 +383,15 @@ def add_custom_factor(
     )
     db.add(factor)
     db.commit()
-    db.refresh(factor)
+    # _log() below issues its own db.commit(), which (default
+    # expire_on_commit=True) expires every attribute on `factor` again.
+    # Returning an ORM object with no response_model serialises via a
+    # vars()-based fallback that doesn't trigger SQLAlchemy's normal
+    # lazy-reload-on-access, so it silently produced `{}` unless refresh()
+    # is the very last DB call before return -- see risk_assessment.py's
+    # create_mitigation_library_item() history for the same bug.
     _log(db, current_user, "risk_factor", factor.id, "risk_factor_added", notes=name)
+    db.refresh(factor)
     return factor
 
 
@@ -858,7 +865,8 @@ def add_mitigation(
     )
     db.add(mit)
     db.commit()
-    db.refresh(mit)
+    # refresh() must be the last DB call before return -- see
+    # add_custom_factor()'s comment above for why.
     _log(
         db,
         current_user,
@@ -867,6 +875,7 @@ def add_mitigation(
         "risk_mitigation_added",
         notes=mitigation_action,
     )
+    db.refresh(mit)
     return mit
 
 
@@ -907,7 +916,8 @@ def update_mitigation(
     if status == MitigationStatus.completed:
         mit.completed_at = datetime.now(timezone.utc)
     db.commit()
-    db.refresh(mit)
+    # refresh() must be the last DB call before return -- see
+    # add_custom_factor()'s comment above for why.
     _log(
         db,
         current_user,
@@ -916,6 +926,7 @@ def update_mitigation(
         "risk_mitigation_updated",
         notes=completion_notes,
     )
+    db.refresh(mit)
     return mit
 
 
@@ -1144,7 +1155,8 @@ def create_mitigation_library_item(
     )
     db.add(item)
     db.commit()
-    db.refresh(item)
+    # refresh() must be the last DB call before return -- see
+    # add_custom_factor()'s comment above for why.
     _log(
         db,
         current_user,
@@ -1153,6 +1165,7 @@ def create_mitigation_library_item(
         "mitigation_library_item_created",
         notes=name,
     )
+    db.refresh(item)
     return item
 
 
@@ -1187,7 +1200,8 @@ def update_mitigation_library_item(
     if is_active is not None:
         item.is_active = is_active
     db.commit()
-    db.refresh(item)
+    # refresh() must be the last DB call before return -- see
+    # add_custom_factor()'s comment above for why.
     _log(
         db,
         current_user,
@@ -1195,4 +1209,5 @@ def update_mitigation_library_item(
         item.id,
         "mitigation_library_item_updated",
     )
+    db.refresh(item)
     return item
