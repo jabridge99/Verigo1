@@ -24,6 +24,8 @@ All country lists are illustrative starting points. Replace with live FATF/DFAT 
 from dataclasses import dataclass, field
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
 from app.models.customer import CDDLevel, Customer, RiskLevel
 from app.models.customer_workflow import EDDTrigger
 from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD, risk_rating_pct
@@ -126,7 +128,8 @@ HIGH_RISK_OCCUPATIONS = frozenset(
     }
 )
 
-# Default weights — can be overridden per org via GovernanceCustomScoring
+# Default weights — used when an org has no RiskFramework yet, or as a
+# per-dimension fallback within get_org_risk_weights() below.
 DEFAULT_WEIGHTS = {
     "customer": 0.30,
     "product": 0.25,
@@ -134,6 +137,51 @@ DEFAULT_WEIGHTS = {
     "channel": 0.15,
     "transaction": 0.10,
 }
+
+
+def get_org_risk_weights(db: Session, org_id: str) -> dict[str, float]:
+    """
+    Per-org, per-industry override for the 5 dimension weights above,
+    derived from the org's own Enterprise-Wide Risk Assessment framework
+    (RiskFramework.category_weights — seeded per-industry at onboarding by
+    risk/factory.py, and user-customisable afterward via
+    PATCH /risk/framework/category-weights) rather than a separate,
+    third weight-storage mechanism invented just for this engine.
+
+    The EWRA framework has 7 categories (customer/product/service/
+    geographic/channel/transaction/regulatory); this engine only scores 5
+    of them, so the relevant 5 are re-normalised to sum to 1.0 after
+    dropping "service" and "regulatory". Falls back to DEFAULT_WEIGHTS if
+    the org has no framework yet (shouldn't happen post-onboarding, since
+    seed_risk_framework() runs from attach_owner(), but defensive).
+    """
+    from app.models.risk_engine import RiskCategory, RiskFramework
+
+    framework = db.query(RiskFramework).filter(RiskFramework.org_id == org_id).first()
+    if not framework:
+        return DEFAULT_WEIGHTS
+
+    category_weights = framework.category_weights or {}
+    category_rows = {
+        c.category_type.value: c.weight
+        for c in db.query(RiskCategory).filter(
+            RiskCategory.framework_id == framework.id,
+            RiskCategory.is_active.is_(True),
+        )
+        if c.category_type is not None
+    }
+
+    raw: dict[str, float] = {
+        dim: float(
+            category_weights.get(dim, category_rows.get(dim, DEFAULT_WEIGHTS[dim]))
+            or DEFAULT_WEIGHTS[dim]
+        )
+        for dim in DEFAULT_WEIGHTS
+    }
+    total = sum(raw.values())
+    if total <= 0:
+        return DEFAULT_WEIGHTS
+    return {dim: v / total for dim, v in raw.items()}
 
 
 @dataclass

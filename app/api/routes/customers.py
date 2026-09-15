@@ -127,6 +127,7 @@ from app.services import audit_service, billing_service
 from app.services.api_key_service import dispatch_event_background
 from app.services.customer_risk_engine import (
     assess_customer_risk,
+    get_org_risk_weights,
     risk_level_from_score,
 )
 from app.services.risk_engine import inherent_risk, residual_risk
@@ -1355,6 +1356,7 @@ def rescore_customer(
         customer,
         is_pep=customer.is_pep,
         is_sanctions_match=customer.is_sanctions_match,
+        weights=get_org_risk_weights(db, org_id_for(current_user)),
     )
     score = result.overall_score
     factors = {

@@ -59,6 +59,7 @@ from app.services import audit_service
 from app.services.customer_risk_engine import (
     assess_customer_risk,
     cdd_level_from_gateway,
+    get_org_risk_weights,
     risk_level_from_score,
 )
 
@@ -391,6 +392,7 @@ def run_risk_assessment(
         expected_max_transaction_aud=payload.expected_max_transaction_aud,
         expected_frequency=payload.expected_frequency,
         crosses_border=payload.crosses_border,
+        weights=get_org_risk_weights(db, org_id_for(current_user)),
     )
 
     # Persist risk profile

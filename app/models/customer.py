@@ -22,6 +22,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, relationship
@@ -95,9 +96,19 @@ class NoteType(str, enum.Enum):
 
 class Customer(Base):
     __tablename__ = "customers"
+    __table_args__ = (
+        # customer_ref is generated per-org (_next_customer_ref() counts only
+        # that org's existing customers), so it was never actually globally
+        # unique -- two different orgs onboarding their Nth customer of the
+        # same calendar year always generate the identical ref (e.g. both
+        # orgs' first customer ever both get "KYC-2026-00001"), which a
+        # global UNIQUE constraint on customer_ref alone would reject on the
+        # second org's insert. Scoped to match the generator's real intent.
+        UniqueConstraint("org_id", "customer_ref", name="uq_customer_org_ref"),
+    )
 
     id = Column(String, primary_key=True, default=lambda: f"cust_{uuid4().hex[:12]}")
-    customer_ref = Column(String(30), unique=True, nullable=False, index=True)
+    customer_ref = Column(String(30), nullable=False, index=True)
     org_id = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
