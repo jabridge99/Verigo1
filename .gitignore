@@ -31,6 +31,9 @@ web/.next/
 *.tsbuildinfo
 web/out/
 web/.vercel/
+web/test-results/
+web/playwright-report/
+web/blob-report/
 
 # ── Editor / OS ──────────────────────────────────────────────────────────────
 .vscode/

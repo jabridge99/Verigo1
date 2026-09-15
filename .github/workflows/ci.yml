@@ -119,10 +119,23 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit/component tests (Vitest)
+        run: npm run test
+
       - name: Build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
         run: npm run build
+
+      - name: Install Playwright Chromium
+        if: matrix.node-version == '20'
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests (Playwright)
+        if: matrix.node-version == '20'
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: npm run test:e2e
 
   # ── Docker build smoke test ──────────────────────────────────────────────────
   docker:
