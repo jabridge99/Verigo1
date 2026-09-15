@@ -930,11 +930,29 @@ Built the file as `middleware.ts` first, matching P50's own earlier prototype �
 
 ---
 
+## Stage 16 (Testing) — seventh pass, 2026-09-15 (P54, second module)
+
+**Scope:** continued P54 with the next-highest real-usage/risk module, per your "continue P54" direction. Checked actual endpoint purpose before picking, not just coverage %: `app/api/routes/dashboard.py` (21% covered) is the real `/dashboard` global + industry admin dashboard — the landing page every analyst/admin/mlro/compliance user hits after login, aggregating data from nearly every other module (alerts, cases, reports, customers, calendar). Its own docstring states "No cross-tenant data leakage" as a hard requirement, which became the organising principle for these tests: every test seeds a second, unrelated org's data alongside the org under test and asserts the dashboard never counts it.
+
+**What changed:** new `tests/test_dashboard.py` (13 tests) covering all 9 endpoints (`/global`, 5 industry dashboards, 2 trend endpoints, `/compliance-score`), all through the real API with known seeded counts, asserting exact returned numbers and formula outputs rather than just a 200 status or key presence:
+- **Tenant isolation** (the module's own stated requirement): seeded alerts/cases/customers in a second org alongside the org under test, confirmed the dashboard's counts reflect only the calling org's data.
+- **Formula correctness, not just presence**: the composite `risk_score` (weighted alert/case/report counts) and `compliance-score` (5-component weighted penalty) were checked against their exact documented weights with known seeded counts — including a partial-penalty case (1 escalated case out of a warn-threshold of 3 → exactly 1/3 of that component's weight), not just the all-or-nothing extremes.
+- **Real domain filtering per industry dashboard**: remittance's FATF blacklist/greylist/near-threshold/structuring-suspect transaction filters (seeded a real blacklisted-country transaction above the statutory IFTI/TTR threshold and confirmed it's the only one counted as an IFTI candidate); crypto's wallet-risk-category and mixer-exposure filters; legal/accountants/real-estate's `ProfessionalServiceType` filters (seeded assessments of the *wrong* service type alongside the right ones and confirmed each dashboard only counts its own).
+- **Trend bucketing**: seeded alerts/cases across distinct weekly periods and confirmed both the weekly-bucket counts and the `_trend()` up/down/stable classification (seeded a case where the prior 30-60-day period has more alerts than the current period, to specifically exercise the "down" branch — the one branch the auto-covered request-level tests hadn't reached).
+- **Auth**: confirmed a viewer-role user is denied (403) — the endpoint requires analyst-or-above.
+
+**What did NOT change / what's still open:** `governance/training.py` (31%, the single largest remaining raw gap) and `risk_triggered_training_service.py` (11%, narrower single-caller footprint via `training_triggers.py`) remain untouched — P54 continues to be worked one module at a time.
+
+**Verified:** all 13 new tests pass. `dashboard.py` coverage 21%→99% (1 of 188 statements missed — `_trend()`'s unreachable final `return "stable"` fallback once both "up" and "down" are exercised). Full suite: 755 passed, 2 skipped (742 + 13 new), 0 regressions, against both real Postgres and default SQLite. Coverage with CI's exact flags: 74.25% (up from 73.73%, gate 58%). mypy: zero errors. Ruff (check + format, `app/`) clean.
+**Detail:** `tests/test_dashboard.py` (new).
+
+---
+
 ### N. Testing (Stage 16, found 2026-09-15)
 | ID | What | Effort |
 |---|---|---|
 | P52 | **Resolved, 2026-09-15** — see "Stage 16 — third pass" below. All 97 Postgres failures fixed across 8 test files; two were genuine production bugs (a flush-ordering bug in `monitoring_engine.py`, an undersized `organisations.abn` column), not just test fixtures. | Done |
 | P53 | **Resolved, 2026-09-15** — see "Stage 16 — second pass" below. Vitest+RTL for unit/component tests, Playwright for e2e, both wired into CI. First real suite covers real business logic (pricing display, analytics-consent privacy behaviour) and the P50 CSP/HSTS work with a genuine browser-level regression check — not exhaustive coverage of all 62 routes, which stays open as its own future effort. | Done (first suite; broader route coverage remains open-ended future work, not re-tracked as a separate ID) |
-| P54 | **In progress, 2026-09-15** — see "Stage 16 — fourth pass" below. `app/services/automation_engine.py` (14%→96%) done first — real usage/risk assessment found it wired into 6+ core route files (transactions, customers, customer_workflow, screening, kyc, independent_review), the widest blast radius of any module on the list. Still open: `app/api/routes/governance/training.py` (31%, 342 of 495 statements missed — the single largest raw gap), `app/api/routes/dashboard.py` (21%), `app/services/risk_triggered_training_service.py` (11%), plus several others in the 15-30% band | Continue one module at a time, prioritised by real usage/risk, not just %; write real request-level tests per module, not a blanket coverage-chasing pass |
+| P54 | **In progress, 2026-09-15** — see "Stage 16 — fourth and seventh passes" below. `app/services/automation_engine.py` (14%→96%) and `app/api/routes/dashboard.py` (21%→99%) both done — the two highest real-usage/risk modules on the list (automation_engine's 6+ route-file blast radius; dashboard.py is the actual `/dashboard` landing page every analyst/admin hits). Still open: `app/api/routes/governance/training.py` (31%, 342 of 495 statements missed — the single largest raw gap), `app/services/risk_triggered_training_service.py` (11%, narrower single-caller footprint), plus several others in the 15-30% band | Continue one module at a time, prioritised by real usage/risk, not just %; write real request-level tests per module, not a blanket coverage-chasing pass |
 
 ---
