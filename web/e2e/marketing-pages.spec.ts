@@ -67,4 +67,29 @@ test.describe('security headers (P50 regression coverage)', () => {
     await page.waitForLoadState('networkidle')
     expect(violations).toEqual([])
   })
+
+  test('P50b: script-src is nonce-based, not unsafe-inline, and the nonce actually matches an inline script', async ({
+    page,
+  }) => {
+    const response = await page.goto('/')
+    const csp = response?.headers()['content-security-policy'] ?? ''
+    expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/)
+    expect(csp).not.toContain("script-src 'self' 'unsafe-inline'")
+
+    const nonce = csp.match(/'nonce-([A-Za-z0-9+/=]+)'/)?.[1]
+    expect(nonce).toBeTruthy()
+    // The nonce header's value must actually appear on a real inline
+    // script tag in this same response's body -- next-themes' pre-paint
+    // theme-setting script -- not just be present in the header alone.
+    const html = await response!.text()
+    expect(html).toContain(`<script nonce="${nonce}">`)
+
+    // A second, independent navigation gets a different nonce -- proves
+    // it's minted fresh per request, not a build-time constant.
+    const secondResponse = await page.goto('/')
+    const secondCsp = secondResponse?.headers()['content-security-policy'] ?? ''
+    const secondNonce = secondCsp.match(/'nonce-([A-Za-z0-9+/=]+)'/)?.[1]
+    expect(secondNonce).toBeTruthy()
+    expect(secondNonce).not.toBe(nonce)
+  })
 })
