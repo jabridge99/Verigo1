@@ -1,21 +1,12 @@
 """
-Risk Assessment Engine API — EWRA (Enterprise-Wide Risk Assessment) for AML/CTF.
-
-Each org has one RiskFramework (seeded at onboarding, fully customisable).
-Assessments run against the framework: users score each RiskFactor (L × C × CE),
-engine calculates inherent/residual scores, compares to previous runs.
-
-Lifecycle:
-  Framework config → Create run → Score factors → Finalise → Approve
-
-Scoring formula:
-  inherent_risk   = likelihood × consequence        (1–25)
-  CEF             = {1:0.20, 2:0.40, 3:0.60, 4:0.80, 5:1.00}
-  residual_risk   = inherent_risk × CEF
-  category_score  = Σ(factor_residual × factor_weight) / Σweight
-  overall_score   = Σ(category_score × category_weight)
-
-Governance disclaimer is displayed on every response and acknowledged on approval.
+Risk Assessment — the assessment-run lifecycle: create, factor scoring,
+recalculate, narrative, mitigations, submit/approve workflow, score history.
+All of these operate on the same RiskAssessmentRun and share _get_run /
+_calculate_run_scores, which is why they stay in one file rather than being
+split further — unlike framework.py/library.py, this isn't several
+independent resources, it's one resource's full lifecycle.
+Part of the risk_assessment route package; see __init__.py for the combined
+router.
 """
 
 import logging
@@ -33,80 +24,30 @@ from app.api.deps import (
     require_compliance_or_above,
     require_mlro_or_above,
 )
+from app.api.routes.risk_assessment._shared import DISCLAIMER, _get_framework, _log
 from app.db.database import get_db
 from app.models.audit_log import AuditEventType, AuditLog
 from app.models.governance_controls import GovernanceControl
-from app.models.mitigation_library import MitigationCategory, MitigationLibraryItem
 from app.models.risk_engine import (
     AssessmentStatus,
     MitigationStatus,
     RiskAssessmentRun,
     RiskCategory,
-    RiskCategoryType,
     RiskFactor,
     RiskFactorScore,
-    RiskFramework,
     RiskMitigation,
     RiskRating,
     RiskScoreHistory,
 )
 from app.models.user import User
-from app.services import audit_service
 from app.services.control_effectiveness import governance_rating_to_score
-from app.services.risk_engine import (
-    inherent_risk,
-    residual_risk,
-    risk_rating,
-)
+from app.services.risk_engine import inherent_risk, residual_risk, risk_rating
 
 log = logging.getLogger("verigo.api.risk_assessment")
-router = APIRouter(prefix="/risk", tags=["Risk Assessment"])
-
-DISCLAIMER = (
-    "This risk assessment framework is a configurable tool only. Risk ratings, scoring, "
-    "assumptions, and conclusions remain the sole responsibility of the reporting entity. "
-    "The platform does not determine final risk ratings, provide legal or compliance advice, "
-    "or accept liability for risk outcomes."
-)
+router = APIRouter()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-
-def _get_framework(org_id: str, db: Session) -> RiskFramework:
-    fw = db.query(RiskFramework).filter(RiskFramework.org_id == org_id).first()
-    if not fw:
-        raise HTTPException(404, "Risk framework not found — complete onboarding first")
-    return fw
-
-
-def _log(
-    db: Session,
-    current_user: User,
-    entity_type: str,
-    entity_id: str,
-    action: str,
-    notes: str = None,
-) -> None:
-    """
-    create_assessment()/submit_assessment()/approve_assessment() below
-    already write directly to AuditLog (app.models.audit_log, merged into
-    GET /audit/ -- see app/api/routes/audit.py), but framework configuration
-    (category weights, custom factors), factor scoring, and the mitigation
-    library had no audit coverage of any kind. AuditEventType has no values
-    for those, so this uses the free-text audit_service.log_action() path
-    (a second, also-merged table) instead of stretching that enum.
-    """
-    audit_service.log_action(
-        db,
-        action=action,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        actor=current_user.email,
-        actor_role=current_user.role.value if current_user.role else None,
-        organisation_id=org_id_for(current_user),
-        notes=notes,
-    )
 
 
 def _get_run(run_id: str, org_id: str, db: Session) -> RiskAssessmentRun:
@@ -226,173 +167,6 @@ def _calculate_run_scores(run: RiskAssessmentRun, db: Session) -> dict:
         "overall_inherent": round(overall_inherent, 2),
         "overall_residual": round(overall_residual, 2),
     }
-
-
-# ── Framework ─────────────────────────────────────────────────────────────────
-
-
-@router.get("/framework")
-def get_framework(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    fw = _get_framework(org_id_for(current_user), db)
-    categories = (
-        db.query(RiskCategory)
-        .filter(
-            RiskCategory.framework_id == fw.id,
-            RiskCategory.is_active == True,
-        )
-        .order_by(RiskCategory.sort_order)
-        .all()
-    )
-
-    return {
-        "id": fw.id,
-        "name": fw.name,
-        "industry": fw.industry,
-        "category_weights": fw.category_weights,
-        "governance_disclaimer": DISCLAIMER,
-        "categories": [
-            {
-                "id": c.id,
-                "type": c.category_type.value,
-                "name": c.name,
-                "description": c.description,
-                "weight": fw.category_weights.get(c.category_type.value, c.weight),
-                "factor_count": db.query(RiskFactor)
-                .filter(
-                    RiskFactor.category_id == c.id,
-                    RiskFactor.is_active == True,
-                )
-                .count(),
-            }
-            for c in categories
-        ],
-        "created_at": fw.created_at,
-    }
-
-
-@router.patch("/framework/weights")
-def update_category_weights(
-    weights: dict,
-    current_user: User = Depends(require_mlro_or_above),
-    db: Session = Depends(get_db),
-):
-    """Update category weights. Values must be > 0; platform will normalise to sum = 1."""
-    fw = _get_framework(org_id_for(current_user), db)
-    valid_types = {t.value for t in RiskCategoryType}
-    for k in weights:
-        if k not in valid_types:
-            raise HTTPException(422, f"Unknown category type: '{k}'")
-        if weights[k] < 0:
-            raise HTTPException(422, f"Weight for '{k}' must be >= 0")
-
-    total = sum(weights.values())
-    if total == 0:
-        raise HTTPException(422, "At least one weight must be > 0")
-
-    # Normalise
-    fw.category_weights = {k: round(v / total, 4) for k, v in weights.items()}
-    db.commit()
-    _log(db, current_user, "risk_framework", fw.id, "risk_category_weights_updated")
-    return {"category_weights": fw.category_weights}
-
-
-# ── Risk Factors ──────────────────────────────────────────────────────────────
-
-
-@router.get("/framework/categories/{category_id}/factors")
-def list_factors(
-    category_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    oid = org_id_for(current_user)
-    fw = _get_framework(oid, db)
-    cat = (
-        db.query(RiskCategory)
-        .filter(
-            RiskCategory.id == category_id,
-            RiskCategory.framework_id == fw.id,
-        )
-        .first()
-    )
-    if not cat:
-        raise HTTPException(404, "Category not found")
-
-    factors = (
-        db.query(RiskFactor)
-        .filter(
-            RiskFactor.category_id == category_id,
-            RiskFactor.is_active == True,
-        )
-        .order_by(RiskFactor.sort_order)
-        .all()
-    )
-
-    return [
-        {
-            "id": f.id,
-            "factor_ref": f.factor_ref,
-            "name": f.name,
-            "description": f.description,
-            "rationale": f.rationale,
-            "is_mandatory": f.is_mandatory,
-            "suggested_likelihood": f.suggested_likelihood,
-            "suggested_consequence": f.suggested_consequence,
-            "suggested_control_effectiveness": f.suggested_control_effectiveness,
-            "mitigation_examples": f.mitigation_examples,
-            "regulatory_references": f.regulatory_references,
-        }
-        for f in factors
-    ]
-
-
-@router.post("/framework/categories/{category_id}/factors")
-def add_custom_factor(
-    category_id: str,
-    name: str,
-    description: Optional[str] = None,
-    rationale: Optional[str] = None,
-    current_user: User = Depends(require_compliance_or_above),
-    db: Session = Depends(get_db),
-):
-    oid = org_id_for(current_user)
-    fw = _get_framework(oid, db)
-    cat = (
-        db.query(RiskCategory)
-        .filter(
-            RiskCategory.id == category_id,
-            RiskCategory.framework_id == fw.id,
-        )
-        .first()
-    )
-    if not cat:
-        raise HTTPException(404, "Category not found")
-
-    count = db.query(RiskFactor).filter(RiskFactor.category_id == category_id).count()
-    factor = RiskFactor(
-        category_id=category_id,
-        org_id=oid,
-        factor_ref=f"{cat.category_type.value[:2].upper()}-C{str(count + 1).zfill(3)}",
-        name=name,
-        description=description,
-        rationale=rationale,
-        created_by=current_user.id,
-    )
-    db.add(factor)
-    db.commit()
-    # _log() below issues its own db.commit(), which (default
-    # expire_on_commit=True) expires every attribute on `factor` again.
-    # Returning an ORM object with no response_model serialises via a
-    # vars()-based fallback that doesn't trigger SQLAlchemy's normal
-    # lazy-reload-on-access, so it silently produced `{}` unless refresh()
-    # is the very last DB call before return -- see risk_assessment.py's
-    # create_mitigation_library_item() history for the same bug.
-    _log(db, current_user, "risk_factor", factor.id, "risk_factor_added", notes=name)
-    db.refresh(factor)
-    return factor
 
 
 # ── Assessment Runs ───────────────────────────────────────────────────────────
@@ -866,7 +640,7 @@ def add_mitigation(
     db.add(mit)
     db.commit()
     # refresh() must be the last DB call before return -- see
-    # add_custom_factor()'s comment above for why.
+    # framework.py's add_custom_factor() comment for why.
     _log(
         db,
         current_user,
@@ -917,7 +691,7 @@ def update_mitigation(
         mit.completed_at = datetime.now(timezone.utc)
     db.commit()
     # refresh() must be the last DB call before return -- see
-    # add_custom_factor()'s comment above for why.
+    # framework.py's add_custom_factor() comment for why.
     _log(
         db,
         current_user,
@@ -1078,136 +852,3 @@ def get_score_history(
         .all()
     )
     return history
-
-
-# ── Library (read-only templates) ─────────────────────────────────────────────
-
-
-@router.get("/library")
-def list_library_factors(
-    industry: Optional[str] = Query(None),
-    category_type: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    from app.models.risk_engine import RiskLibraryFactor
-
-    q = db.query(RiskLibraryFactor)
-    if industry:
-        q = q.filter(RiskLibraryFactor.industry.in_([industry, "all"]))
-    if category_type:
-        q = q.filter(RiskLibraryFactor.category_type == category_type)
-    return q.order_by(
-        RiskLibraryFactor.category_type, RiskLibraryFactor.sort_order
-    ).all()
-
-
-# ── Mitigation Library (reusable catalogue) ────────────────────────────────────
-
-
-@router.get("/mitigation-library")
-def list_mitigation_library(
-    category: Optional[MitigationCategory] = Query(None),
-    industry: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """System-seeded items (org_id null) plus this org's custom additions."""
-    org_id = org_id_for(current_user)
-    q = db.query(MitigationLibraryItem).filter(
-        (MitigationLibraryItem.org_id.is_(None))
-        | (MitigationLibraryItem.org_id == org_id),
-        MitigationLibraryItem.is_active.is_(True),
-    )
-    if category:
-        q = q.filter(MitigationLibraryItem.category == category)
-    items = q.order_by(MitigationLibraryItem.name).all()
-    if industry:
-        items = [
-            i
-            for i in items
-            if not i.applicable_industries or industry in i.applicable_industries
-        ]
-    return items
-
-
-@router.post("/mitigation-library")
-def create_mitigation_library_item(
-    name: str = Query(...),
-    description: Optional[str] = Query(None),
-    category: MitigationCategory = Query(MitigationCategory.other),
-    control_weighting: float = Query(0.1, ge=0.0, le=1.0),
-    applicable_industries: Optional[List[str]] = Query(None),
-    risk_categories: Optional[List[str]] = Query(None),
-    current_user: User = Depends(require_mlro_or_above),
-    db: Session = Depends(get_db),
-):
-    """Director/MLRO/Compliance only — org-scoped custom mitigation catalogue entry."""
-    item = MitigationLibraryItem(
-        org_id=org_id_for(current_user),
-        name=name,
-        description=description,
-        category=category,
-        control_weighting=control_weighting,
-        applicable_industries=applicable_industries or [],
-        risk_categories=risk_categories or [],
-        created_by=current_user.id,
-    )
-    db.add(item)
-    db.commit()
-    # refresh() must be the last DB call before return -- see
-    # add_custom_factor()'s comment above for why.
-    _log(
-        db,
-        current_user,
-        "mitigation_library_item",
-        item.id,
-        "mitigation_library_item_created",
-        notes=name,
-    )
-    db.refresh(item)
-    return item
-
-
-@router.patch("/mitigation-library/{item_id}")
-def update_mitigation_library_item(
-    item_id: str,
-    name: Optional[str] = Query(None),
-    description: Optional[str] = Query(None),
-    control_weighting: Optional[float] = Query(None, ge=0.0, le=1.0),
-    is_active: Optional[bool] = Query(None),
-    current_user: User = Depends(require_mlro_or_above),
-    db: Session = Depends(get_db),
-):
-    item = (
-        db.query(MitigationLibraryItem)
-        .filter(
-            MitigationLibraryItem.id == item_id,
-            MitigationLibraryItem.org_id == org_id_for(current_user),
-        )
-        .first()
-    )
-    if not item:
-        raise HTTPException(
-            404, "Mitigation library item not found (system-seeded items are read-only)"
-        )
-    if name is not None:
-        item.name = name
-    if description is not None:
-        item.description = description
-    if control_weighting is not None:
-        item.control_weighting = control_weighting
-    if is_active is not None:
-        item.is_active = is_active
-    db.commit()
-    # refresh() must be the last DB call before return -- see
-    # add_custom_factor()'s comment above for why.
-    _log(
-        db,
-        current_user,
-        "mitigation_library_item",
-        item.id,
-        "mitigation_library_item_updated",
-    )
-    db.refresh(item)
-    return item
