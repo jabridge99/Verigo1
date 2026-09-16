@@ -59,6 +59,10 @@ export function apiPatch<T>(path: string, body?: unknown, init: RequestInit = {}
   return request<T>(path, jsonInit('PATCH', body, init))
 }
 
+export function apiPut<T>(path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
+  return request<T>(path, jsonInit('PUT', body, init))
+}
+
 export function apiDelete<T>(path: string, init: RequestInit = {}): Promise<T> {
   return request<T>(path, { method: 'DELETE', ...init })
 }

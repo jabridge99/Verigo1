@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, ExternalLink, AlertTriangle,
   Calendar, Receipt, Settings, ArrowRight, Sparkles, Database, Lock,
 } from "lucide-react";
-import { getStoredUser, apiFetch } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import {
@@ -24,12 +24,17 @@ import {
   adminFeatureMatrix,
   adminToggleFeature,
 } from "@/lib/api/billing";
+import {
+  getMyStorageConfig,
+  setMyStorageConfig,
+  clearMyStorageConfig,
+  adminGetStorageConfig,
+  adminSetStorageConfig,
+  adminClearStorageConfig,
+  type StorageConfig,
+} from "@/lib/api/storage";
 import { ApiError } from "@/lib/api/client";
 
-// Storage config (below) is a separate backend resource (app/api/routes/
-// storage.py) and still uses apiFetch/API directly — only billing/*
-// call sites are migrated onto lib/api/billing.ts.
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 interface Plan {
@@ -95,16 +100,15 @@ const DEMO_INVOICES: Invoice[] = [
 
 // ── Storage config ───────────────────────────────────────────────────────────
 
-interface StorageConfig {
-  backend: string;
-  bucket?: string;
-  region?: string;
-  access_key?: string;
-  endpoint_url?: string;
-  account_name?: string;
-  container?: string;
-  configured: boolean;
-  verified?: boolean | null;
+// StorageConfig's non-backend fields are Optional[str] on the backend (nullable
+// and non-string configured/verified alongside them) — filter to the string
+// fields only when seeding the form, rather than spreading the whole response.
+function toFormFields(cfg: StorageConfig): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const [k, v] of Object.entries(cfg)) {
+    if (typeof v === "string") fields[k] = v;
+  }
+  return fields;
 }
 
 const BACKEND_FIELDS: Record<string, { key: string; label: string; secret?: boolean }[]> = {
@@ -169,32 +173,24 @@ function MyStoragePanel({ plan }: { plan?: string }) {
 
   const load = async () => {
     try {
-      const res = await apiFetch(`${API}/api/v1/storage/config`, { credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await getMyStorageConfig();
       setConfig(data);
-      if (data.configured) setForm({ backend: data.backend, ...data });
+      if (data.configured) setForm(toFormFields(data));
     } catch {}
   };
 
   const save = async () => {
     setSaving(true); setMsg("");
     try {
-      const res = await apiFetch(`${API}/api/v1/storage/config`, {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Save failed");
+      const data = await setMyStorageConfig(form);
       setConfig(data);
       setMsg(data.verified ? "Connected and verified." : "Saved — connection could not be verified, check credentials.");
-    } catch (e: any) { setMsg(e.message); }
+    } catch (e) { setMsg(e instanceof ApiError ? e.message : "Save failed"); }
     finally { setSaving(false); }
   };
 
   const disconnect = async () => {
-    await apiFetch(`${API}/api/v1/storage/config`, { method: "DELETE", credentials: "include" });
+    await clearMyStorageConfig();
     setConfig({ backend: "local", configured: false });
     setForm({ backend: "s3" });
     setMsg("Reverted to the platform default storage.");
@@ -262,33 +258,25 @@ function AdminStoragePanel() {
     if (!industryId) return;
     setMsg("");
     try {
-      const res = await apiFetch(`${API}/api/v1/storage/admin/${industryId}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Tenant not found or lookup failed");
-      const data = await res.json();
+      const data = await adminGetStorageConfig(industryId);
       setCurrent(data);
-      setForm({ backend: data.backend, ...data });
-    } catch (e: any) { setMsg(e.message); setCurrent(null); }
+      setForm(toFormFields(data));
+    } catch { setMsg("Tenant not found or lookup failed"); setCurrent(null); }
   };
 
   const save = async () => {
     setSaving(true); setMsg("");
     try {
-      const res = await apiFetch(`${API}/api/v1/storage/admin/${industryId}`, {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Save failed");
+      const data = await adminSetStorageConfig(industryId, form);
       setCurrent(data);
       setMsg(data.verified ? "Connected and verified." : "Saved — connection could not be verified.");
-    } catch (e: any) { setMsg(e.message); }
+    } catch (e) { setMsg(e instanceof ApiError ? e.message : "Save failed"); }
     finally { setSaving(false); }
   };
 
   const clear = async () => {
     if (!industryId) return;
-    await apiFetch(`${API}/api/v1/storage/admin/${industryId}`, { method: "DELETE", credentials: "include" });
+    await adminClearStorageConfig(industryId);
     setCurrent({ backend: "local", configured: false });
     setMsg("Reverted to the platform default storage.");
   };
