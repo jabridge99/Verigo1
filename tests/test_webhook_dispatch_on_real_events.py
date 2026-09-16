@@ -57,7 +57,7 @@ def test_create_customer_dispatches_customer_created_event(
 ):
     calls = []
     monkeypatch.setattr(
-        "app.api.routes.customers.dispatch_event_background",
+        "app.api.routes.customers.crud.dispatch_event_background",
         lambda event, payload, industry_id=None: calls.append(
             (event, payload, industry_id)
         ),
@@ -92,7 +92,7 @@ def test_run_screening_dispatches_aml_alert_created_on_match(
         ),
     )
     monkeypatch.setattr(
-        "app.api.routes.customers.dispatch_event_background", lambda *a, **k: None
+        "app.api.routes.customers.crud.dispatch_event_background", lambda *a, **k: None
     )
 
     create_resp = client.post(
