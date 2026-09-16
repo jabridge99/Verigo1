@@ -7,12 +7,10 @@ Roles:
   Escalate              — mlro+
 """
 
-from datetime import date
 from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -30,6 +28,7 @@ from app.models.compliance_calendar import (
     ComplianceReminder,
 )
 from app.models.user import User
+from app.schemas.compliance_calendar import CalendarItemCreate, CompleteItemRequest
 from app.services import audit_service
 from app.services.compliance_calendar_service import (
     complete_item,
@@ -65,25 +64,6 @@ def _log(
         after_state=after_state,
         notes=notes,
     )
-
-
-class CalendarItemCreate(BaseModel):
-    item_type: CalendarItemType
-    title: str
-    due_date: date
-    description: Optional[str] = None
-    customer_id: Optional[str] = None
-    report_id: Optional[str] = None
-    report_type: Optional[str] = None
-    policy_id: Optional[str] = None
-    control_id: Optional[str] = None
-    assigned_to: Optional[str] = None
-    is_recurring: bool = False
-    recurrence_months: Optional[int] = None
-
-
-class CompleteItemRequest(BaseModel):
-    completion_notes: Optional[str] = None
 
 
 def _item_dict(item: ComplianceCalendarItem) -> dict:

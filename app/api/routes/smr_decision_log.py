@@ -17,7 +17,6 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -29,13 +28,16 @@ from app.api.deps import (
 from app.db.database import get_db
 from app.models.customer import Customer
 from app.models.smr_decision_log import (
-    SMRContinueDealings,
     SMRDecisionLog,
     SMRDecisionOutcome,
-    SMRMatterSource,
-    SMRSuspicionType,
 )
 from app.models.user import User
+from app.schemas.smr_decision_log import (
+    DecisionAssess,
+    DecisionClose,
+    DecisionLodge,
+    DecisionLogCreate,
+)
 from app.services import audit_service
 
 router = APIRouter(prefix="/smr-decision-logs", tags=["SMR Decision Log"])
@@ -58,44 +60,6 @@ def _log(db: Session, current_user: User, decision_id: str, action: str) -> None
         actor_role=current_user.role.value if current_user.role else None,
         organisation_id=org_id_for(current_user),
     )
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class DecisionLogCreate(BaseModel):
-    customer_id: Optional[str] = None
-    case_id: Optional[str] = None
-    tmp_alert_id: Optional[str] = None
-    ecdd_case_id: Optional[str] = None
-    related_transaction_id: Optional[str] = None
-    matter_source: SMRMatterSource
-    identifying_employee: Optional[str] = None
-    suspicion_category: Optional[str] = Field(None, max_length=100)
-    risk_matrix_ref: Optional[str] = Field(None, max_length=50)
-    description: Optional[str] = None
-
-
-class DecisionAssess(BaseModel):
-    suspicion_formed: bool
-    suspicion_type: Optional[SMRSuspicionType] = None
-    is_terrorism_financing_indicator: bool = False
-    reasons: str = Field(..., min_length=1)
-    enhanced_monitoring_applied: bool = False
-
-
-class DecisionLodge(BaseModel):
-    austrac_reference: str = Field(..., min_length=1, max_length=100)
-    tipping_off_check_confirmed: bool
-    director_notified: bool = False
-    continue_dealings: SMRContinueDealings = SMRContinueDealings.continue_normal
-    post_decision_notes: Optional[str] = None
-
-
-class DecisionClose(BaseModel):
-    outcome: SMRDecisionOutcome
-    post_decision_notes: Optional[str] = None
-    next_review_date: Optional[str] = None  # ISO date string
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

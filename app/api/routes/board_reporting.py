@@ -17,12 +17,14 @@ import csv
 import html as html_escape_module
 import io
 import logging
-from datetime import date, datetime, timezone
-from typing import List, Optional
+from datetime import (
+    datetime,
+    timezone,
+)
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_roles
@@ -34,6 +36,7 @@ from app.models.board_report import (
     ReportPeriod,
 )
 from app.models.user import UserRole
+from app.schemas.board_report import DistributeBody, ReportCreate, ReportUpdate
 from app.services import audit_service, billing_service
 from app.services.board_reporting_service import generate_snapshot
 
@@ -80,35 +83,6 @@ REPORT_TRANSITIONS = {
     BoardReportStatus.distributed: [BoardReportStatus.archived],
     BoardReportStatus.archived: [],
 }
-
-# ── Pydantic schemas ──────────────────────────────────────────────────────────
-
-
-class ReportCreate(BaseModel):
-    report_ref: str
-    report_type: BoardReportType
-    period: ReportPeriod
-    period_start: date
-    period_end: date
-    title: Optional[str] = None
-    executive_summary: Optional[str] = None
-    mlro_commentary: Optional[str] = None
-    key_messages: Optional[List[str]] = None
-
-
-class ReportUpdate(BaseModel):
-    title: Optional[str] = None
-    executive_summary: Optional[str] = None
-    mlro_commentary: Optional[str] = None
-    key_messages: Optional[List[str]] = None
-    board_minutes_ref: Optional[str] = None
-    board_resolution: Optional[str] = None
-
-
-class DistributeBody(BaseModel):
-    distributed_to: List[str]  # e.g. ["Board", "Audit Committee", "CEO"]
-    distribution_notes: Optional[str] = None
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

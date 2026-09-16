@@ -17,7 +17,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -37,6 +36,12 @@ from app.models.integration import (
     OrgIntegration,
 )
 from app.models.user import User
+from app.schemas.integration import (
+    CredentialRotation,
+    IntegrationEnable,
+    IntegrationUpdate,
+    OAuthCallback,
+)
 from app.services.crypto import decrypt_credentials, encrypt_credentials
 from app.services.integration_monitor import migrate_legacy_connectors, run_expiry_check
 from app.services.integration_verify import verify_credentials
@@ -48,38 +53,6 @@ DISCLAIMER = (
     "Results from third-party providers are not compliance determinations. "
     "All decisions remain with the reporting entity."
 )
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class IntegrationEnable(BaseModel):
-    credentials: dict = Field(
-        ..., description="Provider credentials (encrypted at rest)"
-    )
-    config: dict = Field(
-        default_factory=dict, description="Non-sensitive configuration"
-    )
-    credential_expires_at: datetime | None = Field(
-        None, description="Vendor-stated API key expiry, if known"
-    )
-
-
-class OAuthCallback(BaseModel):
-    code: str
-    state: str
-
-
-class IntegrationUpdate(BaseModel):
-    config: dict | None = None
-
-
-class CredentialRotation(BaseModel):
-    new_credentials: dict = Field(
-        ..., description="New credentials to replace existing"
-    )
-    reason: str = Field(..., min_length=5)
-    credential_expires_at: datetime | None = None
 
 
 # ── Seed provider catalog ─────────────────────────────────────────────────────
