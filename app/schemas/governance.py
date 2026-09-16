@@ -3,12 +3,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.models.governance import (
-    AttestationType,
-    PolicyCategory,
-    PolicyLifecycleStatus,
-    PolicyType,
-)
 from app.models.governance_controls import (
     ControlEffectiveness,
     ControlFrequency,
@@ -19,6 +13,12 @@ from app.models.governance_controls import (
     FindingSeverity,
     RemediationStatus,
     TestResult,
+)
+from app.models.governance_policies import (
+    AttestationType,
+    PolicyCategory,
+    PolicyLifecycleStatus,
+    PolicyType,
 )
 from app.models.governance_training import (
     AssignmentTrigger,

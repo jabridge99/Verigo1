@@ -4,7 +4,7 @@ rows in the legacy, UI-disconnected Control/AMLPolicy models
 (app.models.aml_solution) while the actively-developed governance module a
 real compliance officer uses -- GET/POST /governance/controls,
 /governance/policies; app.models.governance_controls.GovernanceControl,
-app.models.governance.Policy -- read from a separate, unrelated table set.
+app.models.governance_policies.Policy -- read from a separate, unrelated table set.
 Freshly seeded starter controls/policies were invisible to the real UI.
 
 Fixed by retargeting seed_aml_solution() (and org_service.py's
@@ -17,7 +17,7 @@ for the one BASE_POLICIES entry ("Independent Review Policy") that had no
 enum equivalent at all.
 """
 
-from app.models.governance import Policy, PolicyType
+from app.models.governance_policies import Policy, PolicyType
 from app.models.governance_controls import ControlRiskArea, GovernanceControl
 from app.services.org_service import seed_permission_catalog_and_roles
 from tests.conftest import _auth

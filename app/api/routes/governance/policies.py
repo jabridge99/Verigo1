@@ -25,7 +25,7 @@ from app.api.deps import (
 )
 from app.db.database import get_db
 from app.models.audit_log import AuditEventType, AuditLog
-from app.models.governance import (
+from app.models.governance_policies import (
     ALLOWED_TRANSITIONS,
     POLICY_NUMBER_PREFIX,
     Policy,

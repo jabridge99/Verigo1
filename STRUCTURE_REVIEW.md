@@ -67,10 +67,10 @@ Verified after every step: full backend test suite (413 tests — 2 fewer than b
 
 **Not touched, and still an open question:** the two-tier authorization split (`app/api/deps.py`'s role-based gating vs `app/services/org_service.py`'s DB-backed permission catalog) mentioned in the original C3 write-up is unrelated to risk scoring and wasn't part of this fix — still open, not urgent.
 
-### C4. Naming issues (no functional risk, but renaming touches many files)
+### C4. Naming issues — RESOLVED 2026-09-16 (see PARKING_LOT.md, "Parking-lot cleanup pass, 2026-09-16")
 
-- `app/models/governance.py` actually contains only the *policy* domain (`Policy`, `PolicyVersion`, `PolicyAttestation`, etc.) — misleading next to its siblings `governance_controls.py`, `governance_customisation.py`, `governance_training.py`, which are named for what they contain. Renaming to `governance_policies.py` would be clearer but touches every file that imports from it — mechanical but wide.
-- `app/services/identity_verification.py` vs `app/services/identity_verification_service.py` — two different, both-live scoring systems (single-document match confidence vs. a 6-category composite score) distinguished only by a `_service` suffix that carries no real meaning. A clearer pair of names would help; low urgency.
+- `app/models/governance.py` actually contained only the *policy* domain (`Policy`, `PolicyVersion`, `PolicyAttestation`, etc.) — misleading next to its siblings `governance_controls.py`, `governance_customisation.py`, `governance_training.py`, which are named for what they contain. Renamed to `governance_policies.py`; every importer updated.
+- `app/services/identity_verification.py` vs `app/services/identity_verification_service.py` — two different, both-live scoring systems (single-document match confidence vs. a 6-category composite score) distinguished only by a `_service` suffix that carried no real meaning. Renamed to `document_verification.py` (single-document field match) and `identity_composite_score.py` (six-category composite score) respectively.
 
 ---
 

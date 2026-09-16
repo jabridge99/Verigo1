@@ -88,6 +88,11 @@ from app.models.case import (
 from app.models.case import (
     NoteType as CaseNoteType,
 )
+from app.models.compliance_breach import (
+    BreachSeverity,
+    BreachStatus,
+    ComplianceBreach,
+)
 from app.models.compliance_calendar import (
     CalendarItemStatus,
     CalendarItemType,
@@ -150,23 +155,6 @@ from app.models.examination_pack import (
     ExaminationPack,
     ExaminationPackStatus,
 )
-from app.models.governance import (
-    ALLOWED_TRANSITIONS,
-    ANNUAL_ATTESTATION_POLICY_TYPES,
-    DEFAULT_REVIEW_MONTHS,
-    MANDATORY_ATTESTATION_POLICY_TYPES,
-    POLICY_NUMBER_PREFIX,
-    AttestationType,
-    Policy,
-    PolicyAttestation,
-    PolicyCategory,
-    PolicyLifecycleStatus,
-    PolicyReviewReminder,
-    PolicyType,
-    PolicyVersion,
-    PolicyWorkflowEvent,
-    ReminderType,
-)
 from app.models.governance_controls import (
     CONTROL_REF_PREFIX,
     DEFAULT_EFFECTIVENESS_THRESHOLDS,
@@ -197,6 +185,23 @@ from app.models.governance_customisation import (
     GovernanceCustomWorkflow,
     GovernanceDashboardMetric,
     ListCategory,
+)
+from app.models.governance_policies import (
+    ALLOWED_TRANSITIONS,
+    ANNUAL_ATTESTATION_POLICY_TYPES,
+    DEFAULT_REVIEW_MONTHS,
+    MANDATORY_ATTESTATION_POLICY_TYPES,
+    POLICY_NUMBER_PREFIX,
+    AttestationType,
+    Policy,
+    PolicyAttestation,
+    PolicyCategory,
+    PolicyLifecycleStatus,
+    PolicyReviewReminder,
+    PolicyType,
+    PolicyVersion,
+    PolicyWorkflowEvent,
+    ReminderType,
 )
 from app.models.governance_training import (
     STANDARD_TRAINING_COURSES,

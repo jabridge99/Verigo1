@@ -310,7 +310,7 @@ def _training_section(
 def _policies_section(
     db: Session, org_id: str, period_start: date, period_end: date
 ) -> dict:
-    from app.models.governance import Policy, PolicyLifecycleStatus
+    from app.models.governance_policies import Policy, PolicyLifecycleStatus
 
     policies = db.query(Policy).filter_by(org_id=org_id).all()
     today = date.today()
@@ -643,7 +643,7 @@ def _ttr_quarterly_section(
 def _ecdd_quarterly_section(
     db: Session, org_id: str, period_start: date, period_end: date
 ) -> dict:
-    from app.models.report import ECDDRecord, ECDDStatus
+    from app.models.report import ECDDRecord, ECDDRejectionType, ECDDStatus
 
     period_cases = (
         db.query(ECDDRecord)
@@ -663,6 +663,11 @@ def _ecdd_quarterly_section(
     all_open = (
         db.query(ECDDRecord).filter_by(org_id=org_id, status=ECDDStatus.pending).count()
     )
+    rejected = [
+        c
+        for c in period_cases
+        if c.status == ECDDStatus.rejected or c.recommendation == "reject"
+    ]
 
     return {
         "new_cases_opened": len(period_cases),
@@ -671,10 +676,20 @@ def _ecdd_quarterly_section(
             for c in period_cases
             if c.status == ECDDStatus.completed and c.recommendation != "reject"
         ),
+        # Split per the CO Quarterly Report template (VERIGO-GEN-COR), which
+        # tracks these as separate metrics -- P34. A rejection decided
+        # before this distinction existed (rejection_type unset) falls back
+        # into "declined", the more common case, rather than being silently
+        # dropped from either count.
         "declined": sum(
             1
-            for c in period_cases
-            if c.status == ECDDStatus.rejected or c.recommendation == "reject"
+            for c in rejected
+            if c.rejection_type != ECDDRejectionType.relationship_exited
+        ),
+        "relationship_exited": sum(
+            1
+            for c in rejected
+            if c.rejection_type == ECDDRejectionType.relationship_exited
         ),
         "still_open_end_of_quarter": all_open,
     }
@@ -714,6 +729,57 @@ def _sanctions_quarterly_section(
         "possible_matches": len(possible_matches),
         "false_positives": len(false_positives),
         "confirmed_matches": len(confirmed),
+    }
+
+
+def _breaches_quarterly_section(
+    db: Session, org_id: str, period_start: date, period_end: date
+) -> dict:
+    """
+    "Breaches Identified This Quarter" -- the template's own section.
+    Sourced from ComplianceBreach (app/api/routes/compliance_breach.py, P34).
+    """
+    from app.models.compliance_breach import BreachStatus, ComplianceBreach
+
+    period_breaches = (
+        db.query(ComplianceBreach)
+        .filter(
+            ComplianceBreach.org_id == org_id,
+            ComplianceBreach.identified_date >= period_start,
+            ComplianceBreach.identified_date <= period_end,
+        )
+        .order_by(ComplianceBreach.identified_date)
+        .all()
+    )
+    still_open = (
+        db.query(ComplianceBreach)
+        .filter_by(org_id=org_id, status=BreachStatus.open)
+        .count()
+    )
+
+    return {
+        "total_identified": len(period_breaches),
+        "by_severity": {
+            sev: sum(1 for b in period_breaches if b.severity.value == sev)
+            for sev in ("critical", "high", "medium", "low")
+        },
+        "reported_to_austrac": sum(1 for b in period_breaches if b.reported_to_austrac),
+        "remediated_or_closed": sum(
+            1
+            for b in period_breaches
+            if b.status in (BreachStatus.remediated, BreachStatus.closed)
+        ),
+        "still_open_end_of_quarter": still_open,
+        "breaches": [
+            {
+                "title": b.title,
+                "severity": b.severity.value,
+                "identified_date": str(b.identified_date),
+                "status": b.status.value,
+                "reported_to_austrac": b.reported_to_austrac,
+            }
+            for b in period_breaches
+        ],
     }
 
 
@@ -766,6 +832,9 @@ def _co_quarterly_extras(
         "ttr": _ttr_quarterly_section(db, org_id, period_start, period_end),
         "ecdd_quarterly": _ecdd_quarterly_section(db, org_id, period_start, period_end),
         "sanctions_quarterly": _sanctions_quarterly_section(
+            db, org_id, period_start, period_end
+        ),
+        "breaches_quarterly": _breaches_quarterly_section(
             db, org_id, period_start, period_end
         ),
         "open_actions_prior_quarters": _open_actions_quarterly_section(db, org_id),

@@ -256,7 +256,7 @@ async def submit_onboarding(db, session, ip_address=None):
     Finishes the applicant's self-entry step (Step 1). This does NOT decide
     KYC pass/fail — a Customer record is created in `draft` status as the
     screenable subject, but only Step 3 (document screening / composite
-    identity score, see app.services.identity_verification_service) can
+    identity score, see app.services.identity_composite_score) can
     promote it to `active`. Applicants stay out of the Customers list
     (see customers.py list_customers default filter) until that happens.
 

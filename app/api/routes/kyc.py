@@ -26,7 +26,7 @@ from app.models.screening import ScreeningRecord, ScreeningStatus
 from app.models.usage import UsageEventType, UsageRecordStatus
 from app.models.user import User, UserRole
 from app.services.audit_service import log_action
-from app.services.identity_verification import (
+from app.services.document_verification import (
     compute_kyc_identity_score,
     verify_document,
 )

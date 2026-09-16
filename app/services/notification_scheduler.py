@@ -290,7 +290,7 @@ def check_control_test_overdue(db: Session) -> int:
 
 def check_policy_review_due(db: Session) -> int:
     try:
-        from app.models.governance import Policy, PolicyLifecycleStatus
+        from app.models.governance_policies import Policy, PolicyLifecycleStatus
 
         today = date.today()
         in_30_days = today + timedelta(days=30)

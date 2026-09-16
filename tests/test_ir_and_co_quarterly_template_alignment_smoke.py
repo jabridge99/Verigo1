@@ -178,6 +178,7 @@ def test_co_quarterly_report_computes_template_sections(
         "TTR Activity",
         "ECDD Activity",
         "Sanctions Screening Activity (Detail)",
+        "Breaches Identified This Quarter",
         "Open Actions from Prior Quarters",
         "Program and Regulatory Updates",
     ):

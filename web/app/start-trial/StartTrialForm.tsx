@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CheckCircle, ArrowRight, Shield, Phone, Loader2, AlertCircle } from 'lucide-react'
-import { industries, CUSTOM_PACKAGE_INDUSTRIES, type IndustryId } from '@/lib/industries'
+import { selectableIndustries, CUSTOM_PACKAGE_INDUSTRIES, type IndustryId } from '@/lib/industries'
 import { registerAccount } from '@/lib/signup'
 
 export default function StartTrialForm() {
@@ -100,7 +100,7 @@ export default function StartTrialForm() {
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
             >
               <option value="">Select your industry</option>
-              {industries.map(i => (
+              {selectableIndustries.map(i => (
                 <option key={i.id} value={i.id}>
                   {i.label}{i.regime === 'expanded' ? ' (Tranche 2 — 2026)' : ''}
                 </option>

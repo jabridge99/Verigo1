@@ -52,6 +52,7 @@ from app.models.case import Case
 from app.models.customer import Customer
 from app.models.report import (
     ECDDRecord,
+    ECDDRejectionType,
     ECDDStatus,
     FilingRegisterEntry,
     ReportStatus,
@@ -1448,9 +1449,29 @@ def decide_ecdd(
             "decision_notes is required — record why this customer was accepted, rejected, or reverted.",
         )
 
+    rejection_type: Optional[ECDDRejectionType] = None
+    if new_status == ECDDStatus.rejected:
+        if not payload.rejection_type:
+            raise HTTPException(
+                400,
+                "rejection_type is required when rejecting — "
+                f"one of {[t.value for t in ECDDRejectionType]}",
+            )
+        try:
+            rejection_type = ECDDRejectionType(payload.rejection_type)
+        except ValueError:
+            raise HTTPException(
+                400,
+                f"rejection_type must be one of {[t.value for t in ECDDRejectionType]}",
+            )
+
     before_status = record.status.value
     now = datetime.now(timezone.utc)
     record.status = new_status
+    # Only meaningful while status == rejected -- cleared on any re-decision
+    # that moves the record to a different status (e.g. a mistaken rejection
+    # reverted to pending), so a stale value never lingers.
+    record.rejection_type = rejection_type
     record.decision_notes = payload.decision_notes
     record.decided_by = current_user.id
     record.decided_at = now
@@ -1467,7 +1488,10 @@ def decide_ecdd(
         actor_role=current_user.role.value if current_user.role else None,
         organisation_id=org_id,
         before_state={"status": before_status},
-        after_state={"status": new_status.value},
+        after_state={
+            "status": new_status.value,
+            "rejection_type": rejection_type.value if rejection_type else None,
+        },
         notes=payload.decision_notes,
     )
     return record

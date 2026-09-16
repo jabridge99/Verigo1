@@ -341,7 +341,7 @@ class AMLPolicy(Base):
     """
     Lightweight policy seed record created on AMLSolution initialisation.
     For full governance lifecycle (versioning, attestation, approval workflow)
-    see app.models.governance.Policy.
+    see app.models.governance_policies.Policy.
     """
 
     __tablename__ = "policies"

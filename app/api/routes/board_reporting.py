@@ -897,6 +897,7 @@ def export_html(
         ttr_q = snap.get("ttr", {})
         ecdd_q = snap.get("ecdd_quarterly", {})
         sanctions_q = snap.get("sanctions_quarterly", {})
+        breaches_q = snap.get("breaches_quarterly", {})
         open_actions = snap.get("open_actions_prior_quarters", [])
         ir_status = snap.get("independent_review_status", {})
 
@@ -930,7 +931,8 @@ def export_html(
   <tbody>
     {_row("New ECDD cases opened this quarter", ecdd_q.get("new_cases_opened", 0))}
     {_row("ECDD cases approved — service proceeded", ecdd_q.get("approved", 0))}
-    {_row("ECDD cases declined — service refused", ecdd_q.get("declined", 0))}
+    {_row("ECDD cases declined — service never established", ecdd_q.get("declined", 0))}
+    {_row("Existing relationships exited following EDD review", ecdd_q.get("relationship_exited", 0))}
     {_row("ECDD cases still open at end of quarter", ecdd_q.get("still_open_end_of_quarter", 0))}
   </tbody>
 </table>"""
@@ -944,6 +946,42 @@ def export_html(
     {_row("False positives determined", sanctions_q.get("false_positives", 0))}
     {_row("Confirmed sanctions matches", sanctions_q.get("confirmed_matches", 0))}
   </tbody>
+</table>"""
+
+        by_severity = breaches_q.get("by_severity", {})
+        breach_rows = breaches_q.get("breaches", [])
+        if breach_rows:
+            breaches_detail_rows = "".join(
+                _row(
+                    b["title"],
+                    b["severity"].title(),
+                    b["identified_date"],
+                    b["status"].replace("_", " ").title(),
+                    "Yes" if b["reported_to_austrac"] else "No",
+                )
+                for b in breach_rows
+            )
+        else:
+            breaches_detail_rows = _row(
+                "No breaches identified this quarter", "—", "—", "—", "—"
+            )
+        breaches_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("Total breaches identified this quarter", breaches_q.get("total_identified", 0))}
+    {_row("Critical severity", by_severity.get("critical", 0))}
+    {_row("High severity", by_severity.get("high", 0))}
+    {_row("Medium severity", by_severity.get("medium", 0))}
+    {_row("Low severity", by_severity.get("low", 0))}
+    {_row("Reported to AUSTRAC", breaches_q.get("reported_to_austrac", 0))}
+    {_row("Remediated or closed this quarter", breaches_q.get("remediated_or_closed", 0))}
+    {_row("Still open at end of quarter", breaches_q.get("still_open_end_of_quarter", 0))}
+  </tbody>
+</table>
+<table style="margin-top:10px;">
+  <thead><tr><th>Breach</th><th>Severity</th><th>Identified</th><th>Status</th><th>AUSTRAC Notified</th></tr></thead>
+  <tbody>{breaches_detail_rows}</tbody>
 </table>"""
 
         if open_actions:
@@ -968,7 +1006,7 @@ def export_html(
     {_row("Independent review — report date", ir_status.get("report_date") or "—")}
   </tbody>
 </table>
-<p style="font-size:9pt;color:#888;margin-top:6px;">AML/CTF Program currency, AUSTRAC enrolment status, new AUSTRAC guidance, legislative changes, and AUSTRAC feedback are not yet tracked as structured data — record them in this report's Executive Summary / MLRO Commentary.</p>"""
+<p style="font-size:9pt;color:#888;margin-top:6px;">AML/CTF Program currency, AUSTRAC enrolment status, new AUSTRAC guidance, and legislative changes are not yet tracked as structured data — record them in this report's Executive Summary / MLRO Commentary. Breaches are now tracked structurally — see "Breaches Identified This Quarter" above.</p>"""
 
         co_quarterly_html = "".join(
             [
@@ -978,6 +1016,7 @@ def export_html(
                 _section(
                     "Sanctions Screening Activity (Detail)", sanctions_quarterly_html
                 ),
+                _section("Breaches Identified This Quarter", breaches_quarterly_html),
                 _section("Open Actions from Prior Quarters", open_actions_html),
                 _section("Program and Regulatory Updates", program_updates_html),
             ]

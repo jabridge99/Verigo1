@@ -22,7 +22,7 @@ always shipped these sections empty/wrong, with no error to notice:
 from datetime import date, timedelta
 
 from app.models.aml_solution import AMLProgram, AMLSolution, RiskAssessment
-from app.models.governance import Policy, PolicyLifecycleStatus, PolicyType
+from app.models.governance_policies import Policy, PolicyLifecycleStatus, PolicyType
 from app.services.examination_pack_service import (
     _section_aml_program,
     _section_policy_register,

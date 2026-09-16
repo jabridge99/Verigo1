@@ -62,7 +62,7 @@ from app.models.user import User
 from app.services import audit_service
 from app.services import billing_service as billing_svc
 from app.services.api_key_service import dispatch_event_background
-from app.services.identity_verification_service import compute_identity_score
+from app.services.identity_composite_score import compute_identity_score
 from app.services.sanctions_screening import screen_name
 from app.worker import add_background_task
 

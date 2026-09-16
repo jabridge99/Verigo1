@@ -519,6 +519,23 @@ class ECDDStatus(str, enum.Enum):
     rejected = "rejected"
 
 
+class ECDDRejectionType(str, enum.Enum):
+    """
+    P34: which of two distinct outcomes a 'rejected' ECDD decision was --
+    the CO Quarterly Report template (VERIGO-GEN-COR) tracks these as
+    separate metrics, since they have different regulatory implications
+    (an exit can itself warrant an SMR consideration; a decline never
+    onboarded the risk in the first place). Set by the compliance officer
+    making the decision -- the system has no reliable way to infer which
+    one applies from the customer record alone.
+    """
+
+    service_declined = (
+        "service_declined"  # never onboarded / relationship never established
+    )
+    relationship_exited = "relationship_exited"  # existing customer offboarded
+
+
 class ECDDRecord(Base):
     """Enhanced due diligence assessment — PEP, adverse media, beneficial ownership,
     source of wealth, tax-risk and investment-legitimacy review, captured as a
@@ -570,6 +587,9 @@ class ECDDRecord(Base):
     status = Column(
         Enum(ECDDStatus), default=ECDDStatus.pending, nullable=False, index=True
     )
+    # Only meaningful when status == rejected; cleared on any re-decision
+    # that moves the record away from rejected (see decide_ecdd()).
+    rejection_type = Column(Enum(ECDDRejectionType), nullable=True)
 
     # Manual accept/reject rationale — required whenever status is changed
     # away from pending (and on any later reversal/re-decision).

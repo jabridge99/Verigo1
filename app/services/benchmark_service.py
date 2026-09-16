@@ -642,7 +642,7 @@ def _compute_org_metrics(db: Session, org_id: str, start: date, end: date) -> di
 
     # ── Governance ────────────────────────────────────────────────────────────
     try:
-        from app.models.governance import Policy
+        from app.models.governance_policies import Policy
 
         today = date.today()
         all_policies = db.query(Policy).filter_by(org_id=org_id).all()

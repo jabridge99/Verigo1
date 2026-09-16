@@ -32,12 +32,6 @@ from app.models.aml_solution import (
     ServiceType,
     SolutionStatus,
 )
-from app.models.governance import (
-    POLICY_NUMBER_PREFIX,
-    Policy,
-    PolicyLifecycleStatus,
-    PolicyType,
-)
 from app.models.governance_controls import (
     CONTROL_REF_PREFIX,
     ControlMethod,
@@ -45,6 +39,12 @@ from app.models.governance_controls import (
     ControlStatus,
     ControlType,
     GovernanceControl,
+)
+from app.models.governance_policies import (
+    POLICY_NUMBER_PREFIX,
+    Policy,
+    PolicyLifecycleStatus,
+    PolicyType,
 )
 from app.models.organisation import IndustryType, Organisation
 from app.templates.aml.base import AMLTemplateBase

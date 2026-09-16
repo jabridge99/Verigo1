@@ -459,8 +459,8 @@ def select_industry(
         RiskAssessment,
         TrainingRecord,
     )
-    from app.models.governance import Policy
     from app.models.governance_controls import GovernanceControl
+    from app.models.governance_policies import Policy
     from app.models.risk_engine import RiskAssessmentRun, RiskFramework
     from app.templates.aml.factory import seed_aml_solution
     from app.templates.risk.factory import seed_risk_framework

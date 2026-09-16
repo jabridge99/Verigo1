@@ -487,7 +487,7 @@ def _section_independent_reviews(
 
 
 def _section_policy_register(db: Session, org_id: str, start: date, end: date) -> dict:
-    from app.models.governance import Policy, PolicyAttestation
+    from app.models.governance_policies import Policy, PolicyAttestation
 
     policies = db.query(Policy).filter_by(org_id=org_id).all()
     today = date.today()

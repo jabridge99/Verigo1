@@ -119,13 +119,13 @@ async def test_screen_name_match_and_no_match():
     assert (await screen_transaction("Taliban"))["match_found"] is True
 
 
-# ── identity_verification ──────────────────────────────────────────────────
+# ── document_verification ────────────────────────────────────────────────────
 
 
 def test_verify_document_matches_and_mismatches():
     from datetime import date
 
-    from app.services.identity_verification import (
+    from app.services.document_verification import (
         compute_kyc_identity_score,
         verify_document,
     )
@@ -1238,7 +1238,7 @@ def test_compute_risk_matrix_geographic_and_product_extra_branches():
 def test_governance_metrics_full_pipeline():
     from datetime import date, timedelta
 
-    from app.models.governance import PolicyLifecycleStatus
+    from app.models.governance_policies import PolicyLifecycleStatus
     from app.models.governance_controls import (
         ControlEffectiveness,
         FindingSeverity,

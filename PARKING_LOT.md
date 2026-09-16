@@ -36,19 +36,18 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 *(P16, Independent Review's deliverable/pricing model, is resolved — see Resolved below.)*
 
 ### E. Frontend — small, cosmetic
-| ID | What | Effort |
-|---|---|---|
-| P14 | Industry picker offers a non-real "Reporting Group" option | One-line filter |
+
+*(P14, the industry picker offering the non-real "Reporting Group" option, is resolved — see "Stage 17 — fourth pass" below.)*
 
 *(P13, the wizard's customer-industry slug mapping, is confirmed inert — the field it sets isn't read by anything real. See its full entry. Nothing to fix.)*
 
 ### F. Structural / mechanical backlog
 | ID | What | Effort |
 |---|---|---|
-| C2 | No central frontend API client; thin shared UI components; oversized route files; inline schemas | Dedicated refactor pass |
-| C4 | A couple of misleadingly-named modules | Rename, no functional risk |
-| P5 | ~2,500 `Column()`/`relationship()` declarations still lack `Mapped[]` type annotations (the ~60 mypy actually flagged are fixed) | Mechanical retrofit, ~40 files |
-| P4 | A judgment call on how "under review" policy status maps to board-report categories | Confirm intent, then it's a one-line change either way |
+| C2 | No central frontend API client; thin shared UI components; oversized route files; inline schemas | Dedicated refactor pass — deliberately not attempted alongside P14/P34/C4 (2026-09-16); real risk/effort, needs its own pass |
+| P5 | ~2,500 `Column()`/`relationship()` declarations still lack `Mapped[]` type annotations (the ~60 mypy actually flagged are fixed) | Mechanical retrofit, ~40 files — deliberately not attempted alongside P14/P34/C4 (2026-09-16); same reasoning as C2 |
+
+*(C4, the two misleadingly-named modules, is resolved — see "Stage 17 — fourth pass" below. P4 was already resolved before this parking-lot pass — see its own entry below; nothing left to do.)*
 
 ### G. Transaction monitoring / case management (Stage 8)
 | ID | What | Effort |
@@ -65,9 +64,8 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 | P32 | IFTI-DRA Excel export (`generate_ifti_excel()`) was built from AUSTRAC's published schema/reference docs, not verified cell-by-cell against the actual official AUSTRAC IFTI-DRA template file — you've asked for an exact match, not a schema-faithful approximation. SMR/TTR exports carry the same open question, which you'll review separately later | Get the real AUSTRAC template file(s), diff column-by-column/sheet-by-sheet against current output, correct any mismatch |
 
 ### K. Compliance reporting content gaps (found aligning Independent Review / CO Quarterly Report with their Google Drive templates)
-| ID | What | Effort |
-|---|---|---|
-| P34 | No structured "compliance breach" tracking model exists anywhere in the codebase, so the CO Quarterly Report template's "Breaches Identified This Quarter" and "Open Actions" narrative sub-items (new AUSTRAC guidance, legislative changes, AUSTRAC feedback) can't be computed from real data — left to the report's own free-text `executive_summary`/`mlro_commentary` fields for now. Separately, `ECDDRecord` has no way to distinguish "relationship exited" from "service declined", both of which the template tracks as separate metrics | New lightweight breach-tracking model (or reuse an existing incident/finding concept) if this is worth structuring; small model tweak for the ECDD distinction |
+
+*(P34, the missing compliance-breach tracking model and the ECDD relationship-exited/service-declined distinction, is resolved — see "Stage 17 — fourth pass" below.)*
 
 ### L. External integrations (Stage 14, found 2026-09-10)
 | ID | What | Effort |
@@ -96,11 +94,11 @@ Reading the open items as a roadmap rather than a flat list:
 1. **Rewrite the remaining industry templates from the real VERIGO document library — done for all 8 sectors.** Conveyancers (P19), Remittance (P17), VASP (P18), Legal (P20), Real Estate (P22), Accountants (P23), and now DPMS (P21) are all done — see Resolved below.
 2. **The operational-log data model (P24) is done** — see Resolved below.
 3. **Per-org configurable risk weights (P10) is done** — see Resolved below.
-4. **Resolve the onboarding wizard's remaining cosmetic item (P14)** — P13 needed no action once confirmed inert; P12's architecture/paywall question is resolved (see Resolved below).
+4. **The onboarding wizard's remaining cosmetic item (P14) is done** — see Resolved below. P13 needed no action once confirmed inert; P12's architecture/paywall question is resolved (see Resolved below).
 5. **Commercialisation decisions (P16 is done — Independent Review and the Quarterly Compliance Report are now real paid add-ons; P15 the Liddar validation check remains)** — best made once the underlying product substantively does what the real documents describe, not before.
 6. **Mechanical backlog (C2, C4, P5, P4)** — no functional urgency; pick up opportunistically or as its own dedicated pass whenever there's a lull.
 7. **Production transaction ingestion (P27)** — batch/API/core-banking connectors; a later-stage-sized project once the platform has real transaction volume to receive.
-8. **Structured compliance-breach tracking (P34)** — worth doing once you decide whether it's a new lightweight model or folds into an existing incident/finding concept; unblocks the CO Quarterly Report's "Breaches Identified This Quarter" section and a few of its narrative-only Program/Regulatory-Updates items.
+8. **Structured compliance-breach tracking (P34) is done** — see Resolved below. Unblocked the CO Quarterly Report's "Breaches Identified This Quarter" section and the ECDD relationship-exited/service-declined split.
 9. **The raw-ORM-response serialisation bug (P36) is done** — see its own Resolved entry below.
 10. **Fix the `controlstatus` enum-name collision blocking new-org registration (P37) — urgent.** This was found live while verifying P12/P25 and should be looked at before anything else on this list — see the P37 entry below and the flag at the top of this file.
 
@@ -109,16 +107,16 @@ Reading the open items as a roadmap rather than a flat list:
 ## Parked from Stage 2 (Repository Structure & Clean-up)
 
 ### C2 — Real refactoring backlog
-**Status:** Parked — deferred to a dedicated future pass, by your choice (2026-09-08).
+**Status:** Parked — deferred to a dedicated future pass, by your choice (2026-09-08). Re-confirmed parked 2026-09-16, when picking up the rest of the "ready to pick up now" parking-lot batch (P14/P34/C4) — still real refactoring work, moderate effort and risk, better done as its own dedicated pass than folded into a batch of quick fixes.
 **What:** No central frontend API client (~35+ pages redeclare it); `web/components/ui/` has only 2 shared primitives, so every table/modal/form is hand-built per page; 13 of 56 backend route files define Pydantic schemas inline instead of in `app/schemas/`; several route files (`customers.py` 2365 lines, `reports.py` 1590, etc.) bundle ~15-20 sub-resources into one file; a few minor API-organization issues (`api_keys.py` silently serving webhooks too, confusingly-close `/organisations` vs `/org` prefixes).
 **Why parked:** Real refactoring work, moderate effort and risk each — better done as its own dedicated, incrementally-verified pass than folded into a broader review.
 **Detail:** `STRUCTURE_REVIEW.md`, section C2.
 
 ### C4 — Naming cleanups
-**Status:** Parked — low priority, no functional risk.
-**What:** `app/models/governance.py` actually only contains the policy domain (misleading next to `governance_controls.py`/`governance_training.py`/`governance_customisation.py`); `identity_verification.py` vs `identity_verification_service.py` are two different live scoring systems distinguished only by a suffix.
-**Why parked:** Purely cosmetic — can wait indefinitely without cost.
-**Detail:** `STRUCTURE_REVIEW.md`, section C4.
+**Status:** Resolved, 2026-09-16 — see "Stage 17 — fourth pass" below.
+**What it was:** `app/models/governance.py` actually only contained the policy domain (misleading next to `governance_controls.py`/`governance_training.py`/`governance_customisation.py`); `identity_verification.py` vs `identity_verification_service.py` were two different live scoring systems distinguished only by a `_service` suffix that carried no real meaning.
+**What was done:** `git mv`'d `governance.py` → `governance_policies.py` (matching its siblings' naming convention), `identity_verification.py` → `document_verification.py` (single-document field verification: name/DOB/expiry match against one uploaded document), and `identity_verification_service.py` → `identity_composite_score.py` (the six-category OCR/manual/PEP/sanctions/adverse-media/company composite score, matching its own docstring's title). Every import site across `app/`, `tests/`, and `main.py`'s side-effect model-registration list updated; no behaviour change.
+**Detail:** `app/models/governance_policies.py`, `app/services/document_verification.py`, `app/services/identity_composite_score.py`, and every file importing from them.
 
 ---
 
@@ -127,13 +125,13 @@ Reading the open items as a roadmap rather than a flat list:
 Making CI's mypy check actually block the build (fix-now item, see resolved section below) meant triaging all 184 pre-existing errors it had been silently ignoring. Most were either genuine bugs (fixed, see below) or annotation gaps (fixed). A handful of things surfaced along the way that need a decision or more scope than a type-checker fix, rather than a guess:
 
 ### P4 — "Under review" policy status was mapped to three real sub-stages (judgment call, worth confirming)
-**Status:** Parked for awareness, not blocking — a reasonable reading was applied, flagging it rather than presenting it as unquestionably correct.
+**Status:** Already resolved when found (the fix described below was made at the same time this was parked) — kept as a flagged judgment call, not a pending action. Re-checked 2026-09-16 while working the "ready to pick up now" parking-lot batch: still just a documented judgment call with no bug attached, so no code change was needed or made.
 **What:** `board_reporting_service.py`'s `_policies_section()` used `PolicyLifecycleStatus.under_review`/`.approved`, neither of which exist (real lifecycle: draft → internal_review → compliance_review → pending_approval → published → periodic_review → superseded → archived). Fixed `.approved` → `.published` (clear match, per the enum's own comment). For `.under_review`, mapped it to the three real intermediate stages (`internal_review`, `compliance_review`, `pending_approval`) grouped together, since the board report's "under review" bucket is presented as a single count.
-**Why parked:** That grouping is a reasonable reading of intent, not a certainty — if board reports should distinguish "with the author" from "with the MLRO" from "awaiting Board sign-off," this needs revisiting.
+**Why parked:** That grouping is a reasonable reading of intent, not a certainty — if board reports should distinguish "with the author" from "with the MLRO" from "awaiting Board sign-off," this needs revisiting. Revisit only if you want that finer split; no bug to fix in the meantime.
 **Detail:** `app/services/board_reporting_service.py`, `_policies_section()`.
 
 ### P5 — `app/models/*.py` relationships aren't `Mapped[]`-typed
-**Status:** Parked — a large, mechanical, low-bug-value retrofit; not attempted beyond the columns/relationships mypy actually flagged.
+**Status:** Parked — a large, mechanical, low-bug-value retrofit; not attempted beyond the columns/relationships mypy actually flagged. Re-confirmed parked 2026-09-16 alongside C2, for the same reason: genuinely mechanical and low-risk, but sizeable enough (~40 files) to warrant its own dedicated, incrementally-verified pass rather than being folded into the P14/P34/C4 batch.
 **What:** All of `app/models/` uses SQLAlchemy's classic `Column()`/`relationship()` declarative style. Without an explicit `Mapped[X]` (or `Mapped[list[X]]`) annotation on the left-hand side, the SQLAlchemy mypy plugin can't infer a relationship's scalar-vs-collection Python type, or a `Float`/`Numeric`/`Enum` column's Python type on either read or write — every access type-checks as `Mapped[Any]` or an unresolved `SQLCoreOperations[_N] | _N`, masking real bugs a properly-typed access would catch. `mypy.ini` disables the `[misc]` error code project-wide for `app.models.*` to suppress the (harmless, SQLAlchemy always resolves the real type correctly at runtime) declaration-line noise this produces once a column *is* annotated.
 **Why parked:** Fixed every column/relationship mypy actually flagged as a downstream error across two full passes (the CI-gate fix and this one) — over 60 columns and a dozen relationships, enough to get CI green — but a handful of the codebase's ~2,500 other `Column()`/`relationship()` declarations remain unannotated and will surface the same false-positive class the next time new code reads/writes them in a way mypy checks. A full retrofit (add `Mapped[]` to every declaration in `app/models/`) is a well-defined, mechanical, low-risk piece of work, but sizeable (~40 model files) and out of scope for a bug-fixing pass.
 **Detail:** `mypy.ini`'s `[mypy-app.models.*]` section; any commit on `claude/verigo-repo-inspection-kffwrd` touching `app/models/*.py` with a `Mapped[` diff.
@@ -1037,6 +1035,30 @@ Built the file as `middleware.ts` first, matching P50's own earlier prototype �
 
 **Verified:** `pytest tests/test_csrf_double_submit_smoke.py` — all 7 pre-existing tests still pass, confirming the protection is live and correct as documented, not just present in source.
 **Detail:** `DEPLOYMENT.md` only.
+
+---
+
+## Parking-lot cleanup pass, 2026-09-16 (P14, P34, C4 — "go and fix all ready to pick up now")
+
+**Scope:** with Stage 17 closed out, asked what's next on the parking lot; gave a status summary grouping open items into "ready to pick up now, no blockers" (P14, P4, P34, P5, C2/C4) vs. "blocked on you/external factors" (P38, P43, P32, P15, P27, the KYC/ECDD hold). Picked P14 first; you then asked to fix everything in the "ready to pick up now" bucket. Flagged before starting that P5 and C2 were both explicitly parked in the past specifically because they need their own dedicated, incrementally-verified pass (real refactoring risk / ~2,500-declaration mechanical scale) rather than being folded into a batch of quick fixes — did the three genuinely bounded items (P14, P34, C4) this pass and left P5/C2 parked, consistent with that earlier reasoning rather than rushing them under time pressure.
+
+**P14 — onboarding wizard's industry dropdown offered a non-selectable "Reporting Group" option.**
+`web/lib/industries.ts`'s `industries` array includes `reporting_group` (real marketing content lives at `/solutions/reporting-group`, so it can't just be deleted), but it isn't a real backend `IndustryType` — selecting it in the onboarding wizard or start-trial form always 422s. Added `selectableIndustries` (the same array, filtered) as the one place this exclusion is defined, and pointed both `OnboardingWizard.tsx` and `StartTrialForm.tsx`'s `<select>` at it instead of the raw `industries` array. New `web/lib/industries.test.ts` (3 tests) locks in both halves: the dropdown excludes it, the marketing page's own list still includes it.
+
+**P34 — no structured "compliance breach" tracking; `ECDDRecord` couldn't distinguish an exit from a decline.**
+Two real gaps in the CO Quarterly Compliance Report template's (VERIGO-GEN-COR) structured sections:
+1. Added `app/models/compliance_breach.py` (`ComplianceBreach`, new) and `app/api/routes/compliance_breach.py` — a standalone breach log (create/list/get/update/remediate/close), deliberately *not* folded into `ReviewFinding`/`ControlTestFinding` since most breaches are self-identified during BAU rather than surfaced by a formal review/test cycle, and forcing a parent review/test record onto every breach would misrepresent how most of them are actually found. Compliance/MLRO can log and work a breach; only MLRO gives the final close/risk-accept sign-off, matching this codebase's existing pattern of splitting operational work from governance sign-off. Wired into `board_reporting_service.py`'s `_breaches_quarterly_section()` and rendered in the CO Quarterly Report's export-html, replacing what was previously an unstructured free-text note.
+2. Added `ECDDRejectionType` (`service_declined` / `relationship_exited`) to `ECDDRecord`, set by the compliance officer at decision time (`decide_ecdd()` now requires it when rejecting, validates it against the real enum, and clears it on any re-decision away from rejected so a stale value never lingers). `board_reporting_service.py`'s `_ecdd_quarterly_section()` now reports the two as separate counts, matching the template.
+New migration `fc6af332ef6c` adds the `compliance_breaches` table and `ecdd_records.rejection_type`. Found and fixed a real migration bug while testing it for real against Postgres: `op.create_table()` auto-creates the enum types embedded in its own columns, but `op.add_column()` does not — an explicit `.create(checkfirst=True)` call before `create_table` double-created the type and failed with `DuplicateObject`, while the same explicit call was actually *required* before `add_column` (which otherwise fails with `UndefinedObject`). Fixed by removing the explicit call for the table-creation path and keeping it only for the column-add path — confirmed via a full upgrade→downgrade→upgrade cycle against real Postgres.
+New tests: `tests/test_p34_compliance_breach_tracking_smoke.py` (15 tests: CRUD, RBAC, tenant isolation, remediate/close lifecycle, quarterly-report integration), `tests/test_p34_ecdd_rejection_type_smoke.py` (7 tests: required/validated on reject, round-trips both values, cleared on revert, quarterly split). Extended the existing `tests/test_ir_and_co_quarterly_template_alignment_smoke.py` to assert the new "Breaches Identified This Quarter" section renders.
+
+**C4 — two misleadingly-named modules.**
+`app/models/governance.py` → `app/models/governance_policies.py` (it only ever held the policy domain, misleading next to `governance_controls.py`/`governance_customisation.py`/`governance_training.py`, which are named for what they contain). `app/services/identity_verification.py` → `document_verification.py` (single-document field verification: name/DOB/expiry match against one uploaded document) and `identity_verification_service.py` → `identity_composite_score.py` (the six-category OCR/manual/PEP/sanctions/adverse-media/company composite score, matching its own docstring's title) — the two were previously distinguished only by a `_service` suffix that carried no real meaning. Every import site updated across `app/`, `tests/`, and `main.py`'s side-effect model-registration list (which imports bare module names, not symbols, for `Base.metadata` registration) — confirmed via a full-repo grep with no stragglers. Pure rename, zero behaviour change.
+
+**What did NOT change:** P5 and C2 remain parked, per the "flagged before starting" note above — not touched this pass. The broader KYC/ECDD/vendor-API-key hold is unaffected (P34's compliance-breach model has no vendor dependency and isn't KYC/ECDD-specific).
+
+**Verified:** all new tests pass (P14: 3, P34: 22) plus the extended template-alignment test; full suite 907 collected, 905 passed, 2 skipped, 0 regressions, against both real Postgres and default SQLite. The P34 migration's upgrade/downgrade/upgrade cycle was run against real Postgres and confirmed correct (including the enum-creation bug found and fixed along the way). mypy (CI's exact flags) and ruff (check + format, `app/`) both clean; frontend `tsc --noEmit`, `npm run lint`, and `npm run test` all clean.
+**Detail:** `web/lib/industries.ts`, `web/lib/industries.test.ts` (new), `web/components/OnboardingWizard.tsx`, `web/app/start-trial/StartTrialForm.tsx`; `app/models/compliance_breach.py` (new), `app/api/routes/compliance_breach.py` (new), `app/models/report.py`, `app/schemas/report.py`, `app/api/routes/reports.py`, `app/services/board_reporting_service.py`, `app/api/routes/board_reporting.py`, `alembic/versions/fc6af332ef6c_p34_compliance_breach_tracking_and_ecdd_.py` (new), `tests/test_p34_compliance_breach_tracking_smoke.py` (new), `tests/test_p34_ecdd_rejection_type_smoke.py` (new), `tests/test_ir_and_co_quarterly_template_alignment_smoke.py`; `app/models/governance_policies.py` (renamed), `app/services/document_verification.py` (renamed), `app/services/identity_composite_score.py` (renamed), and every file importing from them.
 
 ---
 

@@ -33,6 +33,7 @@ from app.api.routes.aml_program import router as aml_program_router
 from app.api.routes.benchmark import router as benchmark_router
 from app.api.routes.board_reporting import router as board_reporting_router
 from app.api.routes.cases import router as cases_router
+from app.api.routes.compliance_breach import router as compliance_breach_router
 from app.api.routes.compliance_calendar import router as compliance_calendar_router
 from app.api.routes.customer_portal_public import (
     router as customer_portal_public_router,
@@ -90,9 +91,9 @@ from app.models import (
     customer_workflow,  # noqa: F401
     document,  # noqa: F401
     examination_pack,  # noqa: F401
-    governance,  # noqa: F401
     governance_controls,  # noqa: F401
     governance_customisation,  # noqa: F401
+    governance_policies,  # noqa: F401
     governance_training,  # noqa: F401
     ifti_e,  # noqa: F401
     ifti_receipt,  # noqa: F401
@@ -326,6 +327,7 @@ app.include_router(aml_program_router, prefix="/api/v1")
 app.include_router(governance_training_router, prefix="/api/v1")
 app.include_router(independent_review_router, prefix="/api/v1")
 app.include_router(board_reporting_router, prefix="/api/v1")
+app.include_router(compliance_breach_router, prefix="/api/v1")
 app.include_router(reporting_groups_router, prefix="/api/v1")
 app.include_router(customer_portal_staff_router, prefix="/api/v1")
 app.include_router(customer_portal_public_router, prefix="/api/v1")

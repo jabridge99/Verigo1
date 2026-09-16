@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Loader2, AlertCircle, CheckCircle2, Lock } from 'lucide-react'
-import { industries } from '@/lib/industries'
+import { selectableIndustries } from '@/lib/industries'
 import {
   updateOrganisation,
   selectIndustry,
@@ -253,7 +253,7 @@ export default function OnboardingWizard() {
             <select required value={industryId} onChange={e => setIndustryId(e.target.value)}
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
               <option value="">Select your industry</option>
-              {industries.map(i => (
+              {selectableIndustries.map(i => (
                 <option key={i.id} value={i.id}>
                   {i.label}{i.regime === 'expanded' ? ' (Tranche 2 — 2026)' : ''}
                 </option>
