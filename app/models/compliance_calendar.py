@@ -19,6 +19,8 @@ Reminder escalation chain: 30d → 14d → 7d → due date → overdue
 """
 
 import enum
+from datetime import date, datetime
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -34,7 +36,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -81,53 +83,69 @@ class ReminderStage(str, enum.Enum):
 class ComplianceCalendarItem(Base):
     __tablename__ = "compliance_calendar"
 
-    id = Column(String, primary_key=True, default=lambda: f"cal_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cal_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    item_type = Column(Enum(CalendarItemType), nullable=False, index=True)
-    status = Column(
+    item_type: Mapped[CalendarItemType] = Column(
+        Enum(CalendarItemType), nullable=False, index=True
+    )
+    status: Mapped[CalendarItemStatus] = Column(
         Enum(CalendarItemStatus),
         default=CalendarItemStatus.scheduled,
         nullable=False,
         index=True,
     )
 
-    title = Column(String(255), nullable=False)
-    description = Column(Text)
+    title: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
 
     # Linked objects (all optional — one or none applies per item)
-    customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
-    report_id = Column(String, nullable=True)  # IFTIReport/TTRReport/SMRReport id
-    report_type = Column(
+    customer_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("customers.id"), nullable=True, index=True
+    )
+    report_id: Mapped[Optional[str]] = Column(
+        String, nullable=True
+    )  # IFTIReport/TTRReport/SMRReport id
+    report_type: Mapped[Optional[str]] = Column(
         String(20), nullable=True
     )  # ifti_incoming|ifti_outgoing|ttr|smr
-    policy_id = Column(String, nullable=True)
-    control_id = Column(String, nullable=True)
-    integration_id = Column(String, nullable=True)  # org_integrations.id
-    assigned_to = Column(String, nullable=True)  # user_id
+    policy_id: Mapped[Optional[str]] = Column(String, nullable=True)
+    control_id: Mapped[Optional[str]] = Column(String, nullable=True)
+    integration_id: Mapped[Optional[str]] = Column(
+        String, nullable=True
+    )  # org_integrations.id
+    assigned_to: Mapped[Optional[str]] = Column(String, nullable=True)  # user_id
 
-    due_date = Column(Date, nullable=False, index=True)
-    completed_at = Column(DateTime(timezone=True))
-    completed_by = Column(String)
-    completion_notes = Column(Text)
+    due_date: Mapped[date] = Column(Date, nullable=False, index=True)
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    completed_by: Mapped[Optional[str]] = Column(String)
+    completion_notes: Mapped[Optional[str]] = Column(Text)
 
     # Recurrence
-    is_recurring = Column(Boolean, default=False)
-    recurrence_months = Column(Integer)  # e.g. 12, 24, 36
-    next_due_date = Column(Date)  # set on completion
+    is_recurring: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    recurrence_months: Mapped[Optional[int]] = Column(Integer)  # e.g. 12, 24, 36
+    next_due_date: Mapped[Optional[date]] = Column(Date)  # set on completion
 
     # Escalation
-    is_overdue = Column(Boolean, default=False, index=True)
-    escalated_to = Column(String)  # user_id of compliance officer
-    escalated_at = Column(DateTime(timezone=True))
+    is_overdue: Mapped[Optional[bool]] = Column(Boolean, default=False, index=True)
+    escalated_to: Mapped[Optional[str]] = Column(
+        String
+    )  # user_id of compliance officer
+    escalated_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     organisation = relationship("Organisation")
     customer = relationship("Customer")
@@ -146,35 +164,39 @@ class ComplianceCalendarItem(Base):
 class ComplianceReminder(Base):
     __tablename__ = "compliance_reminders"
 
-    id = Column(String, primary_key=True, default=lambda: f"rem_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rem_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    calendar_item_id = Column(
+    calendar_item_id: Mapped[str] = Column(
         String,
         ForeignKey("compliance_calendar.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    stage = Column(Enum(ReminderStage), nullable=False)
-    recipient_id = Column(String, nullable=False)  # user_id
-    recipient_email = Column(String(255))
+    stage: Mapped[ReminderStage] = Column(Enum(ReminderStage), nullable=False)
+    recipient_id: Mapped[str] = Column(String, nullable=False)  # user_id
+    recipient_email: Mapped[Optional[str]] = Column(String(255))
 
-    sent_at = Column(DateTime(timezone=True))
-    is_sent = Column(Boolean, default=False)
-    send_failed = Column(Boolean, default=False)
-    failure_reason = Column(String(500))
+    sent_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    is_sent: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    send_failed: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    failure_reason: Mapped[Optional[str]] = Column(String(500))
 
     # Channels (which were used)
-    channel_email = Column(Boolean, default=True)
-    channel_in_app = Column(Boolean, default=True)
-    channel_sms = Column(Boolean, default=False)
+    channel_email: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    channel_in_app: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    channel_sms: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     organisation = relationship("Organisation")
     calendar_item = relationship("ComplianceCalendarItem", back_populates="reminders")

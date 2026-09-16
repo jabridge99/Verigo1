@@ -12,6 +12,8 @@ Risk ratings and scoring remain the responsibility of the reporting entity.
 """
 
 import enum
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -28,6 +30,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -365,34 +368,44 @@ class OrgRiskFactor(Base):
         UniqueConstraint("org_id", "factor_key", name="uq_org_factor_key"),
     )
 
-    id = Column(String, primary_key=True, default=lambda: f"orf_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"orf_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    category = Column(Enum(RiskFactorCategory), nullable=False, index=True)
-    factor_key = Column(String(100), nullable=False)  # e.g. "pep_status"
-    label = Column(String(255), nullable=False)
-    description = Column(Text)
+    category: Mapped[RiskFactorCategory] = Column(
+        Enum(RiskFactorCategory), nullable=False, index=True
+    )
+    factor_key: Mapped[str] = Column(String(100), nullable=False)  # e.g. "pep_status"
+    label: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
 
-    weight = Column(Float, nullable=False, default=0.10)  # 0.0–1.0
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_system = Column(
+    weight: Mapped[float] = Column(Float, nullable=False, default=0.10)  # 0.0–1.0
+    is_active: Mapped[bool] = Column(Boolean, default=True, nullable=False)
+    is_system: Mapped[bool] = Column(
         Boolean, default=False, nullable=False
     )  # VeriGo-seeded, cannot delete
 
     # Display order within category
-    display_order = Column(Integer, default=0)
+    display_order: Mapped[Optional[int]] = Column(Integer, default=0)
 
     # Threshold for this factor to trigger (used in scoring engine)
-    trigger_threshold = Column(Float)  # e.g. amount > trigger_threshold
+    trigger_threshold: Mapped[Optional[float]] = Column(
+        Float
+    )  # e.g. amount > trigger_threshold
 
-    created_by = Column(String)
-    updated_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(String)
+    updated_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class OrgRiskProfile(Base):
@@ -406,28 +419,34 @@ class OrgRiskProfile(Base):
         UniqueConstraint("org_id", "risk_level", name="uq_org_risk_level"),
     )
 
-    id = Column(String, primary_key=True, default=lambda: f"orp_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"orp_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    risk_level = Column(Enum(RiskLevel), nullable=False)
+    risk_level: Mapped[RiskLevel] = Column(Enum(RiskLevel), nullable=False)
 
-    score_min = Column(Float, nullable=False)  # Inclusive
-    score_max = Column(Float, nullable=False)  # Inclusive
+    score_min: Mapped[float] = Column(Float, nullable=False)  # Inclusive
+    score_max: Mapped[float] = Column(Float, nullable=False)  # Inclusive
 
-    review_frequency_months = Column(Integer, nullable=False, default=24)
-    edd_required = Column(Boolean, default=False)
-    enhanced_monitoring = Column(Boolean, default=False)
-    senior_approval_required = Column(Boolean, default=False)
+    review_frequency_months: Mapped[int] = Column(Integer, nullable=False, default=24)
+    edd_required: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    enhanced_monitoring: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    senior_approval_required: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
-    description = Column(Text)
+    description: Mapped[Optional[str]] = Column(Text)
 
-    updated_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class OrgRiskMatrixVersion(Base):
@@ -439,29 +458,39 @@ class OrgRiskMatrixVersion(Base):
 
     __tablename__ = "org_risk_matrix_versions"
 
-    id = Column(String, primary_key=True, default=lambda: f"rmv_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rmv_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    version_number = Column(Integer, nullable=False)
-    change_type = Column(String(50))  # factor_added | factor_updated | factor_deleted
+    version_number: Mapped[int] = Column(Integer, nullable=False)
+    change_type: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # factor_added | factor_updated | factor_deleted
     # profile_updated | weights_rebalanced | restored_defaults
-    change_summary = Column(String(500))  # human-readable description
+    change_summary: Mapped[Optional[str]] = Column(
+        String(500)
+    )  # human-readable description
 
-    factors_snapshot = Column(
+    factors_snapshot: Mapped[Any] = Column(
         JSON, nullable=False
     )  # full serialised OrgRiskFactor list
-    profiles_snapshot = Column(
+    profiles_snapshot: Mapped[Any] = Column(
         JSON, nullable=False
     )  # full serialised OrgRiskProfile list
 
-    changed_by = Column(String, nullable=False)
-    change_reason = Column(Text)
-    previous_value = Column(JSON)  # the specific field(s) that changed
-    new_value = Column(JSON)
+    changed_by: Mapped[str] = Column(String, nullable=False)
+    change_reason: Mapped[Optional[str]] = Column(Text)
+    previous_value: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # the specific field(s) that changed
+    new_value: Mapped[Optional[Any]] = Column(JSON)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     # Immutable: no updated_at

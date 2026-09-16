@@ -19,6 +19,8 @@ decisions remain with the reporting entity.
 """
 
 import enum
+from datetime import date, datetime
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -32,6 +34,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -67,44 +70,56 @@ class ComplianceBreach(Base):
 
     __tablename__ = "compliance_breaches"
 
-    id = Column(String, primary_key=True, default=lambda: f"cb_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cb_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    title = Column(String(500), nullable=False)
-    description = Column(Text, nullable=False)
-    severity = Column(Enum(BreachSeverity), nullable=False, index=True)
-    status = Column(
+    title: Mapped[str] = Column(String(500), nullable=False)
+    description: Mapped[str] = Column(Text, nullable=False)
+    severity: Mapped[BreachSeverity] = Column(
+        Enum(BreachSeverity), nullable=False, index=True
+    )
+    status: Mapped[BreachStatus] = Column(
         Enum(BreachStatus), default=BreachStatus.open, nullable=False, index=True
     )
 
-    identified_date = Column(Date, nullable=False, index=True)
-    identified_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    identified_date: Mapped[date] = Column(Date, nullable=False, index=True)
+    identified_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     # Optional provenance -- set only when a formal review/test actually
     # surfaced this breach, rather than it being self-identified.
-    source_review_id = Column(
+    source_review_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("independent_reviews.id", ondelete="SET NULL")
     )
-    source_control_test_id = Column(
+    source_control_test_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("control_tests.id", ondelete="SET NULL")
     )
 
     # ── AUSTRAC notification ──────────────────────────────────────────────────
-    reported_to_austrac = Column(Boolean, default=False)
-    austrac_reference = Column(String(100))
-    austrac_reported_at = Column(DateTime(timezone=True))
+    reported_to_austrac: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    austrac_reference: Mapped[Optional[str]] = Column(String(100))
+    austrac_reported_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
     # ── Remediation ────────────────────────────────────────────────────────────
-    remediation_notes = Column(Text)
-    remediated_date = Column(Date)
-    closed_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    closed_at = Column(DateTime(timezone=True))
+    remediation_notes: Mapped[Optional[str]] = Column(Text)
+    remediated_date: Mapped[Optional[date]] = Column(Date)
+    closed_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    closed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )

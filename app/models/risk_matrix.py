@@ -14,6 +14,8 @@ workflow tools. All regulatory decisions remain with the reporting entity.
 """
 
 import enum
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -75,8 +77,10 @@ class OrgMonitoringConfig(Base):
 
     __tablename__ = "org_monitoring_configs"
 
-    id = Column(String, primary_key=True, default=lambda: f"omc_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"omc_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -107,9 +111,13 @@ class OrgMonitoringConfig(Base):
         Float, default=0.25, nullable=False
     )
 
-    updated_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class OrgApprovalQuestion(Base):
@@ -126,25 +134,31 @@ class OrgApprovalQuestion(Base):
 
     __tablename__ = "org_approval_questions"
 
-    id = Column(String, primary_key=True, default=lambda: f"oaq_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"oaq_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    question_text = Column(String(500), nullable=False)
-    question_order = Column(Integer, default=1)  # 1–5 display order
-    is_required = Column(Boolean, default=True)
-    is_active = Column(Boolean, default=True, nullable=False, index=True)
-    industry_context = Column(String(200))  # e.g. "Remittance" or "Crypto"
-    help_text = Column(String(500))  # guidance shown to reviewer
+    question_text: Mapped[str] = Column(String(500), nullable=False)
+    question_order: Mapped[Optional[int]] = Column(
+        Integer, default=1
+    )  # 1–5 display order
+    is_required: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    is_active: Mapped[bool] = Column(Boolean, default=True, nullable=False, index=True)
+    industry_context: Mapped[Optional[str]] = Column(
+        String(200)
+    )  # e.g. "Remittance" or "Crypto"
+    help_text: Mapped[Optional[str]] = Column(String(500))  # guidance shown to reviewer
 
     # Which workflow this question is presented in. Defaults to "transaction"
     # for backward compatibility with rows created before customer checklists
     # were added; "customer" questions are answered before customer approval.
-    context = Column(
+    context: Mapped[QuestionContext] = Column(
         Enum(QuestionContext),
         default=QuestionContext.transaction,
         nullable=False,
@@ -153,22 +167,34 @@ class OrgApprovalQuestion(Base):
 
     # A "yes" answer means compliant (lower risk); "no" means non-compliant (flag).
     # "not_applicable" is excluded from the score calculation.
-    compliant_answer = Column(Enum(QuestionAnswer), default=QuestionAnswer.yes)
+    compliant_answer: Mapped[Optional[QuestionAnswer]] = Column(
+        Enum(QuestionAnswer), default=QuestionAnswer.yes
+    )
 
-    category = Column(
+    category: Mapped[QuestionCategory] = Column(
         Enum(QuestionCategory),
         default=QuestionCategory.general,
         nullable=False,
         index=True,
     )
-    risk_weight = Column(Float, default=1.0)  # relative weight within category
-    applicable_industries = Column(JSON, default=list)  # [] = all industries
-    template_ref = Column(String(100))  # e.g. "fatf_crypto_v1"
-    is_system = Column(Boolean, default=False)  # seeded by platform
+    risk_weight: Mapped[Optional[float]] = Column(
+        Float, default=1.0
+    )  # relative weight within category
+    applicable_industries: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [] = all industries
+    template_ref: Mapped[Optional[str]] = Column(String(100))  # e.g. "fatf_crypto_v1"
+    is_system: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # seeded by platform
 
-    created_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class TransactionQuestionResponse(Base):
@@ -188,26 +214,30 @@ class TransactionQuestionResponse(Base):
         UniqueConstraint("transaction_id", "question_id", name="uq_txn_question"),
     )
 
-    id = Column(String, primary_key=True, default=lambda: f"tqr_{uuid4().hex[:10]}")
-    transaction_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"tqr_{uuid4().hex[:10]}"
+    )
+    transaction_id: Mapped[str] = Column(
         String,
         ForeignKey("transactions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    question_id = Column(
+    question_id: Mapped[str] = Column(
         String,
         ForeignKey("org_approval_questions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    answer = Column(Enum(QuestionAnswer), nullable=False)
-    notes = Column(Text)
+    answer: Mapped[QuestionAnswer] = Column(Enum(QuestionAnswer), nullable=False)
+    notes: Mapped[Optional[str]] = Column(Text)
 
-    answered_by = Column(String, nullable=False)  # user_id
-    answered_at = Column(DateTime(timezone=True), server_default=func.now())
+    answered_by: Mapped[str] = Column(String, nullable=False)  # user_id
+    answered_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class CustomerQuestionResponse(Base):
@@ -224,23 +254,27 @@ class CustomerQuestionResponse(Base):
         UniqueConstraint("customer_id", "question_id", name="uq_customer_question"),
     )
 
-    id = Column(String, primary_key=True, default=lambda: f"cqr_{uuid4().hex[:10]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cqr_{uuid4().hex[:10]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    question_id = Column(
+    question_id: Mapped[str] = Column(
         String,
         ForeignKey("org_approval_questions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    answer = Column(Enum(QuestionAnswer), nullable=False)
-    notes = Column(Text)
+    answer: Mapped[QuestionAnswer] = Column(Enum(QuestionAnswer), nullable=False)
+    notes: Mapped[Optional[str]] = Column(Text)
 
-    answered_by = Column(String, nullable=False)  # user_id
-    answered_at = Column(DateTime(timezone=True), server_default=func.now())
+    answered_by: Mapped[str] = Column(String, nullable=False)  # user_id
+    answered_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )

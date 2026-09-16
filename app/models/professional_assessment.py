@@ -33,6 +33,8 @@ legal compliance. All decisions remain with the reporting entity.
 """
 
 import enum
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -391,56 +393,72 @@ class ProfessionalAssessment(Base):
 
     __tablename__ = "professional_assessments"
 
-    id = Column(String, primary_key=True, default=lambda: f"pa_{uuid4().hex[:12]}")
-    assessment_ref = Column(String(30), unique=True, nullable=False, index=True)
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"pa_{uuid4().hex[:12]}"
+    )
+    assessment_ref: Mapped[str] = Column(
+        String(30), unique=True, nullable=False, index=True
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(String, ForeignKey("customers.id"), nullable=False, index=True)
-    transaction_id = Column(
+    customer_id: Mapped[str] = Column(
+        String, ForeignKey("customers.id"), nullable=False, index=True
+    )
+    transaction_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("transactions.id"), nullable=True, index=True
     )
-    case_id = Column(String, ForeignKey("cases.id"), nullable=True, index=True)
+    case_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("cases.id"), nullable=True, index=True
+    )
 
-    professional_service_type = Column(
+    professional_service_type: Mapped[ProfessionalServiceType] = Column(
         Enum(ProfessionalServiceType, name="professionalservicetype"),
         nullable=False,
         index=True,
     )
-    matter_description = Column(Text)  # Brief description of the matter/engagement
-    status = Column(
+    matter_description: Mapped[Optional[str]] = Column(
+        Text
+    )  # Brief description of the matter/engagement
+    status: Mapped[AssessmentStatus] = Column(
         Enum(AssessmentStatus, name="professional_assessment_status"),
         default=AssessmentStatus.draft,
         nullable=False,
         index=True,
     )
-    overall_risk_rating = Column(
+    overall_risk_rating: Mapped[Optional[AssessmentRiskRating]] = Column(
         Enum(AssessmentRiskRating), default=AssessmentRiskRating.not_rated
     )
-    risk_summary = Column(Text)  # Reviewer's overall risk narrative
+    risk_summary: Mapped[Optional[str]] = Column(
+        Text
+    )  # Reviewer's overall risk narrative
 
     # Completion tracking
-    created_by = Column(String, nullable=False)
-    assigned_to = Column(String)
-    completed_by = Column(String)
-    completed_at = Column(DateTime(timezone=True))
-    reviewed_by = Column(String)
-    reviewed_at = Column(DateTime(timezone=True))
+    created_by: Mapped[str] = Column(String, nullable=False)
+    assigned_to: Mapped[Optional[str]] = Column(String)
+    completed_by: Mapped[Optional[str]] = Column(String)
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    reviewed_by: Mapped[Optional[str]] = Column(String)
+    reviewed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
     # Escalation
-    is_escalated = Column(Boolean, default=False)
-    escalated_to = Column(String)
-    escalated_at = Column(DateTime(timezone=True))
-    escalation_reason = Column(Text)
+    is_escalated: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    escalated_to: Mapped[Optional[str]] = Column(String)
+    escalated_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    escalation_reason: Mapped[Optional[str]] = Column(Text)
 
     # SMR consideration flag (human decision only — never auto-set)
-    smr_consideration_noted = Column(Boolean, default=False)
+    smr_consideration_noted: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     # Relationships
     sof_assessment: Mapped["SOFAssessment | None"] = relationship(
@@ -488,42 +506,58 @@ class SOFAssessment(Base):
 
     __tablename__ = "sof_assessments"
 
-    id = Column(String, primary_key=True, default=lambda: f"sof_{uuid4().hex[:10]}")
-    assessment_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"sof_{uuid4().hex[:10]}"
+    )
+    assessment_id: Mapped[str] = Column(
         String,
         ForeignKey("professional_assessments.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
     # Source type(s) — can have multiple (e.g. employment + savings)
-    primary_source_type = Column(Enum(SOFSourceType), nullable=False)
-    additional_source_types = Column(JSON, default=list)  # list of SOFSourceType values
-    source_description = Column(Text)  # Narrative from customer/client
+    primary_source_type: Mapped[SOFSourceType] = Column(
+        Enum(SOFSourceType), nullable=False
+    )
+    additional_source_types: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # list of SOFSourceType values
+    source_description: Mapped[Optional[str]] = Column(
+        Text
+    )  # Narrative from customer/client
 
     # Review checklist
-    evidence_uploaded = Column(Boolean, default=False)
-    evidence_reviewed = Column(Boolean, default=False)
-    evidence_sufficient = Column(Boolean, default=False)
-    additional_info_required = Column(Boolean, default=False)
+    evidence_uploaded: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    evidence_reviewed: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    evidence_sufficient: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    additional_info_required: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # Document references
-    evidence_refs = Column(JSON, default=list)  # ["doc_abc123", "doc_def456"]
-    evidence_types = Column(JSON, default=list)  # ["bank_statement", "payslip", ...]
+    evidence_refs: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # ["doc_abc123", "doc_def456"]
+    evidence_types: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # ["bank_statement", "payslip", ...]
 
     # Review outcome
-    review_outcome = Column(
+    review_outcome: Mapped[Optional[ReviewOutcome]] = Column(
         Enum(ReviewOutcome, name="professional_review_outcome"),
         default=ReviewOutcome.not_reviewed,
     )
-    reviewer_id = Column(String)
-    review_date = Column(DateTime(timezone=True))
-    review_notes = Column(Text)
+    reviewer_id: Mapped[Optional[str]] = Column(String)
+    review_date: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    review_notes: Mapped[Optional[str]] = Column(Text)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     assessment = relationship("ProfessionalAssessment", back_populates="sof_assessment")
 
@@ -533,42 +567,54 @@ class SOWAssessment(Base):
 
     __tablename__ = "sow_assessments"
 
-    id = Column(String, primary_key=True, default=lambda: f"sow_{uuid4().hex[:10]}")
-    assessment_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"sow_{uuid4().hex[:10]}"
+    )
+    assessment_id: Mapped[str] = Column(
         String,
         ForeignKey("professional_assessments.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
     # Source type(s)
-    primary_source_type = Column(Enum(SOWSourceType), nullable=False)
-    additional_source_types = Column(JSON, default=list)
-    wealth_narrative = Column(Text)  # customer/client explanation of accumulated wealth
+    primary_source_type: Mapped[SOWSourceType] = Column(
+        Enum(SOWSourceType), nullable=False
+    )
+    additional_source_types: Mapped[Optional[Any]] = Column(JSON, default=list)
+    wealth_narrative: Mapped[Optional[str]] = Column(
+        Text
+    )  # customer/client explanation of accumulated wealth
 
     # Review checklist
-    wealth_explanation_provided = Column(Boolean, default=False)
-    evidence_reviewed = Column(Boolean, default=False)
-    wealth_profile_consistent = Column(Boolean, default=False)
-    additional_review_required = Column(Boolean, default=False)
+    wealth_explanation_provided: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    evidence_reviewed: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    wealth_profile_consistent: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    additional_review_required: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # Document references
-    evidence_refs = Column(JSON, default=list)
+    evidence_refs: Mapped[Optional[Any]] = Column(JSON, default=list)
 
     # Review outcome
-    review_notes = Column(Text)
-    risk_assessment = Column(Text)  # Reviewer's written risk assessment
-    review_outcome = Column(
+    review_notes: Mapped[Optional[str]] = Column(Text)
+    risk_assessment: Mapped[Optional[str]] = Column(
+        Text
+    )  # Reviewer's written risk assessment
+    review_outcome: Mapped[Optional[ReviewOutcome]] = Column(
         Enum(ReviewOutcome, name="professional_review_outcome"),
         default=ReviewOutcome.not_reviewed,
     )
-    reviewer_id = Column(String)
-    review_date = Column(DateTime(timezone=True))
+    reviewer_id: Mapped[Optional[str]] = Column(String)
+    review_date: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     assessment = relationship("ProfessionalAssessment", back_populates="sow_assessment")
 
@@ -578,36 +624,48 @@ class TransactionPurposeAssessment(Base):
 
     __tablename__ = "transaction_purpose_assessments"
 
-    id = Column(String, primary_key=True, default=lambda: f"tpa_{uuid4().hex[:10]}")
-    assessment_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"tpa_{uuid4().hex[:10]}"
+    )
+    assessment_id: Mapped[str] = Column(
         String,
         ForeignKey("professional_assessments.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    purpose_type = Column(Enum(TransactionPurposeType), nullable=False)
-    purpose_description = Column(Text)  # Detailed explanation
+    purpose_type: Mapped[TransactionPurposeType] = Column(
+        Enum(TransactionPurposeType), nullable=False
+    )
+    purpose_description: Mapped[Optional[str]] = Column(Text)  # Detailed explanation
 
     # Review checklist
-    purpose_documented = Column(Boolean, default=False)
-    purpose_verified = Column(Boolean, default=False)
-    supporting_evidence_reviewed = Column(Boolean, default=False)
-    purpose_consistent_with_profile = Column(Boolean, default=False)
+    purpose_documented: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    purpose_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    supporting_evidence_reviewed: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    purpose_consistent_with_profile: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
 
-    evidence_refs = Column(JSON, default=list)
-    review_notes = Column(Text)
-    review_outcome = Column(
+    evidence_refs: Mapped[Optional[Any]] = Column(JSON, default=list)
+    review_notes: Mapped[Optional[str]] = Column(Text)
+    review_outcome: Mapped[Optional[ReviewOutcome]] = Column(
         Enum(ReviewOutcome, name="professional_review_outcome"),
         default=ReviewOutcome.not_reviewed,
     )
-    reviewer_id = Column(String)
-    review_date = Column(DateTime(timezone=True))
+    reviewer_id: Mapped[Optional[str]] = Column(String)
+    review_date: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     assessment = relationship(
         "ProfessionalAssessment", back_populates="purpose_assessment"
@@ -625,46 +683,68 @@ class TaxRiskAssessment(Base):
 
     __tablename__ = "tax_risk_assessments"
 
-    id = Column(String, primary_key=True, default=lambda: f"tra_{uuid4().hex[:10]}")
-    assessment_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"tra_{uuid4().hex[:10]}"
+    )
+    assessment_id: Mapped[str] = Column(
         String,
         ForeignKey("professional_assessments.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
     # Standard AUSTRAC/FATF risk indicators
-    indicator_unexplained_cash = Column(Boolean, default=False)
-    indicator_complex_ownership = Column(Boolean, default=False)
-    indicator_offshore_no_purpose = Column(Boolean, default=False)
-    indicator_income_inconsistency = Column(Boolean, default=False)
-    indicator_related_party_movements = Column(Boolean, default=False)
-    indicator_unusual_trust = Column(Boolean, default=False)
-    indicator_unexplained_wealth = Column(Boolean, default=False)
-    indicator_artificial_structuring = Column(Boolean, default=False)
-    indicator_lack_documentation = Column(Boolean, default=False)
-    indicator_reluctance_records = Column(Boolean, default=False)
+    indicator_unexplained_cash: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    indicator_complex_ownership: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    indicator_offshore_no_purpose: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    indicator_income_inconsistency: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    indicator_related_party_movements: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    indicator_unusual_trust: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    indicator_unexplained_wealth: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    indicator_artificial_structuring: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    indicator_lack_documentation: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    indicator_reluctance_records: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
 
     # Custom indicators added by reviewer
-    custom_indicators = Column(
+    custom_indicators: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # [{"label": "...", "present": true}]
 
     # Total count for quick filtering
-    indicator_count = Column(Integer, default=0)  # computed: sum of True indicators
+    indicator_count: Mapped[Optional[int]] = Column(
+        Integer, default=0
+    )  # computed: sum of True indicators
 
-    supporting_evidence = Column(Text)
-    reviewer_notes = Column(Text)
-    risk_rating = Column(
+    supporting_evidence: Mapped[Optional[str]] = Column(Text)
+    reviewer_notes: Mapped[Optional[str]] = Column(Text)
+    risk_rating: Mapped[Optional[AssessmentRiskRating]] = Column(
         Enum(AssessmentRiskRating), default=AssessmentRiskRating.not_rated
     )
-    reviewer_id = Column(String)
-    review_date = Column(DateTime(timezone=True))
+    reviewer_id: Mapped[Optional[str]] = Column(String)
+    review_date: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     assessment = relationship(
         "ProfessionalAssessment", back_populates="tax_risk_assessment"
@@ -683,41 +763,59 @@ class InvestmentLegitimacyAssessment(Base):
 
     __tablename__ = "investment_legitimacy_assessments"
 
-    id = Column(String, primary_key=True, default=lambda: f"ila_{uuid4().hex[:10]}")
-    assessment_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ila_{uuid4().hex[:10]}"
+    )
+    assessment_id: Mapped[str] = Column(
         String,
         ForeignKey("professional_assessments.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    investment_type = Column(String(200))  # e.g. "Managed fund", "Direct shares"
-    investment_purpose = Column(Text)
+    investment_type: Mapped[Optional[str]] = Column(
+        String(200)
+    )  # e.g. "Managed fund", "Direct shares"
+    investment_purpose: Mapped[Optional[str]] = Column(Text)
 
     # Legitimacy checklist
-    purpose_documented = Column(Boolean, default=False)
-    counterparty_identified = Column(Boolean, default=False)
-    documentation_reviewed = Column(Boolean, default=False)
-    funds_destination_verified = Column(Boolean, default=False)
-    commercial_rationale_understood = Column(Boolean, default=False)
-    regulatory_registration_verified = Column(Boolean, default=False)
-    beneficial_ownership_verified = Column(Boolean, default=False)
-    high_risk_jurisdiction_involved = Column(Boolean, default=False)
+    purpose_documented: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    counterparty_identified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    documentation_reviewed: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    funds_destination_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    commercial_rationale_understood: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    regulatory_registration_verified: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    beneficial_ownership_verified: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    high_risk_jurisdiction_involved: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
 
-    supporting_documentation = Column(JSON, default=list)  # document refs
-    review_outcome = Column(Text)
-    review_outcome_status = Column(
+    supporting_documentation: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # document refs
+    review_outcome: Mapped[Optional[str]] = Column(Text)
+    review_outcome_status: Mapped[Optional[ReviewOutcome]] = Column(
         Enum(ReviewOutcome, name="professional_review_outcome"),
         default=ReviewOutcome.not_reviewed,
     )
-    reviewer_id = Column(String)
-    review_date = Column(DateTime(timezone=True))
-    review_notes = Column(Text)
+    reviewer_id: Mapped[Optional[str]] = Column(String)
+    review_date: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    review_notes: Mapped[Optional[str]] = Column(Text)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     assessment = relationship(
         "ProfessionalAssessment", back_populates="investment_assessment"
@@ -744,28 +842,36 @@ class ProfessionalJudgmentChecklist(Base):
 
     __tablename__ = "professional_judgment_checklists"
 
-    id = Column(String, primary_key=True, default=lambda: f"pjc_{uuid4().hex[:10]}")
-    assessment_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"pjc_{uuid4().hex[:10]}"
+    )
+    assessment_id: Mapped[str] = Column(
         String,
         ForeignKey("professional_assessments.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    checklist_type = Column(Enum(ChecklistType), nullable=False)
-    items = Column(JSON, default=list)  # list of item dicts (see docstring)
+    checklist_type: Mapped[ChecklistType] = Column(Enum(ChecklistType), nullable=False)
+    items: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # list of item dicts (see docstring)
 
     # Completion tracking
-    total_items = Column(Integer, default=0)
-    checked_items = Column(Integer, default=0)
-    is_complete = Column(Boolean, default=False)
-    completed_by = Column(String)
-    completed_at = Column(DateTime(timezone=True))
+    total_items: Mapped[Optional[int]] = Column(Integer, default=0)
+    checked_items: Mapped[Optional[int]] = Column(Integer, default=0)
+    is_complete: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    completed_by: Mapped[Optional[str]] = Column(String)
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     assessment = relationship("ProfessionalAssessment", back_populates="checklist")
 
@@ -781,18 +887,24 @@ class OrgProfessionalChecklistTemplate(Base):
         UniqueConstraint("org_id", "checklist_type", name="uq_org_checklist_type"),
     )
 
-    id = Column(String, primary_key=True, default=lambda: f"oct_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"oct_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    checklist_type = Column(Enum(ChecklistType), nullable=False)
+    checklist_type: Mapped[ChecklistType] = Column(Enum(ChecklistType), nullable=False)
 
     # Customised items list: [{"key": "...", "label": "...", "is_required": true}]
-    items = Column(JSON, nullable=False, default=list)
+    items: Mapped[Any] = Column(JSON, nullable=False, default=list)
 
-    updated_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )

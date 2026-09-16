@@ -14,7 +14,8 @@ All decisions remain with the reporting entity.
 """
 
 import enum
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -145,48 +146,58 @@ class AutomationRule(Base):
 
     __tablename__ = "automation_rules"
 
-    id = Column(String, primary_key=True, default=lambda: f"ar_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ar_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    rule_ref = Column(String(30), index=True)  # e.g. AUTO-TM-001
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
+    rule_ref: Mapped[Optional[str]] = Column(String(30), index=True)  # e.g. AUTO-TM-001
+    name: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
 
-    event_type = Column(Enum(RuleEventType), nullable=False, index=True)
-    status = Column(
+    event_type: Mapped[RuleEventType] = Column(
+        Enum(RuleEventType), nullable=False, index=True
+    )
+    status: Mapped[AutomationRuleStatus] = Column(
         Enum(AutomationRuleStatus),
         default=AutomationRuleStatus.active,
         nullable=False,
         index=True,
     )
-    is_system = Column(Boolean, default=False)  # VeriGo-seeded — cannot delete
-    priority = Column(Integer, default=100)
+    is_system: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # VeriGo-seeded — cannot delete
+    priority: Mapped[Optional[int]] = Column(Integer, default=100)
 
     # Condition groups — JSON encoding same as MonitoringRule:
     # [{"logic": "AND", "description": "...", "conditions": [{"field": "...", "operator": "eq", "value": "..."}]}]
-    condition_groups = Column(JSON, default=list)
+    condition_groups: Mapped[Optional[Any]] = Column(JSON, default=list)
 
     # Actions — ordered list:
     # [{"action_type": "create_alert", "params": {"severity": "high", "title": "..."}, "delay_minutes": 0}]
-    actions = Column(JSON, default=list)
+    actions: Mapped[Optional[Any]] = Column(JSON, default=list)
 
     # Applicable industries (empty = all)
-    applicable_industries = Column(JSON, default=list)
+    applicable_industries: Mapped[Optional[Any]] = Column(JSON, default=list)
 
     # Statistics
-    trigger_count = Column(Integer, default=0)
-    last_triggered_at = Column(DateTime(timezone=True))
-    last_executed_at = Column(DateTime(timezone=True))
-    false_positive_rate = Column(Float)
+    trigger_count: Mapped[Optional[int]] = Column(Integer, default=0)
+    last_triggered_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    last_executed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    false_positive_rate: Mapped[Optional[float]] = Column(Float)
 
-    tags = Column(JSON, default=list)
-    created_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    tags: Mapped[Optional[Any]] = Column(JSON, default=list)
+    created_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class AutomationRuleVersion(Base):
@@ -200,30 +211,34 @@ class AutomationRuleVersion(Base):
 
     __tablename__ = "automation_rule_versions"
 
-    id = Column(String, primary_key=True, default=lambda: f"arv_{uuid4().hex[:12]}")
-    rule_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"arv_{uuid4().hex[:12]}"
+    )
+    rule_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("automation_rules.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    version_number = Column(Integer, nullable=False)
+    version_number: Mapped[int] = Column(Integer, nullable=False)
 
     # Full snapshot of the rule definition at this version
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
-    event_type = Column(String(50), nullable=False)
-    status = Column(String(20), nullable=False)
-    priority = Column(Integer)
-    condition_groups = Column(JSON, default=list)
-    actions = Column(JSON, default=list)
-    applicable_industries = Column(JSON, default=list)
+    name: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    event_type: Mapped[str] = Column(String(50), nullable=False)
+    status: Mapped[str] = Column(String(20), nullable=False)
+    priority: Mapped[Optional[int]] = Column(Integer)
+    condition_groups: Mapped[Optional[Any]] = Column(JSON, default=list)
+    actions: Mapped[Optional[Any]] = Column(JSON, default=list)
+    applicable_industries: Mapped[Optional[Any]] = Column(JSON, default=list)
 
-    change_summary = Column(Text)
-    changed_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    change_summary: Mapped[Optional[str]] = Column(Text)
+    changed_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class AutomationRuleExecution(Base):
@@ -234,31 +249,41 @@ class AutomationRuleExecution(Base):
 
     __tablename__ = "automation_rule_executions"
 
-    id = Column(String, primary_key=True, default=lambda: f"are_{uuid4().hex[:12]}")
-    rule_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"are_{uuid4().hex[:12]}"
+    )
+    rule_id: Mapped[str] = Column(
         String, ForeignKey("automation_rules.id"), nullable=False, index=True
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    event_type = Column(String(100), nullable=False)
-    entity_type = Column(String(50))  # customer | transaction | case | alert | document
-    entity_id = Column(String)
-    triggered_by = Column(String)  # user_id or "system"
+    event_type: Mapped[str] = Column(String(100), nullable=False)
+    entity_type: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # customer | transaction | case | alert | document
+    entity_id: Mapped[Optional[str]] = Column(String)
+    triggered_by: Mapped[Optional[str]] = Column(String)  # user_id or "system"
 
-    conditions_evaluated = Column(Integer)
-    conditions_matched = Column(Boolean, nullable=False)
-    matched_group_index = Column(Integer)  # which condition group matched
+    conditions_evaluated: Mapped[Optional[int]] = Column(Integer)
+    conditions_matched: Mapped[bool] = Column(Boolean, nullable=False)
+    matched_group_index: Mapped[Optional[int]] = Column(
+        Integer
+    )  # which condition group matched
 
     # Actions actually executed (in testing mode: what WOULD have been executed)
-    actions_executed = Column(
+    actions_executed: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # [{"action_type": "...", "result": "...", "entity_id": "..."}]
-    is_shadow_mode = Column(Boolean, default=False)  # True when rule.status == testing
+    is_shadow_mode: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # True when rule.status == testing
 
     execution_time_ms: Mapped[Optional[float]] = Column(Float)
-    error_message = Column(Text)
+    error_message: Mapped[Optional[str]] = Column(Text)
 
-    executed_at = Column(DateTime(timezone=True), server_default=func.now())
+    executed_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class DecisionSupportPanel(Base):
@@ -276,17 +301,23 @@ class DecisionSupportPanel(Base):
 
     __tablename__ = "decision_support_panels"
 
-    id = Column(String, primary_key=True, default=lambda: f"dsp_{uuid4().hex[:12]}")
-    org_id = Column(String, nullable=False, index=True)
-    transaction_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"dsp_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
+    transaction_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("transactions.id"), nullable=True, index=True
     )
-    case_id = Column(String, ForeignKey("cases.id"), nullable=True, index=True)
-    customer_id = Column(String, ForeignKey("customers.id"), nullable=False, index=True)
+    case_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("cases.id"), nullable=True, index=True
+    )
+    customer_id: Mapped[str] = Column(
+        String, ForeignKey("customers.id"), nullable=False, index=True
+    )
 
     # Risk summary (compiled at panel generation time)
     customer_risk_score: Mapped[Optional[float]] = Column(Float)
-    customer_risk_level = Column(String(20))
+    customer_risk_level: Mapped[Optional[str]] = Column(String(20))
     transaction_risk_score: Mapped[Optional[float]] = Column(Float)
     geographic_risk_score: Mapped[Optional[float]] = Column(Float)
     product_risk_score: Mapped[Optional[float]] = Column(Float)
@@ -296,37 +327,53 @@ class DecisionSupportPanel(Base):
     final_approval_score: Mapped[Optional[float]] = Column(Float)
 
     # Triggered rules (from MonitoringRule and AutomationRule evaluations)
-    triggered_rules = Column(JSON, default=list)  # [{rule_id, rule_name, category}]
+    triggered_rules: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [{rule_id, rule_name, category}]
 
     # Required and recommended actions
-    required_actions = Column(JSON, default=list)  # must-do before approval
-    recommended_actions = Column(JSON, default=list)  # guidance prompts
+    required_actions: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # must-do before approval
+    recommended_actions: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # guidance prompts
 
     # Potential AUSTRAC reporting obligations
-    potential_ttr = Column(Boolean, default=False)
-    potential_ifti = Column(Boolean, default=False)
-    potential_smr = Column(Boolean, default=False)
-    reporting_rationale = Column(JSON, default=dict)  # {ttr: "reason", ifti: "reason"}
+    potential_ttr: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    potential_ifti: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    potential_smr: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    reporting_rationale: Mapped[Optional[Any]] = Column(
+        JSON, default=dict
+    )  # {ttr: "reason", ifti: "reason"}
 
     # Outstanding items
-    outstanding_tasks = Column(JSON, default=list)  # [{"task": "...", "due": "..."}]
-    missing_documents = Column(
+    outstanding_tasks: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [{"task": "...", "due": "..."}]
+    missing_documents: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # [{"doc_type": "...", "required_for": "..."}]
 
     # Approval workflow status
-    current_step = Column(
+    current_step: Mapped[Optional[ApprovalStepType]] = Column(
         Enum(ApprovalStepType), default=ApprovalStepType.analyst_review
     )
-    is_complete = Column(Boolean, default=False)
-    final_decision = Column(Enum(ApprovalDecisionType))
-    final_decision_by = Column(String)
-    final_decision_at = Column(DateTime(timezone=True))
-    final_decision_notes = Column(Text)
+    is_complete: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    final_decision: Mapped[Optional[ApprovalDecisionType]] = Column(
+        Enum(ApprovalDecisionType)
+    )
+    final_decision_by: Mapped[Optional[str]] = Column(String)
+    final_decision_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    final_decision_notes: Mapped[Optional[str]] = Column(Text)
 
-    generated_by = Column(String)  # user_id or "system"
-    generated_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    generated_by: Mapped[Optional[str]] = Column(String)  # user_id or "system"
+    generated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class ApprovalWorkflowStep(Base):
@@ -338,27 +385,35 @@ class ApprovalWorkflowStep(Base):
 
     __tablename__ = "approval_workflow_steps"
 
-    id = Column(String, primary_key=True, default=lambda: f"aws_{uuid4().hex[:12]}")
-    panel_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"aws_{uuid4().hex[:12]}"
+    )
+    panel_id: Mapped[str] = Column(
         String,
         ForeignKey("decision_support_panels.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    step_type = Column(Enum(ApprovalStepType), nullable=False)
-    step_order = Column(Integer, nullable=False)
+    step_type: Mapped[ApprovalStepType] = Column(Enum(ApprovalStepType), nullable=False)
+    step_order: Mapped[int] = Column(Integer, nullable=False)
 
-    decision = Column(Enum(ApprovalDecisionType), nullable=False)
-    reviewer_id = Column(String, nullable=False)
-    review_notes = Column(Text)
+    decision: Mapped[ApprovalDecisionType] = Column(
+        Enum(ApprovalDecisionType), nullable=False
+    )
+    reviewer_id: Mapped[str] = Column(String, nullable=False)
+    review_notes: Mapped[Optional[str]] = Column(Text)
 
     # What the reviewer saw at decision time
-    risk_snapshot = Column(JSON)  # scores, flags, triggered rules at decision time
+    risk_snapshot: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # scores, flags, triggered rules at decision time
 
     # Conditions attached (e.g. "approved conditional on SOF documents")
-    conditions = Column(JSON, default=list)
+    conditions: Mapped[Optional[Any]] = Column(JSON, default=list)
 
-    reviewed_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     # Immutable: no updated_at

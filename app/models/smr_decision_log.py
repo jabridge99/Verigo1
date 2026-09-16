@@ -33,6 +33,8 @@ entity's Compliance Officer.
 """
 
 import enum
+from datetime import date, datetime
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -46,7 +48,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -99,83 +101,103 @@ class SMRDecisionLog(Base):
 
     __tablename__ = "smr_decision_logs"
 
-    id = Column(String, primary_key=True, default=lambda: f"smrdl_{uuid4().hex[:12]}")
-    decision_ref = Column(String(30), unique=True, nullable=False, index=True)
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"smrdl_{uuid4().hex[:12]}"
+    )
+    decision_ref: Mapped[str] = Column(
+        String(30), unique=True, nullable=False, index=True
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(
+    customer_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("customers.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    case_id = Column(
+    case_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("cases.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    tmp_alert_id = Column(
+    tmp_alert_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("transaction_alerts.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    ecdd_case_id = Column(
+    ecdd_case_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("professional_assessments.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    related_transaction_id = Column(
+    related_transaction_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
     )
 
     # ── Matter identification ────────────────────────────────────────────────
-    matter_source = Column(Enum(SMRMatterSource), nullable=False)
-    identifying_employee = Column(
+    matter_source: Mapped[SMRMatterSource] = Column(
+        Enum(SMRMatterSource), nullable=False
+    )
+    identifying_employee: Mapped[Optional[str]] = Column(
         String
     )  # user_id, where matter_source is staff-raised
-    suspicion_category = Column(String(100))
+    suspicion_category: Mapped[Optional[str]] = Column(String(100))
     # Free-text/short-code, e.g. "entity_formation_no_purpose",
     # "trust_account_third_party_funds" — deliberately not a fixed enum since
     # every sector's real Risk Matrix defines its own suspicion categories.
-    risk_matrix_ref = Column(String(50))  # e.g. "PR-01", "EF-01"
-    description = Column(Text)  # facts and circumstances giving rise to the suspicion
+    risk_matrix_ref: Mapped[Optional[str]] = Column(String(50))  # e.g. "PR-01", "EF-01"
+    description: Mapped[Optional[str]] = Column(
+        Text
+    )  # facts and circumstances giving rise to the suspicion
 
     # ── Compliance Officer assessment ────────────────────────────────────────
-    co_user_id = Column(String)  # user_id of the assessing Compliance Officer
-    suspicion_formed = Column(Boolean, nullable=False, default=False)
+    co_user_id: Mapped[Optional[str]] = Column(
+        String
+    )  # user_id of the assessing Compliance Officer
+    suspicion_formed: Mapped[bool] = Column(Boolean, nullable=False, default=False)
     # Human decision only — never auto-set by the platform.
-    suspicion_formed_at = Column(DateTime(timezone=True))
-    suspicion_type = Column(Enum(SMRSuspicionType))
-    is_terrorism_financing_indicator = Column(Boolean, default=False)
-    reasons = Column(Text)  # CO's documented reasoning, whichever way the decision goes
-    enhanced_monitoring_applied = Column(Boolean, default=False)
+    suspicion_formed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    suspicion_type: Mapped[Optional[SMRSuspicionType]] = Column(Enum(SMRSuspicionType))
+    is_terrorism_financing_indicator: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    reasons: Mapped[Optional[str]] = Column(
+        Text
+    )  # CO's documented reasoning, whichever way the decision goes
+    enhanced_monitoring_applied: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── SMR deadline and lodgement ───────────────────────────────────────────
     # s.41 AML/CTF Act: 24 hours (terrorism financing) or 3 business days
     # (all other matters) from suspicion_formed_at — consistent across every
     # real sector document reviewed this session.
-    smr_deadline = Column(DateTime(timezone=True))
-    outcome = Column(
+    smr_deadline: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    outcome: Mapped[Optional[SMRDecisionOutcome]] = Column(
         Enum(SMRDecisionOutcome), default=SMRDecisionOutcome.under_assessment
     )
-    smr_lodged_at = Column(DateTime(timezone=True))
-    austrac_reference = Column(String(100))
+    smr_lodged_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    austrac_reference: Mapped[Optional[str]] = Column(String(100))
 
     # ── Tipping-off and post-decision ────────────────────────────────────────
-    tipping_off_check_confirmed = Column(Boolean, default=False)
-    director_notified = Column(Boolean, default=False)
-    director_notified_at = Column(DateTime(timezone=True))
-    continue_dealings = Column(Enum(SMRContinueDealings))
-    post_decision_notes = Column(Text)
-    next_review_date = Column(Date)
+    tipping_off_check_confirmed: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    director_notified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    director_notified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    continue_dealings: Mapped[Optional[SMRContinueDealings]] = Column(
+        Enum(SMRContinueDealings)
+    )
+    post_decision_notes: Mapped[Optional[str]] = Column(Text)
+    next_review_date: Mapped[Optional[date]] = Column(Date)
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     # ── Relationships ─────────────────────────────────────────────────────────
     organisation = relationship("Organisation")

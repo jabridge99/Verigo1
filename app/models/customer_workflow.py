@@ -16,7 +16,8 @@ Risk is scored across 5 dimensions; decision gateway fires automatically after s
 """
 
 import enum
-from typing import Optional
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -180,56 +181,80 @@ class CustomerWorkflow(Base):
 
     __tablename__ = "customer_workflows"
 
-    id = Column(String, primary_key=True, default=lambda: f"wf_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"wf_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    state = Column(
+    state: Mapped[WorkflowState] = Column(
         Enum(WorkflowState), nullable=False, default=WorkflowState.draft, index=True
     )
-    customer_type = Column(String(50))  # snapshot of customer type for routing
+    customer_type: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # snapshot of customer type for routing
 
     # Timing
-    started_at = Column(DateTime(timezone=True))  # when data_collection began
-    verification_started_at = Column(DateTime(timezone=True))
-    screening_started_at = Column(DateTime(timezone=True))
-    risk_assessed_at = Column(DateTime(timezone=True))
-    review_started_at = Column(DateTime(timezone=True))
-    decision_at = Column(DateTime(timezone=True))  # when approved/rejected
-    sla_due_date = Column(Date)  # target completion date
+    started_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True)
+    )  # when data_collection began
+    verification_started_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True)
+    )
+    screening_started_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    risk_assessed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    review_started_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    decision_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True)
+    )  # when approved/rejected
+    sla_due_date: Mapped[Optional[date]] = Column(Date)  # target completion date
 
     # Assignments
-    assigned_analyst = Column(String)  # user_id
-    assigned_compliance = Column(String)  # user_id (CDD/EDD reviewer)
-    assigned_senior = Column(String)  # user_id (EDD senior approver)
+    assigned_analyst: Mapped[Optional[str]] = Column(String)  # user_id
+    assigned_compliance: Mapped[Optional[str]] = Column(
+        String
+    )  # user_id (CDD/EDD reviewer)
+    assigned_senior: Mapped[Optional[str]] = Column(
+        String
+    )  # user_id (EDD senior approver)
 
     # EDD
-    edd_triggered = Column(Boolean, default=False)
-    edd_triggers = Column(JSON)  # list of EDDTrigger values
-    edd_approved_by = Column(String)
-    edd_approved_at = Column(DateTime(timezone=True))
-    edd_notes = Column(Text)
+    edd_triggered: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    edd_triggers: Mapped[Optional[Any]] = Column(JSON)  # list of EDDTrigger values
+    edd_approved_by: Mapped[Optional[str]] = Column(String)
+    edd_approved_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    edd_notes: Mapped[Optional[str]] = Column(Text)
 
     # Final decision
-    decision = Column(String(20))  # approved | rejected | on_hold
-    decision_by = Column(String)
-    decision_notes = Column(Text)
-    rejection_reason = Column(Text)
-    rfi_notes = Column(Text)  # what was requested in on_hold
+    decision: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # approved | rejected | on_hold
+    decision_by: Mapped[Optional[str]] = Column(String)
+    decision_notes: Mapped[Optional[str]] = Column(Text)
+    rejection_reason: Mapped[Optional[str]] = Column(Text)
+    rfi_notes: Mapped[Optional[str]] = Column(Text)  # what was requested in on_hold
 
     # Risk gate results (populated by decision_gateway)
-    risk_gate_result = Column(String(20))  # low | medium | high | critical
+    risk_gate_result: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # low | medium | high | critical
     risk_gate_score: Mapped[Optional[float]] = Column(Float)
-    auto_routed = Column(Boolean, default=False)  # whether gateway fired automatically
+    auto_routed: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # whether gateway fired automatically
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     customer = relationship("Customer", foreign_keys=[customer_id], uselist=False)
     events = relationship(
@@ -254,24 +279,28 @@ class CustomerWorkflowEvent(Base):
 
     __tablename__ = "customer_workflow_events"
 
-    id = Column(String, primary_key=True, default=lambda: f"wfe_{uuid4().hex[:10]}")
-    workflow_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"wfe_{uuid4().hex[:10]}"
+    )
+    workflow_id: Mapped[str] = Column(
         String,
         ForeignKey("customer_workflows.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(String, nullable=False, index=True)
-    org_id = Column(String, nullable=False)
+    customer_id: Mapped[str] = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False)
 
-    action = Column(Enum(WorkflowAction), nullable=False)
-    from_state = Column(Enum(WorkflowState), nullable=False)
-    to_state = Column(Enum(WorkflowState), nullable=False)
-    actor_id = Column(String)  # user_id or "system"
-    actor_role = Column(String(50))
-    comments = Column(Text)
-    event_metadata = Column(JSON)  # action-specific data (risk scores, triggers, etc.)
-    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    action: Mapped[WorkflowAction] = Column(Enum(WorkflowAction), nullable=False)
+    from_state: Mapped[WorkflowState] = Column(Enum(WorkflowState), nullable=False)
+    to_state: Mapped[WorkflowState] = Column(Enum(WorkflowState), nullable=False)
+    actor_id: Mapped[Optional[str]] = Column(String)  # user_id or "system"
+    actor_role: Mapped[Optional[str]] = Column(String(50))
+    comments: Mapped[Optional[str]] = Column(Text)
+    event_metadata: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # action-specific data (risk scores, triggers, etc.)
+    occurred_at: Mapped[datetime] = Column(DateTime(timezone=True), nullable=False)
 
     workflow = relationship("CustomerWorkflow", back_populates="events")
 
@@ -287,84 +316,98 @@ class CustomerRiskProfile(Base):
 
     __tablename__ = "customer_risk_profiles"
 
-    id = Column(String, primary_key=True, default=lambda: f"rp_{uuid4().hex[:12]}")
-    workflow_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rp_{uuid4().hex[:12]}"
+    )
+    workflow_id: Mapped[str] = Column(
         String,
         ForeignKey("customer_workflows.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    customer_id = Column(
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False)
-    version = Column(Integer, default=1)  # increments on each re-assessment
+    org_id: Mapped[str] = Column(String, nullable=False)
+    version: Mapped[Optional[int]] = Column(
+        Integer, default=1
+    )  # increments on each re-assessment
 
     # ── Dimension 1: Customer Risk ────────────────────────────────────────────
     customer_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
-    customer_risk_factors = Column(
+    customer_risk_factors: Mapped[Optional[Any]] = Column(
         JSON
     )  # breakdown: {"pep": 40, "nationality": 20, ...}
-    is_pep = Column(Boolean, default=False)
-    pep_type = Column(String(50))
-    nationality_risk = Column(String(20))  # low | medium | high
-    nationality_country = Column(String(2))
-    occupation_risk = Column(String(20))
-    is_cash_intensive = Column(Boolean, default=False)
+    is_pep: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    pep_type: Mapped[Optional[str]] = Column(String(50))
+    nationality_risk: Mapped[Optional[str]] = Column(String(20))  # low | medium | high
+    nationality_country: Mapped[Optional[str]] = Column(String(2))
+    occupation_risk: Mapped[Optional[str]] = Column(String(20))
+    is_cash_intensive: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Dimension 2: Product/Service Risk ─────────────────────────────────────
     product_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
-    product_risk_factors = Column(JSON)
-    involves_remittance = Column(Boolean, default=False)
-    involves_fx = Column(Boolean, default=False)
-    involves_crypto = Column(Boolean, default=False)
-    involves_cash = Column(Boolean, default=False)
-    involves_trust_structure = Column(Boolean, default=False)
-    involves_bearer_instruments = Column(Boolean, default=False)
+    product_risk_factors: Mapped[Optional[Any]] = Column(JSON)
+    involves_remittance: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    involves_fx: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    involves_crypto: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    involves_cash: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    involves_trust_structure: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    involves_bearer_instruments: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Dimension 3: Geographic Risk ──────────────────────────────────────────
     geographic_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
-    geographic_risk_factors = Column(JSON)
-    countries_involved = Column(JSON)  # list of ISO codes
-    has_fatf_blacklist_country = Column(Boolean, default=False)
-    has_fatf_greylist_country = Column(Boolean, default=False)
-    has_sanctions_country = Column(Boolean, default=False)
-    has_high_risk_country = Column(Boolean, default=False)
-    highest_risk_country = Column(String(2))
+    geographic_risk_factors: Mapped[Optional[Any]] = Column(JSON)
+    countries_involved: Mapped[Optional[Any]] = Column(JSON)  # list of ISO codes
+    has_fatf_blacklist_country: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    has_fatf_greylist_country: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    has_sanctions_country: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    has_high_risk_country: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    highest_risk_country: Mapped[Optional[str]] = Column(String(2))
 
     # ── Dimension 4: Delivery Channel Risk ────────────────────────────────────
     channel_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
-    channel_risk_factors = Column(JSON)
-    channel = Column(String(50))  # online | mobile | branch | agent | third_party
-    is_non_face_to_face = Column(Boolean, default=True)
-    is_introduced = Column(Boolean, default=False)
-    is_third_party_reliance = Column(Boolean, default=False)
+    channel_risk_factors: Mapped[Optional[Any]] = Column(JSON)
+    channel: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # online | mobile | branch | agent | third_party
+    is_non_face_to_face: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    is_introduced: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    is_third_party_reliance: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Dimension 5: Transaction Risk ─────────────────────────────────────────
     transaction_risk_score: Mapped[Optional[float]] = Column(Float, default=0.0)
-    transaction_risk_factors = Column(JSON)
+    transaction_risk_factors: Mapped[Optional[Any]] = Column(JSON)
     expected_monthly_volume_aud: Mapped[Optional[float]] = Column(Float)
-    expected_transaction_frequency = Column(
+    expected_transaction_frequency: Mapped[Optional[str]] = Column(
         String(50)
     )  # daily | weekly | monthly | occasional
     expected_max_transaction_aud: Mapped[Optional[float]] = Column(Float)
-    is_high_value = Column(Boolean, default=False)  # > $10,000 threshold
-    crosses_border = Column(Boolean, default=False)
+    is_high_value: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # > $10,000 threshold
+    crosses_border: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Overall result ─────────────────────────────────────────────────────────
     # Weighted: customer 30%, product 25%, geographic 20%, channel 15%, transaction 10%
     overall_risk_score: Mapped[float] = Column(Float, nullable=False, default=0.0)
-    overall_risk_level = Column(String(20))  # low | medium | high | critical
-    gateway_decision = Column(String(20))  # cdd | edd
-    edd_triggers = Column(JSON)  # list of EDDTrigger values if edd
+    overall_risk_level: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # low | medium | high | critical
+    gateway_decision: Mapped[Optional[str]] = Column(String(20))  # cdd | edd
+    edd_triggers: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # list of EDDTrigger values if edd
 
-    weights_used = Column(JSON)  # snapshot of weights applied
-    assessed_by = Column(String)  # user_id or "system"
-    assessed_at = Column(DateTime(timezone=True), server_default=func.now())
-    assessment_notes = Column(Text)
+    weights_used: Mapped[Optional[Any]] = Column(JSON)  # snapshot of weights applied
+    assessed_by: Mapped[Optional[str]] = Column(String)  # user_id or "system"
+    assessed_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    assessment_notes: Mapped[Optional[str]] = Column(Text)
 
     workflow = relationship("CustomerWorkflow", back_populates="risk_profile")

@@ -7,7 +7,8 @@ they are set only by the scoring engine or privileged compliance roles.
 """
 
 import enum
-from typing import Optional
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -108,41 +109,49 @@ class Customer(Base):
         UniqueConstraint("org_id", "customer_ref", name="uq_customer_org_ref"),
     )
 
-    id = Column(String, primary_key=True, default=lambda: f"cust_{uuid4().hex[:12]}")
-    customer_ref = Column(String(30), nullable=False, index=True)
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cust_{uuid4().hex[:12]}"
+    )
+    customer_ref: Mapped[str] = Column(String(30), nullable=False, index=True)
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_type = Column(
+    customer_type: Mapped[CustomerType] = Column(
         Enum(CustomerType, name="master_customer_type"),
         nullable=False,
         default=CustomerType.individual,
     )
-    status = Column(
+    status: Mapped[CustomerStatus] = Column(
         Enum(CustomerStatus), default=CustomerStatus.draft, nullable=False, index=True
     )
-    cdd_level = Column(Enum(CDDLevel), default=CDDLevel.standard, nullable=False)
+    cdd_level: Mapped[CDDLevel] = Column(
+        Enum(CDDLevel), default=CDDLevel.standard, nullable=False
+    )
 
     # ── Individual / Sole Trader ──────────────────────────────────────────────
-    full_name = Column(String(255), nullable=False)
-    date_of_birth = Column(Date)
-    country_of_birth = Column(String(2))
-    nationality = Column(String(2))  # primary ISO 3166-1 alpha-2
-    dual_nationality = Column(String(2))  # second nationality where applicable
-    country_of_residence = Column(String(2))
-    occupation = Column(String(255))
-    employer_name = Column(String(255))
-    employer_address = Column(String(500))
-    tax_residency_country = Column(String(2))
+    full_name: Mapped[str] = Column(String(255), nullable=False)
+    date_of_birth: Mapped[Optional[date]] = Column(Date)
+    country_of_birth: Mapped[Optional[str]] = Column(String(2))
+    nationality: Mapped[Optional[str]] = Column(String(2))  # primary ISO 3166-1 alpha-2
+    dual_nationality: Mapped[Optional[str]] = Column(
+        String(2)
+    )  # second nationality where applicable
+    country_of_residence: Mapped[Optional[str]] = Column(String(2))
+    occupation: Mapped[Optional[str]] = Column(String(255))
+    employer_name: Mapped[Optional[str]] = Column(String(255))
+    employer_address: Mapped[Optional[str]] = Column(String(500))
+    tax_residency_country: Mapped[Optional[str]] = Column(String(2))
     # P51: encrypted at rest via app.services.crypto.EncryptedKycString --
     # 255, not 50, to hold the Fernet-encrypted token (~165 chars incl.
     # the "kyc:" prefix), not just the raw digits.
-    tax_identification_number = Column(EncryptedKycString(255))  # TFN/TIN
-    fatca_applicable = Column(Boolean, default=False)
-    crs_applicable = Column(Boolean, default=False)
+    tax_identification_number: Mapped[Optional[str]] = Column(
+        EncryptedKycString(255)
+    )  # TFN/TIN
+    fatca_applicable: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    crs_applicable: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Business / KYB ───────────────────────────────────────────────────────
     # Stored in BusinessDetail child record; FK set after flush.
@@ -155,7 +164,7 @@ class Customer(Base):
     # but create_all()/drop_all() (what the test suite uses) previously hit
     # a CircularDependencyError the moment it ran against real Postgres FK
     # enforcement; SQLite's DDL is loose enough to never surface it.
-    business_detail_id = Column(
+    business_detail_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey(
             "customer_business_details.id",
@@ -166,62 +175,70 @@ class Customer(Base):
     )
 
     # ── Contact ──────────────────────────────────────────────────────────────
-    email = Column(String(255), index=True)
-    phone = Column(String(50))
+    email: Mapped[Optional[str]] = Column(String(255), index=True)
+    phone: Mapped[Optional[str]] = Column(String(50))
 
     # ── Residential address ───────────────────────────────────────────────────
-    address_line1 = Column(String(255))
-    address_line2 = Column(String(255))
-    city = Column(String(100))
-    state = Column(String(50))
-    postcode = Column(String(10))
-    country = Column(String(2), default="AU")
+    address_line1: Mapped[Optional[str]] = Column(String(255))
+    address_line2: Mapped[Optional[str]] = Column(String(255))
+    city: Mapped[Optional[str]] = Column(String(100))
+    state: Mapped[Optional[str]] = Column(String(50))
+    postcode: Mapped[Optional[str]] = Column(String(10))
+    country: Mapped[Optional[str]] = Column(String(2), default="AU")
 
     # ── Mailing address (separate where different) ────────────────────────────
-    mail_address_line1 = Column(String(255))
-    mail_address_line2 = Column(String(255))
-    mail_city = Column(String(100))
-    mail_state = Column(String(50))
-    mail_postcode = Column(String(10))
-    mail_country = Column(String(2))
-    mail_same_as_residential = Column(Boolean, default=True)
+    mail_address_line1: Mapped[Optional[str]] = Column(String(255))
+    mail_address_line2: Mapped[Optional[str]] = Column(String(255))
+    mail_city: Mapped[Optional[str]] = Column(String(100))
+    mail_state: Mapped[Optional[str]] = Column(String(50))
+    mail_postcode: Mapped[Optional[str]] = Column(String(10))
+    mail_country: Mapped[Optional[str]] = Column(String(2))
+    mail_same_as_residential: Mapped[Optional[bool]] = Column(Boolean, default=True)
 
     # ── AML risk fields (set by engine / compliance only) ─────────────────────
-    risk_level = Column(Enum(RiskLevel), default=RiskLevel.low, nullable=False)
+    risk_level: Mapped[RiskLevel] = Column(
+        Enum(RiskLevel), default=RiskLevel.low, nullable=False
+    )
     risk_score: Mapped[float] = Column(Float, default=0.0, nullable=False)
-    is_pep = Column(Boolean, default=False, nullable=False)
-    pep_type = Column(Enum(PEPType), nullable=True)
-    pep_details = Column(Text)
-    is_sanctions_match = Column(Boolean, default=False, nullable=False)
-    is_adverse_media = Column(Boolean, default=False, nullable=False)
-    is_reporting_group_member = Column(Boolean, default=False)
-    reporting_group_id = Column(
+    is_pep: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+    pep_type: Mapped[Optional[PEPType]] = Column(Enum(PEPType), nullable=True)
+    pep_details: Mapped[Optional[str]] = Column(Text)
+    is_sanctions_match: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+    is_adverse_media: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+    is_reporting_group_member: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    reporting_group_id: Mapped[Optional[str]] = Column(
         String, nullable=True
     )  # FK to future reporting_groups table
 
     # ── Source of funds / wealth ──────────────────────────────────────────────
-    source_of_funds = Column(Text)
-    source_of_funds_verified = Column(Boolean, default=False)
-    source_of_wealth = Column(Text)
-    source_of_wealth_verified = Column(Boolean, default=False)
+    source_of_funds: Mapped[Optional[str]] = Column(Text)
+    source_of_funds_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    source_of_wealth: Mapped[Optional[str]] = Column(Text)
+    source_of_wealth_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Onboarding metadata ───────────────────────────────────────────────────
-    onboarding_channel = Column(
+    onboarding_channel: Mapped[Optional[OnboardingChannel]] = Column(
         Enum(OnboardingChannel), default=OnboardingChannel.online
     )
-    introduced_by = Column(String)  # user_id of introducer
-    relationship_manager = Column(String)  # user_id of RM
-    onboarded_by = Column(String)  # user_id of staff who created record
+    introduced_by: Mapped[Optional[str]] = Column(String)  # user_id of introducer
+    relationship_manager: Mapped[Optional[str]] = Column(String)  # user_id of RM
+    onboarded_by: Mapped[Optional[str]] = Column(
+        String
+    )  # user_id of staff who created record
 
     # ── Review schedule ───────────────────────────────────────────────────────
-    last_reviewed_date = Column(Date)
-    last_reviewed_by = Column(String)  # user_id
-    next_review_date = Column(Date)
+    last_reviewed_date: Mapped[Optional[date]] = Column(Date)
+    last_reviewed_by: Mapped[Optional[str]] = Column(String)  # user_id
+    next_review_date: Mapped[Optional[date]] = Column(Date)
 
     # ── Metadata ──────────────────────────────────────────────────────────────
-    custom_fields = Column(JSON, default=dict)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    custom_fields: Mapped[Optional[Any]] = Column(JSON, default=dict)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     # ── Relationships ─────────────────────────────────────────────────────────
     organisation = relationship("Organisation", back_populates="customers")
@@ -292,21 +309,27 @@ class Customer(Base):
 class CustomerPreviousName(Base):
     __tablename__ = "customer_previous_names"
 
-    id = Column(String, primary_key=True, default=lambda: f"pn_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"pn_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
-    full_name = Column(String(255), nullable=False)
-    name_type = Column(String(50))  # birth_name | maiden_name | alias | previous_name
-    used_from = Column(Date)
-    used_to = Column(Date)
-    reason = Column(String(255))  # marriage | deed_poll | etc.
-    created_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
+    full_name: Mapped[str] = Column(String(255), nullable=False)
+    name_type: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # birth_name | maiden_name | alias | previous_name
+    used_from: Mapped[Optional[date]] = Column(Date)
+    used_to: Mapped[Optional[date]] = Column(Date)
+    reason: Mapped[Optional[str]] = Column(String(255))  # marriage | deed_poll | etc.
+    created_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="previous_names")
 
@@ -317,71 +340,81 @@ class CustomerPreviousName(Base):
 class BusinessDetail(Base):
     __tablename__ = "customer_business_details"
 
-    id = Column(String, primary_key=True, default=lambda: f"biz_{uuid4().hex[:12]}")
-    org_id = Column(String, nullable=False, index=True)
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"biz_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    legal_name = Column(String(255), nullable=False)
-    trading_name = Column(String(255))
-    abn = Column(String(11), index=True)
-    acn = Column(String(9), index=True)
-    registration_number = Column(String(50))
-    business_type = Column(
+    legal_name: Mapped[str] = Column(String(255), nullable=False)
+    trading_name: Mapped[Optional[str]] = Column(String(255))
+    abn: Mapped[Optional[str]] = Column(String(11), index=True)
+    acn: Mapped[Optional[str]] = Column(String(9), index=True)
+    registration_number: Mapped[Optional[str]] = Column(String(50))
+    business_type: Mapped[Optional[str]] = Column(
         String(100)
     )  # Pty Ltd | public company | trust | partnership | etc.
-    industry_sector = Column(String(255))
-    country_of_incorporation = Column(String(2), default="AU")
-    date_of_incorporation = Column(Date)
+    industry_sector: Mapped[Optional[str]] = Column(String(255))
+    country_of_incorporation: Mapped[Optional[str]] = Column(String(2), default="AU")
+    date_of_incorporation: Mapped[Optional[date]] = Column(Date)
 
     # Registered address
-    reg_address_line1 = Column(String(255))
-    reg_address_line2 = Column(String(255))
-    reg_city = Column(String(100))
-    reg_state = Column(String(50))
-    reg_postcode = Column(String(10))
-    reg_country = Column(String(2), default="AU")
+    reg_address_line1: Mapped[Optional[str]] = Column(String(255))
+    reg_address_line2: Mapped[Optional[str]] = Column(String(255))
+    reg_city: Mapped[Optional[str]] = Column(String(100))
+    reg_state: Mapped[Optional[str]] = Column(String(50))
+    reg_postcode: Mapped[Optional[str]] = Column(String(10))
+    reg_country: Mapped[Optional[str]] = Column(String(2), default="AU")
 
     # Principal place of business (if different)
-    ppob_address_line1 = Column(String(255))
-    ppob_city = Column(String(100))
-    ppob_state = Column(String(50))
-    ppob_postcode = Column(String(10))
-    ppob_country = Column(String(2))
+    ppob_address_line1: Mapped[Optional[str]] = Column(String(255))
+    ppob_city: Mapped[Optional[str]] = Column(String(100))
+    ppob_state: Mapped[Optional[str]] = Column(String(50))
+    ppob_postcode: Mapped[Optional[str]] = Column(String(10))
+    ppob_country: Mapped[Optional[str]] = Column(String(2))
 
     # ASIC validation result
-    asic_status = Column(String(50))  # registered | deregistered | under_external_admin
-    asic_verified_at = Column(DateTime(timezone=True))
-    asic_raw_response = Column(JSON)
+    asic_status: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # registered | deregistered | under_external_admin
+    asic_verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    asic_raw_response: Mapped[Optional[Any]] = Column(JSON)
 
     # ABN validation result
-    abn_status = Column(String(50))  # active | cancelled
-    abn_entity_type = Column(String(100))
-    gst_registered = Column(Boolean)
-    abn_verified_at = Column(DateTime(timezone=True))
-    abn_raw_response = Column(JSON)
+    abn_status: Mapped[Optional[str]] = Column(String(50))  # active | cancelled
+    abn_entity_type: Mapped[Optional[str]] = Column(String(100))
+    gst_registered: Mapped[Optional[bool]] = Column(Boolean)
+    abn_verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    abn_raw_response: Mapped[Optional[Any]] = Column(JSON)
 
     # Trust-specific
-    trust_type = Column(String(100))  # discretionary | unit | hybrid | SMSF
-    trust_deed_date = Column(Date)
-    trustee_name = Column(String(255))
+    trust_type: Mapped[Optional[str]] = Column(
+        String(100)
+    )  # discretionary | unit | hybrid | SMSF
+    trust_deed_date: Mapped[Optional[date]] = Column(Date)
+    trustee_name: Mapped[Optional[str]] = Column(String(255))
 
     # Financial profile
-    annual_turnover_aud = Column(Float)
-    number_of_employees = Column(String(20))
-    years_in_operation = Column(String(20))
+    annual_turnover_aud: Mapped[Optional[float]] = Column(Float)
+    number_of_employees: Mapped[Optional[str]] = Column(String(20))
+    years_in_operation: Mapped[Optional[str]] = Column(String(20))
 
-    website = Column(String(500))
-    primary_contact_name = Column(String(255))
-    primary_contact_email = Column(String(255))
-    primary_contact_phone = Column(String(50))
+    website: Mapped[Optional[str]] = Column(String(500))
+    primary_contact_name: Mapped[Optional[str]] = Column(String(255))
+    primary_contact_email: Mapped[Optional[str]] = Column(String(255))
+    primary_contact_phone: Mapped[Optional[str]] = Column(String(50))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 # ── Beneficial Ownership ───────────────────────────────────────────────────────
@@ -401,62 +434,74 @@ class UBOType(str, enum.Enum):
 class BeneficialOwner(Base):
     __tablename__ = "beneficial_owners"
 
-    id = Column(String, primary_key=True, default=lambda: f"ubo_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ubo_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    ubo_type = Column(Enum(UBOType), nullable=False, default=UBOType.direct_owner)
-    role_title = Column(String(100))
+    ubo_type: Mapped[UBOType] = Column(
+        Enum(UBOType), nullable=False, default=UBOType.direct_owner
+    )
+    role_title: Mapped[Optional[str]] = Column(String(100))
 
-    full_name = Column(String(255), nullable=False)
-    date_of_birth = Column(Date)
-    nationality = Column(String(2))
-    country_of_residence = Column(String(2))
-    country_of_birth = Column(String(2))
-    tax_residency_country = Column(String(2))
+    full_name: Mapped[str] = Column(String(255), nullable=False)
+    date_of_birth: Mapped[Optional[date]] = Column(Date)
+    nationality: Mapped[Optional[str]] = Column(String(2))
+    country_of_residence: Mapped[Optional[str]] = Column(String(2))
+    country_of_birth: Mapped[Optional[str]] = Column(String(2))
+    tax_residency_country: Mapped[Optional[str]] = Column(String(2))
     # P51: encrypted at rest, same as Customer.tax_identification_number above.
-    tax_identification_number = Column(EncryptedKycString(255))
+    tax_identification_number: Mapped[Optional[str]] = Column(EncryptedKycString(255))
 
-    address_line1 = Column(String(255))
-    address_line2 = Column(String(255))
-    city = Column(String(100))
-    state = Column(String(50))
-    postcode = Column(String(10))
-    country = Column(String(2), default="AU")
+    address_line1: Mapped[Optional[str]] = Column(String(255))
+    address_line2: Mapped[Optional[str]] = Column(String(255))
+    city: Mapped[Optional[str]] = Column(String(100))
+    state: Mapped[Optional[str]] = Column(String(50))
+    postcode: Mapped[Optional[str]] = Column(String(10))
+    country: Mapped[Optional[str]] = Column(String(2), default="AU")
 
-    id_type = Column(String(50))
+    id_type: Mapped[Optional[str]] = Column(String(50))
     # P51: encrypted at rest, same as tax_identification_number above.
-    id_number = Column(EncryptedKycString(255))
-    id_issuing_country = Column(String(2))
-    id_expiry = Column(Date)
+    id_number: Mapped[Optional[str]] = Column(EncryptedKycString(255))
+    id_issuing_country: Mapped[Optional[str]] = Column(String(2))
+    id_expiry: Mapped[Optional[date]] = Column(Date)
 
-    ownership_percentage = Column(Float)
-    control_percentage = Column(Float)  # may differ from ownership %
-    intermediate_entity = Column(String(255))  # if indirect owner
+    ownership_percentage: Mapped[Optional[float]] = Column(Float)
+    control_percentage: Mapped[Optional[float]] = Column(
+        Float
+    )  # may differ from ownership %
+    intermediate_entity: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # if indirect owner
 
-    is_pep = Column(Boolean, default=False)
-    pep_type = Column(Enum(PEPType), nullable=True)
-    pep_details = Column(Text)
-    source_of_wealth = Column(Text)
+    is_pep: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    pep_type: Mapped[Optional[PEPType]] = Column(Enum(PEPType), nullable=True)
+    pep_details: Mapped[Optional[str]] = Column(Text)
+    source_of_wealth: Mapped[Optional[str]] = Column(Text)
 
-    verified = Column(Boolean, default=False)
-    verified_by = Column(String)
-    verified_at = Column(DateTime(timezone=True))
-    verification_notes = Column(Text)
+    verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    verified_by: Mapped[Optional[str]] = Column(String)
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    verification_notes: Mapped[Optional[str]] = Column(Text)
 
-    created_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     customer = relationship("Customer", back_populates="beneficial_owners")
 
@@ -484,30 +529,38 @@ class CorporateDocumentType(str, enum.Enum):
 class CorporateDocument(Base):
     __tablename__ = "customer_corporate_documents"
 
-    id = Column(String, primary_key=True, default=lambda: f"cdoc_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cdoc_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    document_type = Column(Enum(CorporateDocumentType), nullable=False)
-    document_ref = Column(String(255))  # file storage reference / S3 key
-    file_name = Column(String(500))
-    description = Column(String(500))
-    issue_date = Column(Date)
-    expiry_date = Column(Date)
-    issuing_authority = Column(String(255))
+    document_type: Mapped[CorporateDocumentType] = Column(
+        Enum(CorporateDocumentType), nullable=False
+    )
+    document_ref: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # file storage reference / S3 key
+    file_name: Mapped[Optional[str]] = Column(String(500))
+    description: Mapped[Optional[str]] = Column(String(500))
+    issue_date: Mapped[Optional[date]] = Column(Date)
+    expiry_date: Mapped[Optional[date]] = Column(Date)
+    issuing_authority: Mapped[Optional[str]] = Column(String(255))
 
-    verified = Column(Boolean, default=False)
-    verified_by = Column(String)
-    verified_at = Column(DateTime(timezone=True))
-    verification_notes = Column(Text)
+    verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    verified_by: Mapped[Optional[str]] = Column(String)
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    verification_notes: Mapped[Optional[str]] = Column(Text)
 
-    uploaded_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    uploaded_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="corporate_documents")
 
@@ -518,19 +571,23 @@ class CorporateDocument(Base):
 class CustomerRiskScoreHistory(Base):
     __tablename__ = "customer_risk_score_history"
 
-    id = Column(String, primary_key=True, default=lambda: f"rsh_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rsh_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
     risk_score: Mapped[float] = Column(Float, nullable=False)
-    risk_level = Column(Enum(RiskLevel), nullable=False)
-    cdd_level = Column(Enum(CDDLevel), nullable=False)
-    scoring_factors = Column(JSON)  # breakdown of contributing factors
+    risk_level: Mapped[RiskLevel] = Column(Enum(RiskLevel), nullable=False)
+    cdd_level: Mapped[CDDLevel] = Column(Enum(CDDLevel), nullable=False)
+    scoring_factors: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # breakdown of contributing factors
 
     # Inherent/residual breakdown (same formula as app.services.risk_engine):
     # inherent = likelihood x consequence, residual = inherent x CEF.
@@ -538,12 +595,18 @@ class CustomerRiskScoreHistory(Base):
     # a full breakdown; legacy rows and simple manual scores leave these null.
     inherent_score: Mapped[Optional[float]] = Column(Float)
     residual_score: Mapped[Optional[float]] = Column(Float)
-    control_effectiveness_score = Column(Integer)  # 1-5, see ControlEffectivenessScore
+    control_effectiveness_score: Mapped[Optional[int]] = Column(
+        Integer
+    )  # 1-5, see ControlEffectivenessScore
 
-    trigger = Column(String(100))  # onboarding | periodic_review | event | manual
-    triggered_by = Column(String)  # user_id or "system"
-    notes = Column(Text)
-    scored_at = Column(DateTime(timezone=True), server_default=func.now())
+    trigger: Mapped[Optional[str]] = Column(
+        String(100)
+    )  # onboarding | periodic_review | event | manual
+    triggered_by: Mapped[Optional[str]] = Column(String)  # user_id or "system"
+    notes: Mapped[Optional[str]] = Column(Text)
+    scored_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="risk_score_history")
 
@@ -563,29 +626,39 @@ class ReviewOutcome(str, enum.Enum):
 class CustomerReview(Base):
     __tablename__ = "customer_reviews"
 
-    id = Column(String, primary_key=True, default=lambda: f"rev_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rev_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    review_type = Column(String(50))  # periodic | trigger_event | ad_hoc
-    trigger_reason = Column(String(255))
-    review_date = Column(Date, nullable=False)
-    next_review_date = Column(Date)
-    reviewed_by = Column(String, nullable=False)
-    outcome = Column(Enum(ReviewOutcome, name="customer_review_outcome"))
-    outcome_notes = Column(Text)
-    documents_reviewed = Column(JSON)  # list of document IDs checked
-    risk_score_before = Column(Float)
-    risk_score_after = Column(Float)
-    cdd_level_before = Column(Enum(CDDLevel))
-    cdd_level_after = Column(Enum(CDDLevel))
+    review_type: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # periodic | trigger_event | ad_hoc
+    trigger_reason: Mapped[Optional[str]] = Column(String(255))
+    review_date: Mapped[date] = Column(Date, nullable=False)
+    next_review_date: Mapped[Optional[date]] = Column(Date)
+    reviewed_by: Mapped[str] = Column(String, nullable=False)
+    outcome: Mapped[Optional[ReviewOutcome]] = Column(
+        Enum(ReviewOutcome, name="customer_review_outcome")
+    )
+    outcome_notes: Mapped[Optional[str]] = Column(Text)
+    documents_reviewed: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # list of document IDs checked
+    risk_score_before: Mapped[Optional[float]] = Column(Float)
+    risk_score_after: Mapped[Optional[float]] = Column(Float)
+    cdd_level_before: Mapped[Optional[CDDLevel]] = Column(Enum(CDDLevel))
+    cdd_level_after: Mapped[Optional[CDDLevel]] = Column(Enum(CDDLevel))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="reviews")
 
@@ -596,24 +669,30 @@ class CustomerReview(Base):
 class CustomerNote(Base):
     __tablename__ = "customer_notes"
 
-    id = Column(String, primary_key=True, default=lambda: f"note_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"note_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    note_type = Column(
+    note_type: Mapped[NoteType] = Column(
         Enum(NoteType, name="customer_note_type"),
         default=NoteType.general,
         nullable=False,
     )
-    content = Column(Text, nullable=False)
-    is_confidential = Column(Boolean, default=False)  # mlro-only visibility
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    content: Mapped[str] = Column(Text, nullable=False)
+    is_confidential: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # mlro-only visibility
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="notes")
 
@@ -626,45 +705,57 @@ class CustomerOnboardingChecklist(Base):
 
     __tablename__ = "customer_onboarding_checklists"
 
-    id = Column(String, primary_key=True, default=lambda: f"chk_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"chk_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
     # Individual KYC steps
-    identity_document_verified = Column(Boolean, default=False)
-    selfie_verified = Column(Boolean, default=False)
-    address_verified = Column(Boolean, default=False)
-    phone_verified = Column(Boolean, default=False)
-    email_verified = Column(Boolean, default=False)
-    pep_screened = Column(Boolean, default=False)
-    sanctions_screened = Column(Boolean, default=False)
-    adverse_media_screened = Column(Boolean, default=False)
+    identity_document_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    selfie_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    address_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    phone_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    email_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    pep_screened: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    sanctions_screened: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    adverse_media_screened: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # Business KYB steps
-    abn_verified = Column(Boolean, default=False)
-    asic_verified = Column(Boolean, default=False)
-    corporate_docs_collected = Column(Boolean, default=False)
-    ubo_identified = Column(Boolean, default=False)
-    ubo_verified = Column(Boolean, default=False)
-    ubo_screened = Column(Boolean, default=False)
+    abn_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    asic_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    corporate_docs_collected: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    ubo_identified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    ubo_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    ubo_screened: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # EDD steps (when cdd_level = enhanced)
-    edd_source_of_funds_verified = Column(Boolean, default=False)
-    edd_source_of_wealth_verified = Column(Boolean, default=False)
-    edd_senior_approval_obtained = Column(Boolean, default=False)
+    edd_source_of_funds_verified: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    edd_source_of_wealth_verified: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
+    edd_senior_approval_obtained: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )
 
     # Completion
-    is_complete = Column(Boolean, default=False)
-    completed_at = Column(DateTime(timezone=True))
-    completed_by = Column(String)
+    is_complete: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    completed_by: Mapped[Optional[str]] = Column(String)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     customer = relationship("Customer", back_populates="onboarding_checklist")

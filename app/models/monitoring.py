@@ -25,7 +25,8 @@ No rule match constitutes a determination of suspicious activity or criminal con
 """
 
 import enum
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -172,54 +173,76 @@ class MonitoringRule(Base):
 
     __tablename__ = "monitoring_rules"
 
-    id = Column(String, primary_key=True, default=lambda: f"rule_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rule_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
-    rule_ref = Column(String(30))  # e.g. RULE-TM-001
-    category = Column(Enum(AlertCategory), nullable=False, index=True)
-    alert_type = Column(Enum(AlertType), default=AlertType.rule_triggered)
+    name: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    rule_ref: Mapped[Optional[str]] = Column(String(30))  # e.g. RULE-TM-001
+    category: Mapped[AlertCategory] = Column(
+        Enum(AlertCategory), nullable=False, index=True
+    )
+    alert_type: Mapped[Optional[AlertType]] = Column(
+        Enum(AlertType), default=AlertType.rule_triggered
+    )
 
-    status = Column(
+    status: Mapped[RuleStatus] = Column(
         Enum(RuleStatus), default=RuleStatus.active, nullable=False, index=True
     )
-    is_system_rule = Column(
+    is_system_rule: Mapped[Optional[bool]] = Column(
         Boolean, default=False
     )  # seeded by Verigo — cannot delete, only disable
 
     # Alert output configuration
-    alert_severity = Column(
+    alert_severity: Mapped[AlertSeverity] = Column(
         Enum(AlertSeverity), nullable=False, default=AlertSeverity.medium
     )
     alert_score: Mapped[Optional[float]] = Column(
         Float, default=50.0
     )  # base score added when rule fires
-    alert_title_template = Column(String(500))  # template with {amount}, {country} etc.
+    alert_title_template: Mapped[Optional[str]] = Column(
+        String(500)
+    )  # template with {amount}, {country} etc.
 
     # Lookback window for frequency/velocity rules
-    lookback_days = Column(Integer)  # e.g. check last 7 days
-    lookback_count = Column(Integer)  # e.g. more than 5 transactions
+    lookback_days: Mapped[Optional[int]] = Column(Integer)  # e.g. check last 7 days
+    lookback_count: Mapped[Optional[int]] = Column(
+        Integer
+    )  # e.g. more than 5 transactions
 
     # Tags and grouping
-    tags = Column(JSON, default=list)
-    applicable_customer_types = Column(JSON, default=list)  # [] = all
-    applicable_payment_methods = Column(JSON, default=list)  # [] = all
-    applicable_industries = Column(JSON, default=list)  # [] = all industry types
+    tags: Mapped[Optional[Any]] = Column(JSON, default=list)
+    applicable_customer_types: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [] = all
+    applicable_payment_methods: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [] = all
+    applicable_industries: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [] = all industry types
 
     # Statistics
-    total_alerts_generated = Column(Integer, default=0)
-    last_triggered_at = Column(DateTime(timezone=True))
-    false_positive_rate = Column(Float)  # updated periodically from resolved alerts
+    total_alerts_generated: Mapped[Optional[int]] = Column(Integer, default=0)
+    last_triggered_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    false_positive_rate: Mapped[Optional[float]] = Column(
+        Float
+    )  # updated periodically from resolved alerts
 
-    created_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     condition_groups: Mapped[list["RuleConditionGroup"]] = relationship(
         "RuleConditionGroup",
@@ -238,15 +261,19 @@ class RuleConditionGroup(Base):
 
     __tablename__ = "rule_condition_groups"
 
-    id = Column(String, primary_key=True, default=lambda: f"rcg_{uuid4().hex[:10]}")
-    rule_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rcg_{uuid4().hex[:10]}"
+    )
+    rule_id: Mapped[str] = Column(
         String,
         ForeignKey("monitoring_rules.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    group_order = Column(Integer, default=0)
-    description = Column(String(255))  # human label for this group
+    group_order: Mapped[Optional[int]] = Column(Integer, default=0)
+    description: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # human label for this group
 
     rule = relationship("MonitoringRule", back_populates="condition_groups")
     conditions: Mapped[list["RuleCondition"]] = relationship(
@@ -270,20 +297,26 @@ class RuleCondition(Base):
 
     __tablename__ = "rule_conditions"
 
-    id = Column(String, primary_key=True, default=lambda: f"rc_{uuid4().hex[:10]}")
-    group_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rc_{uuid4().hex[:10]}"
+    )
+    group_id: Mapped[str] = Column(
         String,
         ForeignKey("rule_condition_groups.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    condition_order = Column(Integer, default=0)
+    condition_order: Mapped[Optional[int]] = Column(Integer, default=0)
 
-    field_path = Column(String(255), nullable=False)
+    field_path: Mapped[str] = Column(String(255), nullable=False)
     # Dot notation: "amount_aud", "customer.risk_level", "crypto_detail.mixer_exposure_pct"
-    operator = Column(Enum(RuleConditionOperator), nullable=False)
-    value = Column(JSON)  # scalar or list depending on operator
-    value_label = Column(String(255))  # human-readable label for UI display
+    operator: Mapped[RuleConditionOperator] = Column(
+        Enum(RuleConditionOperator), nullable=False
+    )
+    value: Mapped[Optional[Any]] = Column(JSON)  # scalar or list depending on operator
+    value_label: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # human-readable label for UI display
 
     group = relationship("RuleConditionGroup", back_populates="conditions")
 
@@ -296,20 +329,26 @@ class RuleExecution(Base):
 
     __tablename__ = "rule_executions"
 
-    id = Column(String, primary_key=True, default=lambda: f"rex_{uuid4().hex[:10]}")
-    rule_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rex_{uuid4().hex[:10]}"
+    )
+    rule_id: Mapped[str] = Column(
         String, ForeignKey("monitoring_rules.id"), nullable=False, index=True
     )
-    transaction_id = Column(
+    transaction_id: Mapped[str] = Column(
         String, ForeignKey("transactions.id"), nullable=False, index=True
     )
-    org_id = Column(String, nullable=False)
+    org_id: Mapped[str] = Column(String, nullable=False)
 
-    matched = Column(Boolean, nullable=False)
-    groups_evaluated = Column(Integer)
-    matched_group = Column(Integer)  # which group index matched (0-based)
-    execution_time_ms = Column(Float)
-    evaluated_at = Column(DateTime(timezone=True), server_default=func.now())
+    matched: Mapped[bool] = Column(Boolean, nullable=False)
+    groups_evaluated: Mapped[Optional[int]] = Column(Integer)
+    matched_group: Mapped[Optional[int]] = Column(
+        Integer
+    )  # which group index matched (0-based)
+    execution_time_ms: Mapped[Optional[float]] = Column(Float)
+    evaluated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     rule = relationship("MonitoringRule", back_populates="executions")
 
@@ -326,27 +365,35 @@ class TransactionAlert(Base):
 
     __tablename__ = "transaction_alerts"
 
-    id = Column(String, primary_key=True, default=lambda: f"alrt_{uuid4().hex[:10]}")
-    alert_ref = Column(String(30), unique=True, nullable=False, index=True)
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"alrt_{uuid4().hex[:10]}"
+    )
+    alert_ref: Mapped[str] = Column(String(30), unique=True, nullable=False, index=True)
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    transaction_id = Column(
+    transaction_id: Mapped[str] = Column(
         String,
         ForeignKey("transactions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(String, ForeignKey("customers.id"), nullable=False, index=True)
+    customer_id: Mapped[str] = Column(
+        String, ForeignKey("customers.id"), nullable=False, index=True
+    )
 
     # ── Classification ────────────────────────────────────────────────────────
-    alert_type = Column(Enum(AlertType), nullable=False)
-    category = Column(Enum(AlertCategory), nullable=False, index=True)
-    severity = Column(Enum(AlertSeverity), nullable=False, index=True)
-    status = Column(
+    alert_type: Mapped[AlertType] = Column(Enum(AlertType), nullable=False)
+    category: Mapped[AlertCategory] = Column(
+        Enum(AlertCategory), nullable=False, index=True
+    )
+    severity: Mapped[AlertSeverity] = Column(
+        Enum(AlertSeverity), nullable=False, index=True
+    )
+    status: Mapped[AlertStatus] = Column(
         Enum(AlertStatus, name="transaction_alert_status"),
         default=AlertStatus.generated,
         nullable=False,
@@ -354,39 +401,47 @@ class TransactionAlert(Base):
     )
 
     # ── Source ────────────────────────────────────────────────────────────────
-    rule_id = Column(String, ForeignKey("monitoring_rules.id"), nullable=True)
-    rule_name = Column(String(255))  # snapshot in case rule is later renamed
-    rules_matched = Column(JSON, default=list)  # [rule_id, ...] all rules that matched
+    rule_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("monitoring_rules.id"), nullable=True
+    )
+    rule_name: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # snapshot in case rule is later renamed
+    rules_matched: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [rule_id, ...] all rules that matched
 
     # ── Score ──────────────────────────────────────────────────────────────────
     alert_score: Mapped[Optional[float]] = Column(
         Float, default=0.0
     )  # combined weighted score
-    score_breakdown = Column(JSON, default=dict)  # {signal: contribution}
+    score_breakdown: Mapped[Optional[Any]] = Column(
+        JSON, default=dict
+    )  # {signal: contribution}
 
     # ── Description ───────────────────────────────────────────────────────────
-    title = Column(String(500), nullable=False)
-    description = Column(Text)
-    behaviour_signals = Column(
+    title: Mapped[str] = Column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    behaviour_signals: Mapped[Optional[Any]] = Column(
         JSON, default=dict
     )  # snapshot of signals that contributed
 
     # ── Workflow ──────────────────────────────────────────────────────────────
-    assigned_to = Column(String)  # user_id
-    assigned_at = Column(DateTime(timezone=True))
-    assigned_by = Column(String)
+    assigned_to: Mapped[Optional[str]] = Column(String)  # user_id
+    assigned_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    assigned_by: Mapped[Optional[str]] = Column(String)
 
-    reviewed_by = Column(String)
-    reviewed_at = Column(DateTime(timezone=True))
-    review_notes = Column(Text)
+    reviewed_by: Mapped[Optional[str]] = Column(String)
+    reviewed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    review_notes: Mapped[Optional[str]] = Column(Text)
 
-    escalated_to = Column(String)
-    escalated_at = Column(DateTime(timezone=True))
-    escalation_reason = Column(Text)
+    escalated_to: Mapped[Optional[str]] = Column(String)
+    escalated_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    escalation_reason: Mapped[Optional[str]] = Column(Text)
 
-    resolved_by = Column(String)
-    resolved_at = Column(DateTime(timezone=True))
-    resolution = Column(
+    resolved_by: Mapped[Optional[str]] = Column(String)
+    resolved_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    resolution: Mapped[Optional[str]] = Column(
         String(100)
     )  # dismissed | escalated_to_case | smr_filed | cleared
 
@@ -394,31 +449,39 @@ class TransactionAlert(Base):
     # Distinct from status (workflow state). Set AFTER the monitoring decision.
     # status  = where the review is in the workflow
     # result  = what action was taken as a consequence of the decision
-    result = Column(
+    result: Mapped[AlertResult] = Column(
         Enum(AlertResult), default=AlertResult.pending, nullable=False, index=True
     )
-    result_notes = Column(Text)  # mandatory when result = other
-    result_set_by = Column(String)  # user_id
-    result_set_at = Column(DateTime(timezone=True))
+    result_notes: Mapped[Optional[str]] = Column(Text)  # mandatory when result = other
+    result_set_by: Mapped[Optional[str]] = Column(String)  # user_id
+    result_set_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    resolution_notes = Column(Text)
+    resolution_notes: Mapped[Optional[str]] = Column(Text)
 
-    is_false_positive = Column(Boolean, default=False)
-    is_smr_candidate = Column(Boolean, default=False, index=True)
+    is_false_positive: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    is_smr_candidate: Mapped[Optional[bool]] = Column(
+        Boolean, default=False, index=True
+    )
 
     # Decision support — populated by recommendation engine after alert generation
-    suggested_next_action = Column(
+    suggested_next_action: Mapped[Optional[str]] = Column(
         String(100)
     )  # consider_ifti | consider_ttr | consider_smr | create_case | no_action_required
-    recommendation_text = Column(Text)  # plain-English guidance surfaced in the UI
+    recommendation_text: Mapped[Optional[str]] = Column(
+        Text
+    )  # plain-English guidance surfaced in the UI
 
     # ── AUSTRAC/FATF Risk Matrix ───────────────────────────────────────────────
     # Computed by risk_matrix_service.compute_risk_matrix() during run_monitoring().
     risk_matrix_score: Mapped[Optional[float]] = Column(
         Float
     )  # 0–100 weighted composite
-    risk_matrix_level = Column(String(20))  # low | medium | high | critical
-    risk_matrix_detail = Column(JSON)  # full per-dimension breakdown
+    risk_matrix_level: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # low | medium | high | critical
+    risk_matrix_detail: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # full per-dimension breakdown
 
     # ── Pre-Approval Custom Questions ─────────────────────────────────────────
     # Populated after compliance officer answers org approval questions.
@@ -428,7 +491,7 @@ class TransactionAlert(Base):
     final_approval_score: Mapped[Optional[float]] = Column(
         Float
     )  # alert_score * base_wt + question_risk * q_wt
-    approval_score_detail = Column(
+    approval_score_detail: Mapped[Optional[Any]] = Column(
         JSON
     )  # breakdown dict from compute_final_approval_score
 
@@ -436,13 +499,23 @@ class TransactionAlert(Base):
     # Reserved for Stage 6: AI-assisted narrative drafting.
     # NOT populated by any current code path. Will be populated by an LLM
     # service in a future release after human-in-the-loop review gates are built.
-    ai_narrative_draft = Column(Text)  # placeholder — not yet populated
-    ai_narrative_reviewed = Column(Boolean, default=False)  # placeholder
-    ai_narrative_reviewed_by = Column(String)  # placeholder
+    ai_narrative_draft: Mapped[Optional[str]] = Column(
+        Text
+    )  # placeholder — not yet populated
+    ai_narrative_reviewed: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # placeholder
+    ai_narrative_reviewed_by: Mapped[Optional[str]] = Column(String)  # placeholder
 
-    trigger_date = Column(DateTime(timezone=True), server_default=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    trigger_date: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     transaction = relationship("Transaction", back_populates="alerts")
     rule = relationship("MonitoringRule")
@@ -458,22 +531,26 @@ class AlertEvidence(Base):
 
     __tablename__ = "alert_evidence"
 
-    id = Column(String, primary_key=True, default=lambda: f"aev_{uuid4().hex[:10]}")
-    alert_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"aev_{uuid4().hex[:10]}"
+    )
+    alert_id: Mapped[str] = Column(
         String,
         ForeignKey("transaction_alerts.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False)
+    org_id: Mapped[str] = Column(String, nullable=False)
 
-    document_type = Column(
+    document_type: Mapped[Optional[str]] = Column(
         String(100)
     )  # bank_statement | wallet_report | identity | other
-    document_ref = Column(String(500))  # cloud storage key
-    file_name = Column(String(500))
-    description = Column(String(500))
-    uploaded_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    document_ref: Mapped[Optional[str]] = Column(String(500))  # cloud storage key
+    file_name: Mapped[Optional[str]] = Column(String(500))
+    description: Mapped[Optional[str]] = Column(String(500))
+    uploaded_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     alert = relationship("TransactionAlert", back_populates="evidence")

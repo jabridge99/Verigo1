@@ -20,6 +20,8 @@ or take other action remain entirely with the reporting entity.
 """
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -35,7 +37,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -130,69 +132,89 @@ class EvidenceType(str, enum.Enum):
 class Case(Base):
     __tablename__ = "cases"
 
-    id = Column(String, primary_key=True, default=lambda: f"case_{uuid4().hex[:12]}")
-    case_ref = Column(String(30), unique=True, nullable=False, index=True)
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"case_{uuid4().hex[:12]}"
+    )
+    case_ref: Mapped[str] = Column(String(30), unique=True, nullable=False, index=True)
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
+    customer_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("customers.id"), nullable=True, index=True
+    )
 
     # ── Classification ────────────────────────────────────────────────────────
-    case_type = Column(
+    case_type: Mapped[CaseType] = Column(
         Enum(CaseType), nullable=False, default=CaseType.internal_investigation
     )
-    severity = Column(
+    severity: Mapped[CaseSeverity] = Column(
         Enum(CaseSeverity), nullable=False, default=CaseSeverity.medium, index=True
     )
-    status = Column(
+    status: Mapped[CaseStatus] = Column(
         Enum(CaseStatus), default=CaseStatus.open, nullable=False, index=True
     )
 
-    title = Column(String(500), nullable=False)
-    description = Column(Text)
+    title: Mapped[str] = Column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
 
     # ── Assignment ────────────────────────────────────────────────────────────
-    assigned_to = Column(String)  # user_id
-    assigned_at = Column(DateTime(timezone=True))
-    assigned_by = Column(String)
-    escalated_to = Column(String)  # user_id (MLRO)
-    escalated_at = Column(DateTime(timezone=True))
-    escalation_reason = Column(Text)
+    assigned_to: Mapped[Optional[str]] = Column(String)  # user_id
+    assigned_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    assigned_by: Mapped[Optional[str]] = Column(String)
+    escalated_to: Mapped[Optional[str]] = Column(String)  # user_id (MLRO)
+    escalated_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    escalation_reason: Mapped[Optional[str]] = Column(Text)
 
     # ── SLA ───────────────────────────────────────────────────────────────────
-    due_date = Column(Date, index=True)
-    is_overdue = Column(Boolean, default=False)
+    due_date: Mapped[Optional[date]] = Column(Date, index=True)
+    is_overdue: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── SMR Workflow ──────────────────────────────────────────────────────────
     # All SMR fields require explicit human action — never auto-set
-    is_smr_candidate = Column(Boolean, default=False, index=True)
-    smr_considered = Column(Boolean, default=False)  # MLRO has reviewed for SMR
-    smr_considered_by = Column(String)
-    smr_considered_at = Column(DateTime(timezone=True))
-    smr_lodged = Column(Boolean, default=False)
-    smr_lodged_at = Column(DateTime(timezone=True))
-    smr_lodged_by = Column(String)
-    smr_reference = Column(String(100))  # AUSTRAC SMR confirmation reference
-    smr_notes = Column(Text)  # MLRO reasoning (confidential)
-    tipping_off_risk = Column(Boolean, default=False)  # do not contact customer
+    is_smr_candidate: Mapped[Optional[bool]] = Column(
+        Boolean, default=False, index=True
+    )
+    smr_considered: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # MLRO has reviewed for SMR
+    smr_considered_by: Mapped[Optional[str]] = Column(String)
+    smr_considered_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    smr_lodged: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    smr_lodged_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    smr_lodged_by: Mapped[Optional[str]] = Column(String)
+    smr_reference: Mapped[Optional[str]] = Column(
+        String(100)
+    )  # AUSTRAC SMR confirmation reference
+    smr_notes: Mapped[Optional[str]] = Column(Text)  # MLRO reasoning (confidential)
+    tipping_off_risk: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # do not contact customer
 
     # ── Linked entities ───────────────────────────────────────────────────────
-    linked_customer_ids = Column(JSON, default=list)  # for group/related customer cases
-    related_case_ids = Column(JSON, default=list)  # for linked cases
+    linked_customer_ids: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # for group/related customer cases
+    related_case_ids: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # for linked cases
 
     # ── Outcome ───────────────────────────────────────────────────────────────
-    outcome = Column(Enum(CaseOutcome))
-    outcome_notes = Column(Text)
-    closed_by = Column(String)
-    closed_at = Column(DateTime(timezone=True))
-    closure_reason = Column(Text)
+    outcome: Mapped[Optional[CaseOutcome]] = Column(Enum(CaseOutcome))
+    outcome_notes: Mapped[Optional[str]] = Column(Text)
+    closed_by: Mapped[Optional[str]] = Column(String)
+    closed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    closure_reason: Mapped[Optional[str]] = Column(Text)
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     # ── Relationships ─────────────────────────────────────────────────────────
     organisation = relationship("Organisation", back_populates="cases")
@@ -222,18 +244,24 @@ class CaseAlert(Base):
 
     __tablename__ = "case_alerts"
 
-    id = Column(String, primary_key=True, default=lambda: f"ca_{uuid4().hex[:10]}")
-    case_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ca_{uuid4().hex[:10]}"
+    )
+    case_id: Mapped[str] = Column(
         String, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    alert_id = Column(
+    alert_id: Mapped[str] = Column(
         String, ForeignKey("transaction_alerts.id"), nullable=False, index=True
     )
-    transaction_id = Column(String, ForeignKey("transactions.id"), nullable=True)
-    org_id = Column(String, nullable=False)
-    added_by = Column(String)
-    added_at = Column(DateTime(timezone=True), server_default=func.now())
-    notes = Column(Text)
+    transaction_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("transactions.id"), nullable=True
+    )
+    org_id: Mapped[str] = Column(String, nullable=False)
+    added_by: Mapped[Optional[str]] = Column(String)
+    added_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    notes: Mapped[Optional[str]] = Column(Text)
 
     case = relationship("Case", back_populates="alert_links")
     alert = relationship("TransactionAlert", back_populates="case_links")
@@ -251,28 +279,34 @@ class CaseNote(Base):
 
     __tablename__ = "case_notes"
 
-    id = Column(String, primary_key=True, default=lambda: f"cn_{uuid4().hex[:12]}")
-    case_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cn_{uuid4().hex[:12]}"
+    )
+    case_id: Mapped[str] = Column(
         String, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    org_id = Column(String, nullable=False)
+    org_id: Mapped[str] = Column(String, nullable=False)
 
-    note_type = Column(
+    note_type: Mapped[NoteType] = Column(
         Enum(NoteType, name="case_note_type"),
         default=NoteType.investigation_note,
         nullable=False,
     )
-    content = Column(Text, nullable=False)
-    is_confidential = Column(
+    content: Mapped[str] = Column(Text, nullable=False)
+    is_confidential: Mapped[Optional[bool]] = Column(
         Boolean, default=False
     )  # MLRO-only (tipping-off protection)
-    is_legal_privilege = Column(Boolean, default=False)  # legal professional privilege
-    workflow_stage = Column(
+    is_legal_privilege: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # legal professional privilege
+    workflow_stage: Mapped[Optional[str]] = Column(
         String(100)
     )  # e.g. "evidence_review", "compliance_approval", "mlro_review"
 
-    author_id = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    author_id: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     case = relationship("Case", back_populates="notes")
 
@@ -285,33 +319,41 @@ class CaseEvidence(Base):
 
     __tablename__ = "case_evidence"
 
-    id = Column(String, primary_key=True, default=lambda: f"cev_{uuid4().hex[:10]}")
-    case_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cev_{uuid4().hex[:10]}"
+    )
+    case_id: Mapped[str] = Column(
         String, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    org_id = Column(String, nullable=False)
+    org_id: Mapped[str] = Column(String, nullable=False)
 
-    evidence_type = Column(Enum(EvidenceType), nullable=False)
-    document_ref = Column(String(500), nullable=False)  # cloud storage key
-    file_name = Column(String(500))
-    description = Column(String(1000))
+    evidence_type: Mapped[EvidenceType] = Column(Enum(EvidenceType), nullable=False)
+    document_ref: Mapped[str] = Column(String(500), nullable=False)  # cloud storage key
+    file_name: Mapped[Optional[str]] = Column(String(500))
+    description: Mapped[Optional[str]] = Column(String(1000))
 
-    source = Column(String(255))  # who provided this evidence
-    received_date = Column(Date)
-    is_verified = Column(Boolean, default=False)
-    verified_by = Column(String)
-    verified_at = Column(DateTime(timezone=True))
+    source: Mapped[Optional[str]] = Column(String(255))  # who provided this evidence
+    received_date: Mapped[Optional[date]] = Column(Date)
+    is_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    verified_by: Mapped[Optional[str]] = Column(String)
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
     # ── Integrity & versioning ─────────────────────────────────────────────────
-    sha256_hash = Column(String(64))  # content hash; server-computed
-    version = Column(Integer, default=1)
-    previous_version_id = Column(String, nullable=True)  # id of prior version
+    sha256_hash: Mapped[Optional[str]] = Column(
+        String(64)
+    )  # content hash; server-computed
+    version: Mapped[Optional[int]] = Column(Integer, default=1)
+    previous_version_id: Mapped[Optional[str]] = Column(
+        String, nullable=True
+    )  # id of prior version
 
     # ── Legal hold ─────────────────────────────────────────────────────────────
-    legal_hold = Column(Boolean, default=False)
-    retention_category = Column(String(50))  # e.g. "aml_7year"
+    legal_hold: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    retention_category: Mapped[Optional[str]] = Column(String(50))  # e.g. "aml_7year"
 
-    uploaded_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    uploaded_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     case = relationship("Case", back_populates="evidence")

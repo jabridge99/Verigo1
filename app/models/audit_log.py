@@ -4,10 +4,12 @@ Records are NEVER modified after creation.
 """
 
 import enum
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Index, String, func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -114,34 +116,48 @@ class AuditLog(Base):
 
     __tablename__ = "audit_logs"
 
-    id = Column(String, primary_key=True, default=lambda: f"aud_{uuid4().hex[:14]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"aud_{uuid4().hex[:14]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    event_type = Column(Enum(AuditEventType), nullable=False, index=True)
-    actor_id = Column(String, index=True)  # user_id; None for system events
-    actor_role = Column(String(50))  # role at time of event
-    action = Column(String(200), nullable=False)  # human-readable summary
+    event_type: Mapped[AuditEventType] = Column(
+        Enum(AuditEventType), nullable=False, index=True
+    )
+    actor_id: Mapped[Optional[str]] = Column(
+        String, index=True
+    )  # user_id; None for system events
+    actor_role: Mapped[Optional[str]] = Column(String(50))  # role at time of event
+    action: Mapped[str] = Column(String(200), nullable=False)  # human-readable summary
 
-    object_type = Column(String(100), index=True)  # e.g. "IFTIReport", "Case"
-    object_id = Column(String, index=True)  # PK of the affected object
+    object_type: Mapped[Optional[str]] = Column(
+        String(100), index=True
+    )  # e.g. "IFTIReport", "Case"
+    object_id: Mapped[Optional[str]] = Column(
+        String, index=True
+    )  # PK of the affected object
 
-    old_value = Column(JSON)  # snapshot before change
-    new_value = Column(JSON)  # snapshot after change
+    old_value: Mapped[Optional[Any]] = Column(JSON)  # snapshot before change
+    new_value: Mapped[Optional[Any]] = Column(JSON)  # snapshot after change
 
-    ip_address = Column(String(45))  # IPv4 or IPv6
-    user_agent = Column(String(500))
-    session_id = Column(String(100))
-    request_id = Column(String(100))
+    ip_address: Mapped[Optional[str]] = Column(String(45))  # IPv4 or IPv6
+    user_agent: Mapped[Optional[str]] = Column(String(500))
+    session_id: Mapped[Optional[str]] = Column(String(100))
+    request_id: Mapped[Optional[str]] = Column(String(100))
 
-    reason = Column(String(1000))  # operator-supplied justification
-    log_metadata = Column(JSON)  # arbitrary extra context
+    reason: Mapped[Optional[str]] = Column(
+        String(1000)
+    )  # operator-supplied justification
+    log_metadata: Mapped[Optional[Any]] = Column(JSON)  # arbitrary extra context
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
     # Intentionally NO updated_at — immutable record
 
     organisation = relationship("Organisation", back_populates="audit_logs")

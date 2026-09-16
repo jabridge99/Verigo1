@@ -1,4 +1,5 @@
 import enum
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import (
@@ -353,28 +354,34 @@ DEFAULT_PLAN_FEATURES = {
 class Feature(Base):
     __tablename__ = "features"
 
-    id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(60), unique=True, index=True, nullable=False)
-    name = Column(String(200), nullable=False)
-    category = Column(String(60))
-    description = Column(Text)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = Column(String(60), unique=True, index=True, nullable=False)
+    name: Mapped[str] = Column(String(200), nullable=False)
+    category: Mapped[Optional[str]] = Column(String(60))
+    description: Mapped[Optional[str]] = Column(Text)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class PlanFeatureToggle(Base):
     __tablename__ = "plan_feature_toggles"
     __table_args__ = (UniqueConstraint("plan", "feature_code", name="uq_plan_feature"),)
 
-    id = Column(Integer, primary_key=True, index=True)
-    plan = Column(Enum(BillingPlan), nullable=False, index=True)
-    feature_code = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    plan: Mapped[BillingPlan] = Column(Enum(BillingPlan), nullable=False, index=True)
+    feature_code: Mapped[str] = Column(
         String(60), ForeignKey("features.code"), nullable=False, index=True
     )
-    enabled = Column(Boolean, default=True, nullable=False)
+    enabled: Mapped[bool] = Column(Boolean, default=True, nullable=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class Subscription(Base):
@@ -385,20 +392,28 @@ class Subscription(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    subscription_id = Column(String(60), unique=True, index=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    subscription_id: Mapped[str] = Column(
+        String(60), unique=True, index=True, nullable=False
+    )
 
     # Tenant link
-    industry_id = Column(String(100), index=True, nullable=False)
-    organisation_id = Column(
+    industry_id: Mapped[str] = Column(String(100), index=True, nullable=False)
+    organisation_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
     )
-    tenant_id = Column(String(60))
+    tenant_id: Mapped[Optional[str]] = Column(String(60))
 
     # Plan
-    plan = Column(Enum(BillingPlan), default=BillingPlan.free_trial)
-    interval = Column(Enum(BillingInterval), default=BillingInterval.monthly)
-    status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.trialing)
+    plan: Mapped[Optional[BillingPlan]] = Column(
+        Enum(BillingPlan), default=BillingPlan.free_trial
+    )
+    interval: Mapped[Optional[BillingInterval]] = Column(
+        Enum(BillingInterval), default=BillingInterval.monthly
+    )
+    status: Mapped[Optional[SubscriptionStatus]] = Column(
+        Enum(SubscriptionStatus), default=SubscriptionStatus.trialing
+    )
 
     # Pricing — base catalogue price
     base_price_aud: Mapped[Optional[float]] = Column(Float)
@@ -410,52 +425,62 @@ class Subscription(Base):
     )  # editable annual discount
 
     # Stripe
-    stripe_customer_id = Column(String(100))
-    stripe_subscription_id = Column(String(100))
-    stripe_price_id = Column(String(100))
+    stripe_customer_id: Mapped[Optional[str]] = Column(String(100))
+    stripe_subscription_id: Mapped[Optional[str]] = Column(String(100))
+    stripe_price_id: Mapped[Optional[str]] = Column(String(100))
 
     # Lifecycle
-    trial_ends_at = Column(DateTime(timezone=True))
-    current_period_start = Column(DateTime(timezone=True))
-    current_period_end = Column(DateTime(timezone=True))
-    canceled_at = Column(DateTime(timezone=True))
-    cancel_at_period_end = Column(Boolean, default=False)
+    trial_ends_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    current_period_start: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    current_period_end: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    canceled_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    cancel_at_period_end: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # Metadata
-    notes = Column(Text)  # admin notes (VVIP deal terms etc.)
-    extra_metadata = Column(JSON, default=dict)
+    notes: Mapped[Optional[str]] = Column(Text)  # admin notes (VVIP deal terms etc.)
+    extra_metadata: Mapped[Optional[Any]] = Column(JSON, default=dict)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class Invoice(Base):
     __tablename__ = "invoices"
 
-    id = Column(Integer, primary_key=True, index=True)
-    invoice_id = Column(String(60), unique=True, index=True, nullable=False)
-    subscription_id = Column(String(60), index=True)
-    industry_id = Column(String(100), index=True)
-    organisation_id = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    invoice_id: Mapped[str] = Column(
+        String(60), unique=True, index=True, nullable=False
+    )
+    subscription_id: Mapped[Optional[str]] = Column(String(60), index=True)
+    industry_id: Mapped[Optional[str]] = Column(String(100), index=True)
+    organisation_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
     )
 
-    stripe_invoice_id = Column(String(100))
+    stripe_invoice_id: Mapped[Optional[str]] = Column(String(100))
     amount_aud: Mapped[float] = Column(Float, nullable=False)
     tax_aud: Mapped[Optional[float]] = Column(Float, default=0.0)
     total_aud: Mapped[float] = Column(Float, nullable=False)
 
-    status = Column(Enum(InvoiceStatus), default=InvoiceStatus.open)
-    description = Column(Text)
-    period_start = Column(DateTime(timezone=True))
-    period_end = Column(DateTime(timezone=True))
-    due_date = Column(DateTime(timezone=True))
-    paid_at = Column(DateTime(timezone=True))
+    status: Mapped[Optional[InvoiceStatus]] = Column(
+        Enum(InvoiceStatus), default=InvoiceStatus.open
+    )
+    description: Mapped[Optional[str]] = Column(Text)
+    period_start: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    period_end: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    due_date: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    paid_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    stripe_hosted_url = Column(String(500))
-    stripe_pdf_url = Column(String(500))
+    stripe_hosted_url: Mapped[Optional[str]] = Column(String(500))
+    stripe_pdf_url: Mapped[Optional[str]] = Column(String(500))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class PlanPricing(Base):
@@ -465,13 +490,17 @@ class PlanPricing(Base):
 
     __tablename__ = "plan_pricing"
 
-    plan = Column(Enum(BillingPlan), primary_key=True)
+    plan: Mapped[BillingPlan] = Column(Enum(BillingPlan), primary_key=True)
     monthly_aud: Mapped[Optional[float]] = Column(Float)
     annual_aud: Mapped[Optional[float]] = Column(Float)
 
-    updated_by = Column(String(60))
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_by: Mapped[Optional[str]] = Column(String(60))
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class StripePriceMapping(Base):
@@ -482,14 +511,20 @@ class StripePriceMapping(Base):
     __tablename__ = "stripe_price_mappings"
     __table_args__ = (UniqueConstraint("plan", "interval", name="uq_plan_interval"),)
 
-    id = Column(Integer, primary_key=True, index=True)
-    plan = Column(Enum(BillingPlan), nullable=False, index=True)
-    interval = Column(Enum(BillingInterval), nullable=False, index=True)
-    stripe_price_id = Column(String(100), nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    plan: Mapped[BillingPlan] = Column(Enum(BillingPlan), nullable=False, index=True)
+    interval: Mapped[BillingInterval] = Column(
+        Enum(BillingInterval), nullable=False, index=True
+    )
+    stripe_price_id: Mapped[str] = Column(String(100), nullable=False)
 
-    updated_by = Column(String(60))
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_by: Mapped[Optional[str]] = Column(String(60))
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class ApiUsageCounter(Base):
@@ -507,13 +542,17 @@ class ApiUsageCounter(Base):
         UniqueConstraint("org_id", "period", name="uq_api_usage_org_period"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    org_id = Column(String(100), index=True, nullable=False)
-    period = Column(String(7), nullable=False)  # "YYYY-MM"
-    count = Column(Integer, default=0, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    org_id: Mapped[str] = Column(String(100), index=True, nullable=False)
+    period: Mapped[str] = Column(String(7), nullable=False)  # "YYYY-MM"
+    count: Mapped[int] = Column(Integer, default=0, nullable=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class SubscriptionAddon(Base):
@@ -523,16 +562,22 @@ class SubscriptionAddon(Base):
 
     __tablename__ = "subscription_addons"
 
-    id = Column(Integer, primary_key=True, index=True)
-    addon_id = Column(String(60), unique=True, index=True, nullable=False)
-    org_id = Column(String(100), index=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    addon_id: Mapped[str] = Column(String(60), unique=True, index=True, nullable=False)
+    org_id: Mapped[str] = Column(String(100), index=True, nullable=False)
 
-    addon_key = Column(Enum(AddonKey), nullable=False)
-    status = Column(Enum(AddonStatus), default=AddonStatus.active, nullable=False)
-    price_aud = Column(Float)
+    addon_key: Mapped[AddonKey] = Column(Enum(AddonKey), nullable=False)
+    status: Mapped[AddonStatus] = Column(
+        Enum(AddonStatus), default=AddonStatus.active, nullable=False
+    )
+    price_aud: Mapped[Optional[float]] = Column(Float)
 
-    stripe_subscription_id = Column(String(100))
+    stripe_subscription_id: Mapped[Optional[str]] = Column(String(100))
 
-    purchased_at = Column(DateTime(timezone=True), server_default=func.now())
-    canceled_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    purchased_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    canceled_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )

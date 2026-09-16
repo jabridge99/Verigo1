@@ -21,6 +21,8 @@ All regulatory decisions remain with the reporting entity.
 """
 
 import enum
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -79,35 +81,43 @@ class VerificationProvider(Base):
 
     __tablename__ = "verification_providers"
 
-    id = Column(String, primary_key=True, default=lambda: f"vprov_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"vprov_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
 
-    name = Column(String(150), nullable=False)
-    description = Column(Text)
-    check_type = Column(Enum(VerificationCheckType), nullable=False, index=True)
-    integration_mode = Column(
+    name: Mapped[str] = Column(String(150), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    check_type: Mapped[VerificationCheckType] = Column(
+        Enum(VerificationCheckType), nullable=False, index=True
+    )
+    integration_mode: Mapped[VerificationIntegrationMode] = Column(
         Enum(VerificationIntegrationMode),
         nullable=False,
         default=VerificationIntegrationMode.manual,
     )
 
     # Vendor identifier for api/hybrid modes (e.g. "sumsub", "refinitiv"); null for manual.
-    vendor_key = Column(String(50))
+    vendor_key: Mapped[Optional[str]] = Column(String(50))
 
     unit_cost_aud: Mapped[float] = Column(Float, default=0.0, nullable=False)
     markup_pct: Mapped[float] = Column(Float, default=0.0, nullable=False)
 
-    is_system = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    is_system: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    is_active: Mapped[bool] = Column(Boolean, default=True, nullable=False, index=True)
 
-    created_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class VerificationOrder(Base):
@@ -123,23 +133,25 @@ class VerificationOrder(Base):
 
     __tablename__ = "verification_orders"
 
-    id = Column(String, primary_key=True, default=lambda: f"vord_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"vord_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    provider_id = Column(
+    provider_id: Mapped[str] = Column(
         String, ForeignKey("verification_providers.id"), nullable=False, index=True
     )
 
-    entity_type = Column(
+    entity_type: Mapped[str] = Column(
         String(30), nullable=False, index=True
     )  # "customer" | "transaction"
-    entity_id = Column(String, nullable=False, index=True)
+    entity_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    status = Column(
+    status: Mapped[VerificationOrderStatus] = Column(
         Enum(VerificationOrderStatus),
         default=VerificationOrderStatus.pending,
         nullable=False,
@@ -148,18 +160,26 @@ class VerificationOrder(Base):
 
     # Optional link to the existing result record once produced (no duplicate
     # result schema — screening results stay in ScreeningRecord et al.).
-    screening_record_id = Column(
+    screening_record_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("screening_records.id"), nullable=True
     )
 
-    evidence_url = Column(String(500))  # uploaded manual-review evidence, if any
-    result_summary = Column(JSON)  # small free-form outcome notes, not the full result
-    usage_record_id = Column(
+    evidence_url: Mapped[Optional[str]] = Column(
+        String(500)
+    )  # uploaded manual-review evidence, if any
+    result_summary: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # small free-form outcome notes, not the full result
+    usage_record_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("usage_records.id"), nullable=True, index=True
     )
 
-    requested_by = Column(String, nullable=False)
-    reviewed_by = Column(String)  # set when a manual/hybrid reviewer signs off
+    requested_by: Mapped[str] = Column(String, nullable=False)
+    reviewed_by: Mapped[Optional[str]] = Column(
+        String
+    )  # set when a manual/hybrid reviewer signs off
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    completed_at = Column(DateTime(timezone=True))
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))

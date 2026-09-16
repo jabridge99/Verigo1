@@ -13,7 +13,8 @@ custom additions/overrides.
 """
 
 import enum
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -50,33 +51,45 @@ class MitigationCategory(str, enum.Enum):
 class MitigationLibraryItem(Base):
     __tablename__ = "mitigation_library_items"
 
-    id = Column(String, primary_key=True, default=lambda: f"mli_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"mli_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )  # null = system-seeded, read-only platform default
 
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
-    category = Column(Enum(MitigationCategory), default=MitigationCategory.other)
+    name: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    category: Mapped[Optional[MitigationCategory]] = Column(
+        Enum(MitigationCategory), default=MitigationCategory.other
+    )
 
     # Numeric weighting (0-1) used when combining multiple applied mitigations
     # into a control-effectiveness adjustment. Does not itself set a rating.
     control_weighting: Mapped[Optional[float]] = Column(Float, default=0.1)
-    effectiveness_rating = Column(
+    effectiveness_rating: Mapped[Optional[ControlEffectiveness]] = Column(
         Enum(ControlEffectiveness), default=ControlEffectiveness.not_tested
     )
 
-    applicable_industries = Column(JSON, default=list)  # [IndustryType.value, ...]
-    risk_categories = Column(
+    applicable_industries: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [IndustryType.value, ...]
+    risk_categories: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # [RiskCategoryType.value / ControlRiskArea.value, ...]
 
-    is_system = Column(Boolean, default=False)  # platform-seeded; orgs may not delete
-    is_active = Column(Boolean, default=True)
+    is_system: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # platform-seeded; orgs may not delete
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
 
-    created_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )

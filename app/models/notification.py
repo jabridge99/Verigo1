@@ -1,6 +1,9 @@
 import enum
+from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String, Text
+from sqlalchemy.orm import Mapped
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -65,22 +68,32 @@ class NotificationPriority(str, enum.Enum):
 class Notification(Base):
     __tablename__ = "notifications"
 
-    id = Column(Integer, primary_key=True, index=True)
-    notif_id = Column(String(60), unique=True, index=True, nullable=False)
-    user_id = Column(String(60), index=True)  # None = broadcast
-    notif_type = Column(Enum(NotificationType), nullable=False)
-    priority = Column(Enum(NotificationPriority), default=NotificationPriority.medium)
-    title = Column(String(300), nullable=False)
-    body = Column(Text, nullable=False)
-    link = Column(String(500))  # frontend deep-link
-    entity_type = Column(String(50))  # customer | report | case | alert
-    entity_id = Column(String(100))
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    notif_id: Mapped[str] = Column(String(60), unique=True, index=True, nullable=False)
+    user_id: Mapped[Optional[str]] = Column(String(60), index=True)  # None = broadcast
+    notif_type: Mapped[NotificationType] = Column(
+        Enum(NotificationType), nullable=False
+    )
+    priority: Mapped[Optional[NotificationPriority]] = Column(
+        Enum(NotificationPriority), default=NotificationPriority.medium
+    )
+    title: Mapped[str] = Column(String(300), nullable=False)
+    body: Mapped[str] = Column(Text, nullable=False)
+    link: Mapped[Optional[str]] = Column(String(500))  # frontend deep-link
+    entity_type: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # customer | report | case | alert
+    entity_id: Mapped[Optional[str]] = Column(String(100))
     # Unique when set — lets callers (deadline reminders, training overdue
     # checks, etc.) pass a stable key (e.g. f"{notif_type}:{entity_id}:{date}")
     # so re-running the same check doesn't create duplicate notifications/
     # emails. NULL for one-off/manual notifications that don't need dedup.
-    dedupe_key = Column(String(150), unique=True, index=True, nullable=True)
-    read = Column(Boolean, default=False)
-    emailed = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    read_at = Column(DateTime(timezone=True))
+    dedupe_key: Mapped[Optional[str]] = Column(
+        String(150), unique=True, index=True, nullable=True
+    )
+    read: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    emailed: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    read_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))

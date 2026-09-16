@@ -24,6 +24,8 @@ Verigo does not provide legal, compliance, or regulatory advice.
 from __future__ import annotations
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -39,7 +41,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -187,16 +189,18 @@ class Policy(Base):
 
     __tablename__ = "governance_policies"
 
-    id = Column(String, primary_key=True, default=lambda: f"gp_{uuid4().hex[:12]}")
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gp_{uuid4().hex[:12]}"
+    )
 
     # ── Organisational linkage ────────────────────────────────────────────────
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    solution_id = Column(
+    solution_id: Mapped[str] = Column(
         String,
         ForeignKey("aml_solutions.id", ondelete="CASCADE"),
         nullable=False,
@@ -204,24 +208,26 @@ class Policy(Base):
     )
 
     # ── Identity ──────────────────────────────────────────────────────────────
-    policy_number = Column(String(30), nullable=False)
+    policy_number: Mapped[str] = Column(String(30), nullable=False)
     # e.g. AML-POL-001; generated on creation; unique per org
-    title = Column(String(255), nullable=False)
-    policy_type = Column(Enum(PolicyType), nullable=False)
-    policy_category = Column(
+    title: Mapped[str] = Column(String(255), nullable=False)
+    policy_type: Mapped[PolicyType] = Column(Enum(PolicyType), nullable=False)
+    policy_category: Mapped[PolicyCategory] = Column(
         Enum(PolicyCategory), nullable=False, default=PolicyCategory.operational
     )
-    business_unit = Column(String(100))  # e.g. Compliance, Operations, Risk
-    regulatory_references = Column(JSON, default=list)
+    business_unit: Mapped[Optional[str]] = Column(
+        String(100)
+    )  # e.g. Compliance, Operations, Risk
+    regulatory_references: Mapped[Optional[Any]] = Column(JSON, default=list)
     # e.g. ["AML/CTF Act s.84", "AML/CTF Rules 2025 r.8.1.3", "FATF R.10"]
 
     # ── Version ───────────────────────────────────────────────────────────────
-    version_major = Column(Integer, default=1, nullable=False)
-    version_minor = Column(Integer, default=0, nullable=False)
+    version_major: Mapped[int] = Column(Integer, default=1, nullable=False)
+    version_minor: Mapped[int] = Column(Integer, default=0, nullable=False)
     # Displayed as "1.0", "1.1", "2.0"
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
-    status = Column(
+    status: Mapped[PolicyLifecycleStatus] = Column(
         Enum(PolicyLifecycleStatus),
         default=PolicyLifecycleStatus.draft,
         nullable=False,
@@ -229,47 +235,63 @@ class Policy(Base):
     )
 
     # ── Dates ─────────────────────────────────────────────────────────────────
-    effective_date = Column(Date)
-    review_due_date = Column(Date, nullable=False)  # mandatory — drives reminders
-    approval_date = Column(Date)
-    last_reviewed_date = Column(Date)
-    next_review_date = Column(Date)
-    archived_date = Column(Date)
+    effective_date: Mapped[Optional[date]] = Column(Date)
+    review_due_date: Mapped[date] = Column(
+        Date, nullable=False
+    )  # mandatory — drives reminders
+    approval_date: Mapped[Optional[date]] = Column(Date)
+    last_reviewed_date: Mapped[Optional[date]] = Column(Date)
+    next_review_date: Mapped[Optional[date]] = Column(Date)
+    archived_date: Mapped[Optional[date]] = Column(Date)
 
     # ── Ownership & approval ──────────────────────────────────────────────────
-    document_owner = Column(String, ForeignKey("users.id"), nullable=False)
+    document_owner: Mapped[str] = Column(String, ForeignKey("users.id"), nullable=False)
     # 1L — author, usually from the business unit
-    internal_reviewer = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    internal_reviewer: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
     # 1L review (senior manager / team lead)
-    compliance_reviewer = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    compliance_reviewer: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
     # 2L review (MLRO / compliance officer)
-    approver = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    approver: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
     # 3L approval (Board / CEO / Risk Committee)
 
     # ── Content ───────────────────────────────────────────────────────────────
-    content = Column(Text)  # full policy text (Markdown/rich text)
-    summary = Column(Text)  # executive summary / purpose statement
-    scope = Column(Text)  # who/what this policy applies to
-    attachments = Column(JSON, default=list)  # [document.id]
+    content: Mapped[Optional[str]] = Column(
+        Text
+    )  # full policy text (Markdown/rich text)
+    summary: Mapped[Optional[str]] = Column(
+        Text
+    )  # executive summary / purpose statement
+    scope: Mapped[Optional[str]] = Column(Text)  # who/what this policy applies to
+    attachments: Mapped[Optional[Any]] = Column(JSON, default=list)  # [document.id]
     # referenced document IDs from the Document model (polymorphic)
 
     # ── Attestation requirements ──────────────────────────────────────────────
-    requires_attestation = Column(Boolean, default=False)
-    attestation_due_days = Column(Integer, default=14)
+    requires_attestation: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    attestation_due_days: Mapped[Optional[int]] = Column(Integer, default=14)
     # staff must attest within N days of publish/update
-    annual_attestation = Column(Boolean, default=False)
+    annual_attestation: Mapped[Optional[bool]] = Column(Boolean, default=False)
     # triggers annual re-attestation cycle
 
     # ── Cross-reference ───────────────────────────────────────────────────────
-    superseded_by_id = Column(
+    superseded_by_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("governance_policies.id"), nullable=True
     )
     # when status=superseded, points to the replacing policy
 
     # ── Audit ─────────────────────────────────────────────────────────────────
-    created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     # ── Relationships ─────────────────────────────────────────────────────────
     versions = relationship(
@@ -326,14 +348,16 @@ class PolicyVersion(Base):
 
     __tablename__ = "policy_versions"
 
-    id = Column(String, primary_key=True, default=lambda: f"pv_{uuid4().hex[:12]}")
-    policy_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"pv_{uuid4().hex[:12]}"
+    )
+    policy_id: Mapped[str] = Column(
         String,
         ForeignKey("governance_policies.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -341,31 +365,37 @@ class PolicyVersion(Base):
     )
 
     # ── Version identity ──────────────────────────────────────────────────────
-    version_major = Column(Integer, nullable=False)
-    version_minor = Column(Integer, nullable=False)
-    version_label = Column(String(20))  # e.g. "1.0", "2.1"
+    version_major: Mapped[int] = Column(Integer, nullable=False)
+    version_minor: Mapped[int] = Column(Integer, nullable=False)
+    version_label: Mapped[Optional[str]] = Column(String(20))  # e.g. "1.0", "2.1"
 
     # ── Full content snapshot at this version ─────────────────────────────────
-    title = Column(String(255), nullable=False)
-    content = Column(Text)  # full Markdown content snapshot
-    summary = Column(Text)
-    scope = Column(Text)
-    attachments = Column(JSON, default=list)
+    title: Mapped[str] = Column(String(255), nullable=False)
+    content: Mapped[Optional[str]] = Column(Text)  # full Markdown content snapshot
+    summary: Mapped[Optional[str]] = Column(Text)
+    scope: Mapped[Optional[str]] = Column(Text)
+    attachments: Mapped[Optional[Any]] = Column(JSON, default=list)
 
     # ── Governance snapshot ───────────────────────────────────────────────────
-    approved_by = Column(String)  # user id at time of approval
-    approved_at = Column(DateTime(timezone=True))
-    effective_date = Column(Date)
-    review_due_date = Column(Date)
+    approved_by: Mapped[Optional[str]] = Column(String)  # user id at time of approval
+    approved_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    effective_date: Mapped[Optional[date]] = Column(Date)
+    review_due_date: Mapped[Optional[date]] = Column(Date)
 
     # ── Change record ─────────────────────────────────────────────────────────
-    change_type = Column(String(20))  # major | minor | administrative
-    change_summary = Column(Text)  # brief description of what changed
-    change_reason = Column(Text)  # business/regulatory reason for change
+    change_type: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # major | minor | administrative
+    change_summary: Mapped[Optional[str]] = Column(
+        Text
+    )  # brief description of what changed
+    change_reason: Mapped[Optional[str]] = Column(
+        Text
+    )  # business/regulatory reason for change
 
     # ── Provenance ────────────────────────────────────────────────────────────
-    created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(
+    created_by: Mapped[str] = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
     # NOTE: created_at is populated on insert and NEVER updated (immutable record)
@@ -398,35 +428,41 @@ class PolicyWorkflowEvent(Base):
 
     __tablename__ = "policy_workflow_events"
 
-    id = Column(String, primary_key=True, default=lambda: f"pwe_{uuid4().hex[:12]}")
-    policy_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"pwe_{uuid4().hex[:12]}"
+    )
+    policy_id: Mapped[str] = Column(
         String,
         ForeignKey("governance_policies.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
 
     # ── Transition ────────────────────────────────────────────────────────────
-    from_status = Column(Enum(PolicyLifecycleStatus), nullable=False)
-    to_status = Column(Enum(PolicyLifecycleStatus), nullable=False)
-    action = Column(String(100), nullable=False)
+    from_status: Mapped[PolicyLifecycleStatus] = Column(
+        Enum(PolicyLifecycleStatus), nullable=False
+    )
+    to_status: Mapped[PolicyLifecycleStatus] = Column(
+        Enum(PolicyLifecycleStatus), nullable=False
+    )
+    action: Mapped[str] = Column(String(100), nullable=False)
     # e.g. "submit_for_review", "approve", "publish", "request_changes", "archive"
 
     # ── Actor ─────────────────────────────────────────────────────────────────
-    actor_id = Column(String, ForeignKey("users.id"), nullable=False)
+    actor_id: Mapped[str] = Column(String, ForeignKey("users.id"), nullable=False)
     # user who performed the action
 
     # ── Context ───────────────────────────────────────────────────────────────
-    comments = Column(Text)  # reviewer/approver comments
-    version_at_event = Column(
+    comments: Mapped[Optional[str]] = Column(Text)  # reviewer/approver comments
+    version_at_event: Mapped[Optional[str]] = Column(
         String(20)
     )  # e.g. "1.0" — version when this event occurred
 
     # ── Timestamp ─────────────────────────────────────────────────────────────
-    occurred_at = Column(
+    occurred_at: Mapped[datetime] = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
     # IMMUTABLE — never updated after insert
@@ -457,45 +493,59 @@ class PolicyAttestation(Base):
 
     __tablename__ = "policy_attestations"
 
-    id = Column(String, primary_key=True, default=lambda: f"pa_{uuid4().hex[:12]}")
-    policy_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"pa_{uuid4().hex[:12]}"
+    )
+    policy_id: Mapped[str] = Column(
         String,
         ForeignKey("governance_policies.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    policy_version_id = Column(String, ForeignKey("policy_versions.id"), nullable=True)
+    policy_version_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("policy_versions.id"), nullable=True
+    )
     # links to the specific version that was attested to
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
 
     # ── Who attested ──────────────────────────────────────────────────────────
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = Column(
+        String, ForeignKey("users.id"), nullable=False, index=True
+    )
 
     # ── What they attested ────────────────────────────────────────────────────
-    attestation_type = Column(
+    attestation_type: Mapped[AttestationType] = Column(
         Enum(AttestationType),
         default=AttestationType.read_and_understood,
         nullable=False,
     )
-    policy_version = Column(String(20))  # version string at time of attestation
-    attestation_statement = Column(Text)
+    policy_version: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # version string at time of attestation
+    attestation_statement: Mapped[Optional[str]] = Column(Text)
     # e.g. "I confirm I have read and understood the CDD Policy v2.1 effective 1 July 2026."
 
     # ── When ─────────────────────────────────────────────────────────────────
-    attested_at = Column(
+    attested_at: Mapped[datetime] = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
     # Immutable — never updated
 
     # ── Prompted by ──────────────────────────────────────────────────────────
-    due_date = Column(Date)  # deadline set when attestation was requested
-    is_overdue = Column(Boolean, default=False)  # flagged if attested after due_date
-    reminded_at = Column(JSON, default=list)  # [datetime] — reminder timestamps
+    due_date: Mapped[Optional[date]] = Column(
+        Date
+    )  # deadline set when attestation was requested
+    is_overdue: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # flagged if attested after due_date
+    reminded_at: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [datetime] — reminder timestamps
 
     # ── Supporting evidence ───────────────────────────────────────────────────
-    comments = Column(Text)  # optional staff comment
+    comments: Mapped[Optional[str]] = Column(Text)  # optional staff comment
 
     policy = relationship("Policy", back_populates="attestations")
     policy_version_obj = relationship("PolicyVersion")
@@ -525,33 +575,43 @@ class PolicyReviewReminder(Base):
 
     __tablename__ = "policy_review_reminders"
 
-    id = Column(String, primary_key=True, default=lambda: f"prr_{uuid4().hex[:12]}")
-    policy_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"prr_{uuid4().hex[:12]}"
+    )
+    policy_id: Mapped[str] = Column(
         String,
         ForeignKey("governance_policies.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
 
     # ── Reminder config ───────────────────────────────────────────────────────
-    reminder_type = Column(Enum(ReminderType), nullable=False)
-    scheduled_date = Column(Date, nullable=False)  # when reminder should fire
-    review_due_date = Column(
+    reminder_type: Mapped[ReminderType] = Column(Enum(ReminderType), nullable=False)
+    scheduled_date: Mapped[date] = Column(
+        Date, nullable=False
+    )  # when reminder should fire
+    review_due_date: Mapped[date] = Column(
         Date, nullable=False
     )  # the policy review_due_date at scheduling time
-    recipient_ids = Column(JSON, default=list)  # [user_id] — who to notify
+    recipient_ids: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [user_id] — who to notify
 
     # ── Dispatch state ────────────────────────────────────────────────────────
-    sent_at = Column(DateTime(timezone=True))  # null = not yet sent
-    is_sent = Column(Boolean, default=False)
-    send_error = Column(Text)  # error message if dispatch failed
-    retry_count = Column(Integer, default=0)
+    sent_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True)
+    )  # null = not yet sent
+    is_sent: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    send_error: Mapped[Optional[str]] = Column(Text)  # error message if dispatch failed
+    retry_count: Mapped[Optional[int]] = Column(Integer, default=0)
 
     # ── Metadata ──────────────────────────────────────────────────────────────
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     policy = relationship("Policy", back_populates="reminders")
 

@@ -23,6 +23,8 @@ decisions. Verigo does not provide legal or compliance advice.
 from __future__ import annotations
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -39,7 +41,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -192,16 +194,18 @@ class GovernanceControl(Base):
 
     __tablename__ = "governance_controls"
 
-    id = Column(String, primary_key=True, default=lambda: f"gc_{uuid4().hex[:12]}")
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gc_{uuid4().hex[:12]}"
+    )
 
     # ── Organisational linkage ────────────────────────────────────────────────
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    solution_id = Column(
+    solution_id: Mapped[str] = Column(
         String,
         ForeignKey("aml_solutions.id", ondelete="CASCADE"),
         nullable=False,
@@ -209,61 +213,67 @@ class GovernanceControl(Base):
     )
 
     # ── Identity ──────────────────────────────────────────────────────────────
-    control_ref = Column(String(30), nullable=False)
+    control_ref: Mapped[str] = Column(String(30), nullable=False)
     # e.g. CTL-CDD-001, CTL-TM-002; generated on creation; unique per org
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
-    objective = Column(Text)
+    name: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    objective: Mapped[Optional[str]] = Column(Text)
     # what risk event this control is designed to prevent/detect/remediate
 
     # ── Classification ────────────────────────────────────────────────────────
-    control_type = Column(Enum(ControlType), nullable=False)
-    control_type_secondary = Column(Enum(ControlType))
+    control_type: Mapped[ControlType] = Column(Enum(ControlType), nullable=False)
+    control_type_secondary: Mapped[Optional[ControlType]] = Column(Enum(ControlType))
     # dual-type: e.g. primary=detective, secondary=automated
 
-    risk_area = Column(Enum(ControlRiskArea), nullable=False, index=True)
-    risk_area_custom = Column(String(100))
+    risk_area: Mapped[ControlRiskArea] = Column(
+        Enum(ControlRiskArea), nullable=False, index=True
+    )
+    risk_area_custom: Mapped[Optional[str]] = Column(String(100))
     # populated when risk_area = ControlRiskArea.custom
 
-    linked_policy_id = Column(
+    linked_policy_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("governance_policies.id"), nullable=True
     )
     # which governance policy this control gives effect to
 
-    regulatory_references = Column(JSON, default=list)
+    regulatory_references: Mapped[Optional[Any]] = Column(JSON, default=list)
     # e.g. ["AML/CTF Act s.84", "AML/CTF Rules 2025 r.8.1", "FATF R.10"]
 
     # ── Ownership (3LoD) ─────────────────────────────────────────────────────
-    control_owner = Column(String, ForeignKey("users.id"), nullable=False)
+    control_owner: Mapped[str] = Column(String, ForeignKey("users.id"), nullable=False)
     # 1L — business unit owner
-    business_unit = Column(String(100))
-    reviewer_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    business_unit: Mapped[Optional[str]] = Column(String(100))
+    reviewer_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
     # 2L — MLRO / compliance reviewer
-    auditor_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    auditor_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
     # 3L — internal audit / independent reviewer
 
     # ── Operating characteristics ─────────────────────────────────────────────
-    frequency = Column(
+    frequency: Mapped[ControlFrequency] = Column(
         Enum(ControlFrequency), nullable=False, default=ControlFrequency.continuous
     )
-    control_method = Column(Enum(ControlMethod), nullable=False)
-    is_key_control = Column(Boolean, default=False)
+    control_method: Mapped[ControlMethod] = Column(Enum(ControlMethod), nullable=False)
+    is_key_control: Mapped[Optional[bool]] = Column(Boolean, default=False)
     # key controls are tested more frequently and tracked on the exec dashboard
 
     # ── Evidence requirements ──────────────────────────────────────────────────
-    evidence_required = Column(JSON, default=list)
+    evidence_required: Mapped[Optional[Any]] = Column(JSON, default=list)
     # e.g. ["System-generated transaction log", "Dual sign-off checklist", "Alert disposition record"]
-    evidence_retention_years = Column(Integer, default=7)
+    evidence_retention_years: Mapped[Optional[int]] = Column(Integer, default=7)
     # AUSTRAC: minimum 7 years
 
     # ── Status & effectiveness ────────────────────────────────────────────────
-    status = Column(
+    status: Mapped[ControlStatus] = Column(
         Enum(ControlStatus, name="governance_control_status"),
         default=ControlStatus.active,
         nullable=False,
         index=True,
     )
-    effectiveness = Column(
+    effectiveness: Mapped[ControlEffectiveness] = Column(
         Enum(ControlEffectiveness),
         default=ControlEffectiveness.not_tested,
         nullable=False,
@@ -271,24 +281,28 @@ class GovernanceControl(Base):
     # CALCULATED by governance_metrics.py from test results — never set manually
 
     # ── Test schedule ─────────────────────────────────────────────────────────
-    last_tested_date = Column(Date)
-    next_test_date = Column(Date)
-    test_frequency = Column(Enum(ControlFrequency))
+    last_tested_date: Mapped[Optional[date]] = Column(Date)
+    next_test_date: Mapped[Optional[date]] = Column(Date)
+    test_frequency: Mapped[Optional[ControlFrequency]] = Column(Enum(ControlFrequency))
     # may differ from operational frequency (e.g. control runs daily, tested quarterly)
 
     # ── Custom fields (no-code extensibility) ────────────────────────────────
-    custom_fields = Column(JSON, default=dict)
+    custom_fields: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {"field_name": value} — populated from GovernanceCustomField definitions
 
     # Optional link to the reusable mitigation catalogue (see mitigation_library.py)
-    library_item_id = Column(
+    library_item_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("mitigation_library_items.id"), nullable=True, index=True
     )
 
     # ── Audit ─────────────────────────────────────────────────────────────────
-    created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     # ── Relationships ─────────────────────────────────────────────────────────
     tests = relationship(
@@ -341,64 +355,84 @@ class ControlTest(Base):
 
     __tablename__ = "control_tests"
 
-    id = Column(String, primary_key=True, default=lambda: f"ct_{uuid4().hex[:12]}")
-    control_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ct_{uuid4().hex[:12]}"
+    )
+    control_id: Mapped[str] = Column(
         String,
         ForeignKey("governance_controls.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
 
     # ── Test execution ────────────────────────────────────────────────────────
-    test_date = Column(Date, nullable=False)
-    test_period_start = Column(Date)
-    test_period_end = Column(Date)
-    tester_id = Column(String, ForeignKey("users.id"), nullable=False)
-    test_method = Column(Enum(ControlMethod))
+    test_date: Mapped[date] = Column(Date, nullable=False)
+    test_period_start: Mapped[Optional[date]] = Column(Date)
+    test_period_end: Mapped[Optional[date]] = Column(Date)
+    tester_id: Mapped[str] = Column(String, ForeignKey("users.id"), nullable=False)
+    test_method: Mapped[Optional[ControlMethod]] = Column(Enum(ControlMethod))
     # may differ from control's default method if tester chose different approach
 
     # ── Sample ────────────────────────────────────────────────────────────────
-    population_size = Column(Integer)  # total population available for testing
-    sample_size = Column(Integer)  # number of items selected
-    passed_samples = Column(Integer)  # items that passed
-    failed_samples = Column(Integer)  # items that failed
-    exceptions_noted = Column(Integer)  # exceptions (not necessarily failures)
-    sampling_method = Column(String(50))  # random | judgement | statistical | haphazard
+    population_size: Mapped[Optional[int]] = Column(
+        Integer
+    )  # total population available for testing
+    sample_size: Mapped[Optional[int]] = Column(Integer)  # number of items selected
+    passed_samples: Mapped[Optional[int]] = Column(Integer)  # items that passed
+    failed_samples: Mapped[Optional[int]] = Column(Integer)  # items that failed
+    exceptions_noted: Mapped[Optional[int]] = Column(
+        Integer
+    )  # exceptions (not necessarily failures)
+    sampling_method: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # random | judgement | statistical | haphazard
 
     # ── Result ────────────────────────────────────────────────────────────────
-    result = Column(Enum(TestResult), nullable=False)
-    calculated_effectiveness = Column(Enum(ControlEffectiveness))
+    result: Mapped[TestResult] = Column(Enum(TestResult), nullable=False)
+    calculated_effectiveness: Mapped[Optional[ControlEffectiveness]] = Column(
+        Enum(ControlEffectiveness)
+    )
     # Populated by scoring engine — NEVER set manually
 
-    effectiveness_score = Column(Float)
+    effectiveness_score: Mapped[Optional[float]] = Column(Float)
     # Numeric score 0-100 from which calculated_effectiveness is derived
 
     # ── Narrative ─────────────────────────────────────────────────────────────
-    test_approach = Column(Text)  # how the test was conducted
-    findings_summary = Column(Text)  # overall findings narrative
-    action_required = Column(Boolean, default=False)
+    test_approach: Mapped[Optional[str]] = Column(Text)  # how the test was conducted
+    findings_summary: Mapped[Optional[str]] = Column(Text)  # overall findings narrative
+    action_required: Mapped[Optional[bool]] = Column(Boolean, default=False)
     # set True if any finding requires remediation
 
     # ── Reviewer sign-off (2L) ────────────────────────────────────────────────
-    reviewed_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    reviewed_at = Column(DateTime(timezone=True))
-    reviewer_comments = Column(Text)
-    is_finalised = Column(Boolean, default=False)
+    reviewed_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    reviewed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    reviewer_comments: Mapped[Optional[str]] = Column(Text)
+    is_finalised: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Retest ────────────────────────────────────────────────────────────────
-    retest_required = Column(Boolean, default=False)
-    retest_date = Column(Date)
-    retest_of_id = Column(String, ForeignKey("control_tests.id"), nullable=True)
+    retest_required: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    retest_date: Mapped[Optional[date]] = Column(Date)
+    retest_of_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("control_tests.id"), nullable=True
+    )
     # links to the original test this is retesting
 
     # ── Attachments ──────────────────────────────────────────────────────────
-    evidence_document_ids = Column(JSON, default=list)  # [document.id]
+    evidence_document_ids: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [document.id]
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     control = relationship("GovernanceControl", back_populates="tests")
     findings = relationship(
@@ -440,40 +474,48 @@ class ControlTestFinding(Base):
 
     __tablename__ = "control_test_findings"
 
-    id = Column(String, primary_key=True, default=lambda: f"ctf_{uuid4().hex[:12]}")
-    test_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ctf_{uuid4().hex[:12]}"
+    )
+    test_id: Mapped[str] = Column(
         String,
         ForeignKey("control_tests.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
-    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    created_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id"), nullable=True
+    )
 
     # ── Finding detail ────────────────────────────────────────────────────────
-    finding_ref = Column(String(20))  # e.g. F-001, F-002
-    title = Column(String(255), nullable=False)
-    description = Column(Text, nullable=False)
-    severity = Column(Enum(FindingSeverity), nullable=False, index=True)
+    finding_ref: Mapped[Optional[str]] = Column(String(20))  # e.g. F-001, F-002
+    title: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[str] = Column(Text, nullable=False)
+    severity: Mapped[FindingSeverity] = Column(
+        Enum(FindingSeverity), nullable=False, index=True
+    )
 
     # ── Root cause ────────────────────────────────────────────────────────────
-    root_cause = Column(Text)
-    root_cause_category = Column(String(50))
+    root_cause: Mapped[Optional[str]] = Column(Text)
+    root_cause_category: Mapped[Optional[str]] = Column(String(50))
     # e.g. "people", "process", "technology", "policy_gap"
 
     # ── Impact ────────────────────────────────────────────────────────────────
-    potential_impact = Column(Text)
-    regulatory_breach = Column(Boolean, default=False)
+    potential_impact: Mapped[Optional[str]] = Column(Text)
+    regulatory_breach: Mapped[Optional[bool]] = Column(Boolean, default=False)
     # flag if finding represents a potential regulatory breach
 
     # ── Affected samples ──────────────────────────────────────────────────────
-    affected_sample_count = Column(Integer, default=0)
-    affected_sample_refs = Column(JSON, default=list)
+    affected_sample_count: Mapped[Optional[int]] = Column(Integer, default=0)
+    affected_sample_refs: Mapped[Optional[Any]] = Column(JSON, default=list)
     # [str] — reference numbers of the failing sample items
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     test = relationship("ControlTest", back_populates="findings")
     remediations = relationship(
@@ -510,14 +552,16 @@ class ControlRemediationAction(Base):
 
     __tablename__ = "control_remediation_actions"
 
-    id = Column(String, primary_key=True, default=lambda: f"cra_{uuid4().hex[:12]}")
-    control_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cra_{uuid4().hex[:12]}"
+    )
+    control_id: Mapped[str] = Column(
         String,
         ForeignKey("governance_controls.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    test_id = Column(
+    test_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("control_tests.id", ondelete="CASCADE"),
         nullable=True,
@@ -525,32 +569,38 @@ class ControlRemediationAction(Base):
     )
     # nullable: a remediation raised directly against a control (not arising
     # from a specific test finding) has no test to link to
-    finding_id = Column(String, ForeignKey("control_test_findings.id"), nullable=True)
-    org_id = Column(
+    finding_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("control_test_findings.id"), nullable=True
+    )
+    org_id: Mapped[str] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
-    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    created_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id"), nullable=True
+    )
 
     # ── Action detail ─────────────────────────────────────────────────────────
-    action_ref = Column(String(20))  # e.g. REM-001
-    title = Column(String(255), nullable=False)
-    description = Column(Text, nullable=False)
-    finding_severity = Column(Enum(FindingSeverity))
+    action_ref: Mapped[Optional[str]] = Column(String(20))  # e.g. REM-001
+    title: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[str] = Column(Text, nullable=False)
+    finding_severity: Mapped[Optional[FindingSeverity]] = Column(Enum(FindingSeverity))
     # denormalised from finding for dashboard queries
 
     # ── Ownership ─────────────────────────────────────────────────────────────
-    owner_id = Column(String, ForeignKey("users.id"), nullable=False)
-    escalation_owner_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    owner_id: Mapped[str] = Column(String, ForeignKey("users.id"), nullable=False)
+    escalation_owner_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
     # escalation owner if primary owner doesn't close in time
 
     # ── Dates ─────────────────────────────────────────────────────────────────
-    due_date = Column(Date, nullable=False)
-    completed_date = Column(Date)
-    extended_due_date = Column(Date)
-    extension_reason = Column(Text)
+    due_date: Mapped[date] = Column(Date, nullable=False)
+    completed_date: Mapped[Optional[date]] = Column(Date)
+    extended_due_date: Mapped[Optional[date]] = Column(Date)
+    extension_reason: Mapped[Optional[str]] = Column(Text)
 
     # ── Status ────────────────────────────────────────────────────────────────
-    status = Column(
+    status: Mapped[RemediationStatus] = Column(
         Enum(RemediationStatus),
         default=RemediationStatus.open,
         nullable=False,
@@ -558,20 +608,30 @@ class ControlRemediationAction(Base):
     )
 
     # ── Closure ───────────────────────────────────────────────────────────────
-    closure_evidence = Column(JSON, default=list)  # [document.id]
-    closure_notes = Column(Text)
-    closed_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    closed_at = Column(DateTime(timezone=True))
-    risk_acceptance_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    closure_evidence: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [document.id]
+    closure_notes: Mapped[Optional[str]] = Column(Text)
+    closed_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    closed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    risk_acceptance_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
     # MLRO/Board user id if risk accepted without full remediation
-    risk_acceptance_note = Column(Text)
+    risk_acceptance_note: Mapped[Optional[str]] = Column(Text)
 
     # ── Progress tracking ─────────────────────────────────────────────────────
-    progress_updates = Column(JSON, default=list)
+    progress_updates: Mapped[Optional[Any]] = Column(JSON, default=list)
     # [{"date": "ISO", "user_id": "...", "update": "text"}]
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     control = relationship("GovernanceControl", back_populates="remediations")
     test = relationship("ControlTest", back_populates="remediations")
@@ -594,26 +654,32 @@ class ControlEvidenceItem(Base):
 
     __tablename__ = "control_evidence_items"
 
-    id = Column(String, primary_key=True, default=lambda: f"cei_{uuid4().hex[:12]}")
-    control_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cei_{uuid4().hex[:12]}"
+    )
+    control_id: Mapped[str] = Column(
         String,
         ForeignKey("governance_controls.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
     )
 
-    title = Column(String(255), nullable=False)
-    description = Column(Text)
-    evidence_date = Column(Date, nullable=False)
-    document_id = Column(String)  # polymorphic: Document.id
-    evidence_type = Column(String(50))
+    title: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    evidence_date: Mapped[date] = Column(Date, nullable=False)
+    document_id: Mapped[Optional[str]] = Column(String)  # polymorphic: Document.id
+    evidence_type: Mapped[Optional[str]] = Column(String(50))
     # e.g. "system_report", "sign_off_log", "alert_summary", "management_attestation"
 
-    uploaded_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    uploaded_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    uploaded_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     control = relationship("GovernanceControl", back_populates="evidence")
 

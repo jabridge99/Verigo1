@@ -10,7 +10,8 @@ Adverse media has its own table (article-level detail).
 """
 
 import enum
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -105,14 +106,16 @@ class ScreeningRecord(Base):
 
     __tablename__ = "screening_records"
 
-    id = Column(String, primary_key=True, default=lambda: f"scr_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"scr_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
@@ -120,46 +123,62 @@ class ScreeningRecord(Base):
     )
 
     # What was screened
-    screening_type = Column(Enum(ScreeningType), nullable=False, index=True)
-    entity_type = Column(Enum(ScreeningEntityType), nullable=False)
-    entity_id = Column(String, nullable=False)  # customer.id or beneficial_owner.id
-    entity_name = Column(String(255))  # name as searched
-    entity_dob = Column(String(20))  # DOB as searched (YYYY-MM-DD)
-    entity_nationality = Column(String(2))
-    lists_checked = Column(JSON)  # list of list names checked
+    screening_type: Mapped[ScreeningType] = Column(
+        Enum(ScreeningType), nullable=False, index=True
+    )
+    entity_type: Mapped[ScreeningEntityType] = Column(
+        Enum(ScreeningEntityType), nullable=False
+    )
+    entity_id: Mapped[str] = Column(
+        String, nullable=False
+    )  # customer.id or beneficial_owner.id
+    entity_name: Mapped[Optional[str]] = Column(String(255))  # name as searched
+    entity_dob: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # DOB as searched (YYYY-MM-DD)
+    entity_nationality: Mapped[Optional[str]] = Column(String(2))
+    lists_checked: Mapped[Optional[Any]] = Column(JSON)  # list of list names checked
 
     # Provider
-    provider = Column(
+    provider: Mapped[ScreeningProvider] = Column(
         Enum(ScreeningProvider), nullable=False, default=ScreeningProvider.internal
     )
-    provider_reference = Column(String(255))  # provider's transaction/request ID
+    provider_reference: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # provider's transaction/request ID
 
     # Result
-    status = Column(
+    status: Mapped[ScreeningStatus] = Column(
         Enum(ScreeningStatus),
         default=ScreeningStatus.pending,
         nullable=False,
         index=True,
     )
-    match_count = Column(Float, default=0)
+    match_count: Mapped[Optional[float]] = Column(Float, default=0)
     match_score: Mapped[Optional[float]] = Column(Float)  # 0–100 fuzzy match confidence
-    match_details = Column(JSON)  # structured match data
-    provider_raw_response = Column(Text)  # full JSON from provider
+    match_details: Mapped[Optional[Any]] = Column(JSON)  # structured match data
+    provider_raw_response: Mapped[Optional[str]] = Column(
+        Text
+    )  # full JSON from provider
 
     # PEP-specific
-    pep_category = Column(String(100))
-    pep_country = Column(String(2))
-    pep_position = Column(String(255))
+    pep_category: Mapped[Optional[str]] = Column(String(100))
+    pep_country: Mapped[Optional[str]] = Column(String(2))
+    pep_position: Mapped[Optional[str]] = Column(String(255))
 
     # Review
-    reviewed_by = Column(String)
-    reviewed_at = Column(DateTime(timezone=True))
-    reviewer_notes = Column(Text)
-    is_false_positive = Column(Boolean, default=False)
+    reviewed_by: Mapped[Optional[str]] = Column(String)
+    reviewed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    reviewer_notes: Mapped[Optional[str]] = Column(Text)
+    is_false_positive: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
-    triggered_by = Column(String)  # user_id or "system"
-    screened_at = Column(DateTime(timezone=True), server_default=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    triggered_by: Mapped[Optional[str]] = Column(String)  # user_id or "system"
+    screened_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="screening_records")
     alerts: Mapped[list["ScreeningAlert"]] = relationship(
@@ -180,41 +199,49 @@ class ScreeningAlert(Base):
 
     __tablename__ = "screening_alerts"
 
-    id = Column(String, primary_key=True, default=lambda: f"alert_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"alert_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    screening_record_id = Column(
+    screening_record_id: Mapped[str] = Column(
         String,
         ForeignKey("screening_records.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(String, ForeignKey("customers.id"), nullable=False, index=True)
+    customer_id: Mapped[str] = Column(
+        String, ForeignKey("customers.id"), nullable=False, index=True
+    )
 
-    severity = Column(Enum(AlertSeverity), nullable=False)
-    status = Column(
+    severity: Mapped[AlertSeverity] = Column(Enum(AlertSeverity), nullable=False)
+    status: Mapped[AlertStatus] = Column(
         Enum(AlertStatus, name="screening_alert_status"),
         default=AlertStatus.open,
         nullable=False,
         index=True,
     )
-    alert_type = Column(String(100))  # pep_match | sanctions_hit | adverse_media | etc.
-    summary = Column(Text, nullable=False)
+    alert_type: Mapped[Optional[str]] = Column(
+        String(100)
+    )  # pep_match | sanctions_hit | adverse_media | etc.
+    summary: Mapped[str] = Column(Text, nullable=False)
 
-    assigned_to = Column(String)  # user_id of reviewer
-    assigned_at = Column(DateTime(timezone=True))
-    resolved_by = Column(String)
-    resolved_at = Column(DateTime(timezone=True))
-    resolution_notes = Column(Text)
+    assigned_to: Mapped[Optional[str]] = Column(String)  # user_id of reviewer
+    assigned_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    resolved_by: Mapped[Optional[str]] = Column(String)
+    resolved_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    resolution_notes: Mapped[Optional[str]] = Column(Text)
 
-    escalated_to = Column(String)  # user_id of MLRO
-    escalated_at = Column(DateTime(timezone=True))
+    escalated_to: Mapped[Optional[str]] = Column(String)  # user_id of MLRO
+    escalated_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     screening_record = relationship("ScreeningRecord", back_populates="alerts")
 
@@ -262,31 +289,37 @@ class CryptoProvider(str, enum.Enum):
 class CryptoWalletScreening(Base):
     __tablename__ = "crypto_wallet_screenings"
 
-    id = Column(String, primary_key=True, default=lambda: f"cws_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"cws_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    wallet_address = Column(String(255), nullable=False, index=True)
-    network = Column(Enum(CryptoNetwork), nullable=False)
-    wallet_label = Column(String(255))  # human label (e.g. "customer's ETH wallet")
+    wallet_address: Mapped[str] = Column(String(255), nullable=False, index=True)
+    network: Mapped[CryptoNetwork] = Column(Enum(CryptoNetwork), nullable=False)
+    wallet_label: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # human label (e.g. "customer's ETH wallet")
 
-    provider = Column(Enum(CryptoProvider), nullable=False)
-    provider_reference = Column(String(255))
+    provider: Mapped[CryptoProvider] = Column(Enum(CryptoProvider), nullable=False)
+    provider_reference: Mapped[Optional[str]] = Column(String(255))
 
     # Risk results
     risk_score: Mapped[Optional[float]] = Column(Float)  # 0–100
-    risk_category = Column(Enum(WalletRiskCategory))
-    risk_details = Column(JSON)
+    risk_category: Mapped[Optional[WalletRiskCategory]] = Column(
+        Enum(WalletRiskCategory)
+    )
+    risk_details: Mapped[Optional[Any]] = Column(JSON)
 
     # Exposure flags
     sanctioned_exposure_pct: Mapped[Optional[float]] = Column(Float, default=0.0)
@@ -296,21 +329,27 @@ class CryptoWalletScreening(Base):
     scam_exposure_pct: Mapped[Optional[float]] = Column(Float, default=0.0)
 
     # Transaction summary
-    total_received_usd = Column(Float)
-    total_sent_usd = Column(Float)
-    first_seen = Column(DateTime(timezone=True))
-    last_seen = Column(DateTime(timezone=True))
+    total_received_usd: Mapped[Optional[float]] = Column(Float)
+    total_sent_usd: Mapped[Optional[float]] = Column(Float)
+    first_seen: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    last_seen: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    provider_raw_response = Column(Text)
+    provider_raw_response: Mapped[Optional[str]] = Column(Text)
 
-    status = Column(Enum(ScreeningStatus), default=ScreeningStatus.pending)
-    reviewed_by = Column(String)
-    reviewed_at = Column(DateTime(timezone=True))
-    reviewer_notes = Column(Text)
+    status: Mapped[Optional[ScreeningStatus]] = Column(
+        Enum(ScreeningStatus), default=ScreeningStatus.pending
+    )
+    reviewed_by: Mapped[Optional[str]] = Column(String)
+    reviewed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    reviewer_notes: Mapped[Optional[str]] = Column(Text)
 
-    triggered_by = Column(String)
-    screened_at = Column(DateTime(timezone=True), server_default=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    triggered_by: Mapped[Optional[str]] = Column(String)
+    screened_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 # ── Adverse Media ──────────────────────────────────────────────────────────────
@@ -334,42 +373,50 @@ class AdverseMediaCategory(str, enum.Enum):
 class AdverseMediaResult(Base):
     __tablename__ = "adverse_media_results"
 
-    id = Column(String, primary_key=True, default=lambda: f"adm_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"adm_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    customer_id = Column(
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    screening_record_id = Column(
+    screening_record_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("screening_records.id"), nullable=True
     )
 
-    category = Column(Enum(AdverseMediaCategory), nullable=False)
-    headline = Column(String(1000))
-    source_name = Column(String(255))
-    source_url = Column(String(2000))
-    publication_date = Column(DateTime(timezone=True))
-    jurisdiction = Column(String(2))
+    category: Mapped[AdverseMediaCategory] = Column(
+        Enum(AdverseMediaCategory), nullable=False
+    )
+    headline: Mapped[Optional[str]] = Column(String(1000))
+    source_name: Mapped[Optional[str]] = Column(String(255))
+    source_url: Mapped[Optional[str]] = Column(String(2000))
+    publication_date: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    jurisdiction: Mapped[Optional[str]] = Column(String(2))
 
     match_confidence: Mapped[Optional[float]] = Column(Float)  # 0–100
-    is_confirmed_match = Column(Boolean, default=False)
-    is_false_positive = Column(Boolean, default=False)
+    is_confirmed_match: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    is_false_positive: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
-    review_status = Column(
+    review_status: Mapped[Optional[AlertStatus]] = Column(
         Enum(AlertStatus, name="screening_alert_status"), default=AlertStatus.open
     )
-    reviewed_by = Column(String)
-    reviewed_at = Column(DateTime(timezone=True))
-    reviewer_notes = Column(Text)
+    reviewed_by: Mapped[Optional[str]] = Column(String)
+    reviewed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    reviewer_notes: Mapped[Optional[str]] = Column(Text)
 
-    provider = Column(Enum(ScreeningProvider), default=ScreeningProvider.internal)
-    provider_raw_response = Column(Text)
+    provider: Mapped[Optional[ScreeningProvider]] = Column(
+        Enum(ScreeningProvider), default=ScreeningProvider.internal
+    )
+    provider_raw_response: Mapped[Optional[str]] = Column(Text)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )

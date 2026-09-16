@@ -15,6 +15,8 @@ The reporting entity bears sole responsibility for all regulatory decisions.
 """
 
 import enum
+from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -28,7 +30,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -89,8 +91,10 @@ class RegulatoryRecommendation(Base):
 
     __tablename__ = "regulatory_recommendations"
 
-    id = Column(String, primary_key=True, default=lambda: f"rec_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rec_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -98,51 +102,69 @@ class RegulatoryRecommendation(Base):
     )
 
     # Links — at least one must be set
-    transaction_id = Column(
+    transaction_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("transactions.id"), nullable=True, index=True
     )
-    alert_id = Column(
+    alert_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("transaction_alerts.id"), nullable=True, index=True
     )
-    case_id = Column(String, ForeignKey("cases.id"), nullable=True, index=True)
-    customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
+    case_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("cases.id"), nullable=True, index=True
+    )
+    customer_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("customers.id"), nullable=True, index=True
+    )
 
     # Classification
-    recommendation_type = Column(Enum(RecommendationType), nullable=False, index=True)
-    priority = Column(
+    recommendation_type: Mapped[RecommendationType] = Column(
+        Enum(RecommendationType), nullable=False, index=True
+    )
+    priority: Mapped[Optional[RecommendationPriority]] = Column(
         Enum(RecommendationPriority, name="regulatory_recommendation_priority"),
         default=RecommendationPriority.normal,
     )
-    source = Column(
+    source: Mapped[Optional[RecommendationSource]] = Column(
         Enum(RecommendationSource), default=RecommendationSource.monitoring_engine
     )
 
     # Content
-    title = Column(String(500), nullable=False)
-    recommendation_text = Column(Text, nullable=False)  # plain-English guidance
-    rationale = Column(Text)  # signals that triggered this
-    regulatory_basis = Column(String(500))  # e.g. "AML/CTF Act 2006 s.45 — IFTI"
+    title: Mapped[str] = Column(String(500), nullable=False)
+    recommendation_text: Mapped[str] = Column(
+        Text, nullable=False
+    )  # plain-English guidance
+    rationale: Mapped[Optional[str]] = Column(Text)  # signals that triggered this
+    regulatory_basis: Mapped[Optional[str]] = Column(
+        String(500)
+    )  # e.g. "AML/CTF Act 2006 s.45 — IFTI"
 
     # AI readiness scaffold — populated when source=ai_assistant
-    is_ai_generated = Column(Boolean, default=False)
-    ai_model = Column(String(100))  # model identifier (never auto-acted on)
-    ai_reviewed_by = Column(String)  # human who reviewed AI output
+    is_ai_generated: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    ai_model: Mapped[Optional[str]] = Column(
+        String(100)
+    )  # model identifier (never auto-acted on)
+    ai_reviewed_by: Mapped[Optional[str]] = Column(
+        String
+    )  # human who reviewed AI output
 
     # Workflow
-    status = Column(
+    status: Mapped[RecommendationStatus] = Column(
         Enum(RecommendationStatus, name="regulatory_recommendation_status"),
         default=RecommendationStatus.pending,
         nullable=False,
         index=True,
     )
-    actioned_by = Column(String)  # user_id
-    actioned_at = Column(DateTime(timezone=True))
-    action_taken = Column(Text)  # officer's description of action
-    dismissed_by = Column(String)
-    dismissed_at = Column(DateTime(timezone=True))
-    dismissed_reason = Column(Text)
+    actioned_by: Mapped[Optional[str]] = Column(String)  # user_id
+    actioned_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    action_taken: Mapped[Optional[str]] = Column(
+        Text
+    )  # officer's description of action
+    dismissed_by: Mapped[Optional[str]] = Column(String)
+    dismissed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    dismissed_reason: Mapped[Optional[str]] = Column(Text)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
     # No updated_at — status transitions are the only mutations allowed
 
     organisation = relationship("Organisation")
