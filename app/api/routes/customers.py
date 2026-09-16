@@ -29,7 +29,6 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -71,7 +70,6 @@ from app.models.risk_matrix import (
     CustomerQuestionResponse,
     OrgApprovalQuestion,
     OrgMonitoringConfig,
-    QuestionAnswer,
     QuestionContext,
 )
 from app.models.screening import (
@@ -99,6 +97,7 @@ from app.schemas.customer import (
     CustomerCreate,
     CustomerNoteCreate,
     CustomerNoteResponse,
+    CustomerOverrideRequest,
     CustomerResponse,
     CustomerReviewCreate,
     CustomerReviewResponse,
@@ -122,6 +121,10 @@ from app.schemas.customer import (
     SelfieVerificationResponse,
     WalletScreeningCreate,
     WalletScreeningResponse,
+)
+from app.schemas.risk_matrix import (
+    CustomerAnswerQuestionsRequest,
+    CustomerQuestionAnswerItem,
 )
 from app.services import audit_service, billing_service
 from app.services.api_key_service import dispatch_event_background
@@ -1431,16 +1434,6 @@ def rescore_customer(
 # ── Pre-Approval Question Checklist (customer onboarding/EDD context) ──────────
 
 
-class CustomerQuestionAnswerItem(BaseModel):
-    question_id: str
-    answer: QuestionAnswer
-    notes: Optional[str] = None
-
-
-class CustomerAnswerQuestionsRequest(BaseModel):
-    answers: List[CustomerQuestionAnswerItem]
-
-
 @router.get("/{customer_id}/approval-checklist")
 def get_customer_approval_checklist(
     customer_id: str,
@@ -2025,20 +2018,6 @@ def get_customer_timeline(
 # A single, audited entry point for the manual overrides an MLRO needs to make.
 # Writes to existing Customer fields only — every change is reasoned and logged
 # to the canonical AuditLog, never silent.
-
-
-class CustomerOverrideRequest(BaseModel):
-    reason: str
-    risk_score: Optional[float] = None
-    risk_level: Optional[RiskLevel] = None
-    cdd_level: Optional[CDDLevel] = None
-    status: Optional[CustomerStatus] = None
-    relationship_manager: Optional[str] = None
-    next_review_date: Optional[date] = None
-    # Free-form classification/monitoring overrides without dedicated columns —
-    # stored in the existing custom_fields JSON rather than adding new schema.
-    classification: Optional[str] = None
-    monitoring_level: Optional[str] = None
 
 
 @router.post("/{customer_id}/override", response_model=CustomerResponse)

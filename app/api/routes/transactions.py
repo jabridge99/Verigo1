@@ -16,7 +16,6 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -36,7 +35,6 @@ from app.models.regulatory_recommendation import (
 from app.models.risk_matrix import (
     OrgApprovalQuestion,
     OrgMonitoringConfig,
-    QuestionAnswer,
     TransactionQuestionResponse,
 )
 from app.models.transaction import (
@@ -45,6 +43,7 @@ from app.models.transaction import (
     TransactionStatus,
 )
 from app.models.user import User
+from app.schemas.risk_matrix import AnswerQuestionsRequest, QuestionAnswerItem
 from app.schemas.transaction import (
     TransactionCreate,
     TransactionListOut,
@@ -517,16 +516,6 @@ def get_transaction_recommendations(
 
 
 # ── Pre-Approval Question Checklist ───────────────────────────────────────────
-
-
-class QuestionAnswerItem(BaseModel):
-    question_id: str
-    answer: QuestionAnswer
-    notes: Optional[str] = None
-
-
-class AnswerQuestionsRequest(BaseModel):
-    answers: list[QuestionAnswerItem]
 
 
 @router.get("/{txn_id}/approval-checklist")

@@ -639,3 +639,22 @@ class RiskScoreHistoryResponse(BaseModel):
     scored_at: Optional[datetime]
 
     model_config = {"from_attributes": True}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MANUAL OVERRIDE
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class CustomerOverrideRequest(BaseModel):
+    reason: str
+    risk_score: Optional[float] = None
+    risk_level: Optional[RiskLevel] = None
+    cdd_level: Optional[CDDLevel] = None
+    status: Optional[CustomerStatus] = None
+    relationship_manager: Optional[str] = None
+    next_review_date: Optional[date] = None
+    # Free-form classification/monitoring overrides without dedicated columns —
+    # stored in the existing custom_fields JSON rather than adding new schema.
+    classification: Optional[str] = None
+    monitoring_level: Optional[str] = None
