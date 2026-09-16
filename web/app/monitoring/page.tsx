@@ -10,6 +10,7 @@ import clsx from "clsx";
 import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
 import { apiFetch } from '@/lib/auth'
+import { listCustomers } from '@/lib/api/customers'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -594,9 +595,8 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
   );
 
   useEffect(() => {
-    apiFetch(`${API}/api/v1/customers/?limit=200`, { credentials: "include" })
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(d => { if (d.length) setCustomers(d.map((c: any) => ({ id: c.id, full_name: c.full_name }))); })
+    listCustomers({ limit: 200 })
+      .then(d => { if (d.length) setCustomers(d.map(c => ({ id: c.id, full_name: c.full_name }))); })
       .catch(() => {});
   }, []);
 

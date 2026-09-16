@@ -8,6 +8,7 @@ import {
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
 import { apiFetch } from '@/lib/auth'
+import { listCustomers } from '@/lib/api/customers'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -520,11 +521,8 @@ function CustomerPicker({ value, onChange }: { value: { id: string; label: strin
     if (!query.trim() || query === value?.label) { setResults([]); return; }
     const handle = setTimeout(async () => {
       try {
-        const res = await apiFetch(`${API}/api/v1/customers/?search=${encodeURIComponent(query)}&limit=10`, { credentials: "include" });
-        if (res.ok) {
-          const d = await res.json();
-          setResults(Array.isArray(d) ? d : d.items || []);
-        }
+        const d = await listCustomers({ search: query, limit: 10 });
+        setResults(d);
       } catch {}
     }, 300);
     return () => clearTimeout(handle);

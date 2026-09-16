@@ -12,8 +12,14 @@ import {
 import clsx from "clsx";
 import { DEMO_CUSTOMERS, getCustomerProfile } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
-import { getStoredUser, apiFetch } from "@/lib/auth";
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { getStoredUser } from "@/lib/auth";
+import {
+  getCustomerWorkspace,
+  getCustomerTimeline,
+  overrideCustomer,
+  type CustomerOverrideInput,
+} from "@/lib/api/customers";
+import { ApiError, API_BASE } from "@/lib/api/client";
 
 const RISK_COLOR: Record<string, string> = {
   low:      "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
@@ -136,13 +142,12 @@ export default function CustomerDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [wr, tr] = await Promise.all([
-        apiFetch(`${API}/api/v1/customers/${id}/workspace`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/customers/${id}/timeline?limit=100`, { credentials: "include" }),
+      const [workspace, timelineResult] = await Promise.all([
+        getCustomerWorkspace(id),
+        getCustomerTimeline(id, 100).catch(() => ({ events: [] })),
       ]);
-      if (!wr.ok) throw new Error("api");
-      setWs(await wr.json());
-      setTimeline(tr.ok ? (await tr.json()).events || [] : []);
+      setWs(workspace);
+      setTimeline(timelineResult.events || []);
       setDemo(false);
     } catch {
       const fallback = buildDemoWorkspace(id);
@@ -157,26 +162,20 @@ export default function CustomerDetailPage() {
 
   const submitOverride = async () => {
     if (!overrideForm.reason) { showToast("error", "Reason is required"); return; }
-    const body: Record<string, any> = { reason: overrideForm.reason };
-    if (overrideForm.risk_level) body.risk_level = overrideForm.risk_level;
+    const body: CustomerOverrideInput = { reason: overrideForm.reason };
+    if (overrideForm.risk_level) body.risk_level = overrideForm.risk_level as CustomerOverrideInput["risk_level"];
     if (overrideForm.risk_score) body.risk_score = parseFloat(overrideForm.risk_score);
-    if (overrideForm.status) body.status = overrideForm.status;
+    if (overrideForm.status) body.status = overrideForm.status as CustomerOverrideInput["status"];
     if (overrideForm.classification) body.classification = overrideForm.classification;
     if (overrideForm.monitoring_level) body.monitoring_level = overrideForm.monitoring_level;
     try {
-      const res = await apiFetch(`${API}/api/v1/customers/${id}/override`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        showToast("success", "Override applied");
-        setShowOverride(false);
-        load();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Override failed");
-      }
-    } catch { showToast("error", "Network error"); }
+      await overrideCustomer(id, body);
+      showToast("success", "Override applied");
+      setShowOverride(false);
+      load();
+    } catch (err) {
+      showToast("error", err instanceof ApiError ? err.message : "Network error");
+    }
   };
 
   if (loading && !ws) {
@@ -375,7 +374,7 @@ export default function CustomerDetailPage() {
                     <div className="text-xs text-slate-500 capitalize">{(d.category || d.document_type || "").replace(/_/g, " ")} · {d.status || "active"}</div>
                   </div>
                   {d.id && !demo && (
-                    <a href={`${API}/api/v1/documents/${d.id}/download`} className="btn-secondary text-xs py-1.5 px-3"><Download className="w-3.5 h-3.5" /> Download</a>
+                    <a href={`${API_BASE}/api/v1/documents/${d.id}/download`} className="btn-secondary text-xs py-1.5 px-3"><Download className="w-3.5 h-3.5" /> Download</a>
                   )}
                 </div>
               ))

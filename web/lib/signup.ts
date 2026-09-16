@@ -1,6 +1,7 @@
 'use client'
 
 import { apiFetch, storeSession, type AuthUser } from '@/lib/auth'
+import { createCustomer } from '@/lib/api/customers'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -310,11 +311,11 @@ export interface FirstCustomerInput {
 }
 
 export async function createFirstCustomer(payload: FirstCustomerInput): Promise<{ customer_id: string; full_name: string }> {
-  const r = await apiFetch(`${API}/api/v1/customers/`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return asJson(r)
+  // The real response is CustomerResponse (id, full_name, ...) — this
+  // function's declared shape (customer_id, full_name) predates that and
+  // was never actually populated correctly (its one caller doesn't read
+  // the result), so map id -> customer_id explicitly instead of trusting
+  // the raw response to already match.
+  const c = await createCustomer(payload)
+  return { customer_id: c.id, full_name: c.full_name }
 }
