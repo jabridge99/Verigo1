@@ -5,17 +5,23 @@ import {
   Users, Shield, AlertTriangle, Clock, GraduationCap, FileCheck,
   Search, Briefcase, Activity, FileText, TrendingUp,
 } from "lucide-react";
-import { getStoredUser, apiFetch } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { BarChartSVG, DonutChart, KPI, StatTile } from "../_components/charts";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import {
+  getAnalyticsSummary,
+  getCustomerOnboardingTrend,
+  getPendingCustomerReviews,
+  getTrainingStatusBreakdown,
+  getGovernanceOverview,
+  getOpenCaseStats,
+} from "@/lib/api/analytics";
 
 const DEMO = {
   summary: {
-    customers: { total: 1847, by_risk: { low: 920, medium: 614, high: 241, critical: 72 } },
+    customers: { total: 1847, by_risk: { low: 920, medium: 614, high: 241, critical: 72 } as Record<string, number> },
     transactions: { total: 28340, flagged: 413, flagged_pct: 1.5 },
-    reports: { total: 342, by_status: { submitted: 198, acknowledged: 11, rejected: 2, draft: 23 } },
+    reports: { total: 342, by_status: { submitted: 198, acknowledged: 11, rejected: 2, draft: 23 } as Record<string, number> },
   },
   onbTrend: Array.from({ length: 30 }, (_, i) => ({
     date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
@@ -23,8 +29,8 @@ const DEMO = {
   })),
   pendingReviews: { overdue: 14, due_within_30_days: 38 },
   training: { total: 412, overdue: 22, due_within_30_days: 47, completion_pct: 87.4 },
-  governance: { policy_reviews_due_30d: 6, policy_reviews_overdue: 2, control_tests_overdue: 4, controls_total: 58, open_findings_total: 11, open_findings_by_risk: { low: 3, medium: 5, high: 2, critical: 1 } },
-  cases: { open_total: 19, by_severity: { low: 3, medium: 8, high: 6, critical: 2 }, overdue: 4, smr_candidates: 3 },
+  governance: { policy_reviews_due_30d: 6, policy_reviews_overdue: 2, control_tests_overdue: 4, controls_total: 58, open_findings_total: 11, open_findings_by_risk: { low: 3, medium: 5, high: 2, critical: 1 } as Record<string, number> },
+  cases: { open_total: 19, by_severity: { low: 3, medium: 8, high: 6, critical: 2 } as Record<string, number>, overdue: 4, smr_candidates: 3 },
 };
 
 export default function ExecutivePage() {
@@ -35,23 +41,16 @@ export default function ExecutivePage() {
 
   const load = useCallback(async () => {
     try {
-      const [sr, ob, pr, tr, gv, cs] = await Promise.all([
-        apiFetch(`${API}/api/v1/analytics/summary`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=30`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/customers/pending-reviews`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/training/status-breakdown`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/governance/overview`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/cases/open-stats`, { credentials: "include" }),
-      ]);
-      if (!sr.ok) throw new Error("api");
-      setD({
-        summary: await sr.json(),
-        onbTrend: await ob.json(),
-        pendingReviews: await pr.json(),
-        training: await tr.json(),
-        governance: await gv.json(),
-        cases: await cs.json(),
-      });
+      const [summary, onbTrend, pendingReviews, training, governance, cases] =
+        await Promise.all([
+          getAnalyticsSummary(),
+          getCustomerOnboardingTrend(30),
+          getPendingCustomerReviews(),
+          getTrainingStatusBreakdown(),
+          getGovernanceOverview(),
+          getOpenCaseStats(),
+        ]);
+      setD({ summary, onbTrend, pendingReviews, training, governance, cases });
     } catch {
       setDemo(true);
     }

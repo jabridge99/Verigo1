@@ -5,12 +5,16 @@ import {
   BarChart2, TrendingUp, Users, FileText, AlertTriangle,
   Shield, CheckCircle, Clock, Activity,
 } from "lucide-react";
-import { getStoredUser, apiFetch } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChartSVG, DonutChart, KPI } from "../_components/charts";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import {
+  getAnalyticsSummary,
+  getTransactionVolumeTrend,
+  getCustomerOnboardingTrend,
+  getReportSubmissionTrend,
+} from "@/lib/api/analytics";
 
 function makeTrend(days: number, base: number, variance: number) {
   return Array.from({ length: days }, (_, i) => {
@@ -24,16 +28,24 @@ function makeTrend(days: number, base: number, variance: number) {
 }
 
 const DEMO_SUMMARY = {
-  customers: { total: 1847, by_risk: { low: 920, medium: 614, high: 241, critical: 72 } },
+  customers: { total: 1847, by_risk: { low: 920, medium: 614, high: 241, critical: 72 } as Record<string, number> },
   transactions: { total: 28340, flagged: 413, flagged_pct: 1.5 },
-  kyc: { total: 1847, by_status: { pass: 1512, fail: 87, refer: 94, not_performed: 154 } },
-  reports: { total: 342, by_status: { submitted: 198, acknowledged: 11, rejected: 2, draft: 23 }, by_type: { ttr: 189, ifti_in: 54, ifti_out: 38, smr: 47, sar: 9, ecdd: 5, ctr: 0 } },
+  kyc: { total: 1847, by_status: { pass: 1512, fail: 87, refer: 94, not_performed: 154 } as Record<string, number> },
+  reports: {
+    total: 342,
+    by_status: { submitted: 198, acknowledged: 11, rejected: 2, draft: 23 } as Record<string, number>,
+    by_type: { ttr: 189, ifti_in: 54, ifti_out: 38, smr: 47, sar: 9, ecdd: 5, ctr: 0 } as Record<string, number>,
+  },
   alerts: { pending_kyc_reviews: 94, overdue_reports: 23, high_risk_customers: 313 },
 };
 
 const DEMO_TXN_TREND = makeTrend(30, 945, 300);
-const DEMO_ONB_TREND = makeTrend(30, 18, 12);
-const DEMO_RPT_TREND = makeTrend(90, 4, 6);
+// The real onboarding-trend/submission-trend endpoints only ever return
+// {date, count} — no volume — so drop it here to match what live data
+// will actually look like (this page only ever renders valueKey="count"
+// for these two anyway).
+const DEMO_ONB_TREND = makeTrend(30, 18, 12).map(({ date, count }) => ({ date, count }));
+const DEMO_RPT_TREND = makeTrend(90, 4, 6).map(({ date, count }) => ({ date, count }));
 
 export default function CompliancePage() {
   const router = useRouter();
@@ -49,16 +61,15 @@ export default function CompliancePage() {
   const load = useCallback(async () => {
     try {
       const [sr, tr, or_, rr] = await Promise.all([
-        apiFetch(`${API}/api/v1/analytics/summary`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/transactions/volume-trend?days=${range}`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=${range}`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/reports/submission-trend?days=${Math.max(range, 90)}`, { credentials: "include" }),
+        getAnalyticsSummary(),
+        getTransactionVolumeTrend(range),
+        getCustomerOnboardingTrend(range),
+        getReportSubmissionTrend(Math.max(range, 90)),
       ]);
-      if (!sr.ok) throw new Error("api");
-      setSummary(await sr.json());
-      setTxnTrend(await tr.json());
-      setOnbTrend(await or_.json());
-      setRptTrend(await rr.json());
+      setSummary(sr);
+      setTxnTrend(tr);
+      setOnbTrend(or_);
+      setRptTrend(rr);
     } catch {
       setDemo(true);
     }

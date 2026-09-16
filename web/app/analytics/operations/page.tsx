@@ -2,25 +2,30 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Users, Activity, GraduationCap, FileCheck, Settings } from "lucide-react";
-import { getStoredUser, apiFetch } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChartSVG, DonutChart, KPI, StatTile } from "../_components/charts";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import {
+  getCustomerOnboardingTrend,
+  getKycStatusBreakdown,
+  getTransactionVolumeTrend,
+  getTrainingStatusBreakdown,
+  getGovernanceOverview,
+} from "@/lib/api/analytics";
 
 const DEMO = {
   onbTrend: Array.from({ length: 30 }, (_, i) => ({
     date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
     count: Math.max(0, Math.round(18 + (Math.random() - 0.5) * 12)),
   })),
-  kyc: { total: 1847, by_status: { pass: 1512, fail: 87, refer: 94, not_performed: 154 } },
+  kyc: { total: 1847, by_status: { pass: 1512, fail: 87, refer: 94, not_performed: 154 } as Record<string, number> },
   txnTrend: Array.from({ length: 30 }, (_, i) => ({
     date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
     count: Math.max(0, Math.round(945 + (Math.random() - 0.5) * 300)),
   })),
-  training: { total: 412, by_status: { assigned: 60, in_progress: 30, completed: 280, overdue: 22, exempted: 20 }, overdue: 22, due_within_30_days: 47, completion_pct: 87.4 },
-  governance: { policy_reviews_due_30d: 6, policy_reviews_overdue: 2, control_tests_overdue: 4, controls_total: 58, open_findings_total: 11, open_findings_by_risk: { low: 3, medium: 5, high: 2, critical: 1 } },
+  training: { total: 412, by_status: { assigned: 60, in_progress: 30, completed: 280, overdue: 22, exempted: 20 } as Record<string, number>, overdue: 22, due_within_30_days: 47, completion_pct: 87.4 },
+  governance: { policy_reviews_due_30d: 6, policy_reviews_overdue: 2, control_tests_overdue: 4, controls_total: 58, open_findings_total: 11, open_findings_by_risk: { low: 3, medium: 5, high: 2, critical: 1 } as Record<string, number> },
 };
 
 export default function OperationsPage() {
@@ -31,21 +36,14 @@ export default function OperationsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [ob, kyc, tx, tr, gv] = await Promise.all([
-        apiFetch(`${API}/api/v1/analytics/customers/onboarding-trend?days=30`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/kyc/status-breakdown`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/transactions/volume-trend?days=30`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/training/status-breakdown`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/analytics/governance/overview`, { credentials: "include" }),
+      const [onbTrend, kyc, txnTrend, training, governance] = await Promise.all([
+        getCustomerOnboardingTrend(30),
+        getKycStatusBreakdown(),
+        getTransactionVolumeTrend(30),
+        getTrainingStatusBreakdown(),
+        getGovernanceOverview(),
       ]);
-      if (!ob.ok) throw new Error("api");
-      setD({
-        onbTrend: await ob.json(),
-        kyc: await kyc.json(),
-        txnTrend: await tx.json(),
-        training: await tr.json(),
-        governance: await gv.json(),
-      });
+      setD({ onbTrend, kyc, txnTrend, training, governance });
     } catch {
       setDemo(true);
     }
