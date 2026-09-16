@@ -367,7 +367,7 @@ For production, use cloud storage (`s3`, `azure`, or `gcs`) — local storage do
 - [x] Migrate rate limiter to Redis for distributed enforcement — done; set `REDIS_URL` (see Scaling above)
 - [x] Replace `unsafe-inline` in CSP with nonce-based headers — done (per-request nonce via `web/proxy.ts`)
 - [x] Encrypt TOTP secrets at rest (Fernet) — done; `User.mfa_secret` via `EncryptedMfaSecret`, keyed off `MFA_ENCRYPTION_KEY` (falls back to `SECRET_KEY` if unset, same pattern as `STORAGE_ENCRYPTION_KEY`/`KYC_ENCRYPTION_KEY`)
-- [ ] Add CSRF middleware for session-based flows
+- [x] Add CSRF middleware for session-based flows — done; double-submit-cookie check in `app/api/routes/auth.py`'s `_decode_current_user()`, covering every route that accepts the session cookie (the other 32 of 49 route files are Bearer-header-only via `app/api/deps.py` and inherently CSRF-immune)
 
 ---
 

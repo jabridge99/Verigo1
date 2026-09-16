@@ -1025,6 +1025,21 @@ Built the file as `middleware.ts` first, matching P50's own earlier prototype �
 
 ---
 
+## Stage 17 (Production Deployment) — third pass, 2026-09-16 (P57, "go ahead with CSRF middleware")
+
+**Scope:** picked up the last item on the hardening checklist from the first pass's briefing, per your direction. Before building anything, investigated the actual current state — the same discipline that already paid off twice this stage (the Redis item in the first pass was a wiring gap, not a missing feature; the docker-compose fix was real work). This time the investigation found there was no work to do at all.
+
+**What was actually found:** `app/services/auth_service.py` already implements a complete double-submit-cookie CSRF scheme, and `app/api/routes/auth.py`'s `_decode_current_user()` already enforces it — a request authenticated via the session cookie alone must also echo a matching `X-CSRF-Token` header for any state-changing method (POST/PUT/PATCH/DELETE); GETs are exempt; requests authenticated via the `Authorization: Bearer` header (used by 32 of the app's 49 route files, via the separate, header-only `app/api/deps.py::get_current_user`) skip the check entirely since a forged cross-site request has no way to set that header. `tests/test_csrf_double_submit_smoke.py` already exists with 7 tests covering exactly this — both cookies get set on register/login, a cookie-only mutation without the header is rejected (403), with the wrong header is rejected, with the correct header succeeds, GETs succeed without the header, Bearer-authenticated mutations skip the check, and logout clears both cookies. The test file's own docstring says this was "added after P35" — i.e., built in an earlier stage of this whole staged process, then never reflected back into DEPLOYMENT.md's hardening roadmap, which still listed it as an open TODO.
+
+**What changed:** only `DEPLOYMENT.md` — marked the "Add CSRF middleware for session-based flows" checklist item done, with a one-line pointer to where the real enforcement lives and why the other 32 route files don't need it. No application code, no new tests, no migration — there was nothing to build.
+
+**What did NOT change:** confirmed no route file other than `auth.py` reads the session cookie for authentication (`grep` for `session_cookie_name` across `app/api/routes/`) — so there's no route bypassing the CSRF-covered path by reading the cookie some other way. Nothing else on the hardening roadmap remains open after this pass; all 5 of DEPLOYMENT.md's original items (Redis blacklist, Redis rate limiter, CSP nonce, TOTP encryption, CSRF) are now done, three of them (Redis wiring aside) having turned out to already be built before Stage 17 even started.
+
+**Verified:** `pytest tests/test_csrf_double_submit_smoke.py` — all 7 pre-existing tests still pass, confirming the protection is live and correct as documented, not just present in source.
+**Detail:** `DEPLOYMENT.md` only.
+
+---
+
 ### N. Testing (Stage 16, found 2026-09-15)
 | ID | What | Effort |
 |---|---|---|
@@ -1038,6 +1053,7 @@ Built the file as `middleware.ts` first, matching P50's own earlier prototype �
 | ID | What | Effort |
 |---|---|---|
 | P55 | **Resolved, 2026-09-16** — see "Stage 17 — first pass" below. `docker-compose.yml` (the only fully-documented deployment path) never actually ran Redis or set `REDIS_URL`, so the app's already-built Redis-backed JWT blacklist and rate limiter (`app/services/token_blacklist.py`, `app/middleware.py`) silently fell back to per-worker in-process state on every self-hosted deployment, despite `API_WORKERS` defaulting to 2 — the code was already correct, the deployment config just never wired it in. | Done |
-| P56 | **Resolved, 2026-09-16** — see "Stage 17 — second pass" below. `User.mfa_secret` (the TOTP seed) was stored as plain text — a DB read or backup leak was a full MFA bypass for every enrolled user. Now encrypted at rest via `EncryptedMfaSecret`, the same ORM-level `TypeDecorator` pattern P51 used for KYC identity numbers. CSRF middleware remains the one open item on the hardening roadmap. | Done |
+| P56 | **Resolved, 2026-09-16** — see "Stage 17 — second pass" below. `User.mfa_secret` (the TOTP seed) was stored as plain text — a DB read or backup leak was a full MFA bypass for every enrolled user. Now encrypted at rest via `EncryptedMfaSecret`, the same ORM-level `TypeDecorator` pattern P51 used for KYC identity numbers. | Done |
+| P57 | **Confirmed already done, 2026-09-16** — see "Stage 17 — third pass" below. DEPLOYMENT.md's hardening checklist listed "Add CSRF middleware for session-based flows" as open. It wasn't — a double-submit-cookie CSRF check already exists in `app/api/routes/auth.py`'s `_decode_current_user()` ("added after P35" per its own test file's docstring), with 7 dedicated tests already passing. No code changed; only the stale checklist. | Done (pre-existing; doc corrected) |
 
 ---
