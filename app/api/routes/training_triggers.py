@@ -15,6 +15,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -574,11 +575,19 @@ def get_enums():
 
 
 def _get_rule(db: Session, rule_id: str, org_id: str) -> TrainingTriggerRule:
+    # NOTE: org_id.in_([org_id, None]) looks like it would also match global
+    # rules (org_id IS NULL), but SQL's IN never matches NULL against a
+    # literal NULL in the list -- it silently excludes those rows. Use
+    # an explicit IS NULL check instead so org-scoped MLROs can still
+    # fetch/manually-fire the platform's global system rules.
     rule = (
         db.query(TrainingTriggerRule)
         .filter(
             TrainingTriggerRule.id == rule_id,
-            TrainingTriggerRule.org_id.in_([org_id, None]),
+            or_(
+                TrainingTriggerRule.org_id == org_id,
+                TrainingTriggerRule.org_id.is_(None),
+            ),
         )
         .first()
     )

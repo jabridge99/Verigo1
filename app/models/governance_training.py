@@ -327,7 +327,11 @@ class TrainingAssignment(Base):
     total_assigned = Column(Integer, default=0)  # count of records spawned
     is_active = Column(Boolean, default=True)
 
-    assigned_by = Column(String, ForeignKey("users.id"), nullable=False)
+    # Nullable: system-initiated assignments (risk-triggered training,
+    # regulatory update broadcasts) have no human actor to attribute this to.
+    assigned_by = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     course = relationship("TrainingCourse", back_populates="assignments")

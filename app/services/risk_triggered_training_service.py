@@ -111,7 +111,14 @@ def evaluate_risk_event(
             continue
 
         assignment_ids, assigned_users, skipped_users = _create_training_records(
-            db, rule, target_users, org_id, entity_snapshot, entity_type, entity_id
+            db,
+            rule,
+            target_users,
+            org_id,
+            entity_snapshot,
+            entity_type,
+            entity_id,
+            fired_by=fired_by,
         )
         total_assignments += len(assignment_ids)
 
@@ -217,6 +224,7 @@ def publish_regulatory_update(
             cooldown_days=30,
             entity_type="regulatory_update",
             entity_id=update.id,
+            assigned_by=published_by,
         )
         total_assignments += len(assignment_ids)
 
@@ -655,6 +663,7 @@ def _create_training_records(
     entity_snapshot: dict,
     entity_type: str,
     entity_id: str,
+    fired_by: str = "system",
 ) -> tuple[list[str], list[User], list[User]]:
     notes = rule.notes_template or f"Auto-assigned by trigger rule: {rule.name}"
     for k, v in (entity_snapshot or {}).items():
@@ -671,6 +680,10 @@ def _create_training_records(
         cooldown_days=rule.cooldown_days,
         entity_type=entity_type,
         entity_id=entity_id,
+        # "system" is a sentinel for "no human actor", not a real user id --
+        # assigned_by is FK-constrained to users.id, so it must be None, not
+        # that literal string, when there's nobody real to attribute this to.
+        assigned_by=fired_by if fired_by != "system" else None,
     )
 
 
@@ -685,6 +698,7 @@ def _create_training_records_direct(
     cooldown_days: int,
     entity_type: str,
     entity_id: str,
+    assigned_by: Optional[str] = None,
 ) -> tuple[list[str], list[User], list[User]]:
     # Find solution_id (use first AML solution for org)
     from app.models.aml_solution import AMLSolution
@@ -706,7 +720,7 @@ def _create_training_records_direct(
         due_date=due_date,
         notes=notes,
         total_assigned=len(target_users),
-        assigned_by="system",
+        assigned_by=assigned_by,
     )
     db.add(assignment)
     db.flush()
@@ -726,7 +740,7 @@ def _create_training_records_direct(
             course_id=course.id,
             user_id=user.id,
             assignment_id=assignment.id,
-            assigned_by="system",
+            assigned_by=assigned_by,
             assigned_date=assigned_date,
             due_date=due_date,
             trigger=trigger_type,
