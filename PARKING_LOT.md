@@ -948,11 +948,31 @@ Built the file as `middleware.ts` first, matching P50's own earlier prototype �
 
 ---
 
+## Stage 16 (Testing) — eighth pass, 2026-09-16 (P54, third module)
+
+**Scope:** continued P54 with `app/api/routes/governance/training.py` (31% covered, 342 of 495 statements missed — the single largest raw gap in the codebase), per your "continue P54" direction. Manages staff AML/CTF training obligations aligned to AUSTRAC AML/CTF Rules 2025 / FATF R.18 — 24 endpoints across course catalogue, bulk assignment, individual training records, and reporting/dashboards, with zero prior test coverage.
+
+**What changed:** new `tests/test_governance_training.py` (46 tests). Identified the module's own highest-risk property before writing anything: training-record `status` is CALCULATED, never set directly by callers — derived from `completion_date`/`expiry_date`/`due_date`/`started_at`/`is_exempt` via a documented state table in the module's docstring. That's exactly the kind of derived-state logic that silently drifts from its own rules if untested, so it became the centre of these tests rather than an afterthought:
+- **Every real lifecycle transition** driven through the real API — assign → start → complete (pass and fail cases, with the resulting `expiry_date` checked against `completion_date + course.expiry_months` via the same `relativedelta` the route itself uses, not a hand-rolled day count) → exempt → revoke-exemption (confirmed the record's real status is recomputed correctly on revoke — back to `overdue` given its due date, not silently reset to `assigned`) → retake (only allowed on a real failed attempt, rejected at `max_attempts`, confirmed it resets `completion_date`/`score`/`passed`/`expiry_date`) → renew (only allowed on `expired`/`completed`, creates a real new record linked to the same course/user).
+- **Every documented guard rejection**, not just the happy path: starting/completing an exempt record, re-completing an already-completed record, revoking a non-exempt record, retaking an exempt record or a passed (non-failed) record.
+- **Record ownership/visibility**: analysts only see their own records in `list_records` and are denied (403) viewing or retaking another user's record directly; compliance+ sees all.
+- **Every `list_records`/`list_assignments` query filter** (status, course_id, training_type via join, `overdue_only`, `expiring_within_days`, user_id, trigger) with real seeded data proving each filter actually excludes what it should, not just that the endpoint accepts the parameter.
+- **Course catalogue**: idempotent standard-course seeding, industry-pack seeding (named + unknown-industry rejection), custom course CRUD, and the standard-vs-custom split (standard courses can only toggle `is_active`, never be edited or hard-deleted).
+- **Certificate export**: rejected for a non-completed record, and a real HTML response checked for the actual course name and certificate number, not just a 200.
+- **Dashboard/overdue/expiring/compliance-report**: tenant isolation (a second org's overdue record seeded alongside every test, confirmed never counted) plus the real formulas — `completion_pct`, traffic lights, and the compliance-report's per-training-type breakdown — checked against known seeded counts.
+
+**What did NOT change / what's still open:** `risk_triggered_training_service.py` (11%, narrower usage via `training_triggers.py` only) and the rest of the 15-30% band remain untouched — P54 continues one module at a time.
+
+**Verified:** all 46 tests pass. `governance/training.py` coverage 31%→97% (14 of 495 statements missed, all minor: a couple of 404-message branches, the health-score's rarely-hit edge weighting, and the compliance-report's skip-records-with-no-matching-course branch). Full suite: 801 passed, 2 skipped (755 + 46 new), 0 regressions, against both real Postgres and default SQLite. Coverage with CI's exact flags: 75.42% (up from 74.25%, gate 58%). mypy: zero errors. Ruff (check + format, `app/`) clean.
+**Detail:** `tests/test_governance_training.py` (new).
+
+---
+
 ### N. Testing (Stage 16, found 2026-09-15)
 | ID | What | Effort |
 |---|---|---|
 | P52 | **Resolved, 2026-09-15** — see "Stage 16 — third pass" below. All 97 Postgres failures fixed across 8 test files; two were genuine production bugs (a flush-ordering bug in `monitoring_engine.py`, an undersized `organisations.abn` column), not just test fixtures. | Done |
 | P53 | **Resolved, 2026-09-15** — see "Stage 16 — second pass" below. Vitest+RTL for unit/component tests, Playwright for e2e, both wired into CI. First real suite covers real business logic (pricing display, analytics-consent privacy behaviour) and the P50 CSP/HSTS work with a genuine browser-level regression check — not exhaustive coverage of all 62 routes, which stays open as its own future effort. | Done (first suite; broader route coverage remains open-ended future work, not re-tracked as a separate ID) |
-| P54 | **In progress, 2026-09-15** — see "Stage 16 — fourth and seventh passes" below. `app/services/automation_engine.py` (14%→96%) and `app/api/routes/dashboard.py` (21%→99%) both done — the two highest real-usage/risk modules on the list (automation_engine's 6+ route-file blast radius; dashboard.py is the actual `/dashboard` landing page every analyst/admin hits). Still open: `app/api/routes/governance/training.py` (31%, 342 of 495 statements missed — the single largest raw gap), `app/services/risk_triggered_training_service.py` (11%, narrower single-caller footprint), plus several others in the 15-30% band | Continue one module at a time, prioritised by real usage/risk, not just %; write real request-level tests per module, not a blanket coverage-chasing pass |
+| P54 | **In progress, 2026-09-15/16** — see "Stage 16 — fourth, seventh and eighth passes" below. `app/services/automation_engine.py` (14%→96%), `app/api/routes/dashboard.py` (21%→99%), and `app/api/routes/governance/training.py` (31%→97%, the single largest raw gap) all done. Still open: `app/services/risk_triggered_training_service.py` (11%, narrower single-caller footprint via `training_triggers.py`), plus several others in the 15-30% band | Continue one module at a time, prioritised by real usage/risk, not just %; write real request-level tests per module, not a blanket coverage-chasing pass |
 
 ---
