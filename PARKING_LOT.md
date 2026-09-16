@@ -44,7 +44,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 ### F. Structural / mechanical backlog
 | ID | What | Effort |
 |---|---|---|
-| C2 | **`api_keys.py`/webhooks split resolved, 2026-09-16** — see "P5/C2 pass" below. Remaining: no central frontend API client; thin shared UI components; oversized route files; inline schemas; `/org` vs `/organisations` prefix naming | Dedicated refactor pass, one sub-item at a time — 1 of 6 done |
+| C2 | **`api_keys.py`/webhooks split and `/org` vs `/organisations` prefix naming both resolved, 2026-09-16** — see "P5/C2 pass" below. Remaining: no central frontend API client; thin shared UI components; oversized route files; inline schemas | Dedicated refactor pass, one sub-item at a time — 2 of 6 done |
 | P5 | **`Column()` side resolved, 2026-09-16** — see "P5/C2 pass" below. The 184 `relationship()` declarations still lack `Mapped[]` (need cross-model list-vs-scalar knowledge, deliberately left for a follow-up) | `relationship()` retrofit remaining, ~40 files touched |
 
 *(C4, the two misleadingly-named modules, is resolved — see "Stage 17 — fourth pass" below. P4 was already resolved before this parking-lot pass — see its own entry below; nothing left to do.)*
@@ -1111,3 +1111,14 @@ Also deliberately left alone: `mypy.ini`'s existing `[mypy-app.models.*]` suppre
 Remaining C2 sub-items (frontend API client, `ui/` primitives, inline schemas, `ecdd/page.tsx` split, the 5 oversized route files, `/org` vs `/organisations` rename) are still open — each is a real, independently-scoped refactor (frontend page migrations touching ~35-40 call sites; backend route-file splits needing care around import cycles), not something to batch into a single pass. Recommend picking the next smallest next time (the `/org` vs `/organisations` prefix rename is the only other sub-item comparable in size to the one just done).
 
 ---
+
+## C2 pass 2, 2026-09-16 (`/org` vs `/organisations` prefix rename)
+
+**What changed:** `app/api/routes/org_config.py` (6 endpoints: monitoring-config GET/PATCH, approval-questions CRUD) registered its router under prefix `/org` — confusingly close to `app/api/routes/organisations.py`'s `/organisations` prefix (21 endpoints: org CRUD, AML program, risk assessment, membership/roles), despite the two files covering genuinely distinct concerns. Renamed `org_config.py`'s prefix to `/org-config`, matching its own module name and the STRUCTURE_REVIEW.md proposal. Updated its module docstring's endpoint list to match. `organisations.py` itself untouched.
+
+**What did NOT change:** no endpoint logic, permission check, request/response schema. `app/main.py`'s registration (`app.include_router(org_config_router, prefix="/api/v1")`) needed no change — the `/api/v1` outer prefix is unaffected, only the router's own inner prefix moved.
+
+**Verified:** grepped `web/`, `tests/`, and `app/` for any caller of `org_config.py`'s endpoints by path fragment (`monitoring-config`, `approval-questions`) — none exist outside the route file itself and its own internal service usage (`org_service.py`, `monitoring_engine.py` call the underlying service functions directly, not via HTTP), so this rename has zero external blast radius, lower even than the webhooks split. Confirmed the new path set via `app.openapi()`: `/api/v1/org-config/monitoring-config`, `/api/v1/org-config/approval-questions`, `/api/v1/org-config/approval-questions/{question_id}`, clearly distinct now from every `/api/v1/organisations/...` path. `ruff check`/`ruff format --check` (CI's exact flags) and `mypy` (CI's exact flags) both clean. Full suite: 905 passed, 2 skipped, no regressions.
+**Detail:** `app/api/routes/org_config.py`.
+
+C2 is now 2 of 6 done. Remaining: no central frontend API client, thin `web/components/ui/`, inline Pydantic schemas in 13 route files, `web/app/ecdd/page.tsx` split, 5 oversized backend route files.

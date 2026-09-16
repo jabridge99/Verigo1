@@ -2,12 +2,12 @@
 Org Monitoring Configuration and Pre-Approval Question Management.
 
 Endpoints:
-  GET  /org/monitoring-config          — get current weight settings
-  PATCH /org/monitoring-config         — update weights (compliance+)
-  GET  /org/approval-questions         — list active questions
-  POST /org/approval-questions         — create question (max 5, compliance+)
-  PATCH /org/approval-questions/{id}   — update question text/order (compliance+)
-  DELETE /org/approval-questions/{id}  — deactivate question (compliance+)
+  GET  /org-config/monitoring-config          — get current weight settings
+  PATCH /org-config/monitoring-config         — update weights (compliance+)
+  GET  /org-config/approval-questions         — list active questions
+  POST /org-config/approval-questions         — create question (max 5, compliance+)
+  PATCH /org-config/approval-questions/{id}   — update question text/order (compliance+)
+  DELETE /org-config/approval-questions/{id}  — deactivate question (compliance+)
 
 DISCLAIMER: Configuration supports the compliance workflow only.
 All regulatory decisions remain with the reporting entity.
@@ -29,7 +29,7 @@ from app.models.risk_matrix import (
 )
 from app.models.user import User
 
-router = APIRouter(prefix="/org", tags=["Org Config"])
+router = APIRouter(prefix="/org-config", tags=["Org Config"])
 
 DISCLAIMER = (
     "Monitoring configuration supports the compliance workflow only. "
