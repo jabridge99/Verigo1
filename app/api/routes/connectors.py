@@ -7,16 +7,14 @@ Use POST /api/v1/integrations/migrate-legacy-connectors to copy existing
 rows into the Hub.
 """
 
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _require_roles
 from app.db.database import get_db
-from app.models.connector import ConnectorProvider, ConnectorStatus
+from app.models.connector import ConnectorProvider
 from app.models.user import User, UserRole
+from app.schemas.connector import ConnectorCreate, ConnectorResponse, ConnectorUpdate
 from app.services.connector_service import (
     delete_credential,
     get_credentials,
@@ -25,38 +23,6 @@ from app.services.connector_service import (
 )
 
 router = APIRouter(prefix="/connectors", tags=["Connector Marketplace"])
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class ConnectorCreate(BaseModel):
-    provider: ConnectorProvider
-    credentials: dict  # plaintext — accepted once, immediately encrypted
-    label: str | None = None
-    is_default: bool = False
-
-
-class ConnectorUpdate(BaseModel):
-    credentials: dict | None = None
-    label: str | None = None
-    is_default: bool | None = None
-
-
-class ConnectorResponse(BaseModel):
-    credential_id: str
-    industry_id: str
-    provider: ConnectorProvider
-    label: str | None
-    key_hint: str | None
-    status: ConnectorStatus
-    is_default: bool
-    last_tested_at: datetime | None
-    last_error: str | None
-    created_at: datetime | None
-
-    class Config:
-        from_attributes = True
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

@@ -15,7 +15,6 @@ The reporting entity bears sole responsibility for all regulatory decisions.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -32,6 +31,7 @@ from app.models.regulatory_recommendation import (
     RegulatoryRecommendation,
 )
 from app.models.user import User
+from app.schemas.regulatory_recommendation import ActionRequest, DismissRequest
 from app.services import audit_service
 from app.services.recommendation_engine import (
     action_recommendation,
@@ -65,14 +65,6 @@ DISCLAIMER = (
     "The reporting entity bears sole responsibility for all regulatory decisions, "
     "including whether to lodge reports with AUSTRAC."
 )
-
-
-class ActionRequest(BaseModel):
-    action_taken: str
-
-
-class DismissRequest(BaseModel):
-    dismissed_reason: str
 
 
 def _rec_dict(r: RegulatoryRecommendation) -> dict:

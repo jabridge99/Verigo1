@@ -44,7 +44,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 ### F. Structural / mechanical backlog
 | ID | What | Effort |
 |---|---|---|
-| C2 | **`api_keys.py`/webhooks split and `/org` vs `/organisations` prefix naming both resolved, 2026-09-16** — see "P5/C2 pass" below. Remaining: no central frontend API client; thin shared UI components; oversized route files; inline schemas | Dedicated refactor pass, one sub-item at a time — 2 of 6 done |
+| C2 | **`api_keys.py`/webhooks split and `/org` vs `/organisations` prefix naming both resolved, 2026-09-16.** Inline-schemas cleanup in progress (5 of 28 route files done, see "C2 pass 3" below — real scope is 28 files, not the originally-estimated 13). Remaining: no central frontend API client; thin shared UI components; oversized route files; rest of inline schemas | Dedicated refactor pass, one sub-item at a time — 2 of 6 fully done, 1 in progress |
 | P5 | **`Column()` side resolved, 2026-09-16** — see "P5/C2 pass" below. The 184 `relationship()` declarations still lack `Mapped[]` (need cross-model list-vs-scalar knowledge, deliberately left for a follow-up) | `relationship()` retrofit remaining, ~40 files touched |
 
 *(C4, the two misleadingly-named modules, is resolved — see "Stage 17 — fourth pass" below. P4 was already resolved before this parking-lot pass — see its own entry below; nothing left to do.)*
@@ -1122,3 +1122,24 @@ Remaining C2 sub-items (frontend API client, `ui/` primitives, inline schemas, `
 **Detail:** `app/api/routes/org_config.py`.
 
 C2 is now 2 of 6 done. Remaining: no central frontend API client, thin `web/components/ui/`, inline Pydantic schemas in 13 route files, `web/app/ecdd/page.tsx` split, 5 oversized backend route files.
+
+## C2 pass 3, 2026-09-16 (inline Pydantic schemas — first batch)
+
+**Re-scoped first, same lesson as P5/P34:** grepped every route file for `^class .*(BaseModel)`. 28 files define at least one inline schema class, not the originally-estimated 13 — 25 of those 28 have *zero* `app.schemas` import at all (pure inline convention), the other 3 (`customers.py`, `documents.py`, `transactions.py`) mix inline classes with an existing `app/schemas/` import. Unlike P5's `Column()` retrofit, this isn't safely blind-codemod-able at full scope in one pass: each class needs to be read (decorators, nested `Config`, which imports it actually needs), and several of the 28 files' natural target schema module already exists under a different name (`aml_program.py`, `customers.py`, `documents.py`, `governance/training.py`, `org_config.py`, `transactions.py` all have a same/related-named `app/schemas/*.py` file already, needing a merge judgement, not just a new file) — so this is being done file-by-file, smallest/cleanest first, exactly as C2's own proposal asked.
+
+**This pass — 5 files done**, all "new schema module, no existing-file collision" cases:
+- `app/api/routes/connectors.py` → `app/schemas/connector.py` (3 classes: `ConnectorCreate`, `ConnectorUpdate`, `ConnectorResponse`)
+- `app/api/routes/customer_portal_public.py` + `app/api/routes/customer_portal_staff.py` → one shared `app/schemas/customer_portal.py` (3 classes: `QuestionnaireResponseRequest`, `CreatePortalSessionRequest`, `ReviewDocumentRequest`) — both route files cover the same `CustomerPortalSession`/`CustomerPortalDocument` domain (public vs staff-side endpoints), so one schema module matching the model file's name, not two.
+- `app/api/routes/examination_packs.py` → `app/schemas/examination_pack.py` (2 classes: `GeneratePackRequest`, `DeliverPackRequest`)
+- `app/api/routes/recommendations.py` → `app/schemas/regulatory_recommendation.py` (2 classes: `ActionRequest`, `DismissRequest`, named after the underlying `RegulatoryRecommendation` model, matching this codebase's model-name-not-route-name convention for schema files)
+
+**A real bug caught by the "app still imports" check, not assumed away:** removing each inline class's `from pydantic import BaseModel` (and, where the class was the only user, `from typing import Optional`/`List`) left two files — `examination_packs.py` and `customer_portal_staff.py` — with a `NameError: name 'Optional' is not defined` at import time, because `Optional` was also used by an unrelated query-parameter default further down each file, not just by the moved schema class. Caught immediately by importing `app.main` after the edit (as done after every change this session), fixed by re-adding the still-needed import.
+
+**What did NOT change:** every route's URL path, method, and request/response shape — confirmed via `app.openapi()` diff (byte-for-byte identical before/after, same technique as the webhooks split). No endpoint logic touched.
+
+**Verified:** `app.main` imports cleanly; `app.openapi()` path diff clean; `ruff check`/`ruff format --check` (CI's exact flags) and `mypy` (CI's exact flags) both clean; full suite 905 passed/2 skipped, no regressions.
+**Detail:** `app/api/routes/{connectors,customer_portal_public,customer_portal_staff,examination_packs,recommendations}.py`; new `app/schemas/{connector,customer_portal,examination_pack,regulatory_recommendation}.py`.
+
+**Remaining — 23 of 28 files**, roughly by complexity:
+- **New-module cases (no collision), same pattern as this pass:** `board_reporting.py`, `compliance_breach.py`, `compliance_calendar.py`, `ifti.py`, `ifti_e.py`, `independent_review.py`, `integrations.py`, `marketplace.py`, `professional_assessment.py`, `reporting_groups.py`, `retention.py`, `risk_matrix_config.py`, `rule_builder.py`, `screening.py`, `smr_decision_log.py`, `tasks.py`, `training_triggers.py` (17 files).
+- **Needs a merge judgement against an existing `app/schemas/*.py` file, not just a new one:** `aml_program.py`, `customers.py`, `documents.py`, `governance/training.py`, `org_config.py`, `transactions.py` (6 files) — each needs reading the existing schema file first to decide whether the inline classes belong there, under a new name, or genuinely overlap.
