@@ -14,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+from app.services.crypto import EncryptedMfaSecret
 
 
 class UserRole(str, enum.Enum):
@@ -64,7 +65,7 @@ class User(Base):
         String, ForeignKey("organisations.id", ondelete="SET NULL")
     )
     mfa_enabled = Column(Boolean, default=False)
-    mfa_secret = Column(String(64))
+    mfa_secret = Column(EncryptedMfaSecret(255))
     mfa_verified = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
     oauth_provider = Column(String(20))  # "google" | "microsoft" | None

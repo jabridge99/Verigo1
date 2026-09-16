@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     # storage_encryption_key; set this explicitly in production.
     kyc_encryption_key: str = ""
 
+    # ── MFA secret encryption (Stage 17 hardening) ──────────────────────────
+    # Encrypts User.mfa_secret (the TOTP seed) at rest. A compromised TOTP
+    # secret is a full MFA bypass, so this is its own independently-rotatable
+    # key rather than reusing storage/KYC's. Falls back to a key derived from
+    # secret_key if unset, same dev-convenience pattern as the others above;
+    # set this explicitly in production.
+    mfa_encryption_key: str = ""
+
     # ── Email ─────────────────────────────────────────────────────────────────
     # console (dev logging) | smtp | resend
     email_backend: str = "console"

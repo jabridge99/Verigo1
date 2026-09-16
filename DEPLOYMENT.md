@@ -366,7 +366,7 @@ For production, use cloud storage (`s3`, `azure`, or `gcs`) — local storage do
 - [x] Migrate `TOKEN_BLACKLIST` to Redis (required for multi-worker JWT revocation) — done; set `REDIS_URL` (see Scaling above)
 - [x] Migrate rate limiter to Redis for distributed enforcement — done; set `REDIS_URL` (see Scaling above)
 - [x] Replace `unsafe-inline` in CSP with nonce-based headers — done (per-request nonce via `web/proxy.ts`)
-- [ ] Encrypt TOTP secrets at rest (Fernet)
+- [x] Encrypt TOTP secrets at rest (Fernet) — done; `User.mfa_secret` via `EncryptedMfaSecret`, keyed off `MFA_ENCRYPTION_KEY` (falls back to `SECRET_KEY` if unset, same pattern as `STORAGE_ENCRYPTION_KEY`/`KYC_ENCRYPTION_KEY`)
 - [ ] Add CSRF middleware for session-based flows
 
 ---

@@ -1006,6 +1006,25 @@ Built the file as `middleware.ts` first, matching P50's own earlier prototype �
 
 ---
 
+## Stage 17 (Production Deployment) — second pass, 2026-09-16 (P56, "go ahead with TOTP secret encryption")
+
+**Scope:** picked up the second of the two genuinely-open hardening-roadmap items flagged in the first pass's briefing, per your direction. `User.mfa_secret` (the TOTP seed each user's authenticator app is keyed to) was stored as plain text — the same class of gap P51 already fixed for KYC identity numbers, and arguably more severe: a compromised database read or backup leak doesn't just expose PII, it hands over a full MFA bypass for every enrolled account, silently and without needing the user's password too.
+
+**What changed:**
+- `app/config.py` — new `mfa_encryption_key` setting, falls back to `secret_key` if unset (same dev-convenience pattern as `storage_encryption_key`/`kyc_encryption_key`).
+- `app/services/crypto.py` — added `MFA_ENC_PREFIX = "mfa:"`, `_mfa_fernet`, `encrypt_mfa_secret()`/`decrypt_mfa_secret()`/`is_mfa_encrypted()`, and an `EncryptedMfaSecret(TypeDecorator)` class — same shape as P51's `EncryptedKycString`, applied at the ORM column-type level rather than at individual call sites so every write path (including `mfa_enrol`'s plain `current_user.mfa_secret = secret` attribute assignment) is covered automatically, with nothing to change in `app/api/routes/auth.py` itself.
+- `app/models/user.py` — `User.mfa_secret` changed from `Column(String(64))` to `Column(EncryptedMfaSecret(255))`.
+- `alembic/versions/3de01cf6adc4_encrypt_user_mfa_secret_at_rest.py` (new) — widens `users.mfa_secret` to `String(255)` (a Fernet token for the 32-char base32 TOTP seed runs to ~140 chars incl. prefix — didn't fit in 64), then re-encrypts any existing plaintext values in place, guarded by the `"mfa:"` prefix for idempotency. `downgrade()` is a deliberate no-op, same reasoning as P51's migration (narrowing the column back is unsafe once encrypted data exists; decrypting-then-narrowing is a separate deliberate decision, not something a routine downgrade should do silently).
+- `DEPLOYMENT.md` — marked the "Encrypt TOTP secrets at rest" hardening-roadmap item done.
+- `tests/test_p56_mfa_secret_encryption_smoke.py` (new, 9 tests) — crypto roundtrip unit tests, then real-API tests that read the raw `users.mfa_secret` DB row via `sqlalchemy.text()` to prove the plaintext secret returned by `/mfa/enrol` never reaches disk, and a full end-to-end lifecycle test (enrol → verify-enrolment → login → mfa/challenge, plus a wrong-code-rejected case) proving TOTP verification still works correctly under encryption, not just that the column round-trips.
+
+**What did NOT change:** CSRF middleware remains the one open item on the hardening roadmap — not requested this round. `.env.example` doesn't document `STORAGE_ENCRYPTION_KEY` or `KYC_ENCRYPTION_KEY` either (a pre-existing gap predating this work); left `MFA_ENCRYPTION_KEY` undocumented there too for consistency rather than fixing one of the three inconsistently — worth a follow-up pass across all three together, not tracked as its own item.
+
+**Verified:** all 9 new tests pass, plus the pre-existing `test_mfa_disable_requires_totp_smoke.py` and `test_mfa_brute_force_hardening_smoke.py` (which read `user.mfa_secret` via the ORM directly) needed zero changes and still pass under encryption — confirming the ORM-level approach covers pre-existing test fixtures transparently, the same result P51 got. Full suite: 883 passed, 2 skipped (874 + 9 new), 0 regressions, against both real Postgres and default SQLite. Migration tested for real against Postgres: seeded a legacy plaintext `mfa_secret` row, ran the migration, confirmed re-encryption; ran it again and confirmed the ciphertext was byte-for-byte identical (proving idempotency, not just "didn't crash"); confirmed `downgrade()` leaves the widened column and encrypted data untouched. mypy (CI's exact flags) and ruff (check + format, `app/`) both clean.
+**Detail:** `tests/test_p56_mfa_secret_encryption_smoke.py` (new); `app/services/crypto.py`, `app/models/user.py`, `app/config.py`, `DEPLOYMENT.md`; `alembic/versions/3de01cf6adc4_encrypt_user_mfa_secret_at_rest.py` (new).
+
+---
+
 ### N. Testing (Stage 16, found 2026-09-15)
 | ID | What | Effort |
 |---|---|---|
@@ -1019,5 +1038,6 @@ Built the file as `middleware.ts` first, matching P50's own earlier prototype �
 | ID | What | Effort |
 |---|---|---|
 | P55 | **Resolved, 2026-09-16** — see "Stage 17 — first pass" below. `docker-compose.yml` (the only fully-documented deployment path) never actually ran Redis or set `REDIS_URL`, so the app's already-built Redis-backed JWT blacklist and rate limiter (`app/services/token_blacklist.py`, `app/middleware.py`) silently fell back to per-worker in-process state on every self-hosted deployment, despite `API_WORKERS` defaulting to 2 — the code was already correct, the deployment config just never wired it in. | Done |
+| P56 | **Resolved, 2026-09-16** — see "Stage 17 — second pass" below. `User.mfa_secret` (the TOTP seed) was stored as plain text — a DB read or backup leak was a full MFA bypass for every enrolled user. Now encrypted at rest via `EncryptedMfaSecret`, the same ORM-level `TypeDecorator` pattern P51 used for KYC identity numbers. CSRF middleware remains the one open item on the hardening roadmap. | Done |
 
 ---

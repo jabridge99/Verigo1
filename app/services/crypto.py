@@ -4,6 +4,7 @@ Field-level encryption for sensitive values stored at rest. Uses Fernet
 sensitivity classes can be rotated independently:
   - storage_encryption_key -> tenant storage/connector credentials
   - kyc_encryption_key     -> Customer/BeneficialOwner identity numbers (P51)
+  - mfa_encryption_key     -> User.mfa_secret, the TOTP seed (Stage 17)
 Each falls back to a key derived from SECRET_KEY when unset, so encryption
 still works out of the box in dev — set the dedicated key explicitly in
 production so a JWT secret rotation doesn't strand encrypted data.
@@ -20,6 +21,7 @@ from app.config import settings
 
 ENC_PREFIX = "enc:"
 KYC_ENC_PREFIX = "kyc:"
+MFA_ENC_PREFIX = "mfa:"
 
 
 def _derive_key(raw: str) -> bytes:
@@ -29,6 +31,7 @@ def _derive_key(raw: str) -> bytes:
 
 _fernet = Fernet(_derive_key(settings.storage_encryption_key or settings.secret_key))
 _kyc_fernet = Fernet(_derive_key(settings.kyc_encryption_key or settings.secret_key))
+_mfa_fernet = Fernet(_derive_key(settings.mfa_encryption_key or settings.secret_key))
 
 
 def encrypt_secret(plain: str) -> str:
@@ -110,3 +113,47 @@ class EncryptedKycString(TypeDecorator):
 
     def process_result_value(self, value, dialect):
         return decrypt_kyc_field(value)
+
+
+def encrypt_mfa_secret(plain: str) -> str:
+    """Encrypt a User.mfa_secret (TOTP seed)."""
+    if plain is None or plain == "":
+        return plain
+    token = _mfa_fernet.encrypt(plain.encode()).decode()
+    return f"{MFA_ENC_PREFIX}{token}"
+
+
+def decrypt_mfa_secret(value: str) -> str:
+    if value is None or not value.startswith(MFA_ENC_PREFIX):
+        return value
+    token = value[len(MFA_ENC_PREFIX) :]
+    try:
+        return _mfa_fernet.decrypt(token.encode()).decode()
+    except InvalidToken:
+        raise ValueError(
+            "Stored MFA secret could not be decrypted — encryption key may have changed"
+        )
+
+
+def is_mfa_encrypted(value) -> bool:
+    return isinstance(value, str) and value.startswith(MFA_ENC_PREFIX)
+
+
+class EncryptedMfaSecret(TypeDecorator):
+    """
+    A String column that transparently encrypts User.mfa_secret on write
+    and decrypts on read -- applied at the ORM layer so every write path
+    (mfa_enrol's direct attribute assignment included) is covered
+    automatically. Same non-deterministic-ciphertext caveat as
+    EncryptedKycString: never usable in an equality filter/WHERE clause --
+    confirmed no code in this app looks up a user by mfa_secret.
+    """
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return encrypt_mfa_secret(value)
+
+    def process_result_value(self, value, dialect):
+        return decrypt_mfa_secret(value)
