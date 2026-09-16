@@ -14,6 +14,9 @@ Nginx  (80 → 443 redirect, TLS termination, rate limiting)
             │
             ├─▶ PostgreSQL  :5432   (primary data store)
             │
+            ├─▶ Redis      :6379   (JWT revocation blacklist, rate limiter —
+            │                       required once running >1 API worker/instance)
+            │
             └─▶ Object Storage      (S3 / Azure Blob / GCS / local)
                                     configurable per tenant
 ```
@@ -32,6 +35,7 @@ For Kubernetes, each service maps to a Deployment + Service.
 | PostgreSQL ORM | ✅ Complete | 16 SQLAlchemy models |
 | Alembic migrations | ✅ Complete | Initial schema migration generated |
 | Docker / Compose | ✅ Complete | Multi-stage, non-root, healthchecks |
+| Redis (JWT blacklist + rate limiter) | ✅ Complete | Provisioned automatically in `docker-compose.yml`; on Railway/managed hosts, add a Redis add-on and set `REDIS_URL` |
 | Nginx reverse proxy | ✅ Complete | TLS 1.2/1.3, HSTS, rate limiting |
 | JWT auth + MFA TOTP | ✅ Complete | Blacklist, revocation, MFA flow |
 | RBAC (5 roles) | ✅ Complete | admin / mlro / compliance / analyst / viewer |
@@ -92,6 +96,7 @@ Key variables to set:
 | `DATABASE_URL` | Yes | `postgresql://user:pass@host:5432/dbname` |
 | `CORS_ORIGINS` | Yes | `https://app.yourdomain.com` (never `*` in prod) |
 | `POSTGRES_PASSWORD` | Yes | Strong password for the DB container |
+| `REDIS_URL` | Yes (multi-worker) | `redis://redis:6379/0` — `docker-compose.yml` provisions this automatically; on Railway/managed hosts, add a Redis add-on and set it yourself. Required for correct JWT revocation and rate limiting once `API_WORKERS`/instance count is above 1 — see Scaling below |
 | `STRIPE_SECRET_KEY` | Billing | Stripe live secret key |
 | `STRIPE_WEBHOOK_SECRET` | Billing | Stripe webhook signing secret |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | Email | SMTP credentials |
@@ -316,8 +321,8 @@ For production, use cloud storage (`s3`, `azure`, or `gcs`) — local storage do
 | API workers | Increase `API_WORKERS` in `.env` (default 2) |
 | DB connections | Use PgBouncer in front of PostgreSQL |
 | File storage | Set `STORAGE_BACKEND=s3` (or azure/gcs) |
-| Rate limiting | Replace in-process limiter with `slowapi + redis` |
-| JWT blacklist | Replace in-process `TOKEN_BLACKLIST` set with Redis (multi-worker safe) |
+| Rate limiting | Redis-backed sliding window when `REDIS_URL` is set (`app/middleware.py`) — shared correctly across all workers/instances. `docker-compose.yml` provisions Redis and wires `REDIS_URL` automatically; on Railway/managed hosts, add a managed Redis add-on and set `REDIS_URL` yourself. Falls back to a per-worker in-process limiter (not shared) if unset — fine for single-worker dev only |
+| JWT blacklist | Redis-backed with TTL matching token expiry when `REDIS_URL` is set (`app/services/token_blacklist.py`) — logout/revocation is then shared across workers and survives restarts. Same fallback caveat as rate limiting above if `REDIS_URL` is unset |
 | Multi-region | Deploy Nginx + API behind a global load balancer; use managed DB with read replicas |
 
 ---
@@ -358,10 +363,10 @@ For production, use cloud storage (`s3`, `azure`, or `gcs`) — local storage do
 
 **Hardening roadmap (post-launch):**
 
-- [ ] Migrate `TOKEN_BLACKLIST` to Redis (required for multi-worker JWT revocation)
+- [x] Migrate `TOKEN_BLACKLIST` to Redis (required for multi-worker JWT revocation) — done; set `REDIS_URL` (see Scaling above)
+- [x] Migrate rate limiter to Redis for distributed enforcement — done; set `REDIS_URL` (see Scaling above)
+- [x] Replace `unsafe-inline` in CSP with nonce-based headers — done (per-request nonce via `web/proxy.ts`)
 - [ ] Encrypt TOTP secrets at rest (Fernet)
-- [ ] Replace `unsafe-inline` in CSP with nonce-based headers
-- [ ] Migrate rate limiter to `slowapi + Redis` for distributed enforcement
 - [ ] Add CSRF middleware for session-based flows
 
 ---

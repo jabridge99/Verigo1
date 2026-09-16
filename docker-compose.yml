@@ -20,6 +20,29 @@ services:
     networks:
       - internal
 
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  # Backs the JWT revocation blacklist and rate limiter (app/services/
+  # token_blacklist.py, app/middleware.py) so both are shared and correct
+  # across the API's multiple workers (WORKERS/API_WORKERS defaults to 2 —
+  # see below). Without this, the app silently falls back to in-process
+  # state that isn't shared between workers: logout doesn't reliably revoke
+  # access, and rate limits can be bypassed by hitting a different worker.
+  # AOF persistence so revoked tokens stay revoked across a Redis restart,
+  # not just until the next container recycle.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
   # ── Backend API ─────────────────────────────────────────────────────────────
   api:
     build:
@@ -29,9 +52,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       ENVIRONMENT:    production
       DATABASE_URL:   postgresql://${POSTGRES_USER:-tvg}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tvg}
+      REDIS_URL:      ${REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY:     ${SECRET_KEY:?SECRET_KEY is required}
       CORS_ORIGINS:   ${CORS_ORIGINS:-https://${APP_DOMAIN:-app.example.com}}
       APP_URL:        ${APP_URL:-https://${APP_DOMAIN:-app.example.com}}
@@ -130,6 +156,7 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   uploads:
   nginx_certs:
   certbot_webroot:

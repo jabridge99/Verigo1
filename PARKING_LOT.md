@@ -987,11 +987,37 @@ Built the file as `middleware.ts` first, matching P50's own earlier prototype �
 
 ---
 
+## Stage 17 (Production Deployment) — first pass, 2026-09-16 (P55)
+
+**Scope:** moving to Stage 17 per the master plan's Stage 12–18 definitions, per your "move on to stage 17" direction. Briefed you first (per the "AI Agent Operating Rules"' before-implementation-briefing requirement) on 3 real candidate gaps found by re-checking DEPLOYMENT.md's own go-live checklist and CURRENT_STATE.md's known issues against the actual code: (1) JWT blacklist/rate limiting looking in-process-only per the stale docs, (2) DEPLOYMENT.md itself being stale (June 2026 snapshot, 63-test claim vs. the real 876), (3) no monitoring/observability wired. You picked (1).
+
+**What was actually found, once investigated properly:** the premise in the briefing was itself half-stale. `app/services/token_blacklist.py` and `app/middleware.py`'s `RateLimitMiddleware` are **already** fully Redis-backed — TTL-matched blacklist entries, a Redis sliding-window rate limiter (sorted sets, one pipelined round-trip per request), tiered limits (login 10/min, other auth 20/min, general API 200/min), graceful fallback to in-process state with a loud startup warning when `REDIS_URL` is unset, `redis` in `requirements.txt`, config wired (`settings.redis_url`), `.env.example` documented, `/health/ready` and `/health/detailed` already report live Redis connectivity, and dedicated test coverage already exists (`test_rate_limit_fail_closed_login_smoke.py`, `test_rate_limit_xff_spoofing_smoke.py`, `test_mfa_brute_force_hardening_smoke.py`). DEPLOYMENT.md's "Hardening roadmap" checklist and CURRENT_STATE.md's "Known Issue #4" describing this as still-open were simply outdated — written before this was built, never updated after.
+
+**The real gap:** `docker-compose.yml` — the *only* deployment path DEPLOYMENT.md documents in depth — never ran a Redis container or set `REDIS_URL` on the `api` service at all. So on every self-hosted deployment following that runbook, the already-correct Redis code silently fell back to per-worker in-process state (the exact failure mode its own warning logs describe), despite `API_WORKERS` defaulting to 2 — meaning logout/JWT revocation wasn't reliably shared across workers, and rate limits could be bypassed by landing on a different worker. The code was right; the deployment config just never wired it in.
+
+**What changed:**
+- `docker-compose.yml` — added a `redis` service (`redis:7-alpine`, `--appendonly yes` for AOF persistence so revoked tokens stay revoked across a container restart, healthcheck, new `redisdata` volume), added it to `api`'s `depends_on` (health-gated), and set `REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}` on the `api` service (still overridable to point at an external/managed Redis instead).
+- `DEPLOYMENT.md` — added `REDIS_URL` to the "Key variables to set" table, added Redis to the architecture diagram and the "Current State" table, corrected the "Scaling" table's Rate limiting/JWT blacklist rows (were describing this as future work — `slowapi + redis`/"replace in-process" — when it's already built), and updated the "Hardening roadmap" checklist to mark the Redis migration and CSP-nonce items done (the latter already shipped in P50b) rather than leaving them as stale open TODOs.
+
+**What did NOT change:** Railway's deployment path (`railway.json`) isn't a docker-compose file — it deploys the API container directly and reads env vars from Railway's own dashboard, so there's no equivalent "add a service" fix to make there; DEPLOYMENT.md now says explicitly that a Railway/managed deployment needs a managed Redis add-on and `REDIS_URL` set through Railway's own env panel, an operational step outside this repo. TOTP-secret-at-rest encryption and CSRF middleware remain genuinely open items on the hardening roadmap (verified — neither is implemented) — left as-is, not requested this round. DEPLOYMENT.md's other staleness (June 2026 snapshot dating, the 63-test claim) was flagged as its own candidate in the briefing and not picked; untouched beyond the specific rows this fix touched.
+
+**Verified:** `docker compose config` validates the compose file cleanly (only a pre-existing, unrelated `version:` key deprecation warning). End-to-end smoke test against a real local Redis instance: booted the app with `REDIS_URL` set, confirmed the startup log reads `RateLimitMiddleware: using Redis backend`, and `GET /health/ready` returns `{"database": "ok", "redis": "ok"}`. Full test suite unaffected (no Python changed): 874 passed, 2 skipped, same as before this pass.
+**Detail:** `docker-compose.yml`, `DEPLOYMENT.md`.
+
+---
+
 ### N. Testing (Stage 16, found 2026-09-15)
 | ID | What | Effort |
 |---|---|---|
 | P52 | **Resolved, 2026-09-15** — see "Stage 16 — third pass" below. All 97 Postgres failures fixed across 8 test files; two were genuine production bugs (a flush-ordering bug in `monitoring_engine.py`, an undersized `organisations.abn` column), not just test fixtures. | Done |
 | P53 | **Resolved, 2026-09-15** — see "Stage 16 — second pass" below. Vitest+RTL for unit/component tests, Playwright for e2e, both wired into CI. First real suite covers real business logic (pricing display, analytics-consent privacy behaviour) and the P50 CSP/HSTS work with a genuine browser-level regression check — not exhaustive coverage of all 62 routes, which stays open as its own future effort. | Done (first suite; broader route coverage remains open-ended future work, not re-tracked as a separate ID) |
 | P54 | **Resolved, 2026-09-15/16** — see "Stage 16 — fourth, seventh, eighth and ninth passes" below. All 4 named modules done: `app/services/automation_engine.py` (14%→96%), `app/api/routes/dashboard.py` (21%→99%), `app/api/routes/governance/training.py` (31%→97%, the single largest raw gap), `app/services/risk_triggered_training_service.py` (11%→97%, plus two genuine production bugs found and fixed — see ninth pass). Several other modules in the 15-30% band remain untouched — never in scope, per P54's own "not a blanket coverage-chasing pass" note. | Done |
+
+---
+
+### O. Production Deployment (Stage 17, found 2026-09-16)
+| ID | What | Effort |
+|---|---|---|
+| P55 | **Resolved, 2026-09-16** — see "Stage 17 — first pass" below. `docker-compose.yml` (the only fully-documented deployment path) never actually ran Redis or set `REDIS_URL`, so the app's already-built Redis-backed JWT blacklist and rate limiter (`app/services/token_blacklist.py`, `app/middleware.py`) silently fell back to per-worker in-process state on every self-hosted deployment, despite `API_WORKERS` defaulting to 2 — the code was already correct, the deployment config just never wired it in. | Done |
 
 ---
