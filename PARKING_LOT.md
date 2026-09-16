@@ -44,7 +44,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 ### F. Structural / mechanical backlog
 | ID | What | Effort |
 |---|---|---|
-| C2 | **`api_keys.py`/webhooks split, `/org` vs `/organisations` prefix naming, the inline-schemas cleanup (all 28 route files), and the oversized-route-files split (all 5 files) are all resolved, 2026-09-16.** See "C2 pass 6/7/8/9/10" below. Frontend API client: scaffold + `customers` + `analytics` + `billing` + `organisations` + `storage` + `governance/training` resources done, see "C2 pass 11" through "C2 pass 16" — 31 files/~146 call sites remain, one resource at a time. Thin `web/components/ui/` (only `button.tsx`/`card.tsx`) not started | Dedicated refactor pass, one sub-item at a time — 4 of 6 fully done, 1 in progress, 1 remaining |
+| C2 | **`api_keys.py`/webhooks split, `/org` vs `/organisations` prefix naming, the inline-schemas cleanup (all 28 route files), and the oversized-route-files split (all 5 files) are all resolved, 2026-09-16.** See "C2 pass 6/7/8/9/10" below. Frontend API client: scaffold + `customers` + `analytics` + `billing` + `organisations` + `storage` + `governance/training` + `governance/policies` resources done, see "C2 pass 11" through "C2 pass 17" — 30 files/~141 call sites remain, one resource at a time. Thin `web/components/ui/` (only `button.tsx`/`card.tsx`) not started | Dedicated refactor pass, one sub-item at a time — 4 of 6 fully done, 1 in progress, 1 remaining |
 | P5 | **`Column()` side resolved, 2026-09-16** — see "P5/C2 pass" below. The 184 `relationship()` declarations still lack `Mapped[]` (need cross-model list-vs-scalar knowledge, deliberately left for a follow-up) | `relationship()` retrofit remaining, ~40 files touched |
 
 *(C4, the two misleadingly-named modules, is resolved — see "Stage 17 — fourth pass" below. P4 was already resolved before this parking-lot pass — see its own entry below; nothing left to do.)*
@@ -1408,3 +1408,20 @@ All 8 originally-shared helpers (`_compute_status`, `_sync_status`, `_get_soluti
 **Detail:** new `web/lib/api/governanceTraining.ts`; `web/app/governance/training/page.tsx` updated (now fully migrated — no raw `apiFetch`/`API` calls left in the file).
 
 **Remaining:** 31 files/~146 call sites (governance's remaining 2 sub-resources — policies, controls —, onboarding, reports, screening, alerts, transactions, etc.).
+
+## C2 pass 17, 2026-09-16 (frontend API client — seventh pilot resource: `governance/policies`)
+
+**Scope:** the seventh resource migrated onto the `lib/api/` pattern, and the second of governance's three sub-resources. `web/app/governance/policies/page.tsx`'s 5 `/api/v1/governance/policies*` call sites, all in one file.
+
+**A deliberate exclusion, not an oversight:** the PDF/HTML export (`GET .../policies/{id}/export-html`) is a `window.open()` browser navigation in the page, not a fetch call site, and returns print-ready HTML rather than JSON — same shape as the `governance/training` pilot's certificate export. `lib/api/governancePolicies.ts` exports `policyExportHtmlUrl(policyId)`, a plain string-builder, rather than a fetch function.
+
+**What changed:**
+- **`web/lib/api/governancePolicies.ts`** (new) — 4 typed functions (`listPolicies`, `listPolicyVersions`, `runPolicyWorkflowAction`, `createPolicy`) plus `policyExportHtmlUrl()`, built on `apiGet`/`apiPost`. Types (`Policy`, `PolicyVersion`, `PolicyCreateInput`) mirror `app/schemas/governance.py`'s `PolicyResponse`/`PolicyVersionResponse`/`PolicyCreate`.
+- **`web/app/governance/policies/page.tsx`** — all 5 call sites migrated; local `Policy`/`PolicyType`/`PolicyStatus` type declarations and the loosely-typed `versions: any[]` state removed in favour of the shared types.
+
+**A real bug the typing surfaced (a display gap, not a crash — same discovery method as the `organisations` pilot's `industry_type` discrepancy):** the page's pre-existing local `PolicyType` union (and its `TYPE_LABELS` map) was missing `independent_review_policy` — a real, currently-in-use enum value on the backend (`app/models/governance_policies.py`). Every fresh org auto-seeds an "Independent Review Policy" document at onboarding, confirmed live: its `policy_type` came back as `"independent_review_policy"` in the very first `GET /governance/policies` call in verification. Before this fix, `TYPE_LABELS[p.policy_type]` would have silently rendered `undefined` in that policy's row for every real org — a genuine display bug the narrower hand-typed union let through unnoticed. Fixed by adding the missing member to both the type and the label map.
+
+**Verified:** `tsc --noEmit` clean; `npm run lint` clean (0 errors, same 21 pre-existing warnings); `npm test` 19/19; `npm run build` succeeded, all 113 routes generated. Live-backend verification against a fresh local SQLite backend with a role-promoted (`admin`) test user: confirmed the auto-seeded policy set on `GET /governance/policies` (which is where the `independent_review_policy` gap surfaced), walked one policy through the full workflow chain (`submit_for_review` → `submit_for_compliance` → `submit_for_approval` → `publish`, confirming the version-bump and version-snapshot side effects), checked `GET .../versions` before and after publish, created a new policy via `POST`, and fetched the HTML export — every response matched the TypeScript types exactly.
+**Detail:** new `web/lib/api/governancePolicies.ts`; `web/app/governance/policies/page.tsx` updated (now fully migrated — no raw `apiFetch`/`API` calls left in the file).
+
+**Remaining:** 30 files/~141 call sites (governance's last sub-resource — controls —, onboarding, reports, screening, alerts, transactions, etc.).
