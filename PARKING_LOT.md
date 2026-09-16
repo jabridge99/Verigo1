@@ -44,7 +44,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 ### F. Structural / mechanical backlog
 | ID | What | Effort |
 |---|---|---|
-| C2 | **`api_keys.py`/webhooks split, `/org` vs `/organisations` prefix naming, and the inline-schemas cleanup (all 28 route files) are resolved, 2026-09-16.** Oversized route files: `risk_assessment.py` (1213 lines) split into a package, 1 of 5 done — see "C2 pass 6" below. Remaining: no central frontend API client; thin shared UI components; `customers.py`/`reports.py`/`governance/training.py`/`screening.py` still oversized | Dedicated refactor pass, one sub-item at a time — 3 of 6 fully done, 1 in progress |
+| C2 | **`api_keys.py`/webhooks split, `/org` vs `/organisations` prefix naming, and the inline-schemas cleanup (all 28 route files) are resolved, 2026-09-16.** Oversized route files: `risk_assessment.py` and `governance/training.py` split into packages, 2 of 5 done — see "C2 pass 6/7" below. Remaining: no central frontend API client; thin shared UI components; `customers.py`/`reports.py`/`screening.py` still oversized | Dedicated refactor pass, one sub-item at a time — 3 of 6 fully done, 1 in progress |
 | P5 | **`Column()` side resolved, 2026-09-16** — see "P5/C2 pass" below. The 184 `relationship()` declarations still lack `Mapped[]` (need cross-model list-vs-scalar knowledge, deliberately left for a follow-up) | `relationship()` retrofit remaining, ~40 files touched |
 
 *(C4, the two misleadingly-named modules, is resolved — see "Stage 17 — fourth pass" below. P4 was already resolved before this parking-lot pass — see its own entry below; nothing left to do.)*
@@ -1205,3 +1205,24 @@ Both bugs are exactly the class of mistake manual transcription risks at this fi
 **Detail:** `app/api/routes/risk_assessment.py` deleted; new `app/api/routes/risk_assessment/{__init__,_shared,framework,assessments,library}.py`.
 
 **Remaining:** `customers.py`, `reports.py`, `governance/training.py`, `screening.py` still need the same treatment — each read in full first, not split by line-count guessing, with the same AST-diff verification given how easy a permission or log-line drop is to introduce by hand at this size.
+
+## C2 pass 7, 2026-09-16 (oversized route files — second of 5: `governance/training.py`)
+
+**Scope:** second of the 5 oversized route files, `governance/training.py` (1278 lines, 32 endpoints). Same discipline as pass 6: read the whole file first, split along real domain boundaries, then verify every function's exact source and every endpoint's permission dependency programmatically against the original before committing — not by eye.
+
+**What changed:** split four ways:
+- **`courses.py`** — course catalogue: seeding standard/industry-pack courses, org-custom course CRUD (7 endpoints).
+- **`assignments.py`** — bulk course-to-user(s)/role(s) assignment (3 endpoints).
+- **`records.py`** — the individual training-record lifecycle: list/create, start/complete, exempt/revoke-exemption, retake, renew, certificate export (10 endpoints) — the largest piece, kept together since every action here operates on the same `GovernanceTrainingRecord`.
+- **`dashboard.py`** — org-wide dashboard, overdue/expiring lists, the AUSTRAC compliance-report training section (4 endpoints).
+
+All 8 originally-shared helpers (`_compute_status`, `_sync_status`, `_get_solution`, `_course_dict`, `_record_dict`, `_assignment_dict`, `_get_course`, `_get_record`) plus `DISCLAIMER` moved to `_shared.py` — kept together rather than split further by exact usage graph (a few, like `_get_record`, are only used by `records.py`) since they're all small and the file's own "Helpers" section already treated them as one shared unit; fragmenting further would add indirection for no real benefit. `app/api/routes/governance/training.py` became the package `app/api/routes/governance/training/`; `__init__.py` composes the four sub-routers under the original `/governance/training` prefix, so `main.py`'s import site needed no change.
+
+**Verification, same method as pass 6 (which is exactly why it's now standard for this kind of change):** a script comparing every function's exact AST source segment, original file vs. all 5 new files — 32 of 32 original top-level functions present, 0 real (non-comment) mismatches, the only "extra" entries were two nested closures (`esc` inside `export_certificate_html`, `_light` inside `training_dashboard`) that the original already had, confirmed present there too. A second script diffed every endpoint's `current_user: User = Depends(...)` dependency name — 24 of 24 endpoints, 0 mismatches. No bugs surfaced this time (unlike pass 6), which is itself a useful data point: the verification step is cheap and catches real mistakes when they happen, so it's worth keeping as standard practice for the remaining 3 files rather than only reaching for it after a bug is found.
+
+**What did NOT change:** every route's URL path, HTTP method, and permission dependency — confirmed via a full `app.openapi()` path-list diff (byte-for-byte identical) and the dedicated auth-dependency diff above. No endpoint logic, request/response shape, or database query changed.
+
+**Verified:** all new files parse; `app.main` imports cleanly; `ruff check`/`ruff format --check` (CI's exact flags) and `mypy` (CI's exact flags) both clean (one import-wrap fixed via `ruff --fix`); full suite 905 passed, 2 skipped, 0 regressions, on both default SQLite and a real local Postgres 16 instance — including the dedicated `tests/test_governance_training.py` (46/46) and a coverage check confirming the split package retains the same 97% coverage the single file had after Stage 16's eighth pass.
+**Detail:** `app/api/routes/governance/training.py` deleted; new `app/api/routes/governance/training/{__init__,_shared,courses,assignments,records,dashboard}.py`.
+
+**Remaining:** `customers.py` (2377 lines), `reports.py` (1497), `screening.py` (1570) still need the same treatment.
