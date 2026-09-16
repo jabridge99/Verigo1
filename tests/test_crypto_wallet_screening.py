@@ -330,7 +330,7 @@ def test_crypto_wallet_route_uses_chainalysis_when_configured(
             return _FakeResult()
 
     monkeypatch.setattr(
-        "app.api.routes.screening.get_crypto_provider", lambda: _FakeProvider()
+        "app.api.routes.screening.crypto_wallet.get_crypto_provider", lambda: _FakeProvider()
     )
     resp = client.post(
         "/api/v1/screening/crypto-wallet",
@@ -422,7 +422,7 @@ def test_crypto_wallet_route_uses_elliptic_once_addon_purchased(
             return _FakeResult()
 
     monkeypatch.setattr(
-        "app.api.routes.screening.get_crypto_provider", lambda: _FakeProvider()
+        "app.api.routes.screening.crypto_wallet.get_crypto_provider", lambda: _FakeProvider()
     )
     resp = client.post(
         "/api/v1/screening/crypto-wallet",

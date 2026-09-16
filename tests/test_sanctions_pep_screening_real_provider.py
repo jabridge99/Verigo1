@@ -127,7 +127,7 @@ def test_screening_run_pep_uses_real_provider_when_configured(
             return _FakeResult()
 
     monkeypatch.setattr(
-        "app.api.routes.screening.get_pep_provider", lambda: _FakeProvider()
+        "app.api.routes.screening._shared.get_pep_provider", lambda: _FakeProvider()
     )
     customer = _make_customer(db, compliance_user.org_id, "Jane Politician")
 

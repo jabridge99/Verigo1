@@ -86,7 +86,7 @@ def test_run_screening_dispatches_aml_alert_created_on_match(
 ):
     calls = []
     monkeypatch.setattr(
-        "app.api.routes.screening.dispatch_event_background",
+        "app.api.routes.screening.records.dispatch_event_background",
         lambda event, payload, industry_id=None: calls.append(
             (event, payload, industry_id)
         ),
@@ -130,7 +130,7 @@ def test_run_screening_does_not_dispatch_when_clear(
 
     calls = []
     monkeypatch.setattr(
-        "app.api.routes.screening.dispatch_event_background",
+        "app.api.routes.screening.records.dispatch_event_background",
         lambda *a, **k: calls.append(a),
     )
     customer = Customer(
