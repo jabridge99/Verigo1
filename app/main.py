@@ -65,6 +65,7 @@ from app.api.routes.screening import router as screening_router
 from app.api.routes.smr_decision_log import router as smr_decision_log_router
 from app.api.routes.tasks import router as tasks_router
 from app.api.routes.training_triggers import router as training_triggers_router
+from app.api.routes.webhooks import router as webhooks_router
 from app.config import settings
 from app.db.database import Base, SessionLocal, engine
 from app.logging_config import setup_logging
@@ -294,6 +295,7 @@ app.include_router(tenants.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(api_keys.router, prefix="/api/v1")
+app.include_router(webhooks_router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(branding.router, prefix="/api/v1")
