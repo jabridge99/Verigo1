@@ -44,7 +44,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 ### F. Structural / mechanical backlog
 | ID | What | Effort |
 |---|---|---|
-| C2 | **`api_keys.py`/webhooks split, `/org` vs `/organisations` prefix naming, the inline-schemas cleanup (all 28 route files), and the oversized-route-files split (all 5 files) are all resolved, 2026-09-16.** See "C2 pass 6/7/8/9/10" below. Frontend API client: scaffold + `customers` + `analytics` + `billing` + `organisations` + `storage` + all 3 governance sub-resources (`training`/`policies`/`controls`) + `screening` + `alerts` resources done, see "C2 pass 11" through "C2 pass 20" — 26 files/~129 call sites remain, one resource at a time. Thin `web/components/ui/` (only `button.tsx`/`card.tsx`) not started | Dedicated refactor pass, one sub-item at a time — 4 of 6 fully done, 1 in progress, 1 remaining |
+| C2 | **`api_keys.py`/webhooks split, `/org` vs `/organisations` prefix naming, the inline-schemas cleanup (all 28 route files), and the oversized-route-files split (all 5 files) are all resolved, 2026-09-16.** See "C2 pass 6/7/8/9/10" below. Frontend API client: scaffold + `customers` + `analytics` + `billing` + `organisations` + `storage` + all 3 governance sub-resources (`training`/`policies`/`controls`) + `screening` + `alerts` + `transactions` resources done, see "C2 pass 11" through "C2 pass 21" — 25 files/~127 call sites remain, one resource at a time. Thin `web/components/ui/` (only `button.tsx`/`card.tsx`) not started | Dedicated refactor pass, one sub-item at a time — 4 of 6 fully done, 1 in progress, 1 remaining |
 | P5 | **`Column()` side resolved, 2026-09-16** — see "P5/C2 pass" below. The 184 `relationship()` declarations still lack `Mapped[]` (need cross-model list-vs-scalar knowledge, deliberately left for a follow-up) | `relationship()` retrofit remaining, ~40 files touched |
 
 *(C4, the two misleadingly-named modules, is resolved — see "Stage 17 — fourth pass" below. P4 was already resolved before this parking-lot pass — see its own entry below; nothing left to do.)*
@@ -1471,3 +1471,16 @@ All 8 originally-shared helpers (`_compute_status`, `_sync_status`, `_get_soluti
 **Detail:** new `web/lib/api/alerts.ts`; `web/app/monitoring/page.tsx` updated (alerts call sites fully migrated; transactions call sites deliberately untouched).
 
 **Remaining:** 26 files/~129 call sites (onboarding, reports, transactions, etc.).
+
+## C2 pass 21, 2026-09-17 (frontend API client — eleventh pilot resource: `transactions`)
+
+**Scope:** the eleventh resource, and the second half of `app/monitoring/page.tsx` — its remaining 2 `/api/v1/transactions*` call sites (the manual `TransactionEntryPanel` create form). After this pass the file is fully migrated — no raw `apiFetch`/`API` calls left in it at all, across both the `alerts` (pass 20) and `transactions` pilots. The backend's transactions route file has a much larger surface (receipt, summary, recommendations, approval-checklist, live-panel, draft-report-prefill, questionnaire endpoints) the page never calls, so this pilot's scope is genuinely just the 2 endpoints the form uses.
+
+**What changed:**
+- **`web/lib/api/transactions.ts`** (new) — 2 typed functions (`createTransaction`, `runMonitoringOnTransaction`), built on `apiPost`. `CreateTransactionInput` mirrors exactly the subset of `app/schemas/transaction.py`'s `TransactionCreate` fields the entry form sends (not the full ~30-field schema); `Transaction` mirrors `TransactionOut`; `RunMonitoringResult` mirrors the route's dashboard-style response dict.
+- **`web/app/monitoring/page.tsx`** — its final 2 call sites migrated; the now-unused `apiFetch` import and local `API` constant removed.
+
+**Verified:** `tsc --noEmit` clean; `npm run lint` clean (0 errors, same 21 pre-existing warnings); `npm test` 19/19; `npm run build` succeeded, all 113 routes generated. Live-backend verification against a fresh local SQLite backend: created a customer and a transaction via the exact payload shape the form sends, confirming the `Transaction` response; then, after discovering `run-monitoring` requires a compliance-or-above role (promoted the test user), confirmed `RunMonitoringResult`'s shape on a second transaction — both matched the TypeScript types exactly.
+**Detail:** new `web/lib/api/transactions.ts`; `web/app/monitoring/page.tsx` updated (now fully migrated across both the `alerts` and `transactions` pilots — no raw `apiFetch`/`API` calls left in the file at all).
+
+**Remaining:** 25 files/~127 call sites (onboarding, reports, etc.).

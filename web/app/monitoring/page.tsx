@@ -9,7 +9,6 @@ import {
 import clsx from "clsx";
 import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
-import { apiFetch } from '@/lib/auth'
 import { listCustomers } from '@/lib/api/customers'
 import {
   listAlerts,
@@ -20,8 +19,7 @@ import {
   type AlertListItem,
   type AlertDetail,
 } from '@/lib/api/alerts'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { createTransaction, runMonitoringOnTransaction } from '@/lib/api/transactions'
 
 interface Alert {
   id: string; alert_id: string; transaction_id?: string | null; customer_id?: string;
@@ -610,38 +608,31 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
     if (!form.customer_id) { onCreate({ error: "Select a customer before creating a transaction." }); return; }
     setSubmitting(true);
     try {
-      const res = await apiFetch(`${API}/api/v1/transactions`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transaction_ref: `TXN-${Date.now()}`,
-          customer_id: form.customer_id,
-          transaction_type: "transfer",
-          direction: "outgoing",
-          payment_method: PAYMENT_METHOD_MAP[form.delivery_method] || "bank_transfer",
-          currency: form.currency,
-          amount: form.amount,
-          is_cross_border: form.is_cross_border,
-          country_destination: form.is_cross_border ? form.country : undefined,
-          purpose: form.purpose,
-          reference: form.reference || undefined,
-          description: form.notes || undefined,
-          transaction_date: new Date().toISOString(),
-        }),
+      const txn = await createTransaction({
+        transaction_ref: `TXN-${Date.now()}`,
+        customer_id: form.customer_id,
+        transaction_type: "transfer",
+        direction: "outgoing",
+        payment_method: PAYMENT_METHOD_MAP[form.delivery_method] || "bank_transfer",
+        currency: form.currency,
+        amount: form.amount,
+        is_cross_border: form.is_cross_border,
+        country_destination: form.is_cross_border ? form.country : undefined,
+        purpose: form.purpose,
+        reference: form.reference || undefined,
+        description: form.notes || undefined,
+        transaction_date: new Date().toISOString(),
       });
-      if (!res.ok) throw new Error((await res.text()) || "Failed to create transaction.");
-      const txn = await res.json();
 
       let alertsGenerated = 0;
       try {
-        const monRes = await apiFetch(`${API}/api/v1/transactions/${txn.id}/run-monitoring`, {
-          method: "POST", credentials: "include",
-        });
-        if (monRes.ok) alertsGenerated = (await monRes.json()).alerts_generated ?? 0;
+        const monRes = await runMonitoringOnTransaction(txn.id);
+        alertsGenerated = monRes.alerts_generated ?? 0;
       } catch {}
 
       onCreate({ alertsGenerated });
-    } catch (err: any) {
-      onCreate({ error: err.message || "Failed to create transaction." });
+    } catch (err) {
+      onCreate({ error: err instanceof Error ? err.message : "Failed to create transaction." });
     } finally {
       setSubmitting(false);
     }
