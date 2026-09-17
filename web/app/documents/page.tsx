@@ -6,36 +6,30 @@ import {
   File, Image, Search, Filter, AlertTriangle, CheckCircle,
   HardDrive, X, Plus,
 } from "lucide-react";
-import { getStoredUser, apiFetch } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface Doc {
-  doc_id: string;
-  filename: string;
-  mime_type?: string;
-  size_bytes: number;
-  category: string;
-  description?: string;
-  entity_type?: string;
-  entity_id?: string;
-  uploaded_by: string;
-  status: string;
-  created_at?: string;
-}
+import {
+  listDocuments,
+  getDocumentStats,
+  uploadDocument,
+  downloadDocument,
+  archiveDocument,
+  deleteDocument,
+  type Doc,
+  type DocumentStats,
+} from "@/lib/api/documents";
 
 const CATEGORIES = [
   "kyc", "aml", "report", "case", "ecdd", "contract", "policy", "correspondence", "other",
 ];
 
 const DEMO_DOCS: Doc[] = [
-  { doc_id: "DOC-A1B2C3", filename: "passport_nguyen_trading.pdf", mime_type: "application/pdf", size_bytes: 2_450_000, category: "kyc", description: "Certified copy of director passport", entity_type: "customer", entity_id: "ACE-00192", uploaded_by: "USR-ADMIN", status: "active", created_at: new Date(Date.now() - 86400000 * 2).toISOString() },
-  { doc_id: "DOC-D4E5F6", filename: "aml_assessment_q2_2025.pdf", mime_type: "application/pdf", size_bytes: 1_100_000, category: "aml", description: "Q2 2025 AML risk assessment", entity_type: "report", entity_id: "RPT-0041", uploaded_by: "USR-MLRO", status: "active", created_at: new Date(Date.now() - 86400000 * 7).toISOString() },
-  { doc_id: "DOC-G7H8I9", filename: "bank_statement_oct2025.xlsx", mime_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", size_bytes: 385_000, category: "kyc", description: "3-month bank statement for EDD", entity_type: "customer", entity_id: "ACE-00201", uploaded_by: "USR-ADMIN", status: "active", created_at: new Date(Date.now() - 86400000 * 14).toISOString() },
-  { doc_id: "DOC-J0K1L2", filename: "case_evidence_CASE-2025-0088.pdf", mime_type: "application/pdf", size_bytes: 980_000, category: "case", description: "Transaction screenshots and correspondence", entity_type: "case", entity_id: "CASE-2025-0088", uploaded_by: "USR-MLRO", status: "active", created_at: new Date(Date.now() - 86400000 * 1).toISOString() },
-  { doc_id: "DOC-M3N4O5", filename: "aml_ctf_policy_v3.pdf", mime_type: "application/pdf", size_bytes: 4_200_000, category: "policy", description: "AML/CTF Program Policy — current version", uploaded_by: "USR-ADMIN", status: "active", created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
-  { doc_id: "DOC-P6Q7R8", filename: "austrac_correspondence_jan2025.pdf", mime_type: "application/pdf", size_bytes: 560_000, category: "correspondence", description: "AUSTRAC acknowledgement of TTR submission", uploaded_by: "USR-MLRO", status: "archived", created_at: new Date(Date.now() - 86400000 * 60).toISOString() },
+  { id: 1, doc_id: "DOC-A1B2C3", filename: "passport_nguyen_trading.pdf", mime_type: "application/pdf", size_bytes: 2_450_000, category: "kyc", description: "Certified copy of director passport", entity_type: "customer", entity_id: "ACE-00192", uploaded_by: "USR-ADMIN", status: "active", created_at: new Date(Date.now() - 86400000 * 2).toISOString() },
+  { id: 2, doc_id: "DOC-D4E5F6", filename: "aml_assessment_q2_2025.pdf", mime_type: "application/pdf", size_bytes: 1_100_000, category: "aml", description: "Q2 2025 AML risk assessment", entity_type: "report", entity_id: "RPT-0041", uploaded_by: "USR-MLRO", status: "active", created_at: new Date(Date.now() - 86400000 * 7).toISOString() },
+  { id: 3, doc_id: "DOC-G7H8I9", filename: "bank_statement_oct2025.xlsx", mime_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", size_bytes: 385_000, category: "kyc", description: "3-month bank statement for EDD", entity_type: "customer", entity_id: "ACE-00201", uploaded_by: "USR-ADMIN", status: "active", created_at: new Date(Date.now() - 86400000 * 14).toISOString() },
+  { id: 4, doc_id: "DOC-J0K1L2", filename: "case_evidence_CASE-2025-0088.pdf", mime_type: "application/pdf", size_bytes: 980_000, category: "case", description: "Transaction screenshots and correspondence", entity_type: "case", entity_id: "CASE-2025-0088", uploaded_by: "USR-MLRO", status: "active", created_at: new Date(Date.now() - 86400000 * 1).toISOString() },
+  { id: 5, doc_id: "DOC-M3N4O5", filename: "aml_ctf_policy_v3.pdf", mime_type: "application/pdf", size_bytes: 4_200_000, category: "policy", description: "AML/CTF Program Policy — current version", uploaded_by: "USR-ADMIN", status: "active", created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
+  { id: 6, doc_id: "DOC-P6Q7R8", filename: "austrac_correspondence_jan2025.pdf", mime_type: "application/pdf", size_bytes: 560_000, category: "correspondence", description: "AUSTRAC acknowledgement of TTR submission", uploaded_by: "USR-MLRO", status: "archived", created_at: new Date(Date.now() - 86400000 * 60).toISOString() },
 ];
 
 const CAT_COLOR: Record<string, string> = {
@@ -50,7 +44,7 @@ const CAT_COLOR: Record<string, string> = {
   other: "text-slate-400 bg-slate-500/10 border-slate-500/20",
 };
 
-function fileIcon(mime?: string) {
+function fileIcon(mime?: string | null) {
   if (!mime) return <File className="w-5 h-5" />;
   if (mime.startsWith("image/")) return <Image className="w-5 h-5" />;
   if (mime.includes("pdf")) return <FileText className="w-5 h-5" />;
@@ -63,7 +57,7 @@ function fmtSize(bytes: number): string {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
-function relTime(iso?: string): string {
+function relTime(iso?: string | null): string {
   if (!iso) return "";
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
   if (d === 0) return "Today";
@@ -87,7 +81,7 @@ export default function DocumentsPage() {
   const [uploadEntity, setUploadEntity] = useState("");
   const [uploadEntityId, setUploadEntityId] = useState("");
   const [uploadError, setUploadError] = useState("");
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DocumentStats | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const user = typeof window !== "undefined" ? getStoredUser() : null;
@@ -100,13 +94,12 @@ export default function DocumentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dr, sr] = await Promise.all([
-        apiFetch(`${API}/api/v1/documents?limit=200`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/documents/stats`, { credentials: "include" }),
+      const [docsData, statsData] = await Promise.all([
+        listDocuments({ limit: 200 }),
+        getDocumentStats().catch(() => null),
       ]);
-      if (!dr.ok) throw new Error("api");
-      setDocs(await dr.json());
-      if (sr.ok) setStats(await sr.json());
+      setDocs(docsData);
+      if (statsData) setStats(statsData);
     } catch {
       setDemo(true);
       setStats({ total: DEMO_DOCS.length, total_bytes: DEMO_DOCS.reduce((s, d) => s + d.size_bytes, 0), by_category: {} });
@@ -120,27 +113,20 @@ export default function DocumentsPage() {
     setUploading(true);
     setUploadError("");
     try {
-      const fd = new FormData();
-      fd.append("file", uploadFile);
-      fd.append("category", uploadCat);
-      if (uploadDesc) fd.append("description", uploadDesc);
-      if (uploadEntity) fd.append("entity_type", uploadEntity);
-      if (uploadEntityId) fd.append("entity_id", uploadEntityId);
-
-      const res = await apiFetch(`${API}/api/v1/documents`, {
-        method: "POST", credentials: "include", body: fd,
+      const newDoc = await uploadDocument({
+        file: uploadFile,
+        category: uploadCat,
+        description: uploadDesc || undefined,
+        entityType: uploadEntity || undefined,
+        entityId: uploadEntityId || undefined,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Upload failed");
-      }
-      const newDoc: Doc = await res.json();
       setDocs(prev => [newDoc, ...prev]);
       setShowUpload(false);
       setUploadFile(null); setUploadDesc(""); setUploadEntity(""); setUploadEntityId("");
-    } catch (e: any) {
+    } catch {
       // Demo mode: add locally
       const fakeDoc: Doc = {
+        id: Date.now(),
         doc_id: `DOC-${Date.now()}`,
         filename: uploadFile.name,
         mime_type: uploadFile.type,
@@ -163,7 +149,7 @@ export default function DocumentsPage() {
 
   const handleDownload = async (doc: Doc) => {
     try {
-      const res = await apiFetch(`${API}/api/v1/documents/${doc.doc_id}/download`, { credentials: "include" });
+      const res = await downloadDocument(doc.doc_id);
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -178,7 +164,7 @@ export default function DocumentsPage() {
   const handleArchive = async (doc_id: string) => {
     setDocs(prev => prev.map(d => d.doc_id === doc_id ? { ...d, status: "archived" } : d));
     try {
-      await apiFetch(`${API}/api/v1/documents/${doc_id}/archive`, { method: "POST", credentials: "include" });
+      await archiveDocument(doc_id);
     } catch {}
   };
 
@@ -186,7 +172,7 @@ export default function DocumentsPage() {
     if (!confirm("Permanently delete this document?")) return;
     setDocs(prev => prev.filter(d => d.doc_id !== doc_id));
     try {
-      await apiFetch(`${API}/api/v1/documents/${doc_id}`, { method: "DELETE", credentials: "include" });
+      await deleteDocument(doc_id);
     } catch {}
   };
 
