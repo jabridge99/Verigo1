@@ -12,7 +12,7 @@ interface Session {
   applicant_email: string;
   status: string;
   documents_uploaded: number;
-  customer_id?: string;
+  customer_id?: string | null;
 }
 
 interface Props {

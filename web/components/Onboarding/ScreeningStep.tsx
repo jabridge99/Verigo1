@@ -15,7 +15,7 @@ interface Session {
   applicant_name: string;
   applicant_email: string;
   status: string;
-  customer_id?: string;
+  customer_id?: string | null;
 }
 
 const DECISION_STYLE: Record<string, { color: string; bar: string; Icon: any; label: string }> = {

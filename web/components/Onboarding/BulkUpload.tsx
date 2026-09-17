@@ -2,17 +2,10 @@
 
 import { useState, useCallback } from "react";
 import { Upload, AlertCircle, CheckCircle, Download } from "lucide-react";
-import { apiFetch } from '@/lib/auth'
+import { importOnboardingFile, type BatchSummary } from '@/lib/api/onboarding'
+import { ApiError } from '@/lib/api/client'
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface UploadResult {
-  batch_id: string;
-  total_rows: number;
-  success_rows: number;
-  error_rows: number;
-  errors?: Array<{ row: number; error: string }>;
-}
+type UploadResult = BatchSummary;
 
 interface Props {
   industryId: string;
@@ -29,19 +22,12 @@ export default function BulkUpload({ industryId, onComplete }: Props) {
     setUploading(true);
     setError(null);
     setResult(null);
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    const endpoint = ext === "xlsx" || ext === "xls" ? "/import/excel" : "/import/csv";
-    const form = new FormData();
-    form.append("industry_id", industryId);
-    form.append("file", file);
     try {
-      const res = await apiFetch(`${API}/api/v1/onboarding${endpoint}`, { method: "POST", credentials: "include", body: form });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const data = await importOnboardingFile(file, industryId);
       setResult(data);
       if (data.batch_id) onComplete(data.batch_id);
-    } catch (e: any) {
-      setError(e.message || "Upload failed");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Upload failed");
     } finally {
       setUploading(false);
     }
