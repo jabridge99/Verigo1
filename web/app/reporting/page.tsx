@@ -8,7 +8,20 @@ import {
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
 import { apiFetch } from '@/lib/auth'
+import {
+  listTtrReports,
+  listSmrReports,
+  getReportingSummary,
+  reviewReport,
+  approveReport,
+  submitReport,
+  acknowledgeReport,
+} from '@/lib/api/reports'
 
+// ifti/* calls below are a separate backend resource (app/api/routes/
+// ifti.py, its own router/prefix) despite sharing this page and the
+// same generic review/approve/submit/acknowledge workflow shape as
+// ttr/smr — left on raw apiFetch()/API, not migrated in this pass.
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type ReportKind = "ifti" | "ttr" | "smr";
@@ -183,43 +196,46 @@ export default function ReportingDashboard() {
   };
 
   const fetchData = useCallback(async () => {
-    try {
-      const [iRes, tRes, sRes, sumRes] = await Promise.all([
-        apiFetch(`${API}/api/v1/ifti/`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/reports/ttr?limit=100`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/reports/smr?limit=100`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/reports/summary`, { credentials: "include" }),
-      ]);
-      if (!iRes.ok && !tRes.ok && !sRes.ok && !sumRes.ok) {
-        showToast("error", "Failed to load reports");
-        return;
-      }
-      const all: Report[] = [];
-      if (iRes.ok) (await iRes.json()).forEach((r: any) => all.push(mapReport(r, "ifti")));
-      if (tRes.ok) (await tRes.json()).forEach((r: any) => all.push(mapReport(r, "ttr")));
-      if (sRes.ok) (await sRes.json()).forEach((r: any) => all.push(mapReport(r, "smr")));
-      setReports(all);
-      if (sumRes.ok) setSummary(await sumRes.json());
-    } catch {
+    const [iRes, tResult, sResult, sumResult] = await Promise.allSettled([
+      apiFetch(`${API}/api/v1/ifti/`, { credentials: "include" }),
+      listTtrReports(100),
+      listSmrReports(100),
+      getReportingSummary(),
+    ]);
+    const iOk = iRes.status === "fulfilled" && iRes.value.ok;
+    if (!iOk && tResult.status === "rejected" && sResult.status === "rejected" && sumResult.status === "rejected") {
       showToast("error", "Failed to load reports");
+      return;
     }
+    const all: Report[] = [];
+    if (iOk && iRes.status === "fulfilled") (await iRes.value.json()).forEach((r: any) => all.push(mapReport(r, "ifti")));
+    if (tResult.status === "fulfilled") tResult.value.forEach(r => all.push(mapReport(r, "ttr")));
+    if (sResult.status === "fulfilled") sResult.value.forEach(r => all.push(mapReport(r, "smr")));
+    setReports(all);
+    if (sumResult.status === "fulfilled") setSummary(sumResult.value);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const advanceStatus = async (report: Report, action: "review" | "approve" | "submit" | "acknowledge") => {
-    const base = report.report_type === "ifti"
-      ? `${API}/api/v1/ifti/${report.id}`
-      : `${API}/api/v1/reports/${report.report_type}/${report.id}`;
     const statusMap: Record<string, string> = { review: "under_review", approve: "approved", submit: "submitted", acknowledge: "acknowledged" };
-    let url = "";
-    if (action === "review") url = `${base}/review`;
-    else if (action === "approve") url = report.report_type === "smr" ? `${base}/mlro-sign-off` : `${base}/approve`;
-    else if (action === "submit") url = `${base}/submit?submission_reference=${encodeURIComponent(`AUTO-${Date.now()}`)}`;
-    else url = `${base}/acknowledge?acknowledgement_ref=${encodeURIComponent(`ACK-${Date.now()}`)}`;
     try {
-      const res = await apiFetch(url, { method: "POST", credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (report.report_type === "ifti") {
+        const base = `${API}/api/v1/ifti/${report.id}`;
+        let url = "";
+        if (action === "review") url = `${base}/review`;
+        else if (action === "approve") url = `${base}/approve`;
+        else if (action === "submit") url = `${base}/submit?submission_reference=${encodeURIComponent(`AUTO-${Date.now()}`)}`;
+        else url = `${base}/acknowledge?acknowledgement_ref=${encodeURIComponent(`ACK-${Date.now()}`)}`;
+        const res = await apiFetch(url, { method: "POST", credentials: "include" });
+        if (!res.ok) throw new Error(await res.text());
+      } else {
+        const reportType = report.report_type;
+        if (action === "review") await reviewReport(reportType, report.id);
+        else if (action === "approve") await approveReport(reportType, report.id);
+        else if (action === "submit") await submitReport(reportType, report.id, `AUTO-${Date.now()}`);
+        else await acknowledgeReport(reportType, report.id, `ACK-${Date.now()}`);
+      }
     } catch (err: any) {
       showToast("error", `Failed to ${action}: ${err.message || "request failed"}`);
       return;

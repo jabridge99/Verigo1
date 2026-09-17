@@ -7,37 +7,13 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
-import { apiFetch } from '@/lib/auth'
 import { listCustomers } from '@/lib/api/customers'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface ECDDRecord {
-  id: string;
-  ecdd_id: string;
-  customer_id: string;
-  trigger_reason: string;
-  trigger_reason_other?: string;
-  pep_status: number;
-  adverse_media_found: number;
-  beneficial_owner_verified: number;
-  source_of_wealth_verified: number;
-  enhanced_risk_score: number;
-  recommendation?: string;
-  analyst_notes?: string;
-  source_of_funds?: string;
-  source_of_wealth_notes?: string;
-  purpose_of_transaction?: string;
-  tax_risk_notes?: string;
-  high_tax_risk?: number;
-  investment_legitimacy_notes?: string;
-  status: string;
-  decision_notes?: string;
-  decided_by?: string;
-  decided_at?: string;
-  last_revised_at?: string;
-  created_at?: string;
-}
+import {
+  listEcddRecords,
+  createEcddRecord,
+  decideEcddRecord,
+  type ECDDRecord,
+} from '@/lib/api/reports'
 
 interface CustomerOption {
   id: string;
@@ -104,8 +80,8 @@ export default function ECDDDashboard() {
 
   const fetchRecords = useCallback(async () => {
     try {
-      const res = await apiFetch(`${API}/api/v1/reports/ecdd/`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setRecords(d); }
+      const d = await listEcddRecords();
+      if (d.length) setRecords(d);
     } catch {}
   }, []);
 
@@ -114,17 +90,11 @@ export default function ECDDDashboard() {
   const decideECDD = async (ecddId: string, status: string, decisionNotes: string) => {
     const now = new Date().toISOString();
     try {
-      const res = await apiFetch(`${API}/api/v1/reports/ecdd/${ecddId}/decision`, {
-        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, decision_notes: decisionNotes }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? updated : r));
-        setSelected(prev => prev?.ecdd_id === ecddId ? updated : prev);
-        showToast("success", `${ecddId} marked ${status}`);
-        return;
-      }
+      const updated = await decideEcddRecord(ecddId, { status, decision_notes: decisionNotes });
+      setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? updated : r));
+      setSelected(prev => prev?.ecdd_id === ecddId ? updated : prev);
+      showToast("success", `${ecddId} marked ${status}`);
+      return;
     } catch {}
     setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? { ...r, status, decision_notes: decisionNotes, last_revised_at: now } : r));
     setSelected(prev => prev?.ecdd_id === ecddId ? { ...prev, status, decision_notes: decisionNotes, last_revised_at: now } : prev);
@@ -616,12 +586,7 @@ function CreateECDDForm({ onCreated }: { onCreated: (r: ECDDRecord) => void }) {
     setError("");
     setSubmitting(true);
     try {
-      const res = await apiFetch(`${API}/api/v1/reports/ecdd/`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_id: customer!.id, ...form }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onCreated(await res.json());
+      onCreated(await createEcddRecord({ customer_id: customer!.id, ...form }));
     } catch {
       onCreated(buildRecord());
     } finally { setSubmitting(false); }
