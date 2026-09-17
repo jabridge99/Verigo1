@@ -11,14 +11,23 @@ import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
 import { apiFetch } from '@/lib/auth'
 import { listCustomers } from '@/lib/api/customers'
+import {
+  listAlerts,
+  getAlertDashboard,
+  reviewAlert,
+  escalateAlert,
+  createCaseFromAlert as apiCreateCaseFromAlert,
+  type AlertListItem,
+  type AlertDetail,
+} from '@/lib/api/alerts'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface Alert {
-  id: string; alert_id: string; transaction_id?: string; customer_id?: string;
+  id: string; alert_id: string; transaction_id?: string | null; customer_id?: string;
   industry_id?: string; alert_type: string; severity: string; status: string;
-  description: string; rule_name?: string; action_taken?: string; notes?: string;
-  assigned_to?: string; is_resolved: number; created_at?: string; resolved_at?: string;
+  description: string; rule_name?: string | null; action_taken?: string; notes?: string;
+  assigned_to?: string | null; is_resolved: number; created_at?: string; resolved_at?: string | null;
 }
 
 interface Stats {
@@ -34,11 +43,19 @@ const STATUS_DISPLAY: Record<string, string> = {
   smr_candidate: "reported",
 };
 
-function mapAlert(raw: any): Alert {
+// GET /alerts returns AlertListItem (no transaction_id/rule_name/description/
+// alert_type/created_at/resolved_at); the mutation endpoints return the
+// fuller AlertDetail. This page displays both through the same table, so
+// mapAlert() accepts either — the Pick below is honest about which fields
+// are genuinely absent on the list shape rather than widening to `any`.
+type RawAlert = (AlertListItem | AlertDetail) &
+  Partial<Pick<AlertDetail, "transaction_id" | "rule_name" | "description" | "alert_type" | "created_at" | "resolved_at">>;
+
+function mapAlert(raw: RawAlert): Alert {
   const status = STATUS_DISPLAY[raw.status] || raw.status;
   return {
     id: raw.id,
-    alert_id: raw.alert_ref ?? raw.alert_id,
+    alert_id: raw.alert_ref,
     transaction_id: raw.transaction_id,
     customer_id: raw.customer_id,
     alert_type: raw.category ?? raw.alert_type,
@@ -117,17 +134,14 @@ function MonitoringDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [aRes, sRes] = await Promise.all([
-        apiFetch(`${API}/api/v1/alerts?limit=200`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/alerts/dashboard`, { credentials: "include" }),
+      const [d, sd] = await Promise.all([
+        listAlerts(200),
+        getAlertDashboard(),
       ]);
-      if (!aRes.ok || !sRes.ok) { showToast("error", "Failed to load alerts"); return; }
-      const d = await aRes.json();
       const mapped = d.map(mapAlert);
       setAlerts(mapped);
       const byType: Record<string, number> = {};
       for (const a of mapped) byType[a.alert_type] = (byType[a.alert_type] || 0) + 1;
-      const sd = await sRes.json();
       setStats({
         total_alerts: sd.total_alerts ?? 0,
         open_alerts: sd.open_alerts ?? 0,
@@ -145,21 +159,14 @@ function MonitoringDashboard() {
 
   const doAction = async (action: "resolve" | "dismiss" | "escalate", alertId: string) => {
     try {
-      const res = action === "escalate"
-        ? await apiFetch(`${API}/api/v1/alerts/${alertId}/escalate`, {
-            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." }),
-          })
-        : await apiFetch(`${API}/api/v1/alerts/${alertId}/review`, {
-            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              resolution: action === "resolve" ? "cleared" : "dismissed",
-              review_notes: actionNote || (action === "resolve" ? "Reviewed and cleared." : "Dismissed — false positive."),
-            }),
+      const updated = action === "escalate"
+        ? await escalateAlert(alertId, { escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." })
+        : await reviewAlert(alertId, {
+            resolution: action === "resolve" ? "cleared" : "dismissed",
+            review_notes: actionNote || (action === "resolve" ? "Reviewed and cleared." : "Dismissed — false positive."),
           });
-      if (!res.ok) { showToast("error", `Failed to ${action} alert`); return; }
-      const updated = mapAlert(await res.json());
-      setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
+      const mapped = mapAlert(updated);
+      setAlerts(prev => prev.map(a => a.id === alertId ? mapped : a));
       setSelected(null);
       setActionNote("");
       showToast("success", `Alert ${action}d`);
@@ -170,12 +177,7 @@ function MonitoringDashboard() {
 
   const createCaseFromAlert = async (alert: Alert) => {
     try {
-      const res = await apiFetch(
-        `${API}/api/v1/alerts/${alert.id}/create-case`,
-        { method: "POST", credentials: "include" }
-      );
-      if (!res.ok) { showToast("error", "Failed to create case"); return; }
-      const body = await res.json();
+      const body = await apiCreateCaseFromAlert(alert.id);
       setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, status: "escalated" } : a));
       setSelected(null);
       showToast("success", body.message || `${body.case_ref} created`);
