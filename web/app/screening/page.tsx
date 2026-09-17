@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { Zap, Shield, User, Search, Building2, MapPin, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
-import { apiFetch } from '@/lib/auth'
+import { quickScreen, type QuickScreenCategory, type QuickScreenResult } from "@/lib/api/screening";
+import { ApiError } from "@/lib/api/client";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type Category = "sanctions" | "pep" | "adverse_media" | "company" | "address";
+type Category = QuickScreenCategory;
 
 const TABS: { id: Category; label: string; icon: any; placeholder: string }[] = [
   { id: "sanctions", label: "Sanctions", icon: Shield, placeholder: "Full name to screen…" },
@@ -16,26 +15,12 @@ const TABS: { id: Category; label: string; icon: any; placeholder: string }[] = 
   { id: "address", label: "Address", icon: MapPin, placeholder: "Address to validate…" },
 ];
 
-interface Result {
-  category: string;
-  query: string;
-  match_found: boolean;
-  matches?: { name: string; id: string; list: string }[];
-  lists_checked?: string[];
-  match_count?: number;
-  status?: string;
-  valid?: boolean;
-  normalized?: string;
-  note?: string;
-  disclaimer: string;
-}
-
 export default function ScreeningHubPage() {
   const [tab, setTab] = useState<Category>("sanctions");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
+  const [result, setResult] = useState<QuickScreenResult | null>(null);
 
   const active = TABS.find(t => t.id === tab)!;
 
@@ -45,16 +30,9 @@ export default function ScreeningHubPage() {
     setError(null);
     setResult(null);
     try {
-      const res = await apiFetch(`${API}/api/v1/screening/quick-screen`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: tab, query: query.trim() }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      setResult(await res.json());
-    } catch (e: any) {
-      setError(e.message || "Screening failed");
+      setResult(await quickScreen(tab, query.trim()));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Screening failed");
     } finally {
       setLoading(false);
     }

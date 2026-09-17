@@ -44,7 +44,7 @@ Each entry: what it is, why it's parked, where the full detail lives. The two se
 ### F. Structural / mechanical backlog
 | ID | What | Effort |
 |---|---|---|
-| C2 | **`api_keys.py`/webhooks split, `/org` vs `/organisations` prefix naming, the inline-schemas cleanup (all 28 route files), and the oversized-route-files split (all 5 files) are all resolved, 2026-09-16.** See "C2 pass 6/7/8/9/10" below. Frontend API client: scaffold + `customers` + `analytics` + `billing` + `organisations` + `storage` + all 3 governance sub-resources (`training`/`policies`/`controls`) resources done, see "C2 pass 11" through "C2 pass 18" — 29 files/~137 call sites remain, one resource at a time. Thin `web/components/ui/` (only `button.tsx`/`card.tsx`) not started | Dedicated refactor pass, one sub-item at a time — 4 of 6 fully done, 1 in progress, 1 remaining |
+| C2 | **`api_keys.py`/webhooks split, `/org` vs `/organisations` prefix naming, the inline-schemas cleanup (all 28 route files), and the oversized-route-files split (all 5 files) are all resolved, 2026-09-16.** See "C2 pass 6/7/8/9/10" below. Frontend API client: scaffold + `customers` + `analytics` + `billing` + `organisations` + `storage` + all 3 governance sub-resources (`training`/`policies`/`controls`) + `screening` resources done, see "C2 pass 11" through "C2 pass 19" — 27 files/~134 call sites remain, one resource at a time. Thin `web/components/ui/` (only `button.tsx`/`card.tsx`) not started | Dedicated refactor pass, one sub-item at a time — 4 of 6 fully done, 1 in progress, 1 remaining |
 | P5 | **`Column()` side resolved, 2026-09-16** — see "P5/C2 pass" below. The 184 `relationship()` declarations still lack `Mapped[]` (need cross-model list-vs-scalar knowledge, deliberately left for a follow-up) | `relationship()` retrofit remaining, ~40 files touched |
 
 *(C4, the two misleadingly-named modules, is resolved — see "Stage 17 — fourth pass" below. P4 was already resolved before this parking-lot pass — see its own entry below; nothing left to do.)*
@@ -1442,3 +1442,17 @@ All 8 originally-shared helpers (`_compute_status`, `_sync_status`, `_get_soluti
 **Detail:** new `web/lib/api/governanceControls.ts`; `web/app/governance/controls/page.tsx` updated (now fully migrated — no raw `apiFetch`/`API` calls left in the file). **This closes out all three governance sub-resources (training/policies/controls).**
 
 **Remaining:** 29 files/~137 call sites (onboarding, reports, screening, alerts, transactions, etc.).
+
+## C2 pass 19, 2026-09-17 (frontend API client — ninth pilot resource: `screening`)
+
+**Scope:** the ninth resource migrated onto the `lib/api/` pattern, and the smallest since `storage` — 3 `/api/v1/screening/*` call sites across 2 files (`app/screening/page.tsx`'s ad-hoc Screening Hub, `components/Onboarding/ScreeningStep.tsx`'s onboarding-wizard identity-score step). The backend's screening route package (`app/api/routes/screening/`) is large — alerts, adverse-media, batch, crypto-wallet, dashboard, records — but neither frontend file calls any of that surface, so this pilot's scope is genuinely just the 3 endpoints, not a deliberate exclusion of the rest.
+
+**What changed:**
+- **`web/lib/api/screening.ts`** (new) — 3 typed functions (`quickScreen`, `getCustomerIdentityScore`, `decideCustomerIdentityScore`), built on `apiGet`/`apiPost`. Types (`QuickScreenResult`, `IdentityScore`, `IdentityScoreDecision`) mirror `app/api/routes/screening/quick_screen.py`'s per-category response dicts and `app/services/identity_composite_score.py`'s `compute_identity_score()` return shape. `QuickScreenResult` gained a `provider_reference` field the page's original local `Result` type didn't declare — confirmed live that the backend actually returns it for the `pep`/`adverse_media`/`company` categories (harmless to omit since the page doesn't render it, but included for accuracy per the discipline in every prior pilot).
+- **`web/app/screening/page.tsx`** — its 1 call site migrated; local `Result` interface removed in favour of the shared `QuickScreenResult`; `Category` type now imported as `QuickScreenCategory`.
+- **`web/components/Onboarding/ScreeningStep.tsx`** — its 2 call sites migrated; local `CategoryBreakdown`/`IdentityScore` interfaces removed in favour of the shared types.
+
+**Verified:** `tsc --noEmit` clean; `npm run lint` clean (0 errors, same 21 pre-existing warnings); `npm test` 19/19; `npm run build` succeeded, all 113 routes generated. Live-backend verification against a fresh local SQLite backend: exercised `quick-screen` across all 5 categories (sanctions/pep/adverse_media/company/address), confirming the per-category response shape (including `provider_reference` on the non-sanctions/non-address categories); created a customer, fetched their identity score, then role-promoted the test user and applied the decision — every response matched the TypeScript types exactly, including the `customer_status` field the `decide` endpoint adds on top of the base identity-score shape.
+**Detail:** new `web/lib/api/screening.ts`; `web/app/screening/page.tsx` and `web/components/Onboarding/ScreeningStep.tsx` updated (both now fully migrated — no raw `apiFetch`/`API` calls left in either file).
+
+**Remaining:** 27 files/~134 call sites (onboarding, reports, alerts, transactions, etc.).
