@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
-import { apiFetch } from '@/lib/auth'
 import {
   listTtrReports,
   listSmrReports,
@@ -17,12 +16,13 @@ import {
   submitReport,
   acknowledgeReport,
 } from '@/lib/api/reports'
-
-// ifti/* calls below are a separate backend resource (app/api/routes/
-// ifti.py, its own router/prefix) despite sharing this page and the
-// same generic review/approve/submit/acknowledge workflow shape as
-// ttr/smr — left on raw apiFetch()/API, not migrated in this pass.
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import {
+  listIftiRecords,
+  reviewIftiRecord,
+  approveIftiRecord,
+  submitIftiRecord,
+  acknowledgeIftiRecord,
+} from '@/lib/api/ifti'
 
 type ReportKind = "ifti" | "ttr" | "smr";
 
@@ -196,19 +196,18 @@ export default function ReportingDashboard() {
   };
 
   const fetchData = useCallback(async () => {
-    const [iRes, tResult, sResult, sumResult] = await Promise.allSettled([
-      apiFetch(`${API}/api/v1/ifti/`, { credentials: "include" }),
+    const [iResult, tResult, sResult, sumResult] = await Promise.allSettled([
+      listIftiRecords(),
       listTtrReports(100),
       listSmrReports(100),
       getReportingSummary(),
     ]);
-    const iOk = iRes.status === "fulfilled" && iRes.value.ok;
-    if (!iOk && tResult.status === "rejected" && sResult.status === "rejected" && sumResult.status === "rejected") {
+    if (iResult.status === "rejected" && tResult.status === "rejected" && sResult.status === "rejected" && sumResult.status === "rejected") {
       showToast("error", "Failed to load reports");
       return;
     }
     const all: Report[] = [];
-    if (iOk && iRes.status === "fulfilled") (await iRes.value.json()).forEach((r: any) => all.push(mapReport(r, "ifti")));
+    if (iResult.status === "fulfilled") iResult.value.forEach(r => all.push(mapReport(r, "ifti")));
     if (tResult.status === "fulfilled") tResult.value.forEach(r => all.push(mapReport(r, "ttr")));
     if (sResult.status === "fulfilled") sResult.value.forEach(r => all.push(mapReport(r, "smr")));
     setReports(all);
@@ -221,14 +220,10 @@ export default function ReportingDashboard() {
     const statusMap: Record<string, string> = { review: "under_review", approve: "approved", submit: "submitted", acknowledge: "acknowledged" };
     try {
       if (report.report_type === "ifti") {
-        const base = `${API}/api/v1/ifti/${report.id}`;
-        let url = "";
-        if (action === "review") url = `${base}/review`;
-        else if (action === "approve") url = `${base}/approve`;
-        else if (action === "submit") url = `${base}/submit?submission_reference=${encodeURIComponent(`AUTO-${Date.now()}`)}`;
-        else url = `${base}/acknowledge?acknowledgement_ref=${encodeURIComponent(`ACK-${Date.now()}`)}`;
-        const res = await apiFetch(url, { method: "POST", credentials: "include" });
-        if (!res.ok) throw new Error(await res.text());
+        if (action === "review") await reviewIftiRecord(report.id);
+        else if (action === "approve") await approveIftiRecord(report.id);
+        else if (action === "submit") await submitIftiRecord(report.id, `AUTO-${Date.now()}`);
+        else await acknowledgeIftiRecord(report.id, `ACK-${Date.now()}`);
       } else {
         const reportType = report.report_type;
         if (action === "review") await reviewReport(reportType, report.id);
