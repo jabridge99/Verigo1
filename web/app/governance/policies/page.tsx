@@ -6,40 +6,18 @@ import {
   History, ShieldCheck, ArrowRight, Archive,
 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type PolicyType =
-  | "aml_ctf_program" | "risk_assessment_methodology" | "cdd_policy" | "edd_policy"
-  | "pep_policy" | "beneficial_ownership_policy" | "transaction_monitoring_policy"
-  | "sanctions_screening_policy" | "travel_rule_policy" | "reporting_policy"
-  | "record_keeping_policy" | "training_policy" | "outsourcing_policy"
-  | "whistleblower_policy" | "conflict_of_interest_policy" | "data_privacy_policy"
-  | "procedure" | "other";
-
-type PolicyStatus =
-  | "draft" | "internal_review" | "compliance_review" | "pending_approval"
-  | "published" | "periodic_review" | "superseded" | "archived";
-
-interface Policy {
-  id: string;
-  policy_number: string;
-  title: string;
-  policy_type: PolicyType;
-  status: PolicyStatus;
-  version_major: number;
-  version_minor: number;
-  effective_date?: string | null;
-  review_due_date: string;
-  approval_date?: string | null;
-  document_owner?: string | null;
-  compliance_reviewer?: string | null;
-  approver?: string | null;
-  summary?: string | null;
-  content?: string | null;
-  regulatory_references?: string[] | null;
-  created_at?: string | null;
-}
+import {
+  listPolicies,
+  listPolicyVersions,
+  runPolicyWorkflowAction,
+  createPolicy,
+  policyExportHtmlUrl,
+  type Policy,
+  type PolicyType,
+  type PolicyStatus,
+  type PolicyVersion,
+  type PolicyCreateInput,
+} from "@/lib/api/governancePolicies";
 
 const TYPE_LABELS: Record<PolicyType, string> = {
   aml_ctf_program: "AML/CTF Program",
@@ -53,6 +31,7 @@ const TYPE_LABELS: Record<PolicyType, string> = {
   travel_rule_policy: "Travel Rule Policy",
   reporting_policy: "Reporting Policy (SMR/TTR/IFTI)",
   record_keeping_policy: "Record Keeping Policy",
+  independent_review_policy: "Independent Review Policy",
   training_policy: "Training Policy",
   outsourcing_policy: "Outsourcing Policy",
   whistleblower_policy: "Whistleblower Policy",
@@ -109,7 +88,7 @@ export default function PoliciesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState<Policy | null>(null);
-  const [versions, setVersions] = useState<any[]>([]);
+  const [versions, setVersions] = useState<PolicyVersion[]>([]);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const showToast = (type: "success" | "error", msg: string) => {
@@ -118,8 +97,8 @@ export default function PoliciesPage() {
 
   const fetchPolicies = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setPolicies(d); }
+      const d = await listPolicies();
+      if (d.length) setPolicies(d);
     } catch {}
   }, []);
 
@@ -127,9 +106,7 @@ export default function PoliciesPage() {
 
   const fetchVersions = async (policyId: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies/${policyId}/versions`, { credentials: "include" });
-      if (res.ok) setVersions(await res.json());
-      else setVersions([]);
+      setVersions(await listPolicyVersions(policyId));
     } catch { setVersions([]); }
   };
 
@@ -137,17 +114,11 @@ export default function PoliciesPage() {
 
   const runWorkflowAction = async (policy: Policy, action: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies/${policy.id}/workflow`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setPolicies(prev => prev.map(p => p.id === policy.id ? updated : p));
-        setSelected(updated);
-        showToast("success", `Policy moved to ${updated.status.replace("_", " ")}`);
-        return;
-      }
+      const updated = await runPolicyWorkflowAction(policy.id, action);
+      setPolicies(prev => prev.map(p => p.id === policy.id ? updated : p));
+      setSelected(updated);
+      showToast("success", `Policy moved to ${updated.status.replace("_", " ")}`);
+      return;
     } catch {}
     // Demo fallback — apply the transition locally
     const STATUS_MAP: Record<string, PolicyStatus> = {
@@ -167,7 +138,7 @@ export default function PoliciesPage() {
   };
 
   const exportPdf = (policy: Policy) => {
-    window.open(`${API}/api/v1/governance/policies/${policy.id}/export-html`, "_blank");
+    window.open(policyExportHtmlUrl(policy.id), "_blank");
   };
 
   const filtered = policies.filter(p => {
@@ -426,15 +397,11 @@ function CreatePolicyForm({ onCreated }: { onCreated: (p: Policy) => void }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          regulatory_references: form.regulatory_references.split(",").map(s => s.trim()).filter(Boolean),
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onCreated(await res.json());
+      const payload: PolicyCreateInput = {
+        ...form,
+        regulatory_references: form.regulatory_references.split(",").map(s => s.trim()).filter(Boolean),
+      };
+      onCreated(await createPolicy(payload));
     } catch {
       onCreated(buildPolicy());
     } finally { setSubmitting(false); }

@@ -29,3 +29,7 @@ class DocumentUpdate(BaseModel):
     category: Optional[DocumentCategory] = None
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
+
+
+class LegalHoldPayload(BaseModel):
+    reason: str

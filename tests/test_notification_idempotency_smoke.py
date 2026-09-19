@@ -39,3 +39,14 @@ def test_no_dedupe_key_allows_multiple_notifications(db, analyst_user):
     second = create_notification(db, _payload(analyst_user.id))
 
     assert first.id != second.id
+
+
+def test_send_email_does_not_crash(db, analyst_user):
+    """
+    _try_email() (called whenever send_email=True) queried
+    User.user_id, which doesn't exist on User (the real PK is `id`) --
+    confirmed via mypy once the SQLAlchemy plugin was enabled. Every
+    notification created with send_email=True raised AttributeError.
+    """
+    notif = create_notification(db, _payload(analyst_user.id), send_email=True)
+    assert notif.id is not None

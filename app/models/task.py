@@ -9,6 +9,8 @@ All completions require explicit human action — never auto-complete.
 """
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -23,6 +25,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -48,6 +51,9 @@ class TaskType(str, enum.Enum):
     submit_smr = "submit_smr"  # SMR lodgement task
     request_asic_extract = "request_asic_extract"  # Pull ASIC company extract
     internal_review = "internal_review"  # General internal review
+    compliance_task = (
+        "compliance_task"  # AML/CTF Program obligation — not tied to a case/customer
+    )
     other = "other"
 
 
@@ -66,63 +72,77 @@ class Task(Base):
 
     __tablename__ = "tasks"
 
-    id = Column(String, primary_key=True, default=lambda: f"task_{uuid4().hex[:12]}")
-    task_ref = Column(String(30), unique=True, nullable=False, index=True)
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"task_{uuid4().hex[:12]}"
+    )
+    task_ref: Mapped[str] = Column(String(30), unique=True, nullable=False, index=True)
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    case_id = Column(
+    case_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("cases.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    customer_id = Column(
+    customer_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("customers.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
 
-    task_type = Column(Enum(TaskType), nullable=False)
-    status = Column(
+    task_type: Mapped[TaskType] = Column(Enum(TaskType), nullable=False)
+    status: Mapped[TaskStatus] = Column(
         Enum(TaskStatus), default=TaskStatus.open, nullable=False, index=True
     )
-    priority = Column(Enum(TaskPriority), default=TaskPriority.normal, nullable=False)
+    priority: Mapped[TaskPriority] = Column(
+        Enum(TaskPriority), default=TaskPriority.normal, nullable=False
+    )
 
-    title = Column(String(500), nullable=False)
-    description = Column(Text)
+    title: Mapped[str] = Column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
 
     # ── Assignment ─────────────────────────────────────────────────────────────
-    assigned_to = Column(String)  # user_id
-    assigned_by = Column(String)
-    assigned_at = Column(DateTime(timezone=True))
+    assigned_to: Mapped[Optional[str]] = Column(String)  # user_id
+    assigned_by: Mapped[Optional[str]] = Column(String)
+    assigned_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
     # ── Deadline ───────────────────────────────────────────────────────────────
-    due_date = Column(Date, index=True)
-    is_overdue = Column(Boolean, default=False)
+    due_date: Mapped[Optional[date]] = Column(Date, index=True)
+    is_overdue: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Completion ─────────────────────────────────────────────────────────────
-    completed_by = Column(String)
-    completed_at = Column(DateTime(timezone=True))
-    completion_notes = Column(Text)
+    completed_by: Mapped[Optional[str]] = Column(String)
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    completion_notes: Mapped[Optional[str]] = Column(Text)
 
     # ── Cancellation ───────────────────────────────────────────────────────────
-    cancelled_by = Column(String)
-    cancelled_at = Column(DateTime(timezone=True))
-    cancellation_reason = Column(Text)
+    cancelled_by: Mapped[Optional[str]] = Column(String)
+    cancelled_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    cancellation_reason: Mapped[Optional[str]] = Column(Text)
 
     # ── RFI (Request for Information) ─────────────────────────────────────────
-    rfi_sent_at = Column(DateTime(timezone=True))
-    rfi_response_received_at = Column(DateTime(timezone=True))
-    rfi_channel = Column(String(50))  # email | portal | mail | in_person
+    rfi_sent_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    rfi_response_received_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True)
+    )
+    rfi_channel: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # email | portal | mail | in_person
 
     # ── Linked documents ───────────────────────────────────────────────────────
-    related_document_ids = Column(JSON, default=list)  # doc_id list
+    related_document_ids: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # doc_id list
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class TaskEvent(Base):
@@ -133,17 +153,21 @@ class TaskEvent(Base):
 
     __tablename__ = "task_events"
 
-    id = Column(String, primary_key=True, default=lambda: f"tev_{uuid4().hex[:10]}")
-    task_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"tev_{uuid4().hex[:10]}"
+    )
+    task_id: Mapped[str] = Column(
         String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    org_id = Column(String, nullable=False)
+    org_id: Mapped[str] = Column(String, nullable=False)
 
-    event_type = Column(String(50), nullable=False)
+    event_type: Mapped[str] = Column(String(50), nullable=False)
     # created | assigned | status_changed | completed | cancelled | rfi_sent | rfi_received | note_added
-    from_status = Column(String(50))
-    to_status = Column(String(50))
-    actor_id = Column(String)  # user_id who triggered the event
-    note = Column(Text)
+    from_status: Mapped[Optional[str]] = Column(String(50))
+    to_status: Mapped[Optional[str]] = Column(String(50))
+    actor_id: Mapped[Optional[str]] = Column(String)  # user_id who triggered the event
+    note: Mapped[Optional[str]] = Column(Text)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )

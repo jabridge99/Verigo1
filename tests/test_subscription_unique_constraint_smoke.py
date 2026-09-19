@@ -14,12 +14,21 @@ from unittest.mock import patch
 from sqlalchemy.exc import IntegrityError
 
 from app.models.billing import Subscription
+from app.models.organisation import IndustryType, Organisation
 from app.services import billing_service as svc
 
 
 def test_concurrent_checkout_completed_recovers_from_integrity_error(db):
     industry_id = "ind_race_test"
     organisation_id = "12345"
+    db.add(
+        Organisation(
+            id=str(int(organisation_id)),
+            name="Race Test Org",
+            industry_type=IndustryType.remittance,
+        )
+    )
+    db.commit()
     session_obj = {
         "metadata": {
             "industry_id": industry_id,

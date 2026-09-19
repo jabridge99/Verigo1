@@ -3,7 +3,7 @@ AML/CTF Program Management — Phase 5.
 
 Manages the organisation's formal AML/CTF Program and associated risk assessments.
 
-Under the AML/CTF Act 2006 (Cth) (as amended by the 2024 reforms effective 31 March 2026),
+Under the AML/CTF Act 2006 (Cth) (as amended by the 2024 reforms effective 1 July 2026),
 reporting entities must:
   - Maintain a written, risk-based AML/CTF Program
   - Conduct Enterprise-Wide Risk Assessments (EWRA) at least annually
@@ -26,12 +26,11 @@ reporting entity. All program content, assessments, and approvals remain the
 sole responsibility of the reporting entity and its AML/CTF Compliance Officer.
 """
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -48,12 +47,48 @@ from app.models.aml_solution import (
     AMLSolution,
     AssessmentStatus,
     ProgramStatus,
-    RiskAppetite,
     RiskAssessment,
 )
 from app.models.user import User
+from app.schemas.aml_solution import (
+    AustracDetails,
+    ProgramCreate,
+    ProgramReview,
+    ProgramUpdate,
+    RiskAssessmentCreate,
+    RiskAssessmentUpdate,
+)
+from app.services import audit_service, billing_service
 
 router = APIRouter(prefix="/aml-program", tags=["AML/CTF Program"])
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    notes: str = None,
+) -> None:
+    """
+    The AML/CTF Program document and its annual risk assessments are the
+    organisation's central compliance artefacts -- program activation,
+    annual review, and risk-assessment approval are exactly the kind of
+    decisions this codebase's audit trail exists to record, and had no
+    coverage at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        notes=notes,
+    )
+
 
 DISCLAIMER = (
     "This module provides AML/CTF Program document management only. "
@@ -83,95 +118,6 @@ REQUIRED_SECTIONS = [
     "17. Record keeping (7-year retention)",
     "18. Independent review program",
 ]
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class ProgramCreate(BaseModel):
-    version: str = Field(..., min_length=1, max_length=20, description="e.g. 1.0, 2.1")
-    risk_appetite: RiskAppetite = RiskAppetite.medium
-    overview: Optional[str] = None
-    scope: Optional[str] = None
-    designated_services: Optional[str] = None
-    compliance_officer_name: Optional[str] = None
-    compliance_officer_role: Optional[str] = None
-    effective_date: Optional[date] = None
-    review_due_date: Optional[date] = None
-    is_legacy_part_ab: bool = False
-
-
-class ProgramUpdate(BaseModel):
-    risk_appetite: Optional[RiskAppetite] = None
-    overview: Optional[str] = None
-    scope: Optional[str] = None
-    designated_services: Optional[str] = None
-    compliance_officer_name: Optional[str] = None
-    compliance_officer_role: Optional[str] = None
-    # Section fields — free-text narrative
-    ewra_summary: Optional[str] = None
-    risk_factors_customer: Optional[str] = None
-    risk_factors_product: Optional[str] = None
-    risk_factors_channel: Optional[str] = None
-    risk_factors_geography: Optional[str] = None
-    risk_factors_proliferation: Optional[str] = None
-    cdd_individuals: Optional[str] = None
-    cdd_companies: Optional[str] = None
-    cdd_trusts: Optional[str] = None
-    cdd_simplified_procedures: Optional[str] = None
-    cdd_enhanced_procedures: Optional[str] = None
-    ongoing_cdd: Optional[str] = None
-    transaction_monitoring: Optional[str] = None
-    beneficial_ownership_procedures: Optional[str] = None
-    pep_procedures: Optional[str] = None
-    sanctions_procedures: Optional[str] = None
-    travel_rule_procedures: Optional[str] = None
-    smr_procedures: Optional[str] = None
-    ttr_procedures: Optional[str] = None
-    ifti_procedures: Optional[str] = None
-    annual_compliance_report: Optional[str] = None
-    employee_due_diligence: Optional[str] = None
-    training_program_summary: Optional[str] = None
-    record_keeping: Optional[str] = None
-    independent_review: Optional[str] = None
-    effective_date: Optional[date] = None
-    review_due_date: Optional[date] = None
-
-
-class ProgramReview(BaseModel):
-    review_notes: str = Field(..., min_length=20)
-    next_review_date: Optional[date] = None
-    changes_required: bool = False
-
-
-class RiskAssessmentCreate(BaseModel):
-    title: str = Field(..., min_length=5, max_length=255)
-    assessment_date: date
-    customer_risk_rating: Optional[str] = None
-    product_risk_rating: Optional[str] = None
-    channel_risk_rating: Optional[str] = None
-    geography_risk_rating: Optional[str] = None
-    inherent_risk_score: Optional[float] = Field(None, ge=0, le=25)
-    control_effectiveness_score: Optional[float] = Field(None, ge=0, le=5)
-    residual_risk_score: Optional[float] = Field(None, ge=0, le=25)
-    findings: Optional[str] = None
-    recommendations: Optional[str] = None
-    action_items: Optional[str] = None
-    next_review_date: Optional[date] = None
-
-
-class RiskAssessmentUpdate(BaseModel):
-    customer_risk_rating: Optional[str] = None
-    product_risk_rating: Optional[str] = None
-    channel_risk_rating: Optional[str] = None
-    geography_risk_rating: Optional[str] = None
-    inherent_risk_score: Optional[float] = Field(None, ge=0, le=25)
-    control_effectiveness_score: Optional[float] = Field(None, ge=0, le=5)
-    residual_risk_score: Optional[float] = Field(None, ge=0, le=25)
-    findings: Optional[str] = None
-    recommendations: Optional[str] = None
-    action_items: Optional[str] = None
-    next_review_date: Optional[date] = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -238,8 +184,22 @@ def _section_completion(p: AMLProgram) -> dict:
     }
 
 
-def _program_dict(p: AMLProgram, include_sections: bool = False) -> dict:
-    d = {
+# Sections shown in full even without the full_aml_program plan feature --
+# enough to show the program is real and complete, not the substance a
+# reporting entity would actually need to operate on (CDD/monitoring/
+# sanctions/SMR/TTR procedures etc. stay locked). Mirrors the same
+# preview-vs-full distinction organisations.py's _program_response() (the
+# other AML program system, AmlProgramRecord) already enforces via
+# billing_service.is_feature_enabled(..., "full_aml_program") -- this
+# endpoint's include_sections=true previously returned every section's
+# full text to any analyst+ user regardless of plan.
+_PREVIEW_SECTIONS = {"overview", "scope"}
+
+
+def _program_dict(
+    p: AMLProgram, include_sections: bool = False, full_access: bool = True
+) -> dict:
+    d: dict = {
         "id": p.id,
         "org_id": p.org_id,
         "solution_id": p.solution_id,
@@ -264,7 +224,7 @@ def _program_dict(p: AMLProgram, include_sections: bool = False) -> dict:
         "austrac_registration_expiry": p.austrac_registration_expiry,
     }
     if include_sections:
-        d["sections"] = {
+        sections: dict = {
             "overview": p.overview,
             "scope": p.scope,
             "designated_services": p.designated_services,
@@ -294,6 +254,15 @@ def _program_dict(p: AMLProgram, include_sections: bool = False) -> dict:
             "record_keeping": p.record_keeping,
             "independent_review": p.independent_review,
         }
+        if not full_access:
+            d["locked_sections"] = sorted(
+                k for k in sections if k not in _PREVIEW_SECTIONS
+            )
+            sections = {
+                k: (v if k in _PREVIEW_SECTIONS else None) for k, v in sections.items()
+            }
+            d["is_preview"] = True
+        d["sections"] = sections
     return d
 
 
@@ -327,6 +296,11 @@ def _assessment_dict(a: RiskAssessment) -> dict:
 # ── Program CRUD ──────────────────────────────────────────────────────────────
 
 
+def _has_full_program_access(db: Session, current_user: User, org_id: str) -> bool:
+    plan = billing_service.current_plan(db, current_user.industry_id, org_id)
+    return billing_service.is_feature_enabled(db, plan, "full_aml_program")
+
+
 @router.get("")
 def get_active_program(
     include_sections: bool = Query(False),
@@ -337,7 +311,9 @@ def get_active_program(
     Get the currently active AML/CTF Program.
 
     Returns document structure with section completion tracker.
-    Set include_sections=true to retrieve all narrative content.
+    Set include_sections=true to retrieve all narrative content -- gated
+    on the org's plan (full_aml_program feature), same as the
+    AmlProgramRecord/organisations.py system.
 
     DISCLAIMER: The platform provides program document management only.
     """
@@ -360,8 +336,11 @@ def get_active_program(
             "disclaimer": DISCLAIMER,
         }
 
+    full_access = (
+        _has_full_program_access(db, current_user, org_id) if include_sections else True
+    )
     return {
-        "active_program": _program_dict(program, include_sections),
+        "active_program": _program_dict(program, include_sections, full_access),
         "required_sections": REQUIRED_SECTIONS,
         "disclaimer": DISCLAIMER,
     }
@@ -382,7 +361,7 @@ def list_program_versions(
         )
         .order_by(desc(AMLProgram.created_at))
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
     return {"versions": [_program_dict(p) for p in programs], "count": len(programs)}
@@ -436,59 +415,10 @@ def create_program(
     db.add(program)
     db.commit()
     db.refresh(program)
+    _log(db, current_user, "aml_program", program.id, "aml_program_created")
     return {
         "program": _program_dict(program),
         "required_sections": REQUIRED_SECTIONS,
-        "disclaimer": DISCLAIMER,
-    }
-
-
-@router.get("/{program_id}")
-def get_program(
-    program_id: str,
-    include_sections: bool = Query(False),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_analyst_or_above),
-):
-    """Get a specific program version."""
-    org_id = org_id_for(current_user)
-    program = _get_program(program_id, org_id, db)
-    return {
-        "program": _program_dict(program, include_sections),
-        "disclaimer": DISCLAIMER,
-    }
-
-
-@router.patch("/{program_id}")
-def update_program(
-    program_id: str,
-    payload: ProgramUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_compliance_or_above),
-):
-    """
-    Update an AML/CTF Program draft.
-
-    Only draft or under_review programs can be updated.
-    Active programs are immutable — create a new version to make changes.
-    """
-    org_id = org_id_for(current_user)
-    program = _get_program(program_id, org_id, db)
-
-    if program.status not in (ProgramStatus.draft, ProgramStatus.under_review):
-        raise HTTPException(
-            409,
-            f"Program is '{program.status.value}' and cannot be updated. "
-            "Active programs are immutable — create a new version.",
-        )
-
-    for field, value in payload.model_dump(exclude_none=True).items():
-        setattr(program, field, value)
-
-    db.commit()
-    db.refresh(program)
-    return {
-        "program": _program_dict(program, True),
         "disclaimer": DISCLAIMER,
     }
 
@@ -506,6 +436,9 @@ def submit_for_review(
         raise HTTPException(409, "Only draft programs can be submitted for review.")
     program.status = ProgramStatus.under_review
     db.commit()
+    _log(
+        db, current_user, "aml_program", program.id, "aml_program_submitted_for_review"
+    )
     return {
         "program_id": program.id,
         "version": program.version,
@@ -549,6 +482,7 @@ def activate_program(
 
     db.commit()
     db.refresh(program)
+    _log(db, current_user, "aml_program", program.id, "aml_program_activated")
     return {
         "program": _program_dict(program),
         "message": f"Program v{program.version} activated. Previous version superseded.",
@@ -585,6 +519,14 @@ def record_annual_review(
 
     db.commit()
     db.refresh(program)
+    _log(
+        db,
+        current_user,
+        "aml_program",
+        program.id,
+        "aml_program_annual_review_recorded",
+        notes=f"changes_required={payload.changes_required}",
+    )
     return {
         "program_id": program.id,
         "version": program.version,
@@ -603,13 +545,6 @@ def record_annual_review(
 # ── AUSTRAC Registration ──────────────────────────────────────────────────────
 
 
-class AustracDetails(BaseModel):
-    austrac_enrolment_date: Optional[date] = None
-    austrac_registration_date: Optional[date] = None
-    austrac_registration_expiry: Optional[date] = None
-    designated_business_group: Optional[str] = None
-
-
 @router.patch("/{program_id}/austrac")
 def update_austrac_details(
     program_id: str,
@@ -626,6 +561,13 @@ def update_austrac_details(
 
     db.commit()
     db.refresh(program)
+    _log(
+        db,
+        current_user,
+        "aml_program",
+        program.id,
+        "aml_program_austrac_details_updated",
+    )
     return {
         "program_id": program.id,
         "austrac_enrolment_date": program.austrac_enrolment_date,
@@ -653,7 +595,7 @@ def list_risk_assessments(
     assessments = (
         q.order_by(desc(RiskAssessment.assessment_date))
         .offset(page.offset)
-        .limit(page.limit)
+        .limit(page.page_size)
         .all()
     )
     return {
@@ -701,6 +643,7 @@ def create_risk_assessment(
     db.add(assessment)
     db.commit()
     db.refresh(assessment)
+    _log(db, current_user, "risk_assessment", assessment.id, "risk_assessment_created")
     return {
         "assessment": _assessment_dict(assessment),
         "disclaimer": DISCLAIMER,
@@ -757,6 +700,7 @@ def update_risk_assessment(
 
     db.commit()
     db.refresh(assessment)
+    _log(db, current_user, "risk_assessment", assessment.id, "risk_assessment_updated")
     return {"assessment": _assessment_dict(assessment), "disclaimer": DISCLAIMER}
 
 
@@ -782,6 +726,9 @@ def complete_risk_assessment(
         raise HTTPException(409, "Assessment is already approved.")
     assessment.status = AssessmentStatus.completed
     db.commit()
+    _log(
+        db, current_user, "risk_assessment", assessment.id, "risk_assessment_completed"
+    )
     return {
         "assessment_id": assessment.id,
         "status": assessment.status.value,
@@ -821,6 +768,7 @@ def approve_risk_assessment(
     assessment.approved_at = now
     db.commit()
     db.refresh(assessment)
+    _log(db, current_user, "risk_assessment", assessment.id, "risk_assessment_approved")
     return {"assessment": _assessment_dict(assessment), "disclaimer": DISCLAIMER}
 
 
@@ -948,5 +896,65 @@ def program_compliance_status(
             or (ewra_age_days is not None and ewra_age_days > 300)
             or (reg_expiry_days is not None and 0 <= reg_expiry_days < 90),
         ),
+        "disclaimer": DISCLAIMER,
+    }
+
+
+# ── Program detail (registered last: /{program_id} is a catch-all for any ─────
+# single path segment under this router, so it must come after every other
+# static route — e.g. /risk-assessments, /compliance-status — or it shadows
+# them and they 404 with "program not found" instead of ever running) ────────
+
+
+@router.get("/{program_id}")
+def get_program(
+    program_id: str,
+    include_sections: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """Get a specific program version."""
+    org_id = org_id_for(current_user)
+    program = _get_program(program_id, org_id, db)
+    full_access = (
+        _has_full_program_access(db, current_user, org_id) if include_sections else True
+    )
+    return {
+        "program": _program_dict(program, include_sections, full_access),
+        "disclaimer": DISCLAIMER,
+    }
+
+
+@router.patch("/{program_id}")
+def update_program(
+    program_id: str,
+    payload: ProgramUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_compliance_or_above),
+):
+    """
+    Update an AML/CTF Program draft.
+
+    Only draft or under_review programs can be updated.
+    Active programs are immutable — create a new version to make changes.
+    """
+    org_id = org_id_for(current_user)
+    program = _get_program(program_id, org_id, db)
+
+    if program.status not in (ProgramStatus.draft, ProgramStatus.under_review):
+        raise HTTPException(
+            409,
+            f"Program is '{program.status.value}' and cannot be updated. "
+            "Active programs are immutable — create a new version.",
+        )
+
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(program, field, value)
+
+    db.commit()
+    db.refresh(program)
+    _log(db, current_user, "aml_program", program.id, "aml_program_updated")
+    return {
+        "program": _program_dict(program, True),
         "disclaimer": DISCLAIMER,
     }

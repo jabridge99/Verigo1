@@ -1,4 +1,6 @@
 import enum
+from datetime import datetime
+from typing import Any, Optional
 
 from sqlalchemy import (
     JSON,
@@ -13,16 +15,22 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.orm import Mapped
 from sqlalchemy.sql import func
 
 from app.db.database import Base
 
 
 class BillingPlan(str, enum.Enum):
-    starter = "starter"  # $299/mo
-    professional = "professional"  # $799/mo
-    enterprise = "enterprise"  # $1,999/mo
-    vvip = "vvip"  # custom pricing
+    # Enum member names are the stable DB/API identifiers and are NOT
+    # renamed on a repricing -- only PLAN_CATALOGUE's "name"/pricing/limits
+    # change. starter = "Compliance" ($299/mo), professional = "Scale"
+    # ($799/mo), enterprise = "Enterprise" ($2,999+/mo) -- see
+    # PLAN_CATALOGUE for current pricing/display names.
+    starter = "starter"
+    professional = "professional"
+    enterprise = "enterprise"
+    vvip = "vvip"  # custom pricing, negotiated outside the self-serve ladder
     free_trial = "free_trial"
 
 
@@ -51,6 +59,8 @@ class InvoiceStatus(str, enum.Enum):
 
 class AddonKey(str, enum.Enum):
     enterprise_crypto_screening = "enterprise_crypto_screening"
+    independent_review = "independent_review"
+    quarterly_compliance_report = "quarterly_compliance_report"
 
 
 class AddonStatus(str, enum.Enum):
@@ -58,15 +68,25 @@ class AddonStatus(str, enum.Enum):
     canceled = "canceled"
 
 
-# ── Enterprise add-on catalogue ─────────────────────────────────────────────────
-# Add-ons unlock providers that are partially built (unverified response schema)
-# or sales-gated (no self-serve API access) — sold separately from the base plan
-# so tenants aren't charged for capability they haven't opted into.
+# ── Add-on catalogue ─────────────────────────────────────────────────────────
+# Three different kinds of add-on live here: enterprise_crypto_screening
+# unlocks providers that are partially built (unverified response schema)
+# or sales-gated (no self-serve API access); independent_review is a human
+# service (an annual AML/CTF independent review, delivered by a dedicated
+# review team separate from the platform build team), not a software
+# feature -- unlocks_providers is deliberately empty for it.
+# quarterly_compliance_report gates the CO Quarterly Compliance Report
+# (BoardReportType.quarterly_compliance in board_reporting.py) -- a
+# software-generated deliverable, unlike independent_review's human
+# service, so it's priced and enforced the same way but doesn't carry the
+# "delivered by a dedicated review team" framing.
 
-ADDON_CATALOGUE = {
+ADDON_CATALOGUE: dict[AddonKey, dict[str, Any]] = {
     AddonKey.enterprise_crypto_screening: {
         "name": "Enterprise Crypto Wallet Screening",
         "monthly_aud": 499.00,
+        "price_aud": 499.00,
+        "billing_interval": "month",
         "description": (
             "Unlocks enterprise-grade crypto wallet risk providers (Elliptic, "
             "TRM Labs) for cluster-level exposure scoring beyond the included "
@@ -75,64 +95,125 @@ ADDON_CATALOGUE = {
         "unlocks_providers": ["elliptic", "trm_labs"],
         "requires_plan": [BillingPlan.enterprise, BillingPlan.vvip],
     },
+    AddonKey.independent_review: {
+        "name": "Annual Independent Review",
+        "monthly_aud": None,  # no monthly equivalent -- billed annually, see price_aud
+        "price_aud": 1_650.00,  # priced 2026-09-14, per your direction
+        "billing_interval": "year",
+        # 20% off this price when the org has generated 3 Quarterly Compliance
+        # Reports in the trailing 12 months ("20% discount on annual review if
+        # conduct all 3 quarters") -- computed in addon_price()/purchase_addon(),
+        # not a static catalogue value.
+        "bundle_discount_pct": 20.0,
+        "bundle_discount_requires_quarterly_reports": 3,
+        "description": (
+            "An annual AML/CTF independent review conducted by Verigo's "
+            "dedicated review team, separate from the platform's own "
+            "compliance-build side -- satisfies the periodic independent "
+            "review AUSTRAC guidance expects of reporting entities."
+        ),
+        "unlocks_providers": [],
+        "requires_plan": [
+            BillingPlan.starter,
+            BillingPlan.professional,
+            BillingPlan.enterprise,
+            BillingPlan.vvip,
+        ],
+    },
+    AddonKey.quarterly_compliance_report: {
+        "name": "Quarterly Compliance Report",
+        "monthly_aud": None,  # no monthly equivalent -- billed per quarter, see price_aud
+        "price_aud": 220.00,  # priced 2026-09-14, per your direction
+        "billing_interval": "quarter",
+        "description": (
+            "AUSTRAC-facing Quarterly Compliance Report generation — SMR/TTR/"
+            "ECDD/sanctions detail with late-lodgement and terrorism-24h "
+            "tracking, open actions carried over from prior quarters, and "
+            "independent review status, board-ready in one export."
+        ),
+        "unlocks_providers": [],
+        "requires_plan": [
+            BillingPlan.starter,
+            BillingPlan.professional,
+            BillingPlan.enterprise,
+            BillingPlan.vvip,
+        ],
+    },
 }
 
 
 # ── Published plan catalogue ───────────────────────────────────────────────────
 
-PLAN_CATALOGUE = {
+PLAN_CATALOGUE: dict[BillingPlan, dict[str, Any]] = {
     BillingPlan.starter: {
-        "name": "Starter",
-        "monthly_aud": 59.00,
-        "annual_aud": 599.00,
+        "name": "Compliance",
+        "monthly_aud": 299.00,
+        "annual_aud": 2_990.00,  # 10 months for the price of 12
         "features": [
-            "Up to 500 customers",
-            "1 user per tenant",
-            "AML transaction monitoring",
+            "Full AML/CTF program for 1 industry, no watermark",
+            "Up to 50 customers",
+            "1 seat",
+            "Real sanctions & PEP screening",
+            "Live regulatory updates included",
             "KYC/KYB onboarding",
             "AUSTRAC TTR & IFTI reporting",
             "Email notifications",
             "Document vault (5 GB)",
-            "1,000 API calls / month",
-            "Standard support",
+            "Email support",
         ],
-        "limits": {"customers": 500, "users": 1, "api_calls_month": 1_000},
+        "limits": {
+            "customers": 50,
+            "users": 1,
+            "api_calls_month": 500,
+            "screening_checks_month": 100,
+        },
     },
     BillingPlan.professional: {
-        "name": "Professional",
-        "monthly_aud": 79.00,
-        "annual_aud": 799.00,
+        "name": "Scale",
+        "monthly_aud": 799.00,
+        "annual_aud": 7_990.00,
         "features": [
-            "Up to 5,000 customers",
-            "3 users per tenant",
+            "Everything in Compliance",
+            "Up to 200 customers",
+            "5 users per tenant",
+            "Transaction monitoring & case management",
             "Advanced rule builder",
             "ECDD assessments",
-            "MLRO case management",
             "Webhooks & API access",
             "Document vault (15 GB)",
             "5,000 API calls / month",
             "Analytics dashboard",
             "Priority support",
         ],
-        "limits": {"customers": 5_000, "users": 3, "api_calls_month": 5_000},
+        "limits": {
+            "customers": 200,
+            "users": 5,
+            "api_calls_month": 5_000,
+            "screening_checks_month": 400,
+        },
     },
     BillingPlan.enterprise: {
         "name": "Enterprise",
-        "monthly_aud": 299.00,
-        "annual_aud": 2_999.00,
+        "monthly_aud": 2_999.00,
+        "annual_aud": 29_990.00,
         "features": [
-            "Unlimited customers",
-            "5 users per tenant",
+            "Everything in Scale",
+            "Multi-entity / multi-brand, 500 customers",
             "White-label branding",
             "Custom domain",
             "Multi-tenant management",
             "Dedicated MLRO support",
             "Document vault (50 GB)",
-            "10,000 API calls / month",
+            "Unlimited API calls",
             "SLA 99.9% uptime",
             "Dedicated account manager",
         ],
-        "limits": {"customers": -1, "users": 5, "api_calls_month": 10_000},
+        "limits": {
+            "customers": 500,
+            "users": -1,
+            "api_calls_month": -1,
+            "screening_checks_month": -1,
+        },
     },
     BillingPlan.vvip: {
         "name": "VVIP",
@@ -145,17 +226,43 @@ PLAN_CATALOGUE = {
             "Regulatory liaison support",
             "Custom integrations",
         ],
-        "limits": {"customers": -1, "users": -1, "api_calls_month": -1},
+        "limits": {
+            "customers": -1,
+            "users": -1,
+            "api_calls_month": -1,
+            "screening_checks_month": -1,
+        },
     },
+}
+
+# BillingPlan.free_trial is the implicit "no subscription yet" state
+# (current_plan() returns it when no Subscription row exists) rather than a
+# purchasable tier, so it's deliberately not in PLAN_CATALOGUE (it's never
+# listed on /billing/plans). It still needs its own usage limits to enforce
+# though -- values match what web/app/pricing/page.tsx already advertises
+# for the free trial card ("Up to 10 customers", "1 user per tenant").
+FREE_TRIAL_LIMITS: dict[str, int] = {
+    "customers": 10,
+    "users": 1,
+    "api_calls_month": 250,
+    "screening_checks_month": 20,
 }
 
 
 # ── Default feature catalogue (seed data, derived from PLAN_CATALOGUE) ─────────
 # code -> (label, category)
 FEATURE_DEFINITIONS = {
+    "customers_100": ("Up to 100 customers", "limits"),
+    "customers_1000": ("Up to 1,000 customers", "limits"),
+    "customers_unlimited": ("Unlimited customers", "limits"),
+    # Superseded by customers_100/customers_1000 after the tier repricing
+    # (Compliance/Scale replacing Starter/Professional) -- left defined,
+    # not deleted, since seed_feature_catalog() only inserts missing
+    # (plan, feature_code) toggle rows and never updates/removes existing
+    # ones; an environment that already seeded these keeps them as
+    # harmless disabled rows rather than orphaned unknown codes.
     "customers_500": ("Up to 500 customers", "limits"),
     "customers_5000": ("Up to 5,000 customers", "limits"),
-    "customers_unlimited": ("Unlimited customers", "limits"),
     "aml_monitoring": ("AML transaction monitoring", "core"),
     "kyc_kyb_onboarding": ("KYC/KYB onboarding", "core"),
     "austrac_reporting": ("AUSTRAC TTR & IFTI reporting", "core"),
@@ -188,7 +295,7 @@ FEATURE_DEFINITIONS = {
 DEFAULT_PLAN_FEATURES = {
     BillingPlan.free_trial: [],
     BillingPlan.starter: [
-        "customers_500",
+        "customers_100",
         "aml_monitoring",
         "kyc_kyb_onboarding",
         "austrac_reporting",
@@ -199,7 +306,7 @@ DEFAULT_PLAN_FEATURES = {
         "full_risk_assessment",
     ],
     BillingPlan.professional: [
-        "customers_5000",
+        "customers_1000",
         "advanced_rule_builder",
         "ecdd_assessments",
         "mlro_case_management",
@@ -247,28 +354,34 @@ DEFAULT_PLAN_FEATURES = {
 class Feature(Base):
     __tablename__ = "features"
 
-    id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(60), unique=True, index=True, nullable=False)
-    name = Column(String(200), nullable=False)
-    category = Column(String(60))
-    description = Column(Text)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = Column(String(60), unique=True, index=True, nullable=False)
+    name: Mapped[str] = Column(String(200), nullable=False)
+    category: Mapped[Optional[str]] = Column(String(60))
+    description: Mapped[Optional[str]] = Column(Text)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class PlanFeatureToggle(Base):
     __tablename__ = "plan_feature_toggles"
     __table_args__ = (UniqueConstraint("plan", "feature_code", name="uq_plan_feature"),)
 
-    id = Column(Integer, primary_key=True, index=True)
-    plan = Column(Enum(BillingPlan), nullable=False, index=True)
-    feature_code = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    plan: Mapped[BillingPlan] = Column(Enum(BillingPlan), nullable=False, index=True)
+    feature_code: Mapped[str] = Column(
         String(60), ForeignKey("features.code"), nullable=False, index=True
     )
-    enabled = Column(Boolean, default=True, nullable=False)
+    enabled: Mapped[bool] = Column(Boolean, default=True, nullable=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class Subscription(Base):
@@ -279,75 +392,95 @@ class Subscription(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    subscription_id = Column(String(60), unique=True, index=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    subscription_id: Mapped[str] = Column(
+        String(60), unique=True, index=True, nullable=False
+    )
 
     # Tenant link
-    industry_id = Column(String(100), index=True, nullable=False)
-    organisation_id = Column(
+    industry_id: Mapped[str] = Column(String(100), index=True, nullable=False)
+    organisation_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
     )
-    tenant_id = Column(String(60))
+    tenant_id: Mapped[Optional[str]] = Column(String(60))
 
     # Plan
-    plan = Column(Enum(BillingPlan), default=BillingPlan.free_trial)
-    interval = Column(Enum(BillingInterval), default=BillingInterval.monthly)
-    status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.trialing)
+    plan: Mapped[Optional[BillingPlan]] = Column(
+        Enum(BillingPlan), default=BillingPlan.free_trial
+    )
+    interval: Mapped[Optional[BillingInterval]] = Column(
+        Enum(BillingInterval), default=BillingInterval.monthly
+    )
+    status: Mapped[Optional[SubscriptionStatus]] = Column(
+        Enum(SubscriptionStatus), default=SubscriptionStatus.trialing
+    )
 
     # Pricing — base catalogue price
-    base_price_aud = Column(Float)
+    base_price_aud: Mapped[Optional[float]] = Column(Float)
     # VVIP / admin override (takes precedence over catalogue)
-    custom_monthly_aud = Column(Float)
-    custom_annual_aud = Column(Float)
-    annual_discount_pct = Column(Float, default=20.0)  # editable annual discount
+    custom_monthly_aud: Mapped[Optional[float]] = Column(Float)
+    custom_annual_aud: Mapped[Optional[float]] = Column(Float)
+    annual_discount_pct: Mapped[Optional[float]] = Column(
+        Float, default=20.0
+    )  # editable annual discount
 
     # Stripe
-    stripe_customer_id = Column(String(100))
-    stripe_subscription_id = Column(String(100))
-    stripe_price_id = Column(String(100))
+    stripe_customer_id: Mapped[Optional[str]] = Column(String(100))
+    stripe_subscription_id: Mapped[Optional[str]] = Column(String(100))
+    stripe_price_id: Mapped[Optional[str]] = Column(String(100))
 
     # Lifecycle
-    trial_ends_at = Column(DateTime(timezone=True))
-    current_period_start = Column(DateTime(timezone=True))
-    current_period_end = Column(DateTime(timezone=True))
-    canceled_at = Column(DateTime(timezone=True))
-    cancel_at_period_end = Column(Boolean, default=False)
+    trial_ends_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    current_period_start: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    current_period_end: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    canceled_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    cancel_at_period_end: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # Metadata
-    notes = Column(Text)  # admin notes (VVIP deal terms etc.)
-    extra_metadata = Column(JSON, default=dict)
+    notes: Mapped[Optional[str]] = Column(Text)  # admin notes (VVIP deal terms etc.)
+    extra_metadata: Mapped[Optional[Any]] = Column(JSON, default=dict)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class Invoice(Base):
     __tablename__ = "invoices"
 
-    id = Column(Integer, primary_key=True, index=True)
-    invoice_id = Column(String(60), unique=True, index=True, nullable=False)
-    subscription_id = Column(String(60), index=True)
-    industry_id = Column(String(100), index=True)
-    organisation_id = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    invoice_id: Mapped[str] = Column(
+        String(60), unique=True, index=True, nullable=False
+    )
+    subscription_id: Mapped[Optional[str]] = Column(String(60), index=True)
+    industry_id: Mapped[Optional[str]] = Column(String(100), index=True)
+    organisation_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
     )
 
-    stripe_invoice_id = Column(String(100))
-    amount_aud = Column(Float, nullable=False)
-    tax_aud = Column(Float, default=0.0)
-    total_aud = Column(Float, nullable=False)
+    stripe_invoice_id: Mapped[Optional[str]] = Column(String(100))
+    amount_aud: Mapped[float] = Column(Float, nullable=False)
+    tax_aud: Mapped[Optional[float]] = Column(Float, default=0.0)
+    total_aud: Mapped[float] = Column(Float, nullable=False)
 
-    status = Column(Enum(InvoiceStatus), default=InvoiceStatus.open)
-    description = Column(Text)
-    period_start = Column(DateTime(timezone=True))
-    period_end = Column(DateTime(timezone=True))
-    due_date = Column(DateTime(timezone=True))
-    paid_at = Column(DateTime(timezone=True))
+    status: Mapped[Optional[InvoiceStatus]] = Column(
+        Enum(InvoiceStatus), default=InvoiceStatus.open
+    )
+    description: Mapped[Optional[str]] = Column(Text)
+    period_start: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    period_end: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    due_date: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    paid_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    stripe_hosted_url = Column(String(500))
-    stripe_pdf_url = Column(String(500))
+    stripe_hosted_url: Mapped[Optional[str]] = Column(String(500))
+    stripe_pdf_url: Mapped[Optional[str]] = Column(String(500))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class PlanPricing(Base):
@@ -357,13 +490,17 @@ class PlanPricing(Base):
 
     __tablename__ = "plan_pricing"
 
-    plan = Column(Enum(BillingPlan), primary_key=True)
-    monthly_aud = Column(Float)
-    annual_aud = Column(Float)
+    plan: Mapped[BillingPlan] = Column(Enum(BillingPlan), primary_key=True)
+    monthly_aud: Mapped[Optional[float]] = Column(Float)
+    annual_aud: Mapped[Optional[float]] = Column(Float)
 
-    updated_by = Column(String(60))
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_by: Mapped[Optional[str]] = Column(String(60))
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class StripePriceMapping(Base):
@@ -374,14 +511,48 @@ class StripePriceMapping(Base):
     __tablename__ = "stripe_price_mappings"
     __table_args__ = (UniqueConstraint("plan", "interval", name="uq_plan_interval"),)
 
-    id = Column(Integer, primary_key=True, index=True)
-    plan = Column(Enum(BillingPlan), nullable=False, index=True)
-    interval = Column(Enum(BillingInterval), nullable=False, index=True)
-    stripe_price_id = Column(String(100), nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    plan: Mapped[BillingPlan] = Column(Enum(BillingPlan), nullable=False, index=True)
+    interval: Mapped[BillingInterval] = Column(
+        Enum(BillingInterval), nullable=False, index=True
+    )
+    stripe_price_id: Mapped[str] = Column(String(100), nullable=False)
 
-    updated_by = Column(String(60))
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_by: Mapped[Optional[str]] = Column(String(60))
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ApiUsageCounter(Base):
+    """Tracks API-key-authenticated calls per org per UTC calendar month, for
+    enforcing PLAN_CATALOGUE's api_calls_month limit (see
+    billing_service.py's record_api_call()). Only requests authenticated via
+    an API key count here -- normal browser/JWT session traffic is never
+    metered, since api_calls_month represents the "Webhooks & API access"
+    plan feature (external integration usage), not ordinary app usage.
+    One row per (org_id, period); period is "YYYY-MM" so a new month just
+    starts a new row rather than needing a scheduled reset job."""
+
+    __tablename__ = "api_usage_counters"
+    __table_args__ = (
+        UniqueConstraint("org_id", "period", name="uq_api_usage_org_period"),
+    )
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    org_id: Mapped[str] = Column(String(100), index=True, nullable=False)
+    period: Mapped[str] = Column(String(7), nullable=False)  # "YYYY-MM"
+    count: Mapped[int] = Column(Integer, default=0, nullable=False)
+
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class SubscriptionAddon(Base):
@@ -391,16 +562,22 @@ class SubscriptionAddon(Base):
 
     __tablename__ = "subscription_addons"
 
-    id = Column(Integer, primary_key=True, index=True)
-    addon_id = Column(String(60), unique=True, index=True, nullable=False)
-    org_id = Column(String(100), index=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    addon_id: Mapped[str] = Column(String(60), unique=True, index=True, nullable=False)
+    org_id: Mapped[str] = Column(String(100), index=True, nullable=False)
 
-    addon_key = Column(Enum(AddonKey), nullable=False)
-    status = Column(Enum(AddonStatus), default=AddonStatus.active, nullable=False)
-    price_aud = Column(Float)
+    addon_key: Mapped[AddonKey] = Column(Enum(AddonKey), nullable=False)
+    status: Mapped[AddonStatus] = Column(
+        Enum(AddonStatus), default=AddonStatus.active, nullable=False
+    )
+    price_aud: Mapped[Optional[float]] = Column(Float)
 
-    stripe_subscription_id = Column(String(100))
+    stripe_subscription_id: Mapped[Optional[str]] = Column(String(100))
 
-    purchased_at = Column(DateTime(timezone=True), server_default=func.now())
-    canceled_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    purchased_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    canceled_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )

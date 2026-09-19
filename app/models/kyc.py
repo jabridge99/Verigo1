@@ -6,6 +6,8 @@ Results are never overwritten — new records are created on re-verification.
 """
 
 import enum
+from datetime import date, datetime
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -20,7 +22,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -70,50 +72,72 @@ class IdentityDocumentType(str, enum.Enum):
 class CustomerIdentityDocument(Base):
     __tablename__ = "customer_identity_documents"
 
-    id = Column(String, primary_key=True, default=lambda: f"doc_{uuid4().hex[:12]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"doc_{uuid4().hex[:12]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    document_type = Column(Enum(IdentityDocumentType), nullable=False)
-    document_number = Column(String(100))
-    issuing_country = Column(String(2))
-    issuing_state = Column(String(50))  # for Australian driver licences
-    issue_date = Column(Date)
-    expiry_date = Column(Date)
+    document_type: Mapped[IdentityDocumentType] = Column(
+        Enum(IdentityDocumentType), nullable=False
+    )
+    document_number: Mapped[Optional[str]] = Column(String(100))
+    issuing_country: Mapped[Optional[str]] = Column(String(2))
+    issuing_state: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # for Australian driver licences
+    issue_date: Mapped[Optional[date]] = Column(Date)
+    expiry_date: Mapped[Optional[date]] = Column(Date)
 
     # Extracted / OCR data
-    extracted_name = Column(String(255))
-    extracted_dob = Column(Date)
-    extracted_mrz = Column(String(500))  # machine-readable zone (passport)
+    extracted_name: Mapped[Optional[str]] = Column(String(255))
+    extracted_dob: Mapped[Optional[date]] = Column(Date)
+    extracted_mrz: Mapped[Optional[str]] = Column(
+        String(500)
+    )  # machine-readable zone (passport)
 
     # File references (cloud storage keys, not raw paths)
-    document_ref_front = Column(String(500))
-    document_ref_back = Column(String(500))
+    document_ref_front: Mapped[Optional[str]] = Column(String(500))
+    document_ref_back: Mapped[Optional[str]] = Column(String(500))
 
     # Verification outcome
-    verification_result = Column(Enum(VerificationResult))
-    verification_source = Column(Enum(VerificationSource))
-    verification_provider = Column(
+    verification_result: Mapped[Optional[VerificationResult]] = Column(
+        Enum(VerificationResult)
+    )
+    verification_source: Mapped[Optional[VerificationSource]] = Column(
+        Enum(VerificationSource)
+    )
+    verification_provider: Mapped[Optional[VerificationProvider]] = Column(
         Enum(VerificationProvider), default=VerificationProvider.internal
     )
-    confidence_score = Column(Float)
-    is_primary = Column(Boolean, default=True)  # primary vs supplementary document
-    is_current = Column(Boolean, default=True)  # most recent for this type
+    confidence_score: Mapped[Optional[float]] = Column(Float)
+    is_primary: Mapped[Optional[bool]] = Column(
+        Boolean, default=True
+    )  # primary vs supplementary document
+    is_current: Mapped[Optional[bool]] = Column(
+        Boolean, default=True
+    )  # most recent for this type
 
     # Verification detail
-    verification_notes = Column(Text)
-    provider_reference = Column(String(255))  # provider's own transaction ID
-    provider_raw_response = Column(String)  # JSON stored as text (large)
+    verification_notes: Mapped[Optional[str]] = Column(Text)
+    provider_reference: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # provider's own transaction ID
+    provider_raw_response: Mapped[Optional[str]] = Column(
+        String
+    )  # JSON stored as text (large)
 
-    verified_by = Column(String)  # user_id or "provider"
-    verified_at = Column(DateTime(timezone=True))
-    uploaded_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    verified_by: Mapped[Optional[str]] = Column(String)  # user_id or "provider"
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    uploaded_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="identity_documents")
 
@@ -132,34 +156,50 @@ class LivenessCheckType(str, enum.Enum):
 class CustomerSelfieVerification(Base):
     __tablename__ = "customer_selfie_verifications"
 
-    id = Column(String, primary_key=True, default=lambda: f"selfie_{uuid4().hex[:10]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"selfie_{uuid4().hex[:10]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
-    identity_document_id = Column(
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
+    identity_document_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("customer_identity_documents.id"), nullable=True
     )
 
-    selfie_ref = Column(String(500))  # cloud storage key
-    liveness_check_type = Column(Enum(LivenessCheckType))
-    liveness_result = Column(Enum(VerificationResult))
-    liveness_score = Column(Float)  # 0.0–1.0
+    selfie_ref: Mapped[Optional[str]] = Column(String(500))  # cloud storage key
+    liveness_check_type: Mapped[Optional[LivenessCheckType]] = Column(
+        Enum(LivenessCheckType)
+    )
+    liveness_result: Mapped[Optional[VerificationResult]] = Column(
+        Enum(VerificationResult)
+    )
+    liveness_score: Mapped[Optional[float]] = Column(Float)  # 0.0–1.0
 
-    face_match_result = Column(Enum(VerificationResult))
-    face_match_score = Column(Float)  # 0.0–1.0
-    face_match_document_id = Column(String)  # which identity doc was matched against
+    face_match_result: Mapped[Optional[VerificationResult]] = Column(
+        Enum(VerificationResult)
+    )
+    face_match_score: Mapped[Optional[float]] = Column(Float)  # 0.0–1.0
+    face_match_document_id: Mapped[Optional[str]] = Column(
+        String
+    )  # which identity doc was matched against
 
-    provider = Column(Enum(VerificationProvider), default=VerificationProvider.internal)
-    provider_reference = Column(String(255))
-    provider_raw_response = Column(String)
+    provider: Mapped[Optional[VerificationProvider]] = Column(
+        Enum(VerificationProvider), default=VerificationProvider.internal
+    )
+    provider_reference: Mapped[Optional[str]] = Column(String(255))
+    provider_raw_response: Mapped[Optional[str]] = Column(String)
 
-    verification_result = Column(Enum(VerificationResult))
-    verified_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    verification_result: Mapped[Optional[VerificationResult]] = Column(
+        Enum(VerificationResult)
+    )
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="selfie_verifications")
 
@@ -182,36 +222,52 @@ class AddressDocumentType(str, enum.Enum):
 class CustomerAddressVerification(Base):
     __tablename__ = "customer_address_verifications"
 
-    id = Column(String, primary_key=True, default=lambda: f"adrv_{uuid4().hex[:10]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"adrv_{uuid4().hex[:10]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    document_type = Column(Enum(AddressDocumentType), nullable=False)
-    document_ref = Column(String(500))  # cloud storage key
-    document_date = Column(Date)  # date on the document (must be < 3 months)
-    issuer = Column(String(255))  # e.g. "AGL Energy", "Commonwealth Bank"
+    document_type: Mapped[AddressDocumentType] = Column(
+        Enum(AddressDocumentType), nullable=False
+    )
+    document_ref: Mapped[Optional[str]] = Column(String(500))  # cloud storage key
+    document_date: Mapped[Optional[date]] = Column(
+        Date
+    )  # date on the document (must be < 3 months)
+    issuer: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # e.g. "AGL Energy", "Commonwealth Bank"
 
     # Address extracted from document
-    extracted_address_line1 = Column(String(255))
-    extracted_city = Column(String(100))
-    extracted_state = Column(String(50))
-    extracted_postcode = Column(String(10))
-    extracted_country = Column(String(2))
+    extracted_address_line1: Mapped[Optional[str]] = Column(String(255))
+    extracted_city: Mapped[Optional[str]] = Column(String(100))
+    extracted_state: Mapped[Optional[str]] = Column(String(50))
+    extracted_postcode: Mapped[Optional[str]] = Column(String(10))
+    extracted_country: Mapped[Optional[str]] = Column(String(2))
 
-    address_match_result = Column(Enum(VerificationResult))
-    verification_result = Column(Enum(VerificationResult))
-    verification_notes = Column(Text)
+    address_match_result: Mapped[Optional[VerificationResult]] = Column(
+        Enum(VerificationResult)
+    )
+    verification_result: Mapped[Optional[VerificationResult]] = Column(
+        Enum(VerificationResult)
+    )
+    verification_notes: Mapped[Optional[str]] = Column(Text)
 
-    provider = Column(Enum(VerificationProvider), default=VerificationProvider.internal)
-    verified_by = Column(String)
-    verified_at = Column(DateTime(timezone=True))
-    uploaded_by = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    provider: Mapped[Optional[VerificationProvider]] = Column(
+        Enum(VerificationProvider), default=VerificationProvider.internal
+    )
+    verified_by: Mapped[Optional[str]] = Column(String)
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    uploaded_by: Mapped[Optional[str]] = Column(String)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="address_verifications")
 
@@ -224,32 +280,40 @@ class CustomerAddressVerification(Base):
 class CustomerPhoneVerification(Base):
     __tablename__ = "customer_phone_verifications"
 
-    id = Column(String, primary_key=True, default=lambda: f"phv_{uuid4().hex[:10]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"phv_{uuid4().hex[:10]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    phone_number = Column(String(50), nullable=False)
-    country_code = Column(String(5))
-    carrier_name = Column(String(100))
-    carrier_type = Column(String(50))  # mobile | landline | voip
-    line_type = Column(String(50))
+    phone_number: Mapped[str] = Column(String(50), nullable=False)
+    country_code: Mapped[Optional[str]] = Column(String(5))
+    carrier_name: Mapped[Optional[str]] = Column(String(100))
+    carrier_type: Mapped[Optional[str]] = Column(String(50))  # mobile | landline | voip
+    line_type: Mapped[Optional[str]] = Column(String(50))
 
-    otp_sent = Column(Boolean, default=False)
-    otp_verified = Column(Boolean, default=False)
-    otp_sent_at = Column(DateTime(timezone=True))
-    otp_verified_at = Column(DateTime(timezone=True))
+    otp_sent: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    otp_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    otp_sent_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    otp_verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    verification_result = Column(Enum(VerificationResult))
-    provider = Column(Enum(VerificationProvider), default=VerificationProvider.internal)
-    provider_reference = Column(String(255))
+    verification_result: Mapped[Optional[VerificationResult]] = Column(
+        Enum(VerificationResult)
+    )
+    provider: Mapped[Optional[VerificationProvider]] = Column(
+        Enum(VerificationProvider), default=VerificationProvider.internal
+    )
+    provider_reference: Mapped[Optional[str]] = Column(String(255))
 
-    verified_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="phone_verifications")
 
@@ -262,29 +326,37 @@ class CustomerPhoneVerification(Base):
 class CustomerEmailVerification(Base):
     __tablename__ = "customer_email_verifications"
 
-    id = Column(String, primary_key=True, default=lambda: f"emv_{uuid4().hex[:10]}")
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"emv_{uuid4().hex[:10]}"
+    )
+    customer_id: Mapped[str] = Column(
         String,
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
 
-    email_address = Column(String(255), nullable=False)
-    domain = Column(String(255))
-    is_disposable = Column(Boolean, default=False)
-    is_free_provider = Column(Boolean, default=False)  # gmail/hotmail risk flag
-    mx_valid = Column(Boolean)
+    email_address: Mapped[str] = Column(String(255), nullable=False)
+    domain: Mapped[Optional[str]] = Column(String(255))
+    is_disposable: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    is_free_provider: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # gmail/hotmail risk flag
+    mx_valid: Mapped[Optional[bool]] = Column(Boolean)
 
-    token_sent = Column(Boolean, default=False)
-    token_verified = Column(Boolean, default=False)
-    token_sent_at = Column(DateTime(timezone=True))
-    token_verified_at = Column(DateTime(timezone=True))
+    token_sent: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    token_verified: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    token_sent_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    token_verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    verification_result = Column(Enum(VerificationResult))
-    verified_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    verification_result: Mapped[Optional[VerificationResult]] = Column(
+        Enum(VerificationResult)
+    )
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     customer = relationship("Customer", back_populates="email_verifications")
 

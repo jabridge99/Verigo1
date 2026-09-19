@@ -6,13 +6,17 @@ import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { DonutChart, KPI, StatTile } from "../_components/charts";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import {
+  getOpenCaseStats,
+  getFlaggedTransactionStats,
+  getReportStats,
+  getPendingCustomerReviews,
+} from "@/lib/api/analytics";
 
 const DEMO = {
-  cases: { open_total: 19, by_status: { open: 6, under_investigation: 7, escalated: 3, decision: 3 }, by_severity: { low: 3, medium: 8, high: 6, critical: 2 }, overdue: 4, smr_candidates: 3 },
+  cases: { open_total: 19, by_status: { open: 6, under_investigation: 7, escalated: 3, decision: 3 } as Record<string, number>, by_severity: { low: 3, medium: 8, high: 6, critical: 2 } as Record<string, number>, overdue: 4, smr_candidates: 3 },
   flagged: { total: 28340, flagged: 413, flagged_pct: 1.5 },
-  reports: { total: 342, by_status: { submitted: 198, acknowledged: 11, rejected: 2, draft: 23 }, by_type: { ttr: 189, ifti_in: 54, ifti_out: 38, smr: 47, sar: 9 } },
+  reports: { total: 342, by_status: { submitted: 198, acknowledged: 11, rejected: 2, draft: 23 } as Record<string, number>, by_type: { ttr: 189, ifti_in: 54, ifti_out: 38, smr: 47, sar: 9 } as Record<string, number> },
   pendingReviews: { overdue: 14, due_within_30_days: 38 },
 };
 
@@ -24,14 +28,13 @@ export default function MLROAnalyticsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [cs, fl, rp, pr] = await Promise.all([
-        fetch(`${API}/api/v1/analytics/cases/open-stats`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/transactions/flagged-stats`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/reports/stats`, { credentials: "include" }),
-        fetch(`${API}/api/v1/analytics/customers/pending-reviews`, { credentials: "include" }),
+      const [cases, flagged, reports, pendingReviews] = await Promise.all([
+        getOpenCaseStats(),
+        getFlaggedTransactionStats(),
+        getReportStats(),
+        getPendingCustomerReviews(),
       ]);
-      if (!cs.ok) throw new Error("api");
-      setD({ cases: await cs.json(), flagged: await fl.json(), reports: await rp.json(), pendingReviews: await pr.json() });
+      setD({ cases, flagged, reports, pendingReviews });
     } catch {
       setDemo(true);
     }

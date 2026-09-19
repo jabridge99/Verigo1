@@ -1,4 +1,6 @@
 import enum
+from datetime import date, datetime
+from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
@@ -12,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy.orm import Mapped
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -56,47 +59,69 @@ RETENTION_CATEGORIES = {
 class Document(Base):
     __tablename__ = "documents"
 
-    id = Column(Integer, primary_key=True, index=True)
-    doc_id = Column(String(60), unique=True, index=True, nullable=False)
-    filename = Column(String(500), nullable=False)  # original filename
-    stored_name = Column(String(500), nullable=False)  # UUID-based stored path
-    mime_type = Column(String(200))
-    size_bytes = Column(BigInteger, default=0)
-    category = Column(Enum(DocumentCategory), default=DocumentCategory.other)
-    description = Column(Text)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    doc_id: Mapped[str] = Column(String(60), unique=True, index=True, nullable=False)
+    filename: Mapped[str] = Column(String(500), nullable=False)  # original filename
+    stored_name: Mapped[str] = Column(
+        String(500), nullable=False
+    )  # UUID-based stored path
+    mime_type: Mapped[Optional[str]] = Column(String(200))
+    size_bytes: Mapped[Optional[int]] = Column(BigInteger, default=0)
+    category: Mapped[Optional[DocumentCategory]] = Column(
+        Enum(DocumentCategory), default=DocumentCategory.other
+    )
+    description: Mapped[Optional[str]] = Column(Text)
 
     # ── Integrity ──────────────────────────────────────────────────────────────
-    sha256_hash = Column(
+    sha256_hash: Mapped[Optional[str]] = Column(
         String(64), index=True
     )  # server-computed; never trusted from client
 
     # ── Versioning ─────────────────────────────────────────────────────────────
-    version = Column(Integer, default=1, nullable=False)
-    previous_version_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    version: Mapped[int] = Column(Integer, default=1, nullable=False)
+    previous_version_id: Mapped[Optional[int]] = Column(
+        Integer, ForeignKey("documents.id"), nullable=True
+    )
 
     # ── Legal hold ─────────────────────────────────────────────────────────────
     # When legal_hold=True, deletion and archival are blocked (409 returned)
-    legal_hold = Column(Boolean, default=False, nullable=False)
-    legal_hold_reason = Column(Text)
-    legal_hold_by = Column(String(60))  # user_id who placed the hold
-    legal_hold_at = Column(DateTime(timezone=True))
+    legal_hold: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+    legal_hold_reason: Mapped[Optional[str]] = Column(Text)
+    legal_hold_by: Mapped[Optional[str]] = Column(
+        String(60)
+    )  # user_id who placed the hold
+    legal_hold_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
     # ── Retention ──────────────────────────────────────────────────────────────
-    retention_days = Column(Integer, nullable=True)  # null = keep forever
-    retention_category = Column(String(50), nullable=True)  # e.g. "aml_7year"
-    expires_at = Column(Date, nullable=True)  # auto-archive date
+    retention_days: Mapped[Optional[int]] = Column(
+        Integer, nullable=True
+    )  # null = keep forever
+    retention_category: Mapped[Optional[str]] = Column(
+        String(50), nullable=True
+    )  # e.g. "aml_7year"
+    expires_at: Mapped[Optional[date]] = Column(
+        Date, nullable=True
+    )  # auto-archive date
 
     # ── Entity association (polymorphic) ───────────────────────────────────────
-    entity_type = Column(String(50))  # customer | kyc | report | case
-    entity_id = Column(String(100))
+    entity_type: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # customer | kyc | report | case
+    entity_id: Mapped[Optional[str]] = Column(String(100))
 
     # ── Ownership ──────────────────────────────────────────────────────────────
-    uploaded_by = Column(String(60), nullable=False)  # user_id
-    industry_id = Column(String(100))
-    organisation_id = Column(
+    uploaded_by: Mapped[str] = Column(String(60), nullable=False)  # user_id
+    industry_id: Mapped[Optional[str]] = Column(String(100))
+    organisation_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
     )
 
-    status = Column(Enum(DocumentStatus), default=DocumentStatus.active)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    status: Mapped[Optional[DocumentStatus]] = Column(
+        Enum(DocumentStatus), default=DocumentStatus.active
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )

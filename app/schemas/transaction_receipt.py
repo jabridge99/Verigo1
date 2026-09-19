@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from app.models.monitoring import AlertCategory, AlertSeverity, AlertStatus
 from app.models.transaction import PaymentMethod, TransactionDirection, TransactionType
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 
 class ReceiptAlertSummary(BaseModel):
@@ -103,7 +104,7 @@ class AUSTRACReportingBlock(BaseModel):
     is_ttr_reportable: bool = Field(
         description="True if amount_aud >= AUD 10,000 — TTR may be required"
     )
-    ttr_threshold_aud: float = 10_000.0
+    ttr_threshold_aud: float = TTR_CTR_THRESHOLD_AUD
 
     # IFTI (International Funds Transfer Instruction) indicators
     is_ifti_reportable: bool = Field(
@@ -248,7 +249,7 @@ def build_receipt(
     """
     from app.services.monitoring_engine import FATF_BLACKLIST, SANCTIONED_COUNTRIES
 
-    TTR_THRESHOLD = 10_000.0
+    TTR_THRESHOLD = TTR_CTR_THRESHOLD_AUD
     amount_aud = txn.amount_aud or txn.amount
 
     countries_involved = {
@@ -323,20 +324,20 @@ def build_receipt(
             screened_at=d.screened_at,
         )
 
+    _customer_type = getattr(customer, "customer_type", None)
+    _risk_level = getattr(customer, "risk_level", None)
+    _cdd_level = getattr(customer, "cdd_level", None)
+
     customer_snapshot = ReceiptCustomerSnapshot(
         customer_id=customer.id,
         customer_ref=getattr(customer, "customer_ref", customer.id),
         full_name=getattr(customer, "full_name", ""),
-        customer_type=getattr(customer, "customer_type", {}).value
-        if hasattr(getattr(customer, "customer_type", None), "value")
-        else str(getattr(customer, "customer_type", "")),
-        risk_level=getattr(customer, "risk_level", {}).value
-        if hasattr(getattr(customer, "risk_level", None), "value")
-        else getattr(customer, "risk_level", None),
+        customer_type=_customer_type.value
+        if hasattr(_customer_type, "value")
+        else str(_customer_type or ""),
+        risk_level=_risk_level.value if hasattr(_risk_level, "value") else _risk_level,
         risk_score=getattr(customer, "risk_score", None),
-        cdd_level=getattr(customer, "cdd_level", {}).value
-        if hasattr(getattr(customer, "cdd_level", None), "value")
-        else getattr(customer, "cdd_level", None),
+        cdd_level=_cdd_level.value if hasattr(_cdd_level, "value") else _cdd_level,
         is_pep=bool(getattr(customer, "is_pep", False)),
         country_of_residence=getattr(customer, "country_of_residence", None),
         nationality=getattr(customer, "nationality", None),

@@ -8,13 +8,14 @@ from .base import EmailProvider
 def get_provider() -> EmailProvider:
     provider = getattr(settings, "email_provider", "smtp")
 
-    if provider == "sendgrid":
-        from .sendgrid import SendGridEmailProvider
-
-        return SendGridEmailProvider(
-            api_key=settings.smtp_pass
-        )  # SG uses API key as password
-
+    # "sendgrid" is not a separate REST client -- app/integrations/email/
+    # has no sendgrid.py, so EMAIL_PROVIDER=sendgrid would ModuleNotFoundError
+    # here (found digging into P45's "real" Integration Hub connection
+    # check for SendGrid). SendGrid is used via its documented SMTP relay
+    # instead (smtp.sendgrid.net, username "apikey", the API key as the
+    # password) -- point EMAIL_PROVIDER at "smtp" with those settings, same
+    # as SMTPEmailProvider's own docstring already says ("Works with any
+    # SMTP relay (SendGrid, Postmark, SES, etc.)").
     if provider == "stub" or not settings.smtp_host:
         from .stub import StubEmailProvider
 

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Building2, Search, CheckCircle, XCircle, Clock, Shield, ChevronRight, Globe, Phone, Mail, Hash, AlertTriangle, Edit2, Save, X } from 'lucide-react'
 import clsx from 'clsx'
+import { apiFetch } from '@/lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -77,8 +78,8 @@ export default function IndustryPage() {
   const [stats, setStats] = useState({ total: 5, active: 3, suspended: 1, pending: 1 })
 
   useEffect(() => {
-    fetch(`${API}/api/v1/tenants/`).then(r => r.ok ? r.json() : null).then(d => d && setTenants(d)).catch(() => {})
-    fetch(`${API}/api/v1/tenants/stats`).then(r => r.ok ? r.json() : null).then(d => d && setStats(d)).catch(() => {})
+    apiFetch(`${API}/api/v1/tenants/`).then(r => r.ok ? r.json() : null).then(d => d && setTenants(d)).catch(() => {})
+    apiFetch(`${API}/api/v1/tenants/stats`).then(r => r.ok ? r.json() : null).then(d => d && setStats(d)).catch(() => {})
   }, [])
 
   const filtered = tenants.filter(t => {
@@ -89,7 +90,7 @@ export default function IndustryPage() {
 
   async function doAction(tenantId: string, action: 'suspend' | 'activate') {
     try {
-      const r = await fetch(`${API}/api/v1/tenants/${tenantId}/${action}`, { method: 'POST' })
+      const r = await apiFetch(`${API}/api/v1/tenants/${tenantId}/${action}`, { method: 'POST' })
       if (r.ok) {
         const updated: Tenant = await r.json()
         setTenants(prev => prev.map(t => t.tenant_id === tenantId ? updated : t))
@@ -106,7 +107,7 @@ export default function IndustryPage() {
     if (!selected) return
     setSaving(true)
     try {
-      const r = await fetch(`${API}/api/v1/tenants/${selected.tenant_id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editForm) })
+      const r = await apiFetch(`${API}/api/v1/tenants/${selected.tenant_id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editForm) })
       const updated: Tenant = r.ok ? await r.json() : { ...selected, ...editForm }
       setTenants(prev => prev.map(t => t.tenant_id === selected.tenant_id ? updated : t))
       setSelected(updated)
@@ -120,7 +121,7 @@ export default function IndustryPage() {
   async function createTenant() {
     setSaving(true)
     try {
-      const r = await fetch(`${API}/api/v1/tenants/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newForm) })
+      const r = await apiFetch(`${API}/api/v1/tenants/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newForm) })
       const t: Tenant = r.ok ? await r.json() : { ...newForm, tenant_id: `TENANT-${Math.random().toString(36).slice(2, 8).toUpperCase()}`, created_at: new Date().toISOString() }
       setTenants(prev => [t, ...prev])
       setSelected(t)

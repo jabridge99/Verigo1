@@ -3,17 +3,23 @@ Data Retention & Legal Hold API.
 Admin/MLRO only — implements Part 11 of the enterprise security review.
 """
 
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _require_roles
 from app.db.database import get_db
 from app.models.retention import EntityScope, LegalHold
 from app.models.user import User, UserRole
+from app.schemas.retention import (
+    EligibilityQuery,
+    HoldCreate,
+    HoldResponse,
+    PolicyResponse,
+    PolicyUpsert,
+)
+from app.services import audit_service
 from app.services.retention_service import (
     generate_purge_report,
     get_policy,
@@ -28,55 +34,32 @@ from app.services.tenant_scope import scope_fields, scope_query
 router = APIRouter(prefix="/retention", tags=["Data Retention"])
 
 
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class PolicyUpsert(BaseModel):
-    entity_scope: EntityScope
-    retention_years: int
-    legal_hold: bool = False
-    notes: Optional[str] = None
-
-
-class PolicyResponse(BaseModel):
-    policy_id: str
-    industry_id: Optional[str]
-    entity_scope: EntityScope
-    retention_years: int
-    legal_hold: bool
-    notes: Optional[str]
-    created_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
-
-
-class HoldCreate(BaseModel):
-    entity_scope: EntityScope
-    entity_id: str
-    reason: str
-
-
-class HoldResponse(BaseModel):
-    hold_id: str
-    industry_id: Optional[str]
-    entity_scope: EntityScope
-    entity_id: str
-    reason: str
-    held_by: Optional[str]
-    placed_at: Optional[datetime]
-    released_at: Optional[datetime]
-    active: bool
-
-    class Config:
-        from_attributes = True
-
-
-class EligibilityQuery(BaseModel):
-    entity_scope: EntityScope
-    entity_id: str
-    created_at: datetime
-    pep_or_high_risk: bool = False
+def _log(
+    db: Session,
+    current_user: User,
+    org_id: Optional[str],
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Retention/legal-hold audit trail. Governs how long AML/CTF records are
+    kept and whether a given record can be deleted at all -- who set a
+    retention policy, and who placed/released a legal hold, is itself a
+    compliance-relevant decision that must be traceable.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="retention",
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state=after_state,
+        notes=notes,
+    )
 
 
 # ── Policy endpoints ──────────────────────────────────────────────────────────
@@ -89,7 +72,7 @@ def list_retention_policies(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    industry_id = None if current_user.is_super_admin else current_user.org_id
     return list_policies(db, industry_id)
 
 
@@ -101,7 +84,7 @@ def set_retention_policy(
 ):
     scoped = scope_fields(current_user)
     try:
-        return upsert_policy(
+        policy = upsert_policy(
             db,
             entity_scope=payload.entity_scope,
             retention_years=payload.retention_years,
@@ -113,6 +96,19 @@ def set_retention_policy(
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
+    _log(
+        db,
+        current_user,
+        current_user.org_id,
+        policy.policy_id,
+        action="retention_policy_set",
+        after_state={
+            "entity_scope": payload.entity_scope.value,
+            "retention_years": payload.retention_years,
+            "legal_hold": payload.legal_hold,
+        },
+    )
+    return policy
 
 
 @router.get("/policies/{entity_scope}", response_model=PolicyResponse)
@@ -123,7 +119,7 @@ def get_retention_policy(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    industry_id = None if current_user.is_super_admin else current_user.org_id
     return get_policy(db, entity_scope, industry_id)
 
 
@@ -137,16 +133,27 @@ def create_legal_hold(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     scoped = scope_fields(current_user)
-    return place_legal_hold(
+    hold = place_legal_hold(
         db,
         entity_scope=payload.entity_scope,
         entity_id=payload.entity_id,
         reason=payload.reason,
         held_by=current_user.id,
-        industry_id=current_user.org_id
-        if current_user.role != UserRole.admin
-        else None,
+        industry_id=current_user.org_id if not current_user.is_super_admin else None,
     )
+    _log(
+        db,
+        current_user,
+        current_user.org_id,
+        hold.hold_id,
+        action="legal_hold_placed",
+        after_state={
+            "entity_scope": payload.entity_scope.value,
+            "entity_id": payload.entity_id,
+        },
+        notes=payload.reason,
+    )
+    return hold
 
 
 @router.post("/holds/{hold_id}/release", response_model=HoldResponse)
@@ -157,16 +164,24 @@ def release_hold(
 ):
     scoped = scope_fields(current_user)
     try:
-        return release_legal_hold(
+        hold = release_legal_hold(
             db,
             hold_id,
             released_by=current_user.id,
             industry_id=current_user.org_id
-            if current_user.role != UserRole.admin
+            if not current_user.is_super_admin
             else None,
         )
     except (ValueError, PermissionError) as e:
         raise HTTPException(400 if isinstance(e, ValueError) else 403, str(e))
+    _log(
+        db,
+        current_user,
+        current_user.org_id,
+        hold.hold_id,
+        action="legal_hold_released",
+    )
+    return hold
 
 
 @router.get("/holds", response_model=list[HoldResponse])
@@ -179,7 +194,7 @@ def list_legal_holds(
     ),
 ):
     q = db.query(LegalHold)
-    if current_user.role != UserRole.admin:
+    if not current_user.is_super_admin:
         q = q.filter(LegalHold.industry_id == current_user.org_id)
     if entity_scope:
         q = q.filter(LegalHold.entity_scope == entity_scope)
@@ -218,5 +233,5 @@ def purge_report(
     current_user: User = Depends(_require_roles(UserRole.admin, UserRole.mlro)),
 ):
     """Dry-run purge report — identifies eligible records without deleting them."""
-    industry_id = None if current_user.role == UserRole.admin else current_user.org_id
+    industry_id = None if current_user.is_super_admin else current_user.org_id
     return generate_purge_report(db, industry_id)

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { BarChartHorizontal, TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -58,7 +58,7 @@ export default function BenchmarkingPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/benchmarks/dashboard`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/benchmarks/dashboard`, { credentials: "include" });
       if (!res.ok) throw new Error("api");
       const data = await res.json();
       const rows: MetricRow[] = Array.isArray(data) ? data : data.metrics ?? [];

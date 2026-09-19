@@ -8,7 +8,7 @@ import {
   Shield, Activity, FolderOpen, BarChart2, Settings, X,
   CreditCard, Webhook, Building2, ClipboardList, LogOut,
 } from "lucide-react";
-import { getStoredUser, clearUser } from "@/lib/auth";
+import { getStoredUser, signOut as authSignOut, apiFetch } from "@/lib/auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -50,7 +50,7 @@ export default function MobileNav() {
 
     const load = async () => {
       try {
-        const res = await fetch(`${API}/api/v1/notifications/summary`, {
+        const res = await apiFetch(`${API}/api/v1/notifications/summary`, {
           credentials: "include",
         });
         if (res.ok) setUnread((await res.json()).unread_count ?? 0);
@@ -69,7 +69,7 @@ export default function MobileNav() {
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   const signOut = () => {
-    clearUser();
+    authSignOut();
     setShowMore(false);
     router.push("/login");
   };

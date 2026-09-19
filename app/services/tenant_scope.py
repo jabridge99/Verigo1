@@ -7,14 +7,21 @@ Two scoping dimensions coexist during the Phase B rollout:
  - organisation_id (Phase B): an FK to a real customer Organisation.
    Populated going forward; NULL on pre-existing records.
 
-A record is visible to a non-admin, non-super-admin user if:
+A record is visible to a non-super-admin user if:
  - the user belongs to an organisation and the record's organisation_id
    matches it, OR
  - the record has no organisation_id yet (legacy data) and its
    industry_id matches the user's industry_id.
 
-Global admins (`UserRole.admin`) and `is_super_admin` users bypass all
-scoping, exactly as before.
+Only global `is_super_admin` users bypass all scoping. `UserRole.admin` is
+a per-organisation role obtainable by any tenant via normal self-serve
+signup, not a global one — it must NOT bypass tenant scoping here. This
+module previously treated it as unscoped too (see git history), the same
+bug class fixed in ifti.py, storage.py, documents.py, billing.py,
+security_monitor.py, and tenants.py; onboarding.py and retention.py
+(the two real consumers of this module — confirmed by a repo-wide
+search, see STRUCTURE_REVIEW.md/PARKING_LOT.md) inherited the same flaw
+through here.
 """
 
 from typing import Optional
@@ -22,11 +29,11 @@ from typing import Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Query
 
-from app.models.user import User, UserRole
+from app.models.user import User
 
 
 def is_unscoped(user: User) -> bool:
-    return user.role == UserRole.admin or bool(getattr(user, "is_super_admin", False))
+    return bool(getattr(user, "is_super_admin", False))
 
 
 def assert_tenant(

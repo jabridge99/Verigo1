@@ -1,4 +1,6 @@
 import enum
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -14,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -33,7 +35,7 @@ class IndustryType(str, enum.Enum):
     vasp = "vasp"  # Virtual asset service providers
     bullion_dealers = "bullion_dealers"  # Bullion dealers
 
-    # ── Tranche 2 (commenced 31 March 2026) ───────────────────────────────────
+    # ── Tranche 2 (commenced 1 July 2026; AUSTRAC enrolment deadline 31 March 2026) ──
     accountants = "accountants"  # Accountants
     conveyancers = "conveyancers"  # Conveyancers
     legal_professionals = "legal_professionals"  # Legal professionals
@@ -88,47 +90,65 @@ class MembershipStatus(str, enum.Enum):
 class Organisation(Base):
     __tablename__ = "organisations"
 
-    id = Column(String, primary_key=True, default=lambda: f"org_{uuid4().hex[:12]}")
-    name = Column(String(255), nullable=False)
-    trading_name = Column(String(255))
-    abn = Column(String(11), unique=True)
-    acn = Column(String(9))
-    austrac_id = Column(String(50))
-    industry_type = Column(Enum(IndustryType), nullable=False)
-    industry_id = Column(String(100), index=True)  # links to an IndustryTenant pack
-    risk_profile = Column(Enum(RiskProfile))  # set during self-service sign-up
-    status = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"org_{uuid4().hex[:12]}"
+    )
+    name: Mapped[str] = Column(String(255), nullable=False)
+    trading_name: Mapped[Optional[str]] = Column(String(255))
+    # 20, not 11: the API accepts and round-trips the human-formatted ABN
+    # ("XX XXX XXX XXX", 14 chars) as entered, not just the 11 raw digits.
+    abn: Mapped[Optional[str]] = Column(String(20), unique=True)
+    acn: Mapped[Optional[str]] = Column(String(9))
+    austrac_id: Mapped[Optional[str]] = Column(String(50))
+    industry_type: Mapped[IndustryType] = Column(Enum(IndustryType), nullable=False)
+    industry_id: Mapped[Optional[str]] = Column(
+        String(100), index=True
+    )  # links to an IndustryTenant pack
+    risk_profile: Mapped[Optional[RiskProfile]] = Column(
+        Enum(RiskProfile)
+    )  # set during self-service sign-up
+    status: Mapped[OrganisationStatus] = Column(
         Enum(OrganisationStatus), default=OrganisationStatus.active, nullable=False
     )
-    contact_email = Column(String(255))
-    contact_phone = Column(String(50))
-    address_line1 = Column(String(255))
-    address_line2 = Column(String(255))
-    city = Column(String(100))
-    state = Column(String(50))
-    postcode = Column(String(10))
-    country = Column(String(2), default="AU")
-    subscription_plan = Column(String(50))
-    settings = Column(JSON, default=dict)
+    contact_email: Mapped[Optional[str]] = Column(String(255))
+    contact_phone: Mapped[Optional[str]] = Column(String(50))
+    address_line1: Mapped[Optional[str]] = Column(String(255))
+    address_line2: Mapped[Optional[str]] = Column(String(255))
+    city: Mapped[Optional[str]] = Column(String(100))
+    state: Mapped[Optional[str]] = Column(String(50))
+    postcode: Mapped[Optional[str]] = Column(String(10))
+    country: Mapped[Optional[str]] = Column(String(2), default="AU")
+    subscription_plan: Mapped[Optional[str]] = Column(String(50))
+    settings: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # Phase D — onboarding wizard company/compliance details
-    business_address = Column(String(300))
-    phone = Column(String(50))
-    compliance_officer_name = Column(String(200))
-    compliance_officer_email = Column(String(200))
+    business_address: Mapped[Optional[str]] = Column(String(300))
+    phone: Mapped[Optional[str]] = Column(String(50))
+    compliance_officer_name: Mapped[Optional[str]] = Column(String(200))
+    compliance_officer_email: Mapped[Optional[str]] = Column(String(200))
     # Phase I — onboarding risk assessment + AML accountability sign-off
-    risk_assessment = Column(JSON)
-    risk_assessment_generated_at = Column(DateTime(timezone=True))
-    aml_accountability_ack = Column(Boolean, default=False)
-    aml_accountability_ack_at = Column(DateTime(timezone=True))
-    aml_accountability_ack_by = Column(String(200))
+    risk_assessment: Mapped[Optional[Any]] = Column(JSON)
+    risk_assessment_generated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True)
+    )
+    aml_accountability_ack: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    aml_accountability_ack_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True)
+    )
+    aml_accountability_ack_by: Mapped[Optional[str]] = Column(String(200))
     # Retention / IP terms-of-use acceptance — tied to the same onboarding
     # checkbox as the accountability acknowledgement (see Phase I).
-    retention_terms_accepted = Column(Boolean, default=False)
-    retention_terms_accepted_at = Column(DateTime(timezone=True))
-    retention_terms_accepted_by = Column(String(200))
-    retention_terms_version = Column(String(20))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    retention_terms_accepted: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    retention_terms_accepted_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True)
+    )
+    retention_terms_accepted_by: Mapped[Optional[str]] = Column(String(200))
+    retention_terms_version: Mapped[Optional[str]] = Column(String(20))
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     users = relationship(
         "User",
@@ -150,9 +170,9 @@ class Permission(Base):
 
     __tablename__ = "permissions"
 
-    id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(100), unique=True, index=True, nullable=False)
-    description = Column(String(300))
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = Column(String(100), unique=True, index=True, nullable=False)
+    description: Mapped[Optional[str]] = Column(String(300))
 
 
 role_permissions = Table(
@@ -166,18 +186,22 @@ role_permissions = Table(
 class Role(Base):
     __tablename__ = "roles"
 
-    id = Column(Integer, primary_key=True, index=True)
-    role_id = Column(String(60), unique=True, index=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    role_id: Mapped[str] = Column(String(60), unique=True, index=True, nullable=False)
     # NULL organisation_id = system role, usable by every organisation
-    organisation_id = Column(
+    organisation_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("organisations.id", ondelete="CASCADE"), index=True
     )
-    name = Column(String(100), nullable=False)
-    description = Column(String(300))
-    is_system = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    name: Mapped[str] = Column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = Column(String(300))
+    is_system: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
-    permissions = relationship("Permission", secondary=role_permissions)
+    permissions: Mapped[list["Permission"]] = relationship(
+        "Permission", secondary=role_permissions
+    )
 
 
 class OrganisationUser(Base):
@@ -188,18 +212,26 @@ class OrganisationUser(Base):
         UniqueConstraint("organisation_id", "user_id", name="uq_org_user"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    organisation_id = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    organisation_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
-    status = Column(Enum(MembershipStatus), default=MembershipStatus.active)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    user_id: Mapped[str] = Column(
+        String, ForeignKey("users.id"), nullable=False, index=True
+    )
+    role_id: Mapped[int] = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    status: Mapped[Optional[MembershipStatus]] = Column(
+        Enum(MembershipStatus), default=MembershipStatus.active
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 def new_role_id() -> str:

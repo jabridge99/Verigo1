@@ -6,7 +6,7 @@ import {
   Building2, Users, ArrowLeftRight, ShieldCheck, BarChart2, Scale, Webhook, Settings,
   ClipboardList, Bell, Shield, FolderOpen, FileCheck, Coins, Zap, Sliders,
   CreditCard, Palette, Key, Archive, FileText, Calendar, BookOpen, ClipboardCheck,
-  Award, FileBarChart, Network, UserCog,
+  Award, FileBarChart, Network, UserCog, Radar,
 } from 'lucide-react'
 
 export type NavItem = { label: string; href: string; icon: LucideIcon }
@@ -41,6 +41,7 @@ export const NAV_GROUPS: NavGroup[] = [
     defaultOpen: true,
     items: [
       { label: 'Transaction Monitoring', href: '/monitoring', icon: ArrowLeftRight },
+      { label: 'Monitoring Rules', href: '/monitoring-rules', icon: Radar },
       { label: 'Alerts', href: '/notifications', icon: Bell },
       { label: 'Cases', href: '/mlro', icon: Shield },
       { label: 'Reporting Queue', href: '/reporting', icon: FileText },
@@ -161,6 +162,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   new: 'New',
   'rule-builder': 'Rule Builder',
   'decision-support': 'Decision Support',
+  'monitoring-rules': 'Monitoring Rules',
 }
 
 // Paths that should never render the app chrome (sidebar/breadcrumbs) — marketing/public/auth pages.
