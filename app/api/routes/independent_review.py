@@ -389,6 +389,58 @@ def review_enums():
     }
 
 
+@router.get("/org-dashboard")
+def org_dashboard(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Cross-review dashboard: all open findings and overdue actions for this org."""
+    today = date.today()
+    open_findings = (
+        db.query(ReviewFinding)
+        .filter(
+            ReviewFinding.org_id == current_user.org_id,
+            ReviewFinding.status.notin_(
+                [FindingStatus.closed, FindingStatus.accepted_risk]
+            ),
+        )
+        .order_by(ReviewFinding.risk_rating.desc())
+        .all()
+    )
+    overdue_actions = (
+        db.query(ReviewAction)
+        .filter(
+            ReviewAction.org_id == current_user.org_id,
+            ReviewAction.due_date < today,
+            ReviewAction.status.notin_(
+                [ActionStatus.completed, ActionStatus.verified, ActionStatus.cancelled]
+            ),
+        )
+        .all()
+    )
+    pending_verification = (
+        db.query(ReviewAction)
+        .filter_by(org_id=current_user.org_id, status=ActionStatus.completed)
+        .all()
+    )
+    return {
+        "open_findings": len(open_findings),
+        "open_findings_by_risk": {
+            "critical": sum(1 for f in open_findings if f.risk_rating == "critical"),
+            "high": sum(1 for f in open_findings if f.risk_rating == "high"),
+            "medium": sum(1 for f in open_findings if f.risk_rating == "medium"),
+            "low": sum(1 for f in open_findings if f.risk_rating == "low"),
+        },
+        "overdue_actions": len(overdue_actions),
+        "pending_verification": len(pending_verification),
+        "overdue_action_list": [_action_dict(a) for a in overdue_actions[:20]],
+        "disclaimer": (
+            "This module provides workflow tooling only. "
+            "All compliance decisions remain with the reporting entity."
+        ),
+    }
+
+
 @router.get("/{review_id}")
 def get_review(
     review_id: str,
@@ -1361,58 +1413,6 @@ def review_dashboard(
             "verified": sum(1 for a in actions if a.status == ActionStatus.verified),
             "overdue": [_action_dict(a) for a in actions if _overdue_action(a)],
         },
-        "disclaimer": (
-            "This module provides workflow tooling only. "
-            "All compliance decisions remain with the reporting entity."
-        ),
-    }
-
-
-@router.get("/org-dashboard")
-def org_dashboard(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Cross-review dashboard: all open findings and overdue actions for this org."""
-    today = date.today()
-    open_findings = (
-        db.query(ReviewFinding)
-        .filter(
-            ReviewFinding.org_id == current_user.org_id,
-            ReviewFinding.status.notin_(
-                [FindingStatus.closed, FindingStatus.accepted_risk]
-            ),
-        )
-        .order_by(ReviewFinding.risk_rating.desc())
-        .all()
-    )
-    overdue_actions = (
-        db.query(ReviewAction)
-        .filter(
-            ReviewAction.org_id == current_user.org_id,
-            ReviewAction.due_date < today,
-            ReviewAction.status.notin_(
-                [ActionStatus.completed, ActionStatus.verified, ActionStatus.cancelled]
-            ),
-        )
-        .all()
-    )
-    pending_verification = (
-        db.query(ReviewAction)
-        .filter_by(org_id=current_user.org_id, status=ActionStatus.completed)
-        .all()
-    )
-    return {
-        "open_findings": len(open_findings),
-        "open_findings_by_risk": {
-            "critical": sum(1 for f in open_findings if f.risk_rating == "critical"),
-            "high": sum(1 for f in open_findings if f.risk_rating == "high"),
-            "medium": sum(1 for f in open_findings if f.risk_rating == "medium"),
-            "low": sum(1 for f in open_findings if f.risk_rating == "low"),
-        },
-        "overdue_actions": len(overdue_actions),
-        "pending_verification": len(pending_verification),
-        "overdue_action_list": [_action_dict(a) for a in overdue_actions[:20]],
         "disclaimer": (
             "This module provides workflow tooling only. "
             "All compliance decisions remain with the reporting entity."
