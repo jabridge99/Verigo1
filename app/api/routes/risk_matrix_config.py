@@ -66,7 +66,7 @@ def _factor_dict(f: OrgRiskFactor) -> dict:
         "is_system": f.is_system,
         "display_order": f.display_order,
         "updated_by": f.updated_by,
-        "updated_at": f.updated_at,
+        "updated_at": f.updated_at.isoformat() if f.updated_at else None,
     }
 
 
@@ -81,7 +81,7 @@ def _profile_dict(p: OrgRiskProfile) -> dict:
         "enhanced_monitoring": p.enhanced_monitoring,
         "senior_approval_required": p.senior_approval_required,
         "description": p.description,
-        "updated_at": p.updated_at,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
 
 
