@@ -5,9 +5,12 @@ charge, create a reversing record rather than editing in place.
 """
 
 import enum
+from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, String, func
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -34,29 +37,37 @@ class UsageRecord(Base):
 
     __tablename__ = "usage_records"
 
-    id = Column(String, primary_key=True, default=lambda: f"usage_{uuid4().hex[:14]}")
-    org_id = Column(String, nullable=False, index=True)
-    customer_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"usage_{uuid4().hex[:14]}"
+    )
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
+    customer_id: Mapped[Optional[str]] = Column(
         String, index=True
     )  # the end-customer being verified, if applicable
 
-    event_type = Column(Enum(UsageEventType), nullable=False, index=True)
-    provider = Column(String(50), nullable=False)  # e.g. "sumsub"
-    provider_reference = Column(String(255), index=True)  # applicantId / inspectionId
+    event_type: Mapped[UsageEventType] = Column(
+        Enum(UsageEventType), nullable=False, index=True
+    )
+    provider: Mapped[str] = Column(String(50), nullable=False)  # e.g. "sumsub"
+    provider_reference: Mapped[Optional[str]] = Column(
+        String(255), index=True
+    )  # applicantId / inspectionId
 
-    status = Column(
+    status: Mapped[UsageRecordStatus] = Column(
         Enum(UsageRecordStatus),
         default=UsageRecordStatus.pending,
         nullable=False,
         index=True,
     )
 
-    unit_cost_aud = Column(Float, nullable=False)
-    markup_pct = Column(Float, nullable=False, default=0.0)
-    billed_amount_aud = Column(Float, nullable=False)
+    unit_cost_aud: Mapped[float] = Column(Float, nullable=False)
+    markup_pct: Mapped[float] = Column(Float, nullable=False, default=0.0)
+    billed_amount_aud: Mapped[float] = Column(Float, nullable=False)
 
-    invoiced = Column(Boolean, default=False, index=True)
-    invoice_id = Column(String(60), index=True)
-    invoiced_at = Column(DateTime(timezone=True))
+    invoiced: Mapped[Optional[bool]] = Column(Boolean, default=False, index=True)
+    invoice_id: Mapped[Optional[str]] = Column(String(60), index=True)
+    invoiced_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )

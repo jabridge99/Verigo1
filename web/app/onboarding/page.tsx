@@ -8,10 +8,21 @@ import ApplicantTable from "@/components/Onboarding/ApplicantTable";
 import PipelineView from "@/components/Onboarding/PipelineView";
 import DocumentUploadStep from "@/components/Onboarding/DocumentUploadStep";
 import ScreeningStep from "@/components/Onboarding/ScreeningStep";
+import {
+  listOnboardingSessions,
+  getOnboardingStats,
+  sendOnboardingReminder,
+  cancelOnboardingSession,
+  createOnboardingSession,
+} from '@/lib/api/onboarding'
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const INDUSTRY_ID = "digital-currency-exchange";
 
+// Deliberately narrower than lib/api/onboarding.ts's OnboardingSession —
+// this shape (and its nullability) matches what ApplicantTable/PipelineView/
+// DocumentUploadStep/ScreeningStep's own local Session prop types expect,
+// so the wider API response is assigned into this narrower local shape
+// (structurally compatible: extra fields on the source side are harmless).
 interface Session {
   id: number;
   session_id: string;
@@ -24,11 +35,11 @@ interface Session {
   completion_pct: number;
   documents_uploaded: number;
   reminders_sent: number;
-  sanctions_match?: boolean;
-  risk_level?: string;
-  risk_score?: number;
-  created_at?: string;
-  customer_id?: string;
+  sanctions_match?: boolean | null;
+  risk_level?: string | null;
+  risk_score?: number | null;
+  created_at?: string | null;
+  customer_id?: string | null;
 }
 
 interface PipelineStats {
@@ -89,15 +100,13 @@ function OnboardingDashboardInner() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    try {
-      const [sessRes, statsRes] = await Promise.all([
-        fetch(`${API}/api/v1/onboarding/sessions?industry_id=${INDUSTRY_ID}&limit=200`, { credentials: "include" }),
-        fetch(`${API}/api/v1/onboarding/stats?industry_id=${INDUSTRY_ID}`, { credentials: "include" }),
-      ]);
-      if (sessRes.ok) setSessions(await sessRes.json());
-      if (statsRes.ok) setStats(await statsRes.json());
-    } catch {}
-    finally { setLoading(false); }
+    const [sessResult, statsResult] = await Promise.allSettled([
+      listOnboardingSessions(INDUSTRY_ID, 200),
+      getOnboardingStats(INDUSTRY_ID),
+    ]);
+    if (sessResult.status === "fulfilled") setSessions(sessResult.value);
+    if (statsResult.status === "fulfilled") setStats(statsResult.value);
+    setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -117,18 +126,17 @@ function OnboardingDashboardInner() {
 
   const handleRemind = async (sessionId: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/remind`, { method: "POST", credentials: "include" });
-      if (res.ok) { showToast("success", "Reminder sent"); fetchData(); }
-      else throw new Error();
+      await sendOnboardingReminder(sessionId);
+      showToast("success", "Reminder sent");
+      fetchData();
     } catch { showToast("error", "Failed to send reminder"); }
   };
 
   const handleCancel = async (sessionId: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/onboarding/sessions/${sessionId}/cancel`, { method: "POST", credentials: "include" });
-      if (!res.ok) throw new Error();
+      await cancelOnboardingSession(sessionId);
       showToast("success", "Verification request cancelled");
-      setSessions(prev => prev.map(s => s.session_id === sessionId ? { ...s, status: "cancelled" } : s));
+      setSessions(prev => prev.map(s => s.session_id === sessionId ? { ...s, status: "abandoned" } : s));
       setSelectedSession(null);
       fetchData();
     } catch {
@@ -140,19 +148,13 @@ function OnboardingDashboardInner() {
     e.preventDefault();
     setSubmittingManual(true);
     try {
-      const res = await fetch(`${API}/api/v1/onboarding/sessions`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...manualForm, industry_id: INDUSTRY_ID }),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await createOnboardingSession({ ...manualForm, industry_id: INDUSTRY_ID });
       showToast("success", `${manualForm.applicant_name} saved`);
       setManualForm({ applicant_name: "", applicant_email: "", applicant_phone: "", applicant_company: "", customer_type: "individual" });
       setTab("applicants");
       fetchData();
-    } catch (err: any) {
-      showToast("error", err.message || "Failed to create session");
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Failed to create session");
     } finally { setSubmittingManual(false); }
   };
 
@@ -313,7 +315,7 @@ function OnboardingDashboardInner() {
                   View customer profile
                 </a>
               )}
-              {!["completed", "rejected", "cancelled"].includes(selectedSession.status) && (
+              {!["completed", "rejected", "abandoned"].includes(selectedSession.status) && (
                 <>
                   <button onClick={() => handleRemind(selectedSession.session_id)} className="btn-secondary text-xs py-1.5 px-3">
                     Resend Link

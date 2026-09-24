@@ -54,9 +54,17 @@ def hash_password(plain: str) -> str:
 
 import uuid
 
-TEST_DB_URL = "sqlite:///./test_tvg.db"
+# Deliberately NOT reading DATABASE_URL -- CI's job-level env already sets
+# that (pointing at its Postgres service, currently unused by this suite),
+# so reading it here would silently flip this whole suite onto Postgres
+# the moment this file changed, rather than as an opt-in choice. Use a
+# distinct var name for local Postgres-backed triage runs instead.
+TEST_DB_URL = os.environ.get("TEST_DATABASE_URL") or "sqlite:///./test_tvg.db"
+_is_sqlite = TEST_DB_URL.startswith("sqlite")
 
-engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    TEST_DB_URL, connect_args={"check_same_thread": False} if _is_sqlite else {}
+)
 TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # NOTE: SQLite ignores FK constraints by default (PRAGMA foreign_keys=ON
@@ -71,6 +79,17 @@ TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 @pytest.fixture(scope="session", autouse=True)
 def create_tables():
     Base.metadata.create_all(bind=engine)
+    # POST /auth/register now always creates an OrganisationUser "owner"
+    # membership (app/services/org_service.py's attach_owner()), so the
+    # system role catalog must exist before any test hits that endpoint --
+    # mirrors what the real app's lifespan does once at startup. Seeded
+    # once here, committed directly against the engine (not a per-test
+    # rolled-back transaction), so it's visible to every test.
+    from app.services.org_service import seed_permission_catalog_and_roles
+
+    seed_session = TestingSession(bind=engine)
+    seed_permission_catalog_and_roles(seed_session)
+    seed_session.close()
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -111,6 +130,21 @@ def _make_org(db) -> Organisation:
 def _make_user(db, role: UserRole, industry_id: str = None) -> User:
     if industry_id is None:
         industry_id = _make_org(db).id
+    elif not db.query(Organisation).filter_by(id=industry_id).first():
+        # Many call sites pass an arbitrary literal (e.g. "IND-STOR-003")
+        # as industry_id without a real Organisation ever existing at that
+        # id. SQLite doesn't enforce users.org_id -> organisations.id, so
+        # this silently worked there; real Postgres FK enforcement rejects
+        # it outright. Create the matching org at that exact id rather
+        # than touching the ~30 call sites relying on this shortcut.
+        db.add(
+            Organisation(
+                id=industry_id,
+                name=f"Test Org {industry_id}",
+                industry_type=IndustryType.remittance,
+            )
+        )
+        db.commit()
     user = User(
         email=f"{role.value}-{uuid.uuid4().hex[:6]}@test.com",
         full_name=f"Test {role.value.title()}",
@@ -119,6 +153,11 @@ def _make_user(db, role: UserRole, industry_id: str = None) -> User:
         status=UserStatus.active,
         org_id=industry_id,
         industry_id=industry_id,
+        # A real registered user has all three identity fields pointing at
+        # the same org (see app/services/org_service.py's attach_owner()) --
+        # match that here so this fixture doesn't understate what a real
+        # user looks like.
+        primary_organisation_id=industry_id,
     )
     db.add(user)
     db.commit()

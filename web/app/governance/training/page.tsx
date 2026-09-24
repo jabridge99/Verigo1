@@ -6,43 +6,22 @@ import {
   BarChart3, Users, BookOpen, RotateCcw, FileBadge, ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type TrainingStatus = "assigned" | "in_progress" | "completed" | "overdue" | "expired" | "exempt";
-
-interface Course {
-  id: string;
-  course_code: string;
-  name: string;
-  training_type: string;
-  description?: string | null;
-  duration_minutes?: number | null;
-  has_assessment: boolean;
-  pass_mark?: number | null;
-  expiry_months?: number | null;
-  applicable_roles: string[];
-  applicable_industries: string[];
-  linked_control_ids: string[];
-  linked_risk_factor_categories: string[];
-  is_mandatory: boolean;
-  is_active: boolean;
-}
-
-interface TrainingRecord {
-  id: string;
-  course_id: string;
-  user_id: string;
-  assigned_date: string;
-  due_date: string;
-  completion_date?: string | null;
-  expiry_date?: string | null;
-  score?: number | null;
-  passed?: boolean | null;
-  attempt_number: number;
-  status: TrainingStatus;
-  is_exempt: boolean;
-}
+import {
+  listCourses,
+  listRecords,
+  getTrainingDashboard,
+  getComplianceReport,
+  seedStandardCourses,
+  seedIndustryPack,
+  completeTraining,
+  retakeTraining,
+  renewTraining,
+  createAssignment,
+  certificateHtmlUrl,
+  type Course,
+  type TrainingRecord,
+  type TrainingStatus,
+} from "@/lib/api/governanceTraining";
 
 const INDUSTRY_PACKS = [
   { key: "remittance", label: "Remittance" },
@@ -99,24 +78,22 @@ export default function TrainingPage() {
   };
 
   const fetchAll = useCallback(async () => {
-    try {
-      const [cRes, rRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/governance/training/courses`, { credentials: "include" }),
-        fetch(`${API}/api/v1/governance/training/records`, { credentials: "include" }),
-        fetch(`${API}/api/v1/governance/training/dashboard`, { credentials: "include" }),
-      ]);
-      if (cRes.ok) { const d = await cRes.json(); if (d.courses?.length) setCourses(d.courses); }
-      if (rRes.ok) { const d = await rRes.json(); if (d.records?.length) setRecords(d.records); }
-      if (dRes.ok) setDashboard(await dRes.json());
-    } catch {}
+    const [cRes, rRes, dRes] = await Promise.allSettled([
+      listCourses(),
+      listRecords(),
+      getTrainingDashboard(),
+    ]);
+    if (cRes.status === "fulfilled" && cRes.value.courses?.length) setCourses(cRes.value.courses);
+    if (rRes.status === "fulfilled" && rRes.value.records?.length) setRecords(rRes.value.records);
+    if (dRes.status === "fulfilled") setDashboard(dRes.value);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const fetchReport = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/compliance-report`, { credentials: "include" });
-      if (res.ok) { setReport(await res.json()); return; }
+      setReport(await getComplianceReport());
+      return;
     } catch {}
     setReport({
       report_date: new Date().toISOString().slice(0, 10),
@@ -133,35 +110,30 @@ export default function TrainingPage() {
 
   const seedPack = async (industry: string | null) => {
     try {
-      const url = industry
-        ? `${API}/api/v1/governance/training/courses/seed-industry-pack?industry=${industry}`
-        : `${API}/api/v1/governance/training/courses/seed-industry-pack`;
-      const res = await fetch(url, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const d = await res.json();
-        showToast("success", d.message || "Pack seeded.");
-        fetchAll();
-        return;
-      }
+      const d = await seedIndustryPack(industry);
+      showToast("success", d.message || "Pack seeded.");
+      fetchAll();
+      return;
     } catch {}
     showToast("success", industry ? `${industry} pack seeded (demo).` : "All packs seeded (demo).");
   };
 
   const seedStandard = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/courses/seed`, { method: "POST", credentials: "include" });
-      if (res.ok) { const d = await res.json(); showToast("success", d.message || "Standard courses seeded."); fetchAll(); return; }
+      const d = await seedStandardCourses();
+      showToast("success", d.message || "Standard courses seeded.");
+      fetchAll();
+      return;
     } catch {}
     showToast("success", "Standard courses seeded (demo).");
   };
 
   const completeRecord = async (r: TrainingRecord, score: number) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/complete`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completion_date: new Date().toISOString().slice(0, 10), score }),
-      });
-      if (res.ok) { const updated = await res.json(); setRecords(prev => prev.map(x => x.id === r.id ? updated : x)); showToast("success", "Training marked complete."); return; }
+      const updated = await completeTraining(r.id, { completion_date: new Date().toISOString().slice(0, 10), score });
+      setRecords(prev => prev.map(x => x.id === r.id ? updated : x));
+      showToast("success", "Training marked complete.");
+      return;
     } catch {}
     setRecords(prev => prev.map(x => x.id === r.id ? { ...x, completion_date: new Date().toISOString().slice(0, 10), score, passed: score >= 75, status: "completed" } : x));
     showToast("success", "Training marked complete (demo).");
@@ -169,8 +141,10 @@ export default function TrainingPage() {
 
   const retakeRecord = async (r: TrainingRecord) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/retake`, { method: "POST", credentials: "include" });
-      if (res.ok) { const updated = await res.json(); setRecords(prev => prev.map(x => x.id === r.id ? updated : x)); showToast("success", "Retake initiated."); return; }
+      const updated = await retakeTraining(r.id);
+      setRecords(prev => prev.map(x => x.id === r.id ? updated : x));
+      showToast("success", "Retake initiated.");
+      return;
     } catch {}
     showToast("success", "Retake initiated (demo).");
   };
@@ -178,8 +152,10 @@ export default function TrainingPage() {
   const renewRecord = async (r: TrainingRecord) => {
     const dueDate = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/renew?due_date=${dueDate}`, { method: "POST", credentials: "include" });
-      if (res.ok) { const created = await res.json(); setRecords(prev => [created, ...prev]); showToast("success", "Renewal cycle created."); return; }
+      const created = await renewTraining(r.id, dueDate);
+      setRecords(prev => [created, ...prev]);
+      showToast("success", "Renewal cycle created.");
+      return;
     } catch {}
     showToast("success", "Renewal cycle created (demo).");
   };
@@ -410,7 +386,7 @@ function RecordsTab({ records, courseName, onComplete, onRetake, onRenew }: {
                     </button>
                   )}
                   {r.status === "completed" && (
-                    <a href={`${API}/api/v1/governance/training/records/${r.id}/certificate-html`} target="_blank" rel="noreferrer"
+                    <a href={certificateHtmlUrl(r.id)} target="_blank" rel="noreferrer"
                       className="p-1.5 rounded-lg hover:bg-navy-700 text-slate-400" title="Certificate">
                       <FileBadge className="w-4 h-4" />
                     </a>
@@ -446,11 +422,7 @@ function AssignTab({ courses, onAssigned }: { courses: Course[]; onAssigned: () 
       trigger: "manual",
     };
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/assignments`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await createAssignment(payload);
     } catch {}
     setSubmitting(false);
     onAssigned();

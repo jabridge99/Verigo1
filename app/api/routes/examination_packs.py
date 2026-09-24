@@ -12,12 +12,10 @@ Sections:
 Notification: MLRO receives in-app + email notification when pack is ready.
 """
 
-from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -32,25 +30,28 @@ from app.models.examination_pack import (
     ExaminationPackStatus,
 )
 from app.models.user import User
+from app.schemas.examination_pack import DeliverPackRequest, GeneratePackRequest
+from app.services import audit_service
 from app.services import examination_pack_service as svc
 
 router = APIRouter(prefix="/examination-packs", tags=["AUSTRAC Examination Pack"])
 
 
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class GeneratePackRequest(BaseModel):
-    period_start: date
-    period_end: date
-    sections: Optional[List[str]] = None  # null = all sections
-    examiner_name: Optional[str] = None
-    examiner_agency: str = "AUSTRAC"
-    examination_ref: Optional[str] = None  # AUSTRAC's own reference number
-
-
-class DeliverPackRequest(BaseModel):
-    delivery_notes: Optional[str] = None
+def _log(db: Session, current_user: User, pack: ExaminationPack, action: str) -> None:
+    """
+    An examination pack is the evidence bundle handed to an AUSTRAC examiner
+    on arrival -- who generated, delivered, or archived it needs its own
+    queryable record, independent of the pack's own status/timestamp fields.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="examination_pack",
+        entity_id=pack.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=current_user.org_id,
+    )
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ def generate_pack(
         examiner_agency=body.examiner_agency,
         examination_ref=body.examination_ref,
     )
+    _log(db, current_user, pack, "examination_pack_generated")
     return _pack_to_dict(pack, include_snapshot=False)
 
 
@@ -182,6 +184,7 @@ def deliver_pack(
     pack.delivered_by = current_user.id
     pack.delivery_notes = body.delivery_notes
     db.commit()
+    _log(db, current_user, pack, "examination_pack_delivered")
     return _pack_to_dict(pack, include_snapshot=False)
 
 
@@ -196,6 +199,7 @@ def archive_pack(
         raise HTTPException(422, "Cannot archive a pack that is still generating")
     pack.status = ExaminationPackStatus.archived
     db.commit()
+    _log(db, current_user, pack, "examination_pack_archived")
     return {"archived": True, "pack_id": pack_id, "pack_ref": pack.pack_ref}
 
 

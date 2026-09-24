@@ -25,6 +25,8 @@ DISCLAIMER: This module is a governance tooling aid only.
 from __future__ import annotations
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -41,7 +43,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 
@@ -120,64 +122,80 @@ class TrainingCourse(Base):
 
     __tablename__ = "training_courses"
 
-    id = Column(String, primary_key=True, default=lambda: f"tc_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"tc_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    solution_id = Column(String, ForeignKey("aml_solutions.id"), nullable=True)
+    solution_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("aml_solutions.id"), nullable=True
+    )
     # null for global standard courses seeded at platform level
 
     # ── Identity ──────────────────────────────────────────────────────────────
-    course_code = Column(String(30), nullable=False)  # e.g. TRN-IND-001
-    name = Column(String(255), nullable=False)
-    training_type = Column(Enum(TrainingType), nullable=False, index=True)
-    description = Column(Text)
-    learning_objectives = Column(JSON, default=list)  # [str]
+    course_code: Mapped[str] = Column(String(30), nullable=False)  # e.g. TRN-IND-001
+    name: Mapped[str] = Column(String(255), nullable=False)
+    training_type: Mapped[TrainingType] = Column(
+        Enum(TrainingType), nullable=False, index=True
+    )
+    description: Mapped[Optional[str]] = Column(Text)
+    learning_objectives: Mapped[Optional[Any]] = Column(JSON, default=list)  # [str]
 
     # ── Provider & delivery ───────────────────────────────────────────────────
-    provider = Column(String(255))
+    provider: Mapped[Optional[str]] = Column(String(255))
     # e.g. "Verigo Platform", "AUSTRAC eLearning", "External Trainer", "Internal"
-    delivery_method = Column(String(50))
+    delivery_method: Mapped[Optional[str]] = Column(String(50))
     # e.g. "online_module", "face_to_face", "webinar", "document_attestation"
-    duration_minutes = Column(Integer)
-    external_url = Column(String(512))  # link to external LMS / course
+    duration_minutes: Mapped[Optional[int]] = Column(Integer)
+    external_url: Mapped[Optional[str]] = Column(
+        String(512)
+    )  # link to external LMS / course
 
     # ── Assessment ────────────────────────────────────────────────────────────
-    has_assessment = Column(Boolean, default=False)
-    pass_mark = Column(Float)  # e.g. 80.0 for 80%
-    max_attempts = Column(Integer, default=3)
-    issues_certificate = Column(Boolean, default=False)
+    has_assessment: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    pass_mark: Mapped[Optional[float]] = Column(Float)  # e.g. 80.0 for 80%
+    max_attempts: Mapped[Optional[int]] = Column(Integer, default=3)
+    issues_certificate: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Expiry ────────────────────────────────────────────────────────────────
-    expiry_months = Column(Integer)
+    expiry_months: Mapped[Optional[int]] = Column(Integer)
     # null = does not expire; 12 = annual renewal required
 
     # ── Applicability ─────────────────────────────────────────────────────────
-    applicable_roles = Column(JSON, default=list)
+    applicable_roles: Mapped[Optional[Any]] = Column(JSON, default=list)
     # ["admin", "mlro", "compliance", "analyst", "all"] — roles that must complete this
-    applicable_industries = Column(JSON, default=list)
+    applicable_industries: Mapped[Optional[Any]] = Column(JSON, default=list)
     # ["remittance", "vasp", "financial_services", "all"] — IndustryType values
     # this course's pack targets; ["all"] = applies to every industry
-    is_mandatory = Column(Boolean, default=False)
-    is_custom = Column(Boolean, default=False)  # org-created custom course
-    is_active = Column(Boolean, default=True)
+    is_mandatory: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    is_custom: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # org-created custom course
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
 
     # ── Regulatory references ─────────────────────────────────────────────────
-    regulatory_references = Column(JSON, default=list)
+    regulatory_references: Mapped[Optional[Any]] = Column(JSON, default=list)
 
     # ── Governance linkage (static mapping — distinct from the risk-event-
     # triggered auto-assignment in training_trigger.py) ────────────────────────
-    linked_control_ids = Column(JSON, default=list)
+    linked_control_ids: Mapped[Optional[Any]] = Column(JSON, default=list)
     # GovernanceControl.id values this course evidences staff competency for
-    linked_risk_factor_categories = Column(JSON, default=list)
+    linked_risk_factor_categories: Mapped[Optional[Any]] = Column(JSON, default=list)
     # RiskFactorCategory values (e.g. ["customer", "geographic"]) this course covers
 
-    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     records = relationship(
         "GovernanceTrainingRecord",
@@ -210,64 +228,86 @@ class GovernanceTrainingRecord(Base):
 
     __tablename__ = "governance_training_records"
 
-    id = Column(String, primary_key=True, default=lambda: f"gtr_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gtr_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    solution_id = Column(String, ForeignKey("aml_solutions.id"), nullable=False)
-    course_id = Column(
+    solution_id: Mapped[str] = Column(
+        String, ForeignKey("aml_solutions.id"), nullable=False
+    )
+    course_id: Mapped[str] = Column(
         String, ForeignKey("training_courses.id"), nullable=False, index=True
     )
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = Column(
+        String, ForeignKey("users.id"), nullable=False, index=True
+    )
 
     # ── Assignment ────────────────────────────────────────────────────────────
-    assignment_id = Column(String, ForeignKey("training_assignments.id"), nullable=True)
-    assigned_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    assigned_date = Column(Date, nullable=False)
-    due_date = Column(Date, nullable=False)
-    trigger = Column(Enum(AssignmentTrigger), default=AssignmentTrigger.manual)
+    assignment_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("training_assignments.id"), nullable=True
+    )
+    assigned_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    assigned_date: Mapped[date] = Column(Date, nullable=False)
+    due_date: Mapped[date] = Column(Date, nullable=False)
+    trigger: Mapped[Optional[AssignmentTrigger]] = Column(
+        Enum(AssignmentTrigger), default=AssignmentTrigger.manual
+    )
 
     # ── Completion ────────────────────────────────────────────────────────────
-    started_at = Column(DateTime(timezone=True))
-    completion_date = Column(Date)
-    expiry_date = Column(Date)
+    started_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    completion_date: Mapped[Optional[date]] = Column(Date)
+    expiry_date: Mapped[Optional[date]] = Column(Date)
     # = completion_date + course.expiry_months (calculated on save)
 
     # ── Assessment result ─────────────────────────────────────────────────────
-    score = Column(Float)  # 0–100
-    pass_mark_applied = Column(Float)  # copy of course.pass_mark at time of completion
-    passed = Column(Boolean)
-    attempt_number = Column(Integer, default=1)
+    score: Mapped[Optional[float]] = Column(Float)  # 0–100
+    pass_mark_applied: Mapped[Optional[float]] = Column(
+        Float
+    )  # copy of course.pass_mark at time of completion
+    passed: Mapped[Optional[bool]] = Column(Boolean)
+    attempt_number: Mapped[Optional[int]] = Column(Integer, default=1)
 
     # ── Certificate ───────────────────────────────────────────────────────────
-    certificate_document_id = Column(String)  # Document.id
-    certificate_number = Column(String(100))
+    certificate_document_id: Mapped[Optional[str]] = Column(String)  # Document.id
+    certificate_number: Mapped[Optional[str]] = Column(String(100))
 
     # ── Status (CALCULATED — do not set manually) ─────────────────────────────
-    status = Column(
-        Enum(TrainingStatus),
+    status: Mapped[TrainingStatus] = Column(
+        Enum(TrainingStatus, name="governance_training_status"),
         default=TrainingStatus.assigned,
         nullable=False,
         index=True,
     )
 
     # ── Exemption ─────────────────────────────────────────────────────────────
-    is_exempt = Column(Boolean, default=False)
-    exemption_reason = Column(Text)
-    exemption_approved_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    is_exempt: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    exemption_reason: Mapped[Optional[str]] = Column(Text)
+    exemption_approved_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     # ── Reminder tracking ─────────────────────────────────────────────────────
-    reminders_sent = Column(JSON, default=list)
+    reminders_sent: Mapped[Optional[Any]] = Column(JSON, default=list)
     # [{"type": "7_day", "sent_at": "ISO datetime"}]
 
-    notes = Column(Text)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    notes: Mapped[Optional[str]] = Column(Text)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
-    course = relationship("TrainingCourse", back_populates="records")
+    course: Mapped["TrainingCourse"] = relationship(
+        "TrainingCourse", back_populates="records"
+    )
     assignment = relationship(
         "TrainingAssignment", back_populates="records", foreign_keys=[assignment_id]
     )
@@ -295,38 +335,56 @@ class TrainingAssignment(Base):
 
     __tablename__ = "training_assignments"
 
-    id = Column(String, primary_key=True, default=lambda: f"ta_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ta_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    solution_id = Column(String, ForeignKey("aml_solutions.id"), nullable=False)
-    course_id = Column(
+    solution_id: Mapped[str] = Column(
+        String, ForeignKey("aml_solutions.id"), nullable=False
+    )
+    course_id: Mapped[str] = Column(
         String, ForeignKey("training_courses.id"), nullable=False, index=True
     )
 
     # ── Assignment scope ──────────────────────────────────────────────────────
-    assigned_to_user_ids = Column(JSON, default=list)  # specific users
-    assigned_to_roles = Column(JSON, default=list)  # ["mlro", "compliance", "all"]
-    assigned_to_units = Column(JSON, default=list)  # business unit names
+    assigned_to_user_ids: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # specific users
+    assigned_to_roles: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # ["mlro", "compliance", "all"]
+    assigned_to_units: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # business unit names
 
     # ── Schedule ──────────────────────────────────────────────────────────────
-    trigger = Column(Enum(AssignmentTrigger), nullable=False)
-    assigned_date = Column(Date, nullable=False)
-    due_date = Column(Date, nullable=False)
-    notes = Column(Text)
+    trigger: Mapped[AssignmentTrigger] = Column(Enum(AssignmentTrigger), nullable=False)
+    assigned_date: Mapped[date] = Column(Date, nullable=False)
+    due_date: Mapped[date] = Column(Date, nullable=False)
+    notes: Mapped[Optional[str]] = Column(Text)
 
     # ── Status ────────────────────────────────────────────────────────────────
-    total_assigned = Column(Integer, default=0)  # count of records spawned
-    is_active = Column(Boolean, default=True)
+    total_assigned: Mapped[Optional[int]] = Column(
+        Integer, default=0
+    )  # count of records spawned
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
 
-    assigned_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Nullable: system-initiated assignments (risk-triggered training,
+    # regulatory update broadcasts) have no human actor to attribute this to.
+    assigned_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     course = relationship("TrainingCourse", back_populates="assignments")
-    records = relationship(
+    records: Mapped[list["GovernanceTrainingRecord"]] = relationship(
         "GovernanceTrainingRecord",
         back_populates="assignment",
         foreign_keys="GovernanceTrainingRecord.assignment_id",
@@ -369,7 +427,7 @@ Training Health Score (0-100):
 # STANDARD COURSE SEEDS
 # ══════════════════════════════════════════════════════════════════════════════
 
-STANDARD_TRAINING_COURSES = [
+STANDARD_TRAINING_COURSES: list[dict[str, Any]] = [
     {
         "course_code": "TRN-IND-001",
         "name": "AML/CTF Induction Training",

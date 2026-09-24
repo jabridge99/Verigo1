@@ -7,11 +7,10 @@ Roles:
   Escalate              — mlro+
 """
 
-from datetime import date
 from typing import Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -29,6 +28,8 @@ from app.models.compliance_calendar import (
     ComplianceReminder,
 )
 from app.models.user import User
+from app.schemas.compliance_calendar import CalendarItemCreate, CompleteItemRequest
+from app.services import audit_service
 from app.services.compliance_calendar_service import (
     complete_item,
     create_calendar_item,
@@ -41,23 +42,28 @@ from app.services.compliance_calendar_service import (
 router = APIRouter(prefix="/compliance-calendar", tags=["Compliance Calendar"])
 
 
-class CalendarItemCreate(BaseModel):
-    item_type: CalendarItemType
-    title: str
-    due_date: date
-    description: Optional[str] = None
-    customer_id: Optional[str] = None
-    report_id: Optional[str] = None
-    report_type: Optional[str] = None
-    policy_id: Optional[str] = None
-    control_id: Optional[str] = None
-    assigned_to: Optional[str] = None
-    is_recurring: bool = False
-    recurrence_months: Optional[int] = None
-
-
-class CompleteItemRequest(BaseModel):
-    completion_notes: Optional[str] = None
+def _log(
+    db: Session,
+    current_user: User,
+    org_id: str,
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """Compliance calendar audit trail -- who scheduled, completed, or escalated a compliance obligation."""
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state=after_state,
+        notes=notes,
+    )
 
 
 def _item_dict(item: ComplianceCalendarItem) -> dict:
@@ -194,6 +200,15 @@ def create_item(
 ):
     org_id = org_id_for(current_user)
     item = create_calendar_item(db=db, org_id=org_id, **payload.model_dump())
+    _log(
+        db,
+        current_user,
+        org_id,
+        "calendar_item",
+        item.id,
+        action="calendar_item_created",
+        after_state={"item_type": item.item_type.value, "title": item.title},
+    )
     return _item_dict(item)
 
 
@@ -252,6 +267,16 @@ def complete_calendar_item(
         raise HTTPException(409, "Item is already completed.")
 
     updated = complete_item(item_id, current_user.id, payload.completion_notes, db)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "calendar_item",
+        item_id,
+        action="calendar_item_completed",
+        after_state={"status": updated.status.value},
+        notes=payload.completion_notes,
+    )
     return _item_dict(updated)
 
 
@@ -263,6 +288,15 @@ def schedule_reviews(
     """Bulk-schedule periodic CDD review items for all active customers."""
     org_id = org_id_for(current_user)
     items = schedule_bulk_customer_reviews(db, org_id)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "calendar_item",
+        f"bulk_{uuid4().hex[:12]}",
+        action="calendar_reviews_bulk_scheduled",
+        after_state={"scheduled": len(items)},
+    )
     return {"scheduled": len(items)}
 
 
@@ -277,6 +311,15 @@ def trigger_reminder_processing(
     """
     org_id = org_id_for(current_user)
     reminders = process_due_reminders(db, org_id)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "calendar_item",
+        f"bulk_{uuid4().hex[:12]}",
+        action="calendar_reminders_processed",
+        after_state={"reminders_created": len(reminders)},
+    )
     return {"reminders_created": len(reminders)}
 
 
@@ -289,6 +332,18 @@ def escalate_overdue(
     """Escalate all overdue items to the named compliance officer."""
     org_id = org_id_for(current_user)
     items = escalate_overdue_items(db, org_id, compliance_officer_id)
+    _log(
+        db,
+        current_user,
+        org_id,
+        "calendar_item",
+        f"bulk_{uuid4().hex[:12]}",
+        action="calendar_items_escalated",
+        after_state={
+            "escalated_to": compliance_officer_id,
+            "item_ids": [i.id for i in items],
+        },
+    )
     return {"escalated": len(items), "item_ids": [i.id for i in items]}
 
 
@@ -334,4 +389,12 @@ def mark_reminder_sent(
     r.is_sent = True
     r.sent_at = datetime.now(timezone.utc)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        "compliance_reminder",
+        r.id,
+        action="calendar_reminder_marked_sent",
+    )
     return _reminder_dict(r)

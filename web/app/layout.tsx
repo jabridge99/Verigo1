@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { headers } from 'next/headers'
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import Tranche2Banner from '@/components/Tranche2Banner'
@@ -36,7 +37,12 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // P50b: the nonce proxy.ts mints per-request and stamps into the CSP
+  // header — read back here so the one inline script this app renders
+  // itself (next-themes' pre-paint theme-setting script) can carry it.
+  const nonce = (await headers()).get('x-nonce') ?? undefined
+
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
@@ -45,7 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
       </head>
       <body>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} nonce={nonce}>
           <Tranche2Banner />
           <Navbar />
           <AppChrome>{children}</AppChrome>

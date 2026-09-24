@@ -26,7 +26,6 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -50,7 +49,18 @@ from app.models.automation_rule import (
     RuleEventType,
 )
 from app.models.user import User
+from app.schemas.automation_rule import (
+    ActionSchema,
+    ApprovalDecision,
+    ConditionGroupSchema,
+    ConditionSchema,
+    RuleCreate,
+    RuleTestRequest,
+    RuleUpdate,
+)
+from app.services import audit_service
 from app.services.automation_engine import evaluate_condition_groups
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 EVENT_LABELS: dict[str, str] = {
     "customer_created": "Customer Created",
@@ -73,72 +83,7 @@ DISCLAIMER = (
 )
 
 
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class ConditionSchema(BaseModel):
-    field: str = Field(
-        ..., description="Dot-notation field path e.g. 'customer.risk_level'"
-    )
-    operator: str = Field(
-        ...,
-        description="eq | ne | gt | lt | gte | lte | in | not_in | contains | starts_with | is_true | is_false | is_null | between",
-    )
-    value: object = None
-    value_label: Optional[str] = None
-    negate: bool = Field(default=False, description="NOT this condition")
-
-
-class ConditionGroupSchema(BaseModel):
-    logic: str = Field(
-        default="AND",
-        description="AND (all must match) or OR (any must match) within this group",
-    )
-    description: Optional[str] = None
-    negate: bool = Field(default=False, description="NOT the whole group's result")
-    conditions: list[ConditionSchema] = Field(default_factory=list)
-    groups: list["ConditionGroupSchema"] = Field(
-        default_factory=list,
-        description="Nested sub-groups, combined per this group's logic",
-    )
-
-
 ConditionGroupSchema.model_rebuild()
-
-
-class ActionSchema(BaseModel):
-    action_type: RuleActionType
-    params: dict = Field(default_factory=dict)
-    delay_minutes: int = Field(default=0, ge=0)
-    description: Optional[str] = None
-
-
-class RuleCreate(BaseModel):
-    name: str = Field(..., min_length=3, max_length=255)
-    description: Optional[str] = None
-    event_type: RuleEventType
-    condition_groups: list[ConditionGroupSchema] = Field(default_factory=list)
-    actions: list[ActionSchema] = Field(..., min_length=1)
-    priority: int = Field(default=100, ge=1, le=9999)
-    applicable_industries: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
-
-
-class RuleUpdate(BaseModel):
-    name: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
-    status: Optional[AutomationRuleStatus] = None
-    condition_groups: Optional[list[ConditionGroupSchema]] = None
-    actions: Optional[list[ActionSchema]] = None
-    priority: Optional[int] = Field(None, ge=1, le=9999)
-    applicable_industries: Optional[list[str]] = None
-    tags: Optional[list[str]] = None
-
-
-class ApprovalDecision(BaseModel):
-    decision: ApprovalDecisionType
-    review_notes: str = Field(..., min_length=5)
-    conditions: list[str] = Field(default_factory=list)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -196,6 +141,34 @@ def _rule_dict(r: AutomationRule) -> dict:
         "created_at": r.created_at,
         "updated_at": r.updated_at,
     }
+
+
+def _log_panel(
+    db: Session,
+    current_user: User,
+    org_id: str,
+    panel_id: str,
+    action: str,
+    notes: str = None,
+) -> None:
+    """
+    Decision support panels aren't AutomationRules, so they don't fit the
+    AuditEventType-based AuditLog pattern create_rule()/update_rule()/
+    delete_rule() already use above (also already merged into GET /audit/,
+    per app/api/routes/audit.py). submit_review_step() in particular
+    records a real human compliance/MLRO/senior-approval decision -- the
+    same kind of event cases.py/reports.py already audit.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="decision_support_panel",
+        entity_id=panel_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        notes=notes,
+    )
 
 
 def _panel_dict(p: DecisionSupportPanel) -> dict:
@@ -632,13 +605,6 @@ def rule_versions(
     ]
 
 
-class RuleTestRequest(BaseModel):
-    context: dict = Field(
-        ...,
-        description="Sample event context to test the rule's conditions against, e.g. {'customer': {'risk_level': 'high'}}",
-    )
-
-
 @router.post("/rules/{rule_id}/test")
 def test_rule(
     rule_id: str,
@@ -767,8 +733,8 @@ def create_decision_panel(
             is_structuring = getattr(txn, "is_structuring_suspect", False)
             is_near_threshold = getattr(txn, "is_near_threshold", False)
 
-    potential_ttr = amount_aud >= 10_000.0
-    potential_ifti = is_cross_border and amount_aud >= 10_000.0
+    potential_ttr = amount_aud >= TTR_CTR_THRESHOLD_AUD
+    potential_ifti = is_cross_border and amount_aud >= TTR_CTR_THRESHOLD_AUD
     potential_smr = is_structuring or alert_score >= 70.0 or customer_is_pep(customer)
     reporting_rationale = {}
     if potential_ttr:
@@ -841,6 +807,7 @@ def create_decision_panel(
     db.add(panel)
     db.commit()
     db.refresh(panel)
+    _log_panel(db, current_user, org_id, panel.id, "decision_panel_generated")
     return _panel_dict(panel)
 
 
@@ -991,6 +958,14 @@ def submit_review_step(
 
     db.commit()
     db.refresh(p)
+    _log_panel(
+        db,
+        current_user,
+        org_id,
+        panel_id,
+        f"decision_panel_{step_type.value}_{payload.decision.value}",
+        notes=payload.review_notes,
+    )
     return {
         "panel_id": panel_id,
         "step_recorded": step_type.value,

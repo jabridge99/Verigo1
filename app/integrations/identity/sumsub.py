@@ -16,6 +16,7 @@ import hmac
 import json as json_lib
 import logging
 import time
+from typing import Any
 
 import httpx
 
@@ -73,7 +74,7 @@ class SumsubProvider(IdentityProvider):
         fixed_info: dict | None = None,
     ) -> str:
         path = f"/resources/applicants?levelName={level_name}"
-        body = {"externalUserId": external_user_id}
+        body: dict[str, Any] = {"externalUserId": external_user_id}
         if fixed_info:
             body["fixedInfo"] = fixed_info
         data = await self._request("POST", path, json=body)

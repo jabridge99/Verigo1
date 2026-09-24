@@ -6,7 +6,7 @@ import {
   Send, Archive, ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, apiFetch } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -65,7 +65,7 @@ export default function BoardReportsPage() {
 
   const fetchReports = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/board-reports`, { credentials: "include" });
+      const res = await apiFetch(`${API}/api/v1/board-reports`, { credentials: "include" });
       if (!res.ok) throw new Error("api");
       const d = await res.json();
       if (d.items?.length) setReports(d.items);
@@ -80,7 +80,7 @@ export default function BoardReportsPage() {
       return;
     }
     try {
-      const res = await fetch(`${API}/api/v1/board-reports`, {
+      const res = await apiFetch(`${API}/api/v1/board-reports`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
@@ -99,7 +99,7 @@ export default function BoardReportsPage() {
   const transition = async (r: Report, action: string, body?: any) => {
     try {
       const url = `${API}/api/v1/board-reports/${r.id}/${action}`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: "POST", credentials: "include",
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,

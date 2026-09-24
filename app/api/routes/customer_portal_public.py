@@ -12,11 +12,11 @@ Security:
 """
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.models.customer_portal import CustomerPortalSession
+from app.schemas.customer_portal import QuestionnaireResponseRequest
 from app.services import customer_portal_service
 
 router = APIRouter(prefix="/portal", tags=["Customer Portal (Public)"])
@@ -32,14 +32,6 @@ def get_portal_session(
 ) -> CustomerPortalSession:
     client_ip = request.client.host if request.client else None
     return customer_portal_service.validate_portal_token(db, token, client_ip)
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class QuestionnaireResponseRequest(BaseModel):
-    responses: dict
-    mark_complete: bool = False
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

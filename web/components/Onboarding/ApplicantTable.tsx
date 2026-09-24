@@ -16,10 +16,10 @@ interface Session {
   completion_pct: number;
   documents_uploaded: number;
   reminders_sent: number;
-  sanctions_match?: boolean;
-  risk_level?: string;
-  risk_score?: number;
-  created_at?: string;
+  sanctions_match?: boolean | null;
+  risk_level?: string | null;
+  risk_score?: number | null;
+  created_at?: string | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {

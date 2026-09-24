@@ -26,6 +26,8 @@ All compliance decisions remain with the reporting entity.
 """
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -41,6 +43,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -98,6 +101,11 @@ class FindingCategory(str, enum.Enum):
     record_keeping = "record_keeping"
     risk_assessment = "risk_assessment"
     policies_procedures = "policies_procedures"
+    # Two mandatory review areas named by the Verigo Independent Review
+    # Framework template (VERIGO-GEN-IRF-01) that had no dedicated category
+    # before this and would otherwise have to be filed under "other".
+    sanctions_screening = "sanctions_screening"
+    austrac_enrolment = "austrac_enrolment"
     other = "other"
 
 
@@ -157,66 +165,83 @@ class IndependentReview(Base):
 
     __tablename__ = "independent_reviews"
 
-    id = Column(String, primary_key=True, default=lambda: f"ir_{uuid4().hex[:12]}")
-    review_ref = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ir_{uuid4().hex[:12]}"
+    )
+    review_ref: Mapped[str] = Column(
         String(30), unique=True, nullable=False, index=True
     )  # IR-2026-001
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    review_type = Column(Enum(ReviewType), nullable=False)
-    review_scope = Column(Enum(ReviewScope), nullable=False)
-    status = Column(
+    review_type: Mapped[ReviewType] = Column(Enum(ReviewType), nullable=False)
+    review_scope: Mapped[ReviewScope] = Column(Enum(ReviewScope), nullable=False)
+    status: Mapped[ReviewStatus] = Column(
         Enum(ReviewStatus), default=ReviewStatus.planned, nullable=False, index=True
     )
-    overall_rating = Column(Enum(ReviewRating))
+    overall_rating: Mapped[Optional[ReviewRating]] = Column(Enum(ReviewRating))
 
     # ── Reviewer ───────────────────────────────────────────────────────────────
-    reviewer_name = Column(String(255))  # Person or firm conducting review
-    reviewer_firm = Column(String(255))  # External firm name (if external)
-    reviewer_credentials = Column(
+    reviewer_name: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # Person or firm conducting review
+    reviewer_firm: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # External firm name (if external)
+    reviewer_credentials: Mapped[Optional[str]] = Column(
         String(500)
     )  # Qualifications / independence statement
 
     # ── Scope & period ────────────────────────────────────────────────────────
-    title = Column(String(500), nullable=False)
-    description = Column(Text)
-    review_period_start = Column(Date)
-    review_period_end = Column(Date)
-    areas_reviewed = Column(JSON, default=list)  # Free-text list of specific areas
+    title: Mapped[str] = Column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    review_period_start: Mapped[Optional[date]] = Column(Date)
+    review_period_end: Mapped[Optional[date]] = Column(Date)
+    target_completion_date: Mapped[Optional[date]] = Column(
+        Date, index=True
+    )  # when the review itself is due
+    areas_reviewed: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # Free-text list of specific areas
 
     # ── Commissioning ─────────────────────────────────────────────────────────
-    commissioned_by = Column(String)  # user_id (Board/MLRO)
-    commissioned_at = Column(DateTime(timezone=True))
-    report_date = Column(Date)  # Date review report issued
-    report_ref = Column(String(100))  # External report reference number
+    commissioned_by: Mapped[Optional[str]] = Column(String)  # user_id (Board/MLRO)
+    commissioned_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    report_date: Mapped[Optional[date]] = Column(Date)  # Date review report issued
+    report_ref: Mapped[Optional[str]] = Column(
+        String(100)
+    )  # External report reference number
 
     # ── Findings summary ──────────────────────────────────────────────────────
-    executive_summary = Column(Text)
-    finding_count_critical = Column(Integer, default=0)
-    finding_count_high = Column(Integer, default=0)
-    finding_count_medium = Column(Integer, default=0)
-    finding_count_low = Column(Integer, default=0)
+    executive_summary: Mapped[Optional[str]] = Column(Text)
+    finding_count_critical: Mapped[Optional[int]] = Column(Integer, default=0)
+    finding_count_high: Mapped[Optional[int]] = Column(Integer, default=0)
+    finding_count_medium: Mapped[Optional[int]] = Column(Integer, default=0)
+    finding_count_low: Mapped[Optional[int]] = Column(Integer, default=0)
 
     # ── Response ──────────────────────────────────────────────────────────────
-    management_response_due = Column(Date)
-    management_response_at = Column(DateTime(timezone=True))
-    board_acknowledged = Column(Boolean, default=False)
-    board_acknowledged_by = Column(String)
-    board_acknowledged_at = Column(DateTime(timezone=True))
+    management_response_due: Mapped[Optional[date]] = Column(Date)
+    management_response_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    board_acknowledged: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    board_acknowledged_by: Mapped[Optional[str]] = Column(String)
+    board_acknowledged_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
     # ── Completion ────────────────────────────────────────────────────────────
-    completed_at = Column(DateTime(timezone=True))
-    completed_by = Column(String)
-    closure_notes = Column(Text)
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    completed_by: Mapped[Optional[str]] = Column(String)
+    closure_notes: Mapped[Optional[str]] = Column(Text)
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class ReviewFinding(Base):
@@ -227,52 +252,68 @@ class ReviewFinding(Base):
 
     __tablename__ = "review_findings"
 
-    id = Column(String, primary_key=True, default=lambda: f"rf_{uuid4().hex[:12]}")
-    finding_ref = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rf_{uuid4().hex[:12]}"
+    )
+    finding_ref: Mapped[str] = Column(
         String(30), unique=True, nullable=False, index=True
     )  # FIND-2026-023
-    review_id = Column(
+    review_id: Mapped[str] = Column(
         String,
         ForeignKey("independent_reviews.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False, index=True)
-    finding_number = Column(Integer, nullable=False)  # Sequential within review
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
+    finding_number: Mapped[int] = Column(
+        Integer, nullable=False
+    )  # Sequential within review
 
     # ── Classification ────────────────────────────────────────────────────────
-    title = Column(String(500), nullable=False)
-    description = Column(Text, nullable=False)
-    risk_rating = Column(Enum(FindingRisk), nullable=False)
-    category = Column(Enum(FindingCategory), nullable=False)
-    status = Column(
+    title: Mapped[str] = Column(String(500), nullable=False)
+    description: Mapped[str] = Column(Text, nullable=False)
+    risk_rating: Mapped[FindingRisk] = Column(Enum(FindingRisk), nullable=False)
+    category: Mapped[FindingCategory] = Column(Enum(FindingCategory), nullable=False)
+    status: Mapped[FindingStatus] = Column(
         Enum(FindingStatus), default=FindingStatus.open, nullable=False, index=True
     )
 
     # ── Regulatory reference ──────────────────────────────────────────────────
-    regulatory_reference = Column(String(500))  # e.g. "AML/CTF Act 2006 s.82(2)(b)"
-    policy_reference = Column(String(500))  # Internal policy reference
+    regulatory_reference: Mapped[Optional[str]] = Column(
+        String(500)
+    )  # e.g. "AML/CTF Act 2006 s.82(2)(b)"
+    policy_reference: Mapped[Optional[str]] = Column(
+        String(500)
+    )  # Internal policy reference
 
     # ── Evidence ──────────────────────────────────────────────────────────────
-    evidence_refs = Column(JSON, default=list)  # document_ids / descriptions
-    affected_areas = Column(JSON, default=list)  # Which business areas affected
-    sample_tested = Column(Integer)  # Number of records tested
-    sample_failed = Column(Integer)  # Number that failed
+    evidence_refs: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # document_ids / descriptions
+    affected_areas: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # Which business areas affected
+    sample_tested: Mapped[Optional[int]] = Column(Integer)  # Number of records tested
+    sample_failed: Mapped[Optional[int]] = Column(Integer)  # Number that failed
 
     # ── Management response ───────────────────────────────────────────────────
-    management_response = Column(Text)
-    response_due_date = Column(Date, index=True)
-    response_submitted_at = Column(DateTime(timezone=True))
-    response_submitted_by = Column(String)
+    management_response: Mapped[Optional[str]] = Column(Text)
+    response_due_date: Mapped[Optional[date]] = Column(Date, index=True)
+    response_submitted_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    response_submitted_by: Mapped[Optional[str]] = Column(String)
 
     # ── Closure ───────────────────────────────────────────────────────────────
-    closed_at = Column(DateTime(timezone=True))
-    closed_by = Column(String)
-    closure_evidence = Column(Text)
+    closed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    closed_by: Mapped[Optional[str]] = Column(String)
+    closure_evidence: Mapped[Optional[str]] = Column(Text)
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class ReviewRecommendation(Base):
@@ -283,39 +324,52 @@ class ReviewRecommendation(Base):
 
     __tablename__ = "review_recommendations"
 
-    id = Column(String, primary_key=True, default=lambda: f"rr_{uuid4().hex[:12]}")
-    recommendation_ref = Column(String(30), unique=True, nullable=False, index=True)
-    finding_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rr_{uuid4().hex[:12]}"
+    )
+    recommendation_ref: Mapped[str] = Column(
+        String(30), unique=True, nullable=False, index=True
+    )
+    finding_id: Mapped[str] = Column(
         String,
         ForeignKey("review_findings.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    review_id = Column(
+    review_id: Mapped[str] = Column(
         String,
         ForeignKey("independent_reviews.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False)
+    org_id: Mapped[str] = Column(String, nullable=False)
 
-    description = Column(Text, nullable=False)
-    priority = Column(Enum(RecommendationPriority), nullable=False)
-    status = Column(
-        Enum(RecommendationStatus),
+    description: Mapped[str] = Column(Text, nullable=False)
+    priority: Mapped[RecommendationPriority] = Column(
+        Enum(RecommendationPriority, name="review_recommendation_priority"),
+        nullable=False,
+    )
+    status: Mapped[RecommendationStatus] = Column(
+        Enum(RecommendationStatus, name="review_recommendation_status"),
         default=RecommendationStatus.open,
         nullable=False,
         index=True,
     )
 
-    target_date = Column(Date, index=True)
-    accepted_by = Column(String)  # user_id who accepted/rejected
-    accepted_at = Column(DateTime(timezone=True))
-    rejection_reason = Column(Text)  # If entity disputes the recommendation
+    target_date: Mapped[Optional[date]] = Column(Date, index=True)
+    accepted_by: Mapped[Optional[str]] = Column(String)  # user_id who accepted/rejected
+    accepted_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    rejection_reason: Mapped[Optional[str]] = Column(
+        Text
+    )  # If entity disputes the recommendation
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class ReviewAction(Base):
@@ -326,58 +380,72 @@ class ReviewAction(Base):
 
     __tablename__ = "review_actions"
 
-    id = Column(String, primary_key=True, default=lambda: f"ra_{uuid4().hex[:12]}")
-    action_ref = Column(String(30), unique=True, nullable=False, index=True)
-    recommendation_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ra_{uuid4().hex[:12]}"
+    )
+    action_ref: Mapped[str] = Column(
+        String(30), unique=True, nullable=False, index=True
+    )
+    recommendation_id: Mapped[str] = Column(
         String,
         ForeignKey("review_recommendations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    finding_id = Column(
+    finding_id: Mapped[str] = Column(
         String,
         ForeignKey("review_findings.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    review_id = Column(
+    review_id: Mapped[str] = Column(
         String,
         ForeignKey("independent_reviews.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    org_id = Column(String, nullable=False)
+    org_id: Mapped[str] = Column(String, nullable=False)
 
-    title = Column(String(500), nullable=False)
-    description = Column(Text)
-    action_type = Column(Enum(ActionType), nullable=False)
-    status = Column(
+    title: Mapped[str] = Column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    action_type: Mapped[ActionType] = Column(Enum(ActionType), nullable=False)
+    status: Mapped[ActionStatus] = Column(
         Enum(ActionStatus), default=ActionStatus.planned, nullable=False, index=True
     )
 
     # ── Ownership & timeline ──────────────────────────────────────────────────
-    assigned_to = Column(String)  # user_id
-    assigned_by = Column(String)
-    assigned_at = Column(DateTime(timezone=True))
-    due_date = Column(Date, index=True)
-    is_overdue = Column(Boolean, default=False)
+    assigned_to: Mapped[Optional[str]] = Column(String)  # user_id
+    assigned_by: Mapped[Optional[str]] = Column(String)
+    assigned_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    due_date: Mapped[Optional[date]] = Column(Date, index=True)
+    is_overdue: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
     # ── Completion ────────────────────────────────────────────────────────────
-    completion_evidence = Column(Text)  # Description of how action was completed
-    supporting_doc_ids = Column(JSON, default=list)  # document_ids as evidence
-    completed_by = Column(String)
-    completed_at = Column(DateTime(timezone=True))
+    completion_evidence: Mapped[Optional[str]] = Column(
+        Text
+    )  # Description of how action was completed
+    supporting_doc_ids: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # document_ids as evidence
+    completed_by: Mapped[Optional[str]] = Column(String)
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
     # ── Verification (compliance sign-off) ───────────────────────────────────
-    verified_by = Column(String)  # Compliance officer who verified
-    verified_at = Column(DateTime(timezone=True))
-    verified_notes = Column(Text)
+    verified_by: Mapped[Optional[str]] = Column(
+        String
+    )  # Compliance officer who verified
+    verified_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    verified_notes: Mapped[Optional[str]] = Column(Text)
 
     # ── Cancellation ─────────────────────────────────────────────────────────
-    cancelled_by = Column(String)
-    cancelled_at = Column(DateTime(timezone=True))
-    cancellation_reason = Column(Text)
+    cancelled_by: Mapped[Optional[str]] = Column(String)
+    cancelled_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    cancellation_reason: Mapped[Optional[str]] = Column(Text)
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )

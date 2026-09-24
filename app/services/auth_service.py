@@ -23,7 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import EmailActionToken, MagicLinkToken, User, UserStatus
+from app.models.user import EmailActionToken, MagicLinkToken, User, UserRole, UserStatus
 from app.services.token_blacklist import (
     TOKEN_BLACKLIST,  # noqa: F401 — re-exported for callers
 )
@@ -32,6 +32,8 @@ pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 MAGIC_LINK_EXPIRY_MINUTES = 15
 ACCESS_TOKEN_EXPIRY_MINUTES = 60 * 4 if settings.is_production else 60 * 8
+FAILED_LOGIN_LOCK_THRESHOLD = 5
+FAILED_LOGIN_LOCK_MINUTES = 15
 
 
 # ── Password ──────────────────────────────────────────────────────────────────
@@ -82,7 +84,7 @@ def create_user(
     email: str,
     full_name: str,
     password: str,
-    role: str = "analyst",
+    role: UserRole = UserRole.analyst,
     org_id: Optional[str] = None,
 ) -> User:
     user = User(
@@ -116,9 +118,9 @@ def seed_master_admin(db: Session) -> Optional[User]:
     if user:
         changed = False
         changes: list[str] = []
-        if not user.is_super_admin or user.role != "admin":
+        if not user.is_super_admin or user.role != UserRole.admin:
             user.is_super_admin = True
-            user.role = "admin"
+            user.role = UserRole.admin
             changed = True
             changes.append("role/super_admin")
         # Resync password to MASTER_ADMIN_PASSWORD on every boot — this is an
@@ -152,7 +154,7 @@ def seed_master_admin(db: Session) -> Optional[User]:
         email=email,
         full_name="Master Admin",
         hashed_password=hash_password(settings.master_admin_password),
-        role="admin",
+        role=UserRole.admin,
         status=UserStatus.active,
         email_verified=True,
         is_super_admin=True,
@@ -183,11 +185,44 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
         # Perform dummy verify to prevent timing attacks
         pwd_ctx.dummy_verify()
         return None
+    # failed_login_count/locked_until existed on the model but nothing ever
+    # read or wrote them -- a distributed/low-and-slow credential-stuffing
+    # attack (a handful of attempts per account, from many IPs) was
+    # throttled by nothing at all, since RateLimitMiddleware's login limit
+    # is per-IP only. Lock the account itself once too many wrong passwords
+    # land in a row, independent of where they came from.
+    if user.locked_until and user.locked_until.replace(
+        tzinfo=timezone.utc
+    ) > datetime.now(timezone.utc):
+        pwd_ctx.dummy_verify()
+        return None
     if not verify_password(password, user.hashed_password):
+        user.failed_login_count = (user.failed_login_count or 0) + 1
+        if user.failed_login_count >= FAILED_LOGIN_LOCK_THRESHOLD:
+            user.locked_until = datetime.now(timezone.utc) + timedelta(
+                minutes=FAILED_LOGIN_LOCK_MINUTES
+            )
+        db.commit()
         return None
     if user.status != UserStatus.active:
         return None
+    if user.failed_login_count or user.locked_until:
+        user.failed_login_count = 0
+        user.locked_until = None
+        db.commit()
     return user
+
+
+def account_lock_remaining(user: User) -> Optional[int]:
+    """Minutes left on an active lockout, or None if not locked."""
+    if not user.locked_until:
+        return None
+    remaining = (
+        user.locked_until.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
+    ).total_seconds()
+    if remaining <= 0:
+        return None
+    return max(1, int(remaining // 60) + 1)
 
 
 def build_token_response(user: User, mfa_pending: bool = False) -> dict:
@@ -344,6 +379,47 @@ def clear_session_cookie(response) -> None:
     )
 
 
+# ── CSRF (double-submit cookie) ─────────────────────────────────────────────
+#
+# The session cookie is SameSite=None in production (required cross-origin,
+# see above) with no other CSRF mitigation — a forged cross-site request
+# still gets the cookie attached by the browser. app.api.deps.get_current_user
+# (32 of 49 route files) is header-only and so is inherently immune, but
+# app/api/routes/auth.py's _current_user (the other 17, plus itself) accepts
+# the cookie alone. Double-submit: a second, non-httpOnly cookie carries a
+# random token the frontend reads via document.cookie and echoes back as
+# X-CSRF-Token on state-changing requests; _decode_current_user rejects any
+# cookie-authenticated mutation where the header doesn't match. A forged
+# cross-site request can get the cookie auto-attached but has no way to read
+# it (SameSite/httpOnly-adjacent same-origin-only readability) to construct
+# a matching header.
+
+
+def new_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def set_csrf_cookie(response, token: str) -> None:
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=token,
+        httponly=False,  # frontend JS must read this to echo it back
+        secure=settings.environment != "development",
+        samesite=_session_cookie_samesite(),
+        max_age=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+        path="/",
+    )
+
+
+def clear_csrf_cookie(response) -> None:
+    response.delete_cookie(
+        key=settings.csrf_cookie_name,
+        path="/",
+        secure=settings.environment != "development",
+        samesite=_session_cookie_samesite(),
+    )
+
+
 # ── Security event logging ────────────────────────────────────────────────────
 
 
@@ -363,7 +439,7 @@ def record_security_event(
             event_type=event_type,
             user_id=user_id,
             ip_address=ip,
-            metadata=json.dumps(meta or {}),
+            extra_metadata=json.dumps(meta or {}),
         )
         db.add(ev)
         db.commit()
@@ -373,56 +449,3 @@ def record_security_event(
         logging.getLogger("tvg.security").warning(
             "Failed to record security event: %s", e
         )
-
-
-# ── RBAC helpers ──────────────────────────────────────────────────────────────
-
-ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "admin": {"*"},
-    "mlro": {
-        "customers:read",
-        "customers:write",
-        "kyc:read",
-        "kyc:write",
-        "transactions:read",
-        "reports:read",
-        "reports:write",
-        "reports:approve",
-        "audit:read",
-        "cases:read",
-        "cases:write",
-        "cases:close",
-        "ecdd:read",
-        "ecdd:write",
-        "tenants:read",
-    },
-    "compliance": {
-        "customers:read",
-        "customers:write",
-        "kyc:read",
-        "kyc:write",
-        "transactions:read",
-        "reports:read",
-        "reports:write",
-        "audit:read",
-        "cases:read",
-        "cases:write",
-        "ecdd:read",
-        "ecdd:write",
-    },
-    "analyst": {
-        "customers:read",
-        "kyc:read",
-        "transactions:read",
-        "reports:read",
-        "audit:read",
-        "cases:read",
-        "ecdd:read",
-    },
-    "viewer": {"customers:read", "transactions:read", "reports:read", "audit:read"},
-}
-
-
-def has_permission(role: str, permission: str) -> bool:
-    perms = ROLE_PERMISSIONS.get(role, set())
-    return "*" in perms or permission in perms

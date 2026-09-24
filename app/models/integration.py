@@ -16,6 +16,8 @@ The platform never logs or returns raw credentials.
 """
 
 import enum
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -31,6 +33,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -140,6 +143,10 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Global identity verification, KYB, and transaction monitoring platform",
+        "required_credentials": [
+            {"key": "app_token", "label": "App Token", "secret": True},
+            {"key": "secret_key", "label": "Secret Key", "secret": True},
+        ],
     },
     {
         "slug": "frankieone",
@@ -172,6 +179,9 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Real-time AML data and transaction monitoring",
+        "required_credentials": [
+            {"key": "api_key", "label": "API Key", "secret": True},
+        ],
     },
     {
         "slug": "opensanctions",
@@ -188,6 +198,9 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "enterprise_api",
         "auth": "api_key",
         "description": "Cryptocurrency transaction monitoring and wallet screening",
+        "required_credentials": [
+            {"key": "api_key", "label": "API Key", "secret": True},
+        ],
     },
     {
         "slug": "elliptic",
@@ -196,6 +209,10 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "enterprise_api",
         "auth": "api_key",
         "description": "Blockchain analytics and crypto risk scoring",
+        "required_credentials": [
+            {"key": "api_key", "label": "API Key", "secret": True},
+            {"key": "api_secret", "label": "API Secret", "secret": True},
+        ],
     },
     {
         "slug": "trmlabs",
@@ -221,6 +238,13 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "free_api",
         "auth": "api_key",
         "description": "Australian Business Number and entity lookup",
+        "required_credentials": [
+            {
+                "key": "guid",
+                "label": "ABR Web Services GUID (free — register at abr.business.gov.au/Tools/WebServices)",
+                "secret": True,
+            },
+        ],
     },
     {
         "slug": "asic",
@@ -418,6 +442,23 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "free_api",
         "auth": "api_key",
         "description": "Transactional email (alerts, reminders, notifications)",
+        "required_credentials": [
+            {
+                "key": "smtp_host",
+                "label": "SMTP Host (SendGrid: smtp.sendgrid.net)",
+                "secret": False,
+            },
+            {
+                "key": "smtp_username",
+                "label": 'SMTP Username (SendGrid: literally "apikey")',
+                "secret": False,
+            },
+            {
+                "key": "smtp_password",
+                "label": "SMTP Password / API Key",
+                "secret": True,
+            },
+        ],
     },
     {
         "slug": "ses",
@@ -426,6 +467,15 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Amazon Simple Email Service",
+        "required_credentials": [
+            {
+                "key": "smtp_host",
+                "label": "SES SMTP Endpoint (e.g. email-smtp.us-east-1.amazonaws.com)",
+                "secret": False,
+            },
+            {"key": "smtp_username", "label": "SES SMTP Username", "secret": False},
+            {"key": "smtp_password", "label": "SES SMTP Password", "secret": True},
+        ],
     },
     {
         "slug": "twilio_sms",
@@ -434,6 +484,10 @@ PROVIDER_CATALOG: list[dict] = [
         "type": "premium_api",
         "auth": "api_key",
         "description": "Programmable SMS for compliance alerts",
+        "required_credentials": [
+            {"key": "account_sid", "label": "Account SID", "secret": False},
+            {"key": "auth_token", "label": "Auth Token", "secret": True},
+        ],
     },
     {
         "slug": "ms_teams",
@@ -489,34 +543,44 @@ class IntegrationProvider(Base):
 
     __tablename__ = "integration_providers"
 
-    id = Column(String, primary_key=True, default=lambda: f"prv_{uuid4().hex[:10]}")
-    slug = Column(String(100), unique=True, nullable=False, index=True)
-    name = Column(String(200), nullable=False)
-    category = Column(Enum(IntegrationCategory), nullable=False, index=True)
-    integration_type = Column(Enum(IntegrationType), nullable=False)
-    auth_type = Column(Enum(AuthType), nullable=False)
-    description = Column(Text)
-    logo_url = Column(String(500))
-    docs_url = Column(String(500))
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"prv_{uuid4().hex[:10]}"
+    )
+    slug: Mapped[str] = Column(String(100), unique=True, nullable=False, index=True)
+    name: Mapped[str] = Column(String(200), nullable=False)
+    category: Mapped[IntegrationCategory] = Column(
+        Enum(IntegrationCategory), nullable=False, index=True
+    )
+    integration_type: Mapped[IntegrationType] = Column(
+        Enum(IntegrationType), nullable=False
+    )
+    auth_type: Mapped[AuthType] = Column(Enum(AuthType), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    logo_url: Mapped[Optional[str]] = Column(String(500))
+    docs_url: Mapped[Optional[str]] = Column(String(500))
 
     # Schema for credentials (what the org needs to supply)
-    required_credentials = Column(
+    required_credentials: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # [{"key": "api_key", "label": "API Key", "secret": True}]
-    optional_config = Column(
+    optional_config: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # [{"key": "base_url", "label": "Base URL", "default": "..."}]
 
     # Capabilities offered by this provider
-    capabilities = Column(
+    capabilities: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # ["pep_check", "sanctions_check", "adverse_media"]
 
-    is_active = Column(Boolean, default=True)
-    is_featured = Column(Boolean, default=False)
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    is_featured: Mapped[Optional[bool]] = Column(Boolean, default=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class OrgIntegration(Base):
@@ -532,53 +596,67 @@ class OrgIntegration(Base):
         UniqueConstraint("org_id", "provider_id", name="uq_org_provider"),
     )
 
-    id = Column(String, primary_key=True, default=lambda: f"int_{uuid4().hex[:10]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"int_{uuid4().hex[:10]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    provider_id = Column(String, ForeignKey("integration_providers.id"), nullable=False)
-    provider_slug = Column(
+    provider_id: Mapped[str] = Column(
+        String, ForeignKey("integration_providers.id"), nullable=False
+    )
+    provider_slug: Mapped[str] = Column(
         String(100), nullable=False, index=True
     )  # denormalised for queries
 
-    is_enabled = Column(Boolean, default=False, nullable=False, index=True)
+    is_enabled: Mapped[bool] = Column(
+        Boolean, default=False, nullable=False, index=True
+    )
 
     # Encrypted credentials (Fernet/AES at application layer, see app/services/crypto.py)
     # NEVER returned in API responses
-    credentials_encrypted = Column(JSON)  # {"api_key": "<encrypted>"}
-    config = Column(JSON, default=dict)  # non-sensitive config {"base_url": "..."}
-    credential_expires_at = Column(
+    credentials_encrypted: Mapped[Optional[Any]] = Column(
+        JSON
+    )  # {"api_key": "<encrypted>"}
+    config: Mapped[Optional[Any]] = Column(
+        JSON, default=dict
+    )  # non-sensitive config {"base_url": "..."}
+    credential_expires_at: Mapped[Optional[datetime]] = Column(
         DateTime(timezone=True)
     )  # vendor-stated API key expiry, if any
 
     # OAuth2 token state (set via /oauth/authorize + /oauth/callback)
-    oauth_state = Column(
+    oauth_state: Mapped[Optional[str]] = Column(
         String(100)
     )  # transient CSRF token during the authorize round-trip
-    oauth_access_token_encrypted = Column(Text)
-    oauth_refresh_token_encrypted = Column(Text)
-    oauth_expires_at = Column(DateTime(timezone=True))
+    oauth_access_token_encrypted: Mapped[Optional[str]] = Column(Text)
+    oauth_refresh_token_encrypted: Mapped[Optional[str]] = Column(Text)
+    oauth_expires_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
     # Connection health
-    last_tested_at = Column(DateTime(timezone=True))
-    last_test_result = Column(Boolean)  # True = passed
-    last_test_message = Column(Text)
-    health_status = Column(
+    last_tested_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    last_test_result: Mapped[Optional[bool]] = Column(Boolean)  # True = passed
+    last_test_message: Mapped[Optional[str]] = Column(Text)
+    health_status: Mapped[Optional[IntegrationHealthStatus]] = Column(
         Enum(IntegrationHealthStatus), default=IntegrationHealthStatus.unknown
     )
-    last_health_check_at = Column(DateTime(timezone=True))
-    consecutive_failures = Column(Integer, default=0)
+    last_health_check_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    consecutive_failures: Mapped[Optional[int]] = Column(Integer, default=0)
 
     # Usage tracking
-    usage_count = Column(Integer, default=0)
-    last_used_at = Column(DateTime(timezone=True))
+    usage_count: Mapped[Optional[int]] = Column(Integer, default=0)
+    last_used_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    enabled_by = Column(String)  # user_id who enabled
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    enabled_by: Mapped[Optional[str]] = Column(String)  # user_id who enabled
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class IntegrationAuditLog(Base):
@@ -590,19 +668,23 @@ class IntegrationAuditLog(Base):
 
     __tablename__ = "integration_audit_logs"
 
-    id = Column(String, primary_key=True, default=lambda: f"ial_{uuid4().hex[:12]}")
-    org_id = Column(String, nullable=False, index=True)
-    integration_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ial_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
+    integration_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("org_integrations.id"), nullable=True, index=True
     )
-    provider_slug = Column(String(100), nullable=False)
+    provider_slug: Mapped[str] = Column(String(100), nullable=False)
 
-    event_type = Column(
+    event_type: Mapped[str] = Column(
         String(50), nullable=False
     )  # enabled | disabled | tested | rotated | error | health_check
-    success = Column(Boolean)
-    message = Column(Text)
-    actor_id = Column(String)  # user_id or "system"
-    ip_address = Column(String(45))
+    success: Mapped[Optional[bool]] = Column(Boolean)
+    message: Mapped[Optional[str]] = Column(Text)
+    actor_id: Mapped[Optional[str]] = Column(String)  # user_id or "system"
+    ip_address: Mapped[Optional[str]] = Column(String(45))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   AlertTriangle, ShieldAlert, Activity, BarChart3,
   RefreshCw, CheckCircle, XCircle, ArrowUpCircle, Search, Eye, FilePlus2, Scale, FileText,
@@ -9,14 +9,23 @@ import {
 import clsx from "clsx";
 import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { listCustomers } from '@/lib/api/customers'
+import {
+  listAlerts,
+  getAlertDashboard,
+  reviewAlert,
+  escalateAlert,
+  createCaseFromAlert as apiCreateCaseFromAlert,
+  type AlertListItem,
+  type AlertDetail,
+} from '@/lib/api/alerts'
+import { createTransaction, runMonitoringOnTransaction } from '@/lib/api/transactions'
 
 interface Alert {
-  id: string; alert_id: string; transaction_id?: string; customer_id?: string;
+  id: string; alert_id: string; transaction_id?: string | null; customer_id?: string;
   industry_id?: string; alert_type: string; severity: string; status: string;
-  description: string; rule_name?: string; action_taken?: string; notes?: string;
-  assigned_to?: string; is_resolved: number; created_at?: string; resolved_at?: string;
+  description: string; rule_name?: string | null; action_taken?: string; notes?: string;
+  assigned_to?: string | null; is_resolved: number; created_at?: string; resolved_at?: string | null;
 }
 
 interface Stats {
@@ -32,11 +41,19 @@ const STATUS_DISPLAY: Record<string, string> = {
   smr_candidate: "reported",
 };
 
-function mapAlert(raw: any): Alert {
+// GET /alerts returns AlertListItem (no transaction_id/rule_name/description/
+// alert_type/created_at/resolved_at); the mutation endpoints return the
+// fuller AlertDetail. This page displays both through the same table, so
+// mapAlert() accepts either — the Pick below is honest about which fields
+// are genuinely absent on the list shape rather than widening to `any`.
+type RawAlert = (AlertListItem | AlertDetail) &
+  Partial<Pick<AlertDetail, "transaction_id" | "rule_name" | "description" | "alert_type" | "created_at" | "resolved_at">>;
+
+function mapAlert(raw: RawAlert): Alert {
   const status = STATUS_DISPLAY[raw.status] || raw.status;
   return {
     id: raw.id,
-    alert_id: raw.alert_ref ?? raw.alert_id,
+    alert_id: raw.alert_ref,
     transaction_id: raw.transaction_id,
     customer_id: raw.customer_id,
     alert_type: raw.category ?? raw.alert_type,
@@ -79,22 +96,9 @@ const TYPE_LABELS: Record<string, string> = {
   pep_transaction: "PEP Transaction", rule_triggered: "Custom Rule",
 };
 
-const DEMO_ALERTS: Alert[] = [
-  { id: "1", alert_id: "ALT-DEMO0001", transaction_id: "1", customer_id: "1", alert_type: "sanctions_match", severity: "critical", status: "open", description: "Counterparty 'Petrov Trading LLC' matched on OFAC SDN sanctions watchlist.", is_resolved: 0, created_at: new Date(Date.now() - 300000).toISOString() },
-  { id: "2", alert_id: "ALT-DEMO0002", transaction_id: "2", customer_id: "2", alert_type: "large_transaction", severity: "high", status: "under_review", description: "Transaction AUD $45,000.00 meets or exceeds the CTR threshold of $10,000. AUSTRAC reporting may be required.", is_resolved: 0, assigned_to: "compliance@firm.com.au", created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: "3", alert_id: "ALT-DEMO0003", transaction_id: "3", customer_id: "3", alert_type: "structuring", severity: "high", status: "open", description: "4 transactions totalling AUD $38,200 detected near the CTR threshold within 24 hours — possible structuring.", is_resolved: 0, created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: "4", alert_id: "ALT-DEMO0004", transaction_id: "4", customer_id: "1", alert_type: "cross_border", severity: "high", status: "open", description: "International funds transfer instruction (IFTI) detected to/from IR. AUSTRAC IFTI report may be required.", is_resolved: 0, created_at: new Date(Date.now() - 10800000).toISOString() },
-  { id: "5", alert_id: "ALT-DEMO0005", transaction_id: "5", customer_id: "4", alert_type: "velocity_breach", severity: "medium", status: "open", description: "Velocity breach (24h): 18 transactions totalling AUD $72,400 exceed thresholds (15 txns / $50,000).", is_resolved: 0, created_at: new Date(Date.now() - 14400000).toISOString() },
-  { id: "6", alert_id: "ALT-DEMO0006", transaction_id: "6", customer_id: "5", alert_type: "pep_transaction", severity: "high", status: "escalated", description: "Transaction of AUD $25,000.00 by a Politically Exposed Person (PEP). Enhanced due diligence required.", is_resolved: 0, created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: "7", alert_id: "ALT-DEMO0007", transaction_id: "7", customer_id: "2", alert_type: "high_risk_country", severity: "medium", status: "dismissed", description: "Counterparty country RU is on FATF/AUSTRAC high-risk jurisdiction list.", is_resolved: 1, created_at: new Date(Date.now() - 172800000).toISOString() },
-  { id: "8", alert_id: "ALT-DEMO0008", transaction_id: "8", customer_id: "3", alert_type: "rule_triggered", severity: "medium", status: "resolved", description: "Custom rule triggered: 'Crypto withdrawal > $5,000'. Action: flag.", rule_name: "Crypto withdrawal > $5,000", is_resolved: 1, created_at: new Date(Date.now() - 259200000).toISOString() },
-];
-
-const DEMO_STATS: Stats = {
-  total_alerts: 8, open_alerts: 5, smr_candidates: 1,
-  by_severity: { critical: 1, high: 4, medium: 3, low: 0 },
-  by_type: { large_transaction: 1, structuring: 1, cross_border: 1, sanctions_match: 1, velocity_breach: 1, pep_transaction: 1, high_risk_country: 1, rule_triggered: 1 },
-  by_status: { open: 4, under_review: 1, escalated: 1, dismissed: 1, resolved: 1 },
+const EMPTY_STATS: Stats = {
+  total_alerts: 0, open_alerts: 0, smr_candidates: 0,
+  by_severity: {}, by_type: {}, by_status: {},
 };
 
 type Tab = "queue" | "stats" | "create" | "simulate";
@@ -108,11 +112,12 @@ export default function MonitoringDashboardPage() {
 }
 
 function MonitoringDashboard() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const customerParam = searchParams.get("customer") || "";
   const [tab, setTab] = useState<Tab>(searchParams.get("action") === "new" ? "create" : "queue");
-  const [alerts, setAlerts] = useState<Alert[]>(DEMO_ALERTS);
-  const [stats, setStats] = useState<Stats>(DEMO_STATS);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -127,53 +132,57 @@ function MonitoringDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [aRes, sRes] = await Promise.all([
-        fetch(`${API}/api/v1/alerts?limit=200`, { credentials: "include" }),
-        fetch(`${API}/api/v1/alerts/dashboard`, { credentials: "include" }),
+      const [d, sd] = await Promise.all([
+        listAlerts(200),
+        getAlertDashboard(),
       ]);
-      if (aRes.ok) {
-        const d = await aRes.json();
-        if (d.length) {
-          const mapped = d.map(mapAlert);
-          setAlerts(mapped);
-          const byType: Record<string, number> = {};
-          for (const a of mapped) byType[a.alert_type] = (byType[a.alert_type] || 0) + 1;
-          setStats(prev => ({ ...prev, by_type: byType }));
-        }
-      }
-      if (sRes.ok) {
-        const d = await sRes.json();
-        if (d.total_alerts) setStats(prev => ({ ...prev, total_alerts: d.total_alerts, open_alerts: d.open_alerts, smr_candidates: d.smr_candidates, by_severity: d.by_severity, by_status: d.by_status }));
-      }
-    } catch {}
+      const mapped = d.map(mapAlert);
+      setAlerts(mapped);
+      const byType: Record<string, number> = {};
+      for (const a of mapped) byType[a.alert_type] = (byType[a.alert_type] || 0) + 1;
+      setStats({
+        total_alerts: sd.total_alerts ?? 0,
+        open_alerts: sd.open_alerts ?? 0,
+        smr_candidates: sd.smr_candidates ?? 0,
+        by_severity: sd.by_severity ?? {},
+        by_type: byType,
+        by_status: sd.by_status ?? {},
+      });
+    } catch {
+      showToast("error", "Failed to load alerts");
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const doAction = async (action: "resolve" | "dismiss" | "escalate", alertId: string) => {
-    const statusMap: Record<string, string> = { resolve: "resolved", dismiss: "dismissed", escalate: "escalated" };
     try {
-      if (action === "escalate") {
-        await fetch(`${API}/api/v1/alerts/${alertId}/escalate`, {
-          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." }),
-        });
-      } else {
-        await fetch(`${API}/api/v1/alerts/${alertId}/review`, {
-          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+      const updated = action === "escalate"
+        ? await escalateAlert(alertId, { escalate_to: "mlro@firm.com.au", escalation_reason: actionNote || "Escalated for MLRO review." })
+        : await reviewAlert(alertId, {
             resolution: action === "resolve" ? "cleared" : "dismissed",
             review_notes: actionNote || (action === "resolve" ? "Reviewed and cleared." : "Dismissed — false positive."),
-          }),
-        });
-      }
-    } catch {}
-    setAlerts(prev => prev.map(a =>
-      a.id === alertId ? { ...a, status: statusMap[action], is_resolved: action !== "escalate" ? 1 : 0 } : a
-    ));
-    setSelected(null);
-    setActionNote("");
-    showToast("success", `Alert ${action}d`);
+          });
+      const mapped = mapAlert(updated);
+      setAlerts(prev => prev.map(a => a.id === alertId ? mapped : a));
+      setSelected(null);
+      setActionNote("");
+      showToast("success", `Alert ${action}d`);
+    } catch {
+      showToast("error", `Failed to ${action} alert`);
+    }
+  };
+
+  const createCaseFromAlert = async (alert: Alert) => {
+    try {
+      const body = await apiCreateCaseFromAlert(alert.id);
+      setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, status: "escalated" } : a));
+      setSelected(null);
+      showToast("success", body.message || `${body.case_ref} created`);
+      router.push("/mlro");
+    } catch {
+      showToast("error", "Failed to create case");
+    }
   };
 
   const filtered = alerts.filter(a => {
@@ -423,7 +432,9 @@ function MonitoringDashboard() {
             <div className="border-t border-navy-700 pt-4 space-y-2">
               <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
               <QuickActions actions={[
-                { label: "Create Case", href: `/mlro?customer=${selected.customer_id ?? ""}&action=new-case&alert=${selected.alert_id}`, icon: Scale },
+                ...(selected.is_resolved
+                  ? []
+                  : [{ label: "Create Case", onClick: () => createCaseFromAlert(selected), icon: Scale }]),
                 { label: "File Report", href: `/reporting?customer=${selected.customer_id ?? ""}&action=new&alert=${selected.alert_id}`, icon: FileText },
               ]} />
             </div>
@@ -584,9 +595,8 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
   );
 
   useEffect(() => {
-    fetch(`${API}/api/v1/customers/?limit=200`, { credentials: "include" })
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(d => { if (d.length) setCustomers(d.map((c: any) => ({ id: c.id, full_name: c.full_name }))); })
+    listCustomers({ limit: 200 })
+      .then(d => { if (d.length) setCustomers(d.map(c => ({ id: c.id, full_name: c.full_name }))); })
       .catch(() => {});
   }, []);
 
@@ -598,38 +608,31 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
     if (!form.customer_id) { onCreate({ error: "Select a customer before creating a transaction." }); return; }
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/transactions`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transaction_ref: `TXN-${Date.now()}`,
-          customer_id: form.customer_id,
-          transaction_type: "transfer",
-          direction: "outgoing",
-          payment_method: PAYMENT_METHOD_MAP[form.delivery_method] || "bank_transfer",
-          currency: form.currency,
-          amount: form.amount,
-          is_cross_border: form.is_cross_border,
-          country_destination: form.is_cross_border ? form.country : undefined,
-          purpose: form.purpose,
-          reference: form.reference || undefined,
-          description: form.notes || undefined,
-          transaction_date: new Date().toISOString(),
-        }),
+      const txn = await createTransaction({
+        transaction_ref: `TXN-${Date.now()}`,
+        customer_id: form.customer_id,
+        transaction_type: "transfer",
+        direction: "outgoing",
+        payment_method: PAYMENT_METHOD_MAP[form.delivery_method] || "bank_transfer",
+        currency: form.currency,
+        amount: form.amount,
+        is_cross_border: form.is_cross_border,
+        country_destination: form.is_cross_border ? form.country : undefined,
+        purpose: form.purpose,
+        reference: form.reference || undefined,
+        description: form.notes || undefined,
+        transaction_date: new Date().toISOString(),
       });
-      if (!res.ok) throw new Error((await res.text()) || "Failed to create transaction.");
-      const txn = await res.json();
 
       let alertsGenerated = 0;
       try {
-        const monRes = await fetch(`${API}/api/v1/transactions/${txn.id}/run-monitoring`, {
-          method: "POST", credentials: "include",
-        });
-        if (monRes.ok) alertsGenerated = (await monRes.json()).alerts_generated ?? 0;
+        const monRes = await runMonitoringOnTransaction(txn.id);
+        alertsGenerated = monRes.alerts_generated ?? 0;
       } catch {}
 
       onCreate({ alertsGenerated });
-    } catch (err: any) {
-      onCreate({ error: err.message || "Failed to create transaction." });
+    } catch (err) {
+      onCreate({ error: err instanceof Error ? err.message : "Failed to create transaction." });
     } finally {
       setSubmitting(false);
     }

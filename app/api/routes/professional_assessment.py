@@ -21,7 +21,6 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -42,17 +41,27 @@ from app.models.professional_assessment import (
     ProfessionalAssessment,
     ProfessionalJudgmentChecklist,
     ProfessionalServiceType,
-    ReviewOutcome,
     SOFAssessment,
-    SOFSourceType,
     SOWAssessment,
-    SOWSourceType,
     TaxRiskAssessment,
     TransactionPurposeAssessment,
-    TransactionPurposeType,
 )
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.schemas.professional_assessment import (
+    AssessmentCreate,
+    AssessmentUpdate,
+    ChecklistItemUpdate,
+    ChecklistSubmit,
+    ChecklistTemplateUpsert,
+    EscalateRequest,
+    InvestmentUpsert,
+    PurposeUpsert,
+    SOFUpsert,
+    SOWUpsert,
+    TaxRiskUpsert,
+)
+from app.services import audit_service
 from app.services.professional_assessment_service import (
     DISCLAIMER,
     compute_assessment_risk_rating,
@@ -63,129 +72,33 @@ router = APIRouter(
     prefix="/professional-assessments", tags=["Professional Assessments"]
 )
 
+
+def _log(
+    db: Session, current_user: User, assessment_id: str, action: str, notes: str = None
+) -> None:
+    """
+    A professional-services AML assessment (source of funds/wealth, tax
+    risk, investment legitimacy, the professional-judgment checklist) is a
+    real compliance record for accountants/lawyers/TCSPs -- had no audit
+    coverage at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="professional_assessment",
+        entity_id=assessment_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        notes=notes,
+    )
+
+
 ORG_CHECKLIST_DISCLAIMER = (
     "Checklists are compliance workflow tools only. "
     "Completing a checklist does not constitute a compliance determination. "
     "All decisions remain with the reporting entity."
 )
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class AssessmentCreate(BaseModel):
-    customer_id: str
-    professional_service_type: ProfessionalServiceType
-    transaction_id: Optional[str] = None
-    case_id: Optional[str] = None
-    matter_description: Optional[str] = Field(None, max_length=2000)
-    assigned_to: Optional[str] = None
-
-
-class AssessmentUpdate(BaseModel):
-    matter_description: Optional[str] = Field(None, max_length=2000)
-    assigned_to: Optional[str] = None
-    overall_risk_rating: Optional[AssessmentRiskRating] = None
-    risk_summary: Optional[str] = None
-    smr_consideration_noted: Optional[bool] = None
-
-
-class SOFUpsert(BaseModel):
-    primary_source_type: SOFSourceType
-    additional_source_types: list[str] = Field(default_factory=list)
-    source_description: Optional[str] = None
-    evidence_uploaded: bool = False
-    evidence_reviewed: bool = False
-    evidence_sufficient: bool = False
-    additional_info_required: bool = False
-    evidence_refs: list[str] = Field(default_factory=list)
-    evidence_types: list[str] = Field(default_factory=list)
-    review_outcome: ReviewOutcome = ReviewOutcome.not_reviewed
-    review_notes: Optional[str] = None
-
-
-class SOWUpsert(BaseModel):
-    primary_source_type: SOWSourceType
-    additional_source_types: list[str] = Field(default_factory=list)
-    wealth_narrative: Optional[str] = None
-    wealth_explanation_provided: bool = False
-    evidence_reviewed: bool = False
-    wealth_profile_consistent: bool = False
-    additional_review_required: bool = False
-    evidence_refs: list[str] = Field(default_factory=list)
-    review_notes: Optional[str] = None
-    risk_assessment: Optional[str] = None
-    review_outcome: ReviewOutcome = ReviewOutcome.not_reviewed
-
-
-class PurposeUpsert(BaseModel):
-    purpose_type: TransactionPurposeType
-    purpose_description: Optional[str] = None
-    purpose_documented: bool = False
-    purpose_verified: bool = False
-    supporting_evidence_reviewed: bool = False
-    purpose_consistent_with_profile: bool = False
-    evidence_refs: list[str] = Field(default_factory=list)
-    review_notes: Optional[str] = None
-    review_outcome: ReviewOutcome = ReviewOutcome.not_reviewed
-
-
-class TaxRiskUpsert(BaseModel):
-    indicator_unexplained_cash: bool = False
-    indicator_complex_ownership: bool = False
-    indicator_offshore_no_purpose: bool = False
-    indicator_income_inconsistency: bool = False
-    indicator_related_party_movements: bool = False
-    indicator_unusual_trust: bool = False
-    indicator_unexplained_wealth: bool = False
-    indicator_artificial_structuring: bool = False
-    indicator_lack_documentation: bool = False
-    indicator_reluctance_records: bool = False
-    custom_indicators: list[dict] = Field(default_factory=list)
-    supporting_evidence: Optional[str] = None
-    reviewer_notes: Optional[str] = None
-    risk_rating: AssessmentRiskRating = AssessmentRiskRating.not_rated
-
-
-class InvestmentUpsert(BaseModel):
-    investment_type: Optional[str] = Field(None, max_length=200)
-    investment_purpose: Optional[str] = None
-    purpose_documented: bool = False
-    counterparty_identified: bool = False
-    documentation_reviewed: bool = False
-    funds_destination_verified: bool = False
-    commercial_rationale_understood: bool = False
-    regulatory_registration_verified: bool = False
-    beneficial_ownership_verified: bool = False
-    high_risk_jurisdiction_involved: bool = False
-    supporting_documentation: list[str] = Field(default_factory=list)
-    review_outcome: Optional[str] = None
-    review_outcome_status: ReviewOutcome = ReviewOutcome.not_reviewed
-    review_notes: Optional[str] = None
-
-
-class ChecklistItemUpdate(BaseModel):
-    key: str
-    checked: bool
-    notes: Optional[str] = None
-
-
-class ChecklistSubmit(BaseModel):
-    items: list[ChecklistItemUpdate]
-
-
-class ChecklistTemplateUpsert(BaseModel):
-    items: list[dict] = Field(
-        ...,
-        description="List of {key, label, is_required} dicts",
-        min_length=1,
-        max_length=20,
-    )
-
-
-class EscalateRequest(BaseModel):
-    escalated_to: str
-    escalation_reason: str = Field(..., min_length=10)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -473,6 +386,7 @@ def create_assessment(
     db.add(pa)
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_created")
     return _pa_dict(pa)
 
 
@@ -567,6 +481,7 @@ def update_assessment(
         setattr(pa, k, v)
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_updated")
     return _pa_dict(pa)
 
 
@@ -593,6 +508,13 @@ def complete_assessment(
     pa.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(pa)
+    _log(
+        db,
+        current_user,
+        pa.id,
+        "professional_assessment_completed",
+        notes=f"risk_rating={risk_rating.value}",
+    )
     return _pa_dict(pa, include_sections=True)
 
 
@@ -612,6 +534,13 @@ def escalate_assessment(
     pa.status = AssessmentStatus.escalated
     db.commit()
     db.refresh(pa)
+    _log(
+        db,
+        current_user,
+        pa.id,
+        "professional_assessment_escalated",
+        notes=payload.escalation_reason,
+    )
     return _pa_dict(pa)
 
 
@@ -635,6 +564,7 @@ def upsert_sof(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    sof: SOFAssessment
     if pa.sof_assessment:
         sof = pa.sof_assessment
         for k, v in payload.model_dump().items():
@@ -657,6 +587,7 @@ def upsert_sof(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_sof_updated")
     return _sof_dict(pa.sof_assessment)
 
 
@@ -693,6 +624,7 @@ def upsert_sow(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    sow: SOWAssessment
     if pa.sow_assessment:
         sow = pa.sow_assessment
         for k, v in payload.model_dump().items():
@@ -715,6 +647,7 @@ def upsert_sow(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_sow_updated")
     return _sow_dict(pa.sow_assessment)
 
 
@@ -746,6 +679,7 @@ def upsert_purpose(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    p: TransactionPurposeAssessment
     if pa.purpose_assessment:
         p = pa.purpose_assessment
         for k, v in payload.model_dump().items():
@@ -768,6 +702,7 @@ def upsert_purpose(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_purpose_updated")
     return _purpose_dict(pa.purpose_assessment)
 
 
@@ -822,6 +757,7 @@ def upsert_tax_risk(
     )
     indicator_count = sum(1 for v in standard_indicators if v) + custom_count
 
+    t: TaxRiskAssessment
     if pa.tax_risk_assessment:
         t = pa.tax_risk_assessment
         for k, v in data.items():
@@ -846,6 +782,7 @@ def upsert_tax_risk(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_tax_risk_updated")
     return _tax_dict(pa.tax_risk_assessment)
 
 
@@ -880,6 +817,7 @@ def upsert_investment(
     pa = _get_or_404(assessment_id, org_id_for(current_user), db)
     now = datetime.now(timezone.utc)
 
+    i: InvestmentLegitimacyAssessment
     if pa.investment_assessment:
         i = pa.investment_assessment
         for k, v in payload.model_dump().items():
@@ -902,6 +840,7 @@ def upsert_investment(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_investment_updated")
     return _inv_dict(pa.investment_assessment)
 
 
@@ -985,6 +924,7 @@ def submit_checklist(
 
     update_map = {item.key: item for item in payload.items}
 
+    c: ProfessionalJudgmentChecklist
     if pa.checklist:
         c = pa.checklist
         existing = {it["key"]: it for it in (c.items or [])}
@@ -1028,7 +968,7 @@ def submit_checklist(
             id=f"pjc_{uuid4().hex[:10]}",
             assessment_id=pa.id,
             org_id=pa.org_id,
-            checklist_type=ctype,
+            checklist_type=ChecklistType(ctype),
             items=items_list,
         )
         db.add(c)
@@ -1048,6 +988,7 @@ def submit_checklist(
 
     db.commit()
     db.refresh(pa)
+    _log(db, current_user, pa.id, "professional_assessment_checklist_submitted")
     return _checklist_dict(pa.checklist)
 
 
@@ -1177,6 +1118,15 @@ def upsert_checklist_template(
         db.add(existing)
 
     db.commit()
+    audit_service.log_action(
+        db,
+        action="professional_assessment_checklist_template_updated",
+        entity_type="professional_assessment_checklist_template",
+        entity_id=checklist_type.value,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+    )
     return {
         "checklist_type": checklist_type.value,
         "item_count": len(payload.items),

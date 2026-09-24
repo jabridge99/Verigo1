@@ -5,10 +5,9 @@ Staff create portal sessions, monitor progress, and review uploaded documents.
 All routes require standard JWT authentication.
 """
 
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -20,28 +19,15 @@ from app.models.customer_portal import (
     CustomerPortalDocument,
     CustomerPortalSession,
     PortalSessionStatus,
-    PortalType,
 )
 from app.models.user import User
+from app.schemas.customer_portal import (
+    CreatePortalSessionRequest,
+    ReviewDocumentRequest,
+)
 from app.services import customer_portal_service
 
 router = APIRouter(prefix="/customer-portal", tags=["Customer Portal (Staff)"])
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class CreatePortalSessionRequest(BaseModel):
-    customer_id: str
-    portal_type: PortalType = PortalType.cdd
-    required_documents: List[str] = ["passport", "proof_of_address"]
-    required_questionnaire_sections: List[str] = ["cdd_personal"]
-    expiry_days: int = 7
-
-
-class ReviewDocumentRequest(BaseModel):
-    accepted: bool
-    rejection_reason: Optional[str] = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

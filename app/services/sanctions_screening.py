@@ -1,40 +1,37 @@
-import re
+"""
+Quick sanctions name-screen used by the onboarding applicant portal
+(onboarding_service.py::submit_onboarding) and the Screening Hub's
+quick-screen endpoint (app/api/routes/screening.py).
 
-SAMPLE_WATCHLIST = [
-    {"name": "John Doe Sanction", "id": "SDN-001", "list": "OFAC"},
-    {"name": "Jane Criminal", "id": "UN-002", "list": "UN"},
-    {"name": "Acme Shell Corp", "id": "EU-003", "list": "EU"},
-]
+Delegates to the real sanctions provider factory (app.integrations.sanctions
+-- InternalSanctionsProvider by default, ComplyAdvantage when configured)
+rather than matching against a fixed local list -- SANCTIONS_PROVIDER
+controls which provider is actually consulted (see app/config.py).
+"""
 
-
-def _normalize(name: str) -> str:
-    return re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
-
-
-def _name_match(name_a: str, name_b: str, threshold: float = 0.7) -> bool:
-    a = _normalize(name_a).split()
-    b = _normalize(name_b).split()
-    if not a or not b:
-        return False
-    common = set(a) & set(b)
-    similarity = len(common) / max(len(a), len(b))
-    return similarity >= threshold
+from app.integrations.sanctions import get_provider
 
 
-def screen_name(full_name: str) -> dict:
-    matches = []
-    for entry in SAMPLE_WATCHLIST:
-        if _name_match(full_name, entry["name"]):
-            matches.append(entry)
+async def screen_name(full_name: str) -> dict:
+    provider = get_provider()
+    result = await provider.screen(full_name)
     return {
         "screened_name": full_name,
-        "match_found": len(matches) > 0,
-        "matches": matches,
-        "watchlists_checked": list({e["list"] for e in SAMPLE_WATCHLIST}),
+        "match_found": result.is_match,
+        "matches": [
+            {
+                "name": m.match_name,
+                "list": m.list_name,
+                "match_score": m.match_score,
+                "program": m.program,
+            }
+            for m in result.matches
+        ],
+        "watchlists_checked": result.lists_checked,
     }
 
 
-def screen_transaction(counterparty_name: str) -> dict:
+async def screen_transaction(counterparty_name: str) -> dict:
     if not counterparty_name:
         return {"match_found": False, "matches": [], "watchlists_checked": []}
-    return screen_name(counterparty_name)
+    return await screen_name(counterparty_name)

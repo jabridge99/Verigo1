@@ -9,8 +9,30 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { DEMO_CUSTOMERS, DEMO_PROFILES, type Customer } from "@/lib/demoCustomers";
+import { listCustomers, type CustomerSummary } from "@/lib/api/customers";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// The real API's CustomerSummary shape doesn't match the page's demo-data
+// Customer type (e.g. the real id lives in `id`, not `customer_id`) — map
+// explicitly rather than assigning the raw response, which previously
+// crashed the page's render (customer_id.toLowerCase() on undefined) the
+// moment a real fetch succeeded.
+function toPageCustomer(c: CustomerSummary, index: number): Customer {
+  return {
+    id: index,
+    customer_id: c.id,
+    full_name: c.full_name,
+    email: c.email ?? "",
+    nationality: c.nationality ?? "",
+    country_of_residence: c.country_of_residence ?? "",
+    industry: "",
+    occupation: c.occupation ?? undefined,
+    status: c.status,
+    risk_level: c.risk_level,
+    risk_score: c.risk_score,
+    is_pep: c.is_pep ? 1 : 0,
+    created_at: c.created_at ?? undefined,
+  };
+}
 
 const RISK_COLOR: Record<string, string> = {
   low:      "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
@@ -52,8 +74,8 @@ function CustomerRiskDashboard() {
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/customers/?limit=100`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setCustomers(d); }
+      const d = await listCustomers({ limit: 100 });
+      if (d.length) setCustomers(d.map(toPageCustomer));
     } catch {}
     setLoading(false);
   }, []);

@@ -56,8 +56,23 @@ jobs:
 
       - name: Type check (mypy)
         run: |
-          pip install mypy types-python-jose
-          mypy app/ --ignore-missing-imports --no-strict-optional --no-error-summary || true
+          pip install mypy types-python-jose types-python-dateutil
+          mypy app/ --ignore-missing-imports --no-strict-optional
+
+      - name: Dependency vulnerability scan (pip-audit)
+        if: matrix.python-version == '3.11'
+        run: |
+          pip install pip-audit
+          # One known, currently-unfixable finding is ignored here rather
+          # than silently allowed to fail CI forever — tracked in
+          # PARKING_LOT.md. (starlette's 7 CVEs and pytest's CVE, both
+          # previously ignored here too, are fixed as of the fastapi
+          # 0.111->0.141.1/pydantic 2.7->2.13 bump (P48) and the pytest
+          # 8->9.1.1/pytest-asyncio 1.x bump (P49) respectively.)
+          #  - PYSEC-2026-1325 (ecdsa): transitive python-jose dependency,
+          #    never exercised (this app signs JWTs with HS256, not ECDSA).
+          #    No fix version exists upstream.
+          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325
 
       - name: Run tests
         run: |
@@ -97,13 +112,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency vulnerability scan (npm audit)
+        if: matrix.node-version == '20'
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Lint
         run: npm run lint
+
+      - name: Unit/component tests (Vitest)
+        run: npm run test
 
       - name: Build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
         run: npm run build
+
+      - name: Install Playwright Chromium
+        if: matrix.node-version == '20'
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests (Playwright)
+        if: matrix.node-version == '20'
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: npm run test:e2e
 
   # ── Docker build smoke test ──────────────────────────────────────────────────
   docker:

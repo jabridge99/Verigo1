@@ -319,8 +319,8 @@ def governance_overview(
     industry_id: Optional[str] = None,
     organisation_id: Optional[str] = None,
 ):
-    from app.models.governance import Policy, PolicyLifecycleStatus
     from app.models.governance_controls import ControlStatus, GovernanceControl
+    from app.models.governance_policies import Policy, PolicyLifecycleStatus
     from app.models.independent_review import FindingRisk, FindingStatus, ReviewFinding
 
     today = _now().date()

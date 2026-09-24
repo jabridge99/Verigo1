@@ -7,8 +7,22 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import {
+  listTtrReports,
+  listSmrReports,
+  getReportingSummary,
+  reviewReport,
+  approveReport,
+  submitReport,
+  acknowledgeReport,
+} from '@/lib/api/reports'
+import {
+  listIftiRecords,
+  reviewIftiRecord,
+  approveIftiRecord,
+  submitIftiRecord,
+  acknowledgeIftiRecord,
+} from '@/lib/api/ifti'
 
 type ReportKind = "ifti" | "ttr" | "smr";
 
@@ -110,20 +124,18 @@ function mapReport(raw: any, type: ReportKind): Report {
   if (type === "ifti") {
     const austracType = raw.direction === "incoming" ? "ifti_incoming" : "ifti_outgoing";
     return {
-      id: raw.id,
-      report_ref: raw.report_ref,
+      id: raw.ifti_id,
+      report_ref: raw.ifti_id,
       report_type: "ifti",
       direction: raw.direction,
-      customer_id: raw.customer_id,
       status: raw.status,
-      priority: raw.priority,
-      title: `${AUSTRAC_LABEL[austracType]} — Customer ${raw.customer_id ?? "—"}`,
-      summary: `${raw.direction === "incoming" ? "Inbound" : "Outbound"} international funds transfer of ${raw.currency || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()}.`,
-      total_amount_flagged: raw.amount_aud ?? raw.total_amount ?? 0,
+      title: `${AUSTRAC_LABEL[austracType]} — ${raw.oc_full_name || raw.bc_full_name || raw.ifti_id}`,
+      summary: `${raw.direction === "incoming" ? "Inbound" : "Outbound"} international funds transfer of ${raw.currency_code || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()}.`,
+      total_amount_flagged: raw.total_amount ?? 0,
       transaction_count: 1,
       austrac_report_type: AUSTRAC_LABEL[austracType],
       due_date: raw.due_date,
-      prepared_by: raw.prepared_by,
+      prepared_by: raw.created_by,
       reviewed_by: raw.reviewed_by,
       approved_by: raw.approved_by,
       submission_reference: raw.submission_reference,
@@ -162,26 +174,17 @@ function daysRemaining(dueDate?: string): number | undefined {
   return Math.ceil(ms / 86400000);
 }
 
-const DEMO_REPORTS: Report[] = [
-  mapReport({ id: "smr_demo001", report_ref: "SMR-DEMO00001", customer_id: "cust_demo01", status: "draft", priority: "urgent", suspicion_grounds: "Sanctions watchlist match on Ivan Petrov.", subject_name: "Ivan Petrov", total_amount: 15000, transaction_ids: ["txn_1"], due_date: new Date(Date.now() + 86400000).toISOString(), created_at: new Date(Date.now() - 3600000).toISOString() }, "smr"),
-  mapReport({ id: "ttr_demo001", report_ref: "TTR-DEMO00002", customer_id: "cust_demo02", status: "under_review", priority: "high", total_amount: 45000, currency: "AUD", due_date: new Date(Date.now() + 432000000).toISOString(), reviewed_by: "compliance@firm.com.au", created_at: new Date(Date.now() - 7200000).toISOString() }, "ttr"),
-  mapReport({ id: "ifti_demo001", report_ref: "IFTI-DEMO00003", customer_id: "cust_demo03", direction: "outgoing", status: "approved", priority: "medium", total_amount: 8500, amount_aud: 8500, currency: "AUD", due_date: new Date(Date.now() + 604800000).toISOString(), approved_by: "mlro@firm.com.au", created_at: new Date(Date.now() - 86400000).toISOString() }, "ifti"),
-  mapReport({ id: "smr_demo002", report_ref: "SMR-DEMO00004", customer_id: "cust_demo04", status: "submitted", priority: "high", suspicion_grounds: "Velocity breach over 24h period.", subject_name: "Li Wei", total_amount: 72400, transaction_ids: Array.from({ length: 18 }, (_, i) => `txn_${i}`), submission_reference: "REF-7A3B9C2D", submitted_at: new Date(Date.now() - 86400000).toISOString(), created_at: new Date(Date.now() - 172800000).toISOString() }, "smr"),
-  mapReport({ id: "ttr_demo002", report_ref: "TTR-DEMO00005", customer_id: "cust_demo05", status: "acknowledged", priority: "medium", total_amount: 12000, currency: "AUD", submission_reference: "REF-4D2E8F1A", created_at: new Date(Date.now() - 259200000).toISOString() }, "ttr"),
-];
-
-const DEMO_SUMMARY: Summary = {
-  total: 5, by_type: { smr: 2, ttr: 2, ifti: 1 },
-  by_status: { draft: 1, under_review: 1, approved: 1, submitted: 1, acknowledged: 1 },
-  overdue: 0, due_soon: 1, submitted: 2, draft: 1, under_review: 1,
+const EMPTY_SUMMARY: Summary = {
+  total: 0, by_type: {}, by_status: {},
+  overdue: 0, due_soon: 0, submitted: 0, draft: 0, under_review: 0,
 };
 
 type Tab = "reports" | "obligations";
 
 export default function ReportingDashboard() {
   const [tab, setTab] = useState<Tab>("reports");
-  const [reports, setReports] = useState<Report[]>(DEMO_REPORTS);
-  const [summary, setSummary] = useState<Summary>(DEMO_SUMMARY);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -193,35 +196,41 @@ export default function ReportingDashboard() {
   };
 
   const fetchData = useCallback(async () => {
-    try {
-      const [iRes, tRes, sRes, sumRes] = await Promise.all([
-        fetch(`${API}/api/v1/reports/ifti?limit=100`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/ttr?limit=100`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/smr?limit=100`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/summary`, { credentials: "include" }),
-      ]);
-      const all: Report[] = [];
-      if (iRes.ok) (await iRes.json()).forEach((r: any) => all.push(mapReport(r, "ifti")));
-      if (tRes.ok) (await tRes.json()).forEach((r: any) => all.push(mapReport(r, "ttr")));
-      if (sRes.ok) (await sRes.json()).forEach((r: any) => all.push(mapReport(r, "smr")));
-      if (all.length) setReports(all);
-      if (sumRes.ok) { const d = await sumRes.json(); if (d.total !== undefined) setSummary(d); }
-    } catch {}
+    const [iResult, tResult, sResult, sumResult] = await Promise.allSettled([
+      listIftiRecords(),
+      listTtrReports(100),
+      listSmrReports(100),
+      getReportingSummary(),
+    ]);
+    if (iResult.status === "rejected" && tResult.status === "rejected" && sResult.status === "rejected" && sumResult.status === "rejected") {
+      showToast("error", "Failed to load reports");
+      return;
+    }
+    const all: Report[] = [];
+    if (iResult.status === "fulfilled") iResult.value.forEach(r => all.push(mapReport(r, "ifti")));
+    if (tResult.status === "fulfilled") tResult.value.forEach(r => all.push(mapReport(r, "ttr")));
+    if (sResult.status === "fulfilled") sResult.value.forEach(r => all.push(mapReport(r, "smr")));
+    setReports(all);
+    if (sumResult.status === "fulfilled") setSummary(sumResult.value);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const advanceStatus = async (report: Report, action: "review" | "approve" | "submit" | "acknowledge") => {
-    const base = `${API}/api/v1/reports/${report.report_type}/${report.id}`;
     const statusMap: Record<string, string> = { review: "under_review", approve: "approved", submit: "submitted", acknowledge: "acknowledged" };
-    let url = "";
-    if (action === "review") url = `${base}/review`;
-    else if (action === "approve") url = report.report_type === "smr" ? `${base}/mlro-sign-off` : `${base}/approve`;
-    else if (action === "submit") url = `${base}/submit?submission_reference=${encodeURIComponent(`AUTO-${Date.now()}`)}`;
-    else url = `${base}/acknowledge?acknowledgement_ref=${encodeURIComponent(`ACK-${Date.now()}`)}`;
     try {
-      const res = await fetch(url, { method: "POST", credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (report.report_type === "ifti") {
+        if (action === "review") await reviewIftiRecord(report.id);
+        else if (action === "approve") await approveIftiRecord(report.id);
+        else if (action === "submit") await submitIftiRecord(report.id, `AUTO-${Date.now()}`);
+        else await acknowledgeIftiRecord(report.id, `ACK-${Date.now()}`);
+      } else {
+        const reportType = report.report_type;
+        if (action === "review") await reviewReport(reportType, report.id);
+        else if (action === "approve") await approveReport(reportType, report.id);
+        else if (action === "submit") await submitReport(reportType, report.id, `AUTO-${Date.now()}`);
+        else await acknowledgeReport(reportType, report.id, `ACK-${Date.now()}`);
+      }
     } catch (err: any) {
       showToast("error", `Failed to ${action}: ${err.message || "request failed"}`);
       return;

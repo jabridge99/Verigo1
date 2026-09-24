@@ -6,14 +6,19 @@ import {
   ChevronDown, ChevronRight, X, Save,
 } from "lucide-react"
 import clsx from "clsx"
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
-
-type Category =
-  | "customer" | "geographic" | "product" | "transaction" | "behaviour"
-  | "crypto" | "professional_service" | "delivery_channel" | "custom"
-
-type RiskLevel = "low" | "medium" | "high" | "critical"
+import {
+  listRiskFactors,
+  listRiskProfiles,
+  listRiskMatrixVersions,
+  addRiskFactor,
+  updateRiskFactor,
+  restoreDefaults as restoreDefaultsApi,
+  type RiskFactor as Factor,
+  type RiskProfile as Profile,
+  type RiskMatrixVersion as VersionEntry,
+  type RiskFactorCategory as Category,
+  type RiskLevel,
+} from "@/lib/api/riskMatrix"
 
 const CATEGORY_LABELS: Record<Category, string> = {
   customer: "Customer",
@@ -32,43 +37,6 @@ const LEVEL_COLOR: Record<RiskLevel, string> = {
   medium: "bg-amber-100 text-amber-700 border-amber-300",
   high: "bg-orange-100 text-orange-700 border-orange-300",
   critical: "bg-red-100 text-red-700 border-red-300",
-}
-
-interface Factor {
-  id: string
-  category: Category
-  factor_key: string
-  label: string
-  description: string | null
-  weight: number
-  is_active: boolean
-  is_system: boolean
-  display_order: number
-  updated_by: string | null
-  updated_at: string | null
-}
-
-interface Profile {
-  id: string
-  risk_level: RiskLevel
-  score_min: number
-  score_max: number
-  review_frequency_months: number
-  edd_required: boolean
-  enhanced_monitoring: boolean
-  senior_approval_required: boolean
-  description: string | null
-  updated_at: string | null
-}
-
-interface VersionEntry {
-  id: string
-  version_number: number
-  change_type: string
-  change_summary: string
-  changed_by: string
-  change_reason: string | null
-  created_at: string
 }
 
 const DEMO_FACTORS: Record<string, Factor[]> = {
@@ -154,15 +122,11 @@ export default function RiskMatrixPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [fRes, pRes, vRes] = await Promise.all([
-          fetch(`${API}/api/v1/risk-matrix/factors?active_only=false`),
-          fetch(`${API}/api/v1/risk-matrix/profiles`),
-          fetch(`${API}/api/v1/risk-matrix/versions`),
+        const [fData, pData, vData] = await Promise.all([
+          listRiskFactors(false),
+          listRiskProfiles(),
+          listRiskMatrixVersions(),
         ])
-        if (!fRes.ok || !pRes.ok || !vRes.ok) throw new Error("fetch failed")
-        const fData = await fRes.json()
-        const pData = await pRes.json()
-        const vData = await vRes.json()
         setByCategory(fData.by_category)
         setWeightTotals(fData.weight_totals)
         setProfiles(pData.profiles)
@@ -191,11 +155,7 @@ export default function RiskMatrixPage() {
 
   async function saveFactor(factor: Factor, weight: number, isActive: boolean) {
     try {
-      const res = await fetch(
-        `${API}/api/v1/risk-matrix/factors/${factor.id}?reason=${encodeURIComponent("Adjusted via Risk Matrix console")}`,
-        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weight, is_active: isActive }) }
-      )
-      if (!res.ok) throw new Error("save failed")
+      await updateRiskFactor(factor.id, { weight, is_active: isActive }, "Adjusted via Risk Matrix console")
     } catch {
       // demo fallback below regardless
     }
@@ -219,22 +179,14 @@ export default function RiskMatrixPage() {
 
   async function addFactor(cat: Category, payload: { factor_key: string; label: string; description: string; weight: number }) {
     try {
-      const res = await fetch(
-        `${API}/api/v1/risk-matrix/factors?reason=${encodeURIComponent("Added via Risk Matrix console")}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category: cat, ...payload, display_order: (byCategory[cat]?.length ?? 0) }),
-        }
+      const created = await addRiskFactor(
+        { category: cat, ...payload, display_order: byCategory[cat]?.length ?? 0 },
+        "Added via Risk Matrix console"
       )
-      if (res.ok) {
-        const created = await res.json()
-        setByCategory(prev => ({ ...prev, [cat]: [...(prev[cat] ?? []), created] }))
-        setAddFactorCat(null)
-        toast("Custom risk factor added")
-        return
-      }
-      throw new Error("add failed")
+      setByCategory(prev => ({ ...prev, [cat]: [...(prev[cat] ?? []), created] }))
+      setAddFactorCat(null)
+      toast("Custom risk factor added")
+      return
     } catch {
       const newFactor: Factor = {
         id: `orf_local_${Date.now()}`,
@@ -257,11 +209,7 @@ export default function RiskMatrixPage() {
 
   async function restoreDefaults(section: string) {
     try {
-      const res = await fetch(
-        `${API}/api/v1/risk-matrix/restore-defaults?section=${section}&reason=${encodeURIComponent("Restored via Risk Matrix console")}`,
-        { method: "POST" }
-      )
-      if (!res.ok) throw new Error("restore failed")
+      await restoreDefaultsApi(section, "Restored via Risk Matrix console")
       toast(`Restored ${section} to defaults`)
     } catch {
       if (section === "factors" || section === "all") setByCategory(DEMO_FACTORS)

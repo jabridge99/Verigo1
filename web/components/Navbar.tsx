@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Menu, X, ChevronDown, Shield, Bell, Coins, Globe, ArrowLeftRight, CreditCard, Home, FileCheck, Scale, Calculator, Gem, Network, Landmark, BookOpen, HelpCircle, Building2 } from 'lucide-react'
-import { getStoredUser, clearUser } from '@/lib/auth'
+import { getStoredUser, signOut, apiFetch } from '@/lib/auth'
 import { useRouter, usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ThemeToggle'
 
@@ -68,7 +68,7 @@ export default function Navbar() {
     if (!user) return
     const load = async () => {
       try {
-        const res = await fetch(`${API}/api/v1/notifications/summary`, {
+        const res = await apiFetch(`${API}/api/v1/notifications/summary`, {
           credentials: "include",
         })
         if (res.ok) {
@@ -87,7 +87,7 @@ export default function Navbar() {
   }
 
   const handleSignOut = () => {
-    clearUser()
+    signOut()
     router.push('/login')
   }
 

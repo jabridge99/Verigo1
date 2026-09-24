@@ -17,15 +17,18 @@ import csv
 import html as html_escape_module
 import io
 import logging
-from datetime import date, datetime, timezone
-from typing import List, Optional
+from datetime import (
+    datetime,
+    timezone,
+)
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_roles
+from app.models.billing import AddonKey
 from app.models.board_report import (
     BoardReport,
     BoardReportStatus,
@@ -33,11 +36,40 @@ from app.models.board_report import (
     ReportPeriod,
 )
 from app.models.user import UserRole
+from app.schemas.board_report import DistributeBody, ReportCreate, ReportUpdate
+from app.services import audit_service, billing_service
 from app.services.board_reporting_service import generate_snapshot
 
 log = logging.getLogger("tvg.board_reporting")
 
 router = APIRouter(prefix="/board-reports", tags=["Board & Executive Reporting"])
+
+
+def _log(
+    db: Session,
+    current_user,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Board report audit trail. Who created, approved, and distributed a
+    report to the Board -- the entity's own governance record of what
+    its Board was told -- had no audit coverage at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="board_report",
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=current_user.org_id,
+        after_state=after_state,
+        notes=notes,
+    )
+
 
 # ── Status transitions ────────────────────────────────────────────────────────
 
@@ -51,35 +83,6 @@ REPORT_TRANSITIONS = {
     BoardReportStatus.distributed: [BoardReportStatus.archived],
     BoardReportStatus.archived: [],
 }
-
-# ── Pydantic schemas ──────────────────────────────────────────────────────────
-
-
-class ReportCreate(BaseModel):
-    report_ref: str
-    report_type: BoardReportType
-    period: ReportPeriod
-    period_start: date
-    period_end: date
-    title: Optional[str] = None
-    executive_summary: Optional[str] = None
-    mlro_commentary: Optional[str] = None
-    key_messages: Optional[List[str]] = None
-
-
-class ReportUpdate(BaseModel):
-    title: Optional[str] = None
-    executive_summary: Optional[str] = None
-    mlro_commentary: Optional[str] = None
-    key_messages: Optional[List[str]] = None
-    board_minutes_ref: Optional[str] = None
-    board_resolution: Optional[str] = None
-
-
-class DistributeBody(BaseModel):
-    distributed_to: List[str]  # e.g. ["Board", "Audit Committee", "CEO"]
-    distribution_notes: Optional[str] = None
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -179,6 +182,18 @@ def create_report(
     Create a new board report and auto-populate its snapshot from live compliance data.
     The snapshot is taken at creation time and stored immutably.
     """
+    if body.report_type == BoardReportType.quarterly_compliance and not (
+        billing_service.has_addon(
+            db, current_user.org_id or "", AddonKey.quarterly_compliance_report
+        )
+    ):
+        raise HTTPException(
+            402,
+            "The Quarterly Compliance Report requires the 'Quarterly "
+            "Compliance Report' add-on. Purchase it via POST /billing/"
+            "addons/quarterly_compliance_report/purchase.",
+        )
+
     if (
         db.query(BoardReport)
         .filter_by(org_id=current_user.org_id, report_ref=body.report_ref)
@@ -237,6 +252,16 @@ def create_report(
         report.report_ref,
         report.report_type,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_created",
+        after_state={
+            "report_ref": report.report_ref,
+            "report_type": report.report_type.value,
+        },
+    )
     return _report_dict(report, include_snapshot=True)
 
 
@@ -274,6 +299,12 @@ def regenerate_snapshot(
         "board_report.snapshot_regenerated org=%s ref=%s",
         current_user.org_id,
         report.report_ref,
+    )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_snapshot_regenerated",
     )
     return _report_dict(report, include_snapshot=True)
 
@@ -329,10 +360,18 @@ def update_report(
         raise HTTPException(
             409, f"Reports in '{report.status}' status cannot be edited"
         )
-    for field, value in body.model_dump(exclude_none=True).items():
+    changed = body.model_dump(exclude_none=True)
+    for field, value in changed.items():
         setattr(report, field, value)
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_updated",
+        after_state={k: str(v) for k, v in changed.items()},
+    )
     return _report_dict(report)
 
 
@@ -359,6 +398,14 @@ def submit_for_review(
         "board_report.submitted_for_review org=%s ref=%s",
         current_user.org_id,
         report.report_ref,
+    )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_submitted_for_review",
+        after_state={"status": report.status.value},
+        notes=notes,
     )
     return _report_dict(report)
 
@@ -388,6 +435,14 @@ def approve_report(
         report.report_ref,
         current_user.id,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_approved",
+        after_state={"status": report.status.value},
+        notes=approval_notes,
+    )
     return _report_dict(report)
 
 
@@ -408,6 +463,14 @@ def return_to_draft(
     report.review_notes = review_notes
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_returned_to_draft",
+        after_state={"status": report.status.value},
+        notes=review_notes,
+    )
     return _report_dict(report)
 
 
@@ -439,6 +502,17 @@ def distribute_report(
         report.report_ref,
         body.distributed_to,
     )
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_distributed",
+        after_state={
+            "status": report.status.value,
+            "distributed_to": body.distributed_to,
+        },
+        notes=body.distribution_notes,
+    )
     return _report_dict(report)
 
 
@@ -454,6 +528,13 @@ def archive_report(
     report.status = BoardReportStatus.archived
     db.commit()
     db.refresh(report)
+    _log(
+        db,
+        current_user,
+        report.id,
+        action="board_report_archived",
+        after_state={"status": report.status.value},
+    )
     return _report_dict(report)
 
 
@@ -518,6 +599,17 @@ def create_new_version(
         current_user.org_id,
         new_report.report_ref,
         new_report.version,
+    )
+    _log(
+        db,
+        current_user,
+        new_report.id,
+        action="board_report_new_version",
+        after_state={
+            "report_ref": new_report.report_ref,
+            "version": new_report.version,
+        },
+        notes=f"Supersedes {report_id}",
     )
     return _report_dict(new_report, include_snapshot=True)
 
@@ -769,6 +861,141 @@ def export_html(
   </tbody>
 </table>"""
 
+    # ── CO Quarterly Compliance Report sections ─────────────────────────────
+    # Only populated for report_type == "quarterly_compliance" -- aligns with
+    # the Verigo CO Quarterly Compliance Report template (VERIGO-GEN-COR).
+    # Other report types keep the sections above only.
+    co_quarterly_html = ""
+    if report.report_type.value == "quarterly_compliance":
+        smr_q = snap.get("smr_quarterly", {})
+        ttr_q = snap.get("ttr", {})
+        ecdd_q = snap.get("ecdd_quarterly", {})
+        sanctions_q = snap.get("sanctions_quarterly", {})
+        breaches_q = snap.get("breaches_quarterly", {})
+        open_actions = snap.get("open_actions_prior_quarters", [])
+        ir_status = snap.get("independent_review_status", {})
+
+        smr_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("Suspicious matters escalated to CO this quarter", smr_q.get("escalated_to_co_period", 0))}
+    {_row("SMRs lodged with AUSTRAC this quarter", smr_q.get("lodged_period", 0))}
+    {_row("SMRs not lodged — cleared by CO", smr_q.get("cleared_not_lodged", 0))}
+    {_row("Terrorism-financing SMRs (24hr deadline)", smr_q.get("terrorism_smrs_period", 0))}
+    {_row("All terrorism SMRs submitted within 24 hours", "Yes" if smr_q.get("terrorism_all_within_24h") else "No" if smr_q.get("terrorism_smrs_period") else "N/A")}
+    {_row("Late SMRs (outside required timeframe)", smr_q.get("late_smrs", 0))}
+  </tbody>
+</table>"""
+
+        ttr_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("TTRs lodged this quarter", ttr_q.get("ttrs_lodged_period", 0))}
+    {_row("Total value of threshold transactions (AUD)", f"${ttr_q.get('total_value_aud', 0):,.2f}")}
+    {_row("Late TTRs (outside 10 business day deadline)", ttr_q.get("late_ttrs", 0))}
+    {_row("TTRs that also resulted in SMR lodgement", ttr_q.get("ttrs_also_smr", 0))}
+  </tbody>
+</table>"""
+
+        ecdd_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("New ECDD cases opened this quarter", ecdd_q.get("new_cases_opened", 0))}
+    {_row("ECDD cases approved — service proceeded", ecdd_q.get("approved", 0))}
+    {_row("ECDD cases declined — service never established", ecdd_q.get("declined", 0))}
+    {_row("Existing relationships exited following EDD review", ecdd_q.get("relationship_exited", 0))}
+    {_row("ECDD cases still open at end of quarter", ecdd_q.get("still_open_end_of_quarter", 0))}
+  </tbody>
+</table>"""
+
+        sanctions_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("Total sanctions screens conducted this quarter", sanctions_q.get("total_screens_period", 0))}
+    {_row("Possible matches identified", sanctions_q.get("possible_matches", 0))}
+    {_row("False positives determined", sanctions_q.get("false_positives", 0))}
+    {_row("Confirmed sanctions matches", sanctions_q.get("confirmed_matches", 0))}
+  </tbody>
+</table>"""
+
+        by_severity = breaches_q.get("by_severity", {})
+        breach_rows = breaches_q.get("breaches", [])
+        if breach_rows:
+            breaches_detail_rows = "".join(
+                _row(
+                    b["title"],
+                    b["severity"].title(),
+                    b["identified_date"],
+                    b["status"].replace("_", " ").title(),
+                    "Yes" if b["reported_to_austrac"] else "No",
+                )
+                for b in breach_rows
+            )
+        else:
+            breaches_detail_rows = _row(
+                "No breaches identified this quarter", "—", "—", "—", "—"
+            )
+        breaches_quarterly_html = f"""
+<table>
+  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {_row("Total breaches identified this quarter", breaches_q.get("total_identified", 0))}
+    {_row("Critical severity", by_severity.get("critical", 0))}
+    {_row("High severity", by_severity.get("high", 0))}
+    {_row("Medium severity", by_severity.get("medium", 0))}
+    {_row("Low severity", by_severity.get("low", 0))}
+    {_row("Reported to AUSTRAC", breaches_q.get("reported_to_austrac", 0))}
+    {_row("Remediated or closed this quarter", breaches_q.get("remediated_or_closed", 0))}
+    {_row("Still open at end of quarter", breaches_q.get("still_open_end_of_quarter", 0))}
+  </tbody>
+</table>
+<table style="margin-top:10px;">
+  <thead><tr><th>Breach</th><th>Severity</th><th>Identified</th><th>Status</th><th>AUSTRAC Notified</th></tr></thead>
+  <tbody>{breaches_detail_rows}</tbody>
+</table>"""
+
+        if open_actions:
+            open_actions_rows = "".join(
+                _row(a["title"], a["due_date"], a["status"].replace("_", " ").title())
+                for a in open_actions
+            )
+        else:
+            open_actions_rows = _row("No open actions from prior quarters", "—", "—")
+        open_actions_html = f"""
+<table>
+  <thead><tr><th>Action Item</th><th>Due Date</th><th>Status</th></tr></thead>
+  <tbody>{open_actions_rows}</tbody>
+</table>"""
+
+        program_updates_html = f"""
+<table>
+  <thead><tr><th>Item</th><th>Status</th></tr></thead>
+  <tbody>
+    {_row("Independent review — status", (ir_status.get("status") or "Not yet conducted").replace("_", " ").title())}
+    {_row("Independent review — reviewer", ir_status.get("reviewer") or "—")}
+    {_row("Independent review — report date", ir_status.get("report_date") or "—")}
+  </tbody>
+</table>
+<p style="font-size:9pt;color:#888;margin-top:6px;">AML/CTF Program currency, AUSTRAC enrolment status, new AUSTRAC guidance, and legislative changes are not yet tracked as structured data — record them in this report's Executive Summary / MLRO Commentary. Breaches are now tracked structurally — see "Breaches Identified This Quarter" above.</p>"""
+
+        co_quarterly_html = "".join(
+            [
+                _section("SMR Activity (Detail)", smr_quarterly_html),
+                _section("TTR Activity", ttr_quarterly_html),
+                _section("ECDD Activity", ecdd_quarterly_html),
+                _section(
+                    "Sanctions Screening Activity (Detail)", sanctions_quarterly_html
+                ),
+                _section("Breaches Identified This Quarter", breaches_quarterly_html),
+                _section("Open Actions from Prior Quarters", open_actions_html),
+                _section("Program and Regulatory Updates", program_updates_html),
+            ]
+        )
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -854,6 +1081,8 @@ def export_html(
 {_section("Independent Review", independent_review_html)}
 
 {_section("Regulatory Reporting", regulatory_reporting_html)}
+
+{co_quarterly_html}
 
 {risk_html and _section("Risk Indicators", risk_html) or ""}
 

@@ -30,6 +30,8 @@ Assessment outcome flow:
 from __future__ import annotations
 
 import enum
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -46,9 +48,12 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.governance_training import TrainingCourse
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ENUMS
@@ -157,8 +162,10 @@ class TrainingTriggerRule(Base):
 
     __tablename__ = "training_trigger_rules"
 
-    id = Column(String, primary_key=True, default=lambda: f"ttr_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ttr_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[Optional[str]] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=True,
@@ -167,45 +174,63 @@ class TrainingTriggerRule(Base):
     # null org_id = system-level default rule (applies to all orgs unless overridden)
 
     # ── Rule identity ─────────────────────────────────────────────────────────
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
-    event_type = Column(Enum(TriggerEventType), nullable=False, index=True)
-    status = Column(Enum(TriggerStatus), default=TriggerStatus.active, nullable=False)
+    name: Mapped[str] = Column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    event_type: Mapped[TriggerEventType] = Column(
+        Enum(TriggerEventType), nullable=False, index=True
+    )
+    status: Mapped[TriggerStatus] = Column(
+        Enum(TriggerStatus), default=TriggerStatus.active, nullable=False
+    )
 
     # ── Condition filter (JSON) ───────────────────────────────────────────────
-    condition_filter = Column(JSON, default=dict)
+    condition_filter: Mapped[Optional[Any]] = Column(JSON, default=dict)
 
     # ── What to assign ───────────────────────────────────────────────────────
-    course_id = Column(
+    course_id: Mapped[str] = Column(
         String, ForeignKey("training_courses.id"), nullable=False, index=True
     )
-    target_type = Column(Enum(TriggerTargetType), nullable=False)
-    target_roles = Column(JSON, default=list)  # used when target_type = all_role
-    specific_user_ids = Column(
+    target_type: Mapped[TriggerTargetType] = Column(
+        Enum(TriggerTargetType), nullable=False
+    )
+    target_roles: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # used when target_type = all_role
+    specific_user_ids: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # used when target_type = specific_users
 
     # ── Assignment parameters ─────────────────────────────────────────────────
-    due_days = Column(Integer, default=14)  # days from trigger date to complete
-    priority = Column(String(20), default="normal")  # "urgent" | "normal" | "low"
-    notes_template = Column(Text)
+    due_days: Mapped[Optional[int]] = Column(
+        Integer, default=14
+    )  # days from trigger date to complete
+    priority: Mapped[Optional[str]] = Column(
+        String(20), default="normal"
+    )  # "urgent" | "normal" | "low"
+    notes_template: Mapped[Optional[str]] = Column(Text)
     # Template can include {event_type}, {entity_id}, {customer_name} placeholders
 
     # ── Dedup control ─────────────────────────────────────────────────────────
-    cooldown_days = Column(Integer, default=90)
+    cooldown_days: Mapped[Optional[int]] = Column(Integer, default=90)
     # Don't re-assign same course to same user within cooldown_days of last assignment
 
     # ── System / override ─────────────────────────────────────────────────────
-    is_system = Column(Boolean, default=False)
-    override_system = Column(Boolean, default=False)
-    regulatory_basis = Column(String(500))
+    is_system: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    override_system: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    regulatory_basis: Mapped[Optional[str]] = Column(String(500))
     # e.g. "AML/CTF Act s.36 — staff must be trained when SMR filed"
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
-    course = relationship("TrainingCourse", foreign_keys=[course_id])
+    course: Mapped["TrainingCourse"] = relationship(
+        "TrainingCourse", foreign_keys=[course_id]
+    )
     trigger_logs = relationship(
         "TrainingTriggerLog", back_populates="rule", cascade="all, delete-orphan"
     )
@@ -226,12 +251,14 @@ class TrainingTriggerLog(Base):
 
     __tablename__ = "training_trigger_logs"
 
-    id = Column(String, primary_key=True, default=lambda: f"ttl_{uuid4().hex[:12]}")
-    rule_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ttl_{uuid4().hex[:12]}"
+    )
+    rule_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("training_trigger_rules.id"), nullable=True, index=True
     )
     # null if fired by regulatory_update (not a rule-based trigger)
-    org_id = Column(
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -239,29 +266,41 @@ class TrainingTriggerLog(Base):
     )
 
     # ── Trigger context ───────────────────────────────────────────────────────
-    event_type = Column(Enum(TriggerEventType), nullable=False, index=True)
-    entity_type = Column(
+    event_type: Mapped[TriggerEventType] = Column(
+        Enum(TriggerEventType), nullable=False, index=True
+    )
+    entity_type: Mapped[Optional[str]] = Column(
         String(50)
     )  # "customer" | "transaction" | "alert" | "case" | "smr"
-    entity_id = Column(String, index=True)
-    entity_snapshot = Column(JSON, default=dict)
+    entity_id: Mapped[Optional[str]] = Column(String, index=True)
+    entity_snapshot: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # Snapshot of key fields at the time of trigger (for audit — entity may change)
 
-    regulatory_update_id = Column(
+    regulatory_update_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("regulatory_update_events.id"), nullable=True
     )
 
     # ── Outcome ───────────────────────────────────────────────────────────────
-    assignments_created = Column(
+    assignments_created: Mapped[Optional[int]] = Column(
         Integer, default=0
     )  # number of training records spawned
-    assignment_ids = Column(JSON, default=list)  # list of GovernanceTrainingRecord IDs
-    users_assigned = Column(JSON, default=list)  # list of user_ids assigned
-    skipped_users = Column(JSON, default=list)  # user_ids skipped (cooldown / exempt)
-    skip_reason = Column(String(500))
+    assignment_ids: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # list of GovernanceTrainingRecord IDs
+    users_assigned: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # list of user_ids assigned
+    skipped_users: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # user_ids skipped (cooldown / exempt)
+    skip_reason: Mapped[Optional[str]] = Column(String(500))
 
-    fired_at = Column(DateTime(timezone=True), server_default=func.now())
-    fired_by = Column(String)  # "system" or user_id if manually triggered
+    fired_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    fired_by: Mapped[Optional[str]] = Column(
+        String
+    )  # "system" or user_id if manually triggered
 
     rule = relationship("TrainingTriggerRule", back_populates="trigger_logs")
     regulatory_update = relationship(
@@ -294,52 +333,68 @@ class RegulatoryUpdateEvent(Base):
 
     __tablename__ = "regulatory_update_events"
 
-    id = Column(String, primary_key=True, default=lambda: f"rue_{uuid4().hex[:12]}")
-    event_ref = Column(String(100), unique=True, nullable=False)
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"rue_{uuid4().hex[:12]}"
+    )
+    event_ref: Mapped[str] = Column(String(100), unique=True, nullable=False)
     # e.g. "AUSTRAC-2026-001", "FATF-VASP-2025-UPDATE"
 
     # ── Content ───────────────────────────────────────────────────────────────
-    title = Column(String(500), nullable=False)
-    issuing_body = Column(Enum(IssuingBody), nullable=False)
-    summary = Column(Text, nullable=False)
-    key_changes = Column(JSON, default=list)  # [str] bullet points
-    full_text_url = Column(String(512))
-    effective_date = Column(Date)
-    compliance_deadline = Column(Date)  # date by which training must be completed
+    title: Mapped[str] = Column(String(500), nullable=False)
+    issuing_body: Mapped[IssuingBody] = Column(Enum(IssuingBody), nullable=False)
+    summary: Mapped[str] = Column(Text, nullable=False)
+    key_changes: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # [str] bullet points
+    full_text_url: Mapped[Optional[str]] = Column(String(512))
+    effective_date: Mapped[Optional[date]] = Column(Date)
+    compliance_deadline: Mapped[Optional[date]] = Column(
+        Date
+    )  # date by which training must be completed
 
     # ── Scope ─────────────────────────────────────────────────────────────────
-    affected_industries = Column(JSON, default=list)
+    affected_industries: Mapped[Optional[Any]] = Column(JSON, default=list)
     # [] = all industries; ["remittance", "vasp"] = specific only
-    affected_roles = Column(JSON, default=list)
+    affected_roles: Mapped[Optional[Any]] = Column(JSON, default=list)
     # [] = all roles; ["mlro", "compliance"] = specific roles
 
     # ── Linked training ───────────────────────────────────────────────────────
-    linked_course_id = Column(String, ForeignKey("training_courses.id"), nullable=True)
+    linked_course_id: Mapped[Optional[str]] = Column(
+        String, ForeignKey("training_courses.id"), nullable=True
+    )
     # The specific course to assign when this update is published
     # If null: system assigns the org's annual refresher course
 
-    auto_assign_training = Column(Boolean, default=True)
+    auto_assign_training: Mapped[Optional[bool]] = Column(Boolean, default=True)
     # False = notification only, no auto-assignment
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
-    status = Column(
+    status: Mapped[RegulatoryUpdateStatus] = Column(
         Enum(RegulatoryUpdateStatus),
         default=RegulatoryUpdateStatus.draft,
         nullable=False,
         index=True,
     )
-    published_at = Column(DateTime(timezone=True))
-    published_by = Column(String)
-    orgs_notified = Column(Integer, default=0)  # count populated on publish
-    assignments_created = Column(Integer, default=0)
+    published_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    published_by: Mapped[Optional[str]] = Column(String)
+    orgs_notified: Mapped[Optional[int]] = Column(
+        Integer, default=0
+    )  # count populated on publish
+    assignments_created: Mapped[Optional[int]] = Column(Integer, default=0)
 
-    tags = Column(JSON, default=list)  # ["tranche_2", "crypto", "pep"]
-    is_urgent = Column(Boolean, default=False)
+    tags: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # ["tranche_2", "crypto", "pep"]
+    is_urgent: Mapped[Optional[bool]] = Column(Boolean, default=False)
     # Urgent → due_days = 7 instead of standard 30
 
-    created_by = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[str] = Column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     linked_course = relationship("TrainingCourse", foreign_keys=[linked_course_id])
     trigger_logs = relationship(
@@ -369,53 +424,63 @@ class AssessmentOutcomeFlag(Base):
 
     __tablename__ = "assessment_outcome_flags"
 
-    id = Column(String, primary_key=True, default=lambda: f"aof_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"aof_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    training_record_id = Column(
+    user_id: Mapped[str] = Column(
+        String, ForeignKey("users.id"), nullable=False, index=True
+    )
+    training_record_id: Mapped[str] = Column(
         String, ForeignKey("governance_training_records.id"), nullable=False
     )
-    course_id = Column(String, ForeignKey("training_courses.id"), nullable=False)
+    course_id: Mapped[str] = Column(
+        String, ForeignKey("training_courses.id"), nullable=False
+    )
 
     # ── Assessment result ─────────────────────────────────────────────────────
-    score = Column(Float, nullable=False)
-    pass_mark = Column(Float, nullable=False)
-    attempt_number = Column(Integer, nullable=False)
-    course_name = Column(String(255))
+    score: Mapped[float] = Column(Float, nullable=False)
+    pass_mark: Mapped[float] = Column(Float, nullable=False)
+    attempt_number: Mapped[int] = Column(Integer, nullable=False)
+    course_name: Mapped[Optional[str]] = Column(String(255))
 
     # ── Linked risk decisions (populated at flag creation) ────────────────────
-    recent_decision_ids = Column(JSON, default=list)
+    recent_decision_ids: Mapped[Optional[Any]] = Column(JSON, default=list)
     # IDs of transactions/alerts/cases handled by this user in the past 30 days
     # that relate to the failed training topic
-    decision_summary = Column(JSON, default=dict)
+    decision_summary: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {"transactions_reviewed": 12, "alerts_actioned": 3, "cases_handled": 1}
 
     # ── Risk implication ─────────────────────────────────────────────────────
-    requires_oversight = Column(Boolean, default=False)
+    requires_oversight: Mapped[Optional[bool]] = Column(Boolean, default=False)
     # If True: user's risk decisions flagged for compliance co-sign until cleared
-    oversight_note = Column(Text)
+    oversight_note: Mapped[Optional[str]] = Column(Text)
 
     # ── Resolution ────────────────────────────────────────────────────────────
-    status = Column(
+    status: Mapped[AssessmentFlagStatus] = Column(
         Enum(AssessmentFlagStatus),
         default=AssessmentFlagStatus.open,
         nullable=False,
         index=True,
     )
-    reviewed_by = Column(
+    reviewed_by: Mapped[Optional[str]] = Column(
         String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    reviewed_at = Column(DateTime(timezone=True))
-    review_notes = Column(Text)
-    cleared_at = Column(DateTime(timezone=True))
+    reviewed_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    review_notes: Mapped[Optional[str]] = Column(Text)
+    cleared_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -423,7 +488,7 @@ class AssessmentOutcomeFlag(Base):
 # (seeded at org creation via seed_default_trigger_rules())
 # ══════════════════════════════════════════════════════════════════════════════
 
-SYSTEM_TRIGGER_RULES = [
+SYSTEM_TRIGGER_RULES: list[dict[str, Any]] = [
     {
         "name": "EDD Escalation → EDD Training",
         "event_type": TriggerEventType.edd_escalation,

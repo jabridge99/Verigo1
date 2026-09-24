@@ -6,6 +6,13 @@ brand-new TransactionAlert with no dedup, polluting the analyst queue with
 duplicates for the same underlying activity. Fixed by skipping alert
 creation when an open (non-dismissed/non-resolved) alert already exists for
 the transaction.
+
+Since Stage 8's fix (POST /transactions now automatically runs monitoring
+on creation, not just via this manual endpoint -- see
+tests/test_stage8_transaction_creation_triggers_monitoring_smoke.py), the
+transaction below already has its alert by the time it's created; this
+test now exercises dedup between that automatic run and a subsequent
+manual re-run, which is the more realistic real-world case anyway.
 """
 
 import uuid
@@ -34,11 +41,11 @@ TXN_PAYLOAD = {
     "amount": 250000.00,
     "currency": "AUD",
     "is_cross_border": True,
+    "country_destination": "KP",  # FATF blacklist
     "description": "Large cross-border transfer",
     "counterparty_name": "Offshore Corp",
-    "counterparty_account": "999888777",
-    "counterparty_bank": "Foreign Bank",
-    "counterparty_country": "KP",
+    "destination_account_number": "999888777",
+    "destination_bank_name": "Foreign Bank",
     "transaction_date": "2025-06-01T10:00:00",
 }
 
@@ -76,21 +83,25 @@ def test_rerunning_monitoring_does_not_duplicate_open_alert(
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     customer.is_pep = True
     db.commit()
+
+    # Creation itself now runs monitoring (Stage 8 fix) -- must already
+    # have generated the alert for this test payload to exercise dedup.
     txn_id = _create_txn(client, compliance_headers, customer_id)
+    created_alerts = (
+        db.query(TransactionAlert)
+        .filter(TransactionAlert.transaction_id == txn_id)
+        .count()
+    )
+    assert created_alerts >= 1, (
+        "test payload must actually trigger an alert on creation for this "
+        "to exercise dedup"
+    )
 
-    first = client.post(
+    rerun = client.post(
         f"/api/v1/transactions/{txn_id}/run-monitoring", headers=compliance_headers
     )
-    assert first.status_code == 200, first.text
-    assert first.json()["alerts_generated"] >= 1, (
-        "test payload must actually trigger an alert for this to exercise dedup"
-    )
-
-    second = client.post(
-        f"/api/v1/transactions/{txn_id}/run-monitoring", headers=compliance_headers
-    )
-    assert second.status_code == 200, second.text
-    assert second.json()["alerts_generated"] == 0
+    assert rerun.status_code == 200, rerun.text
+    assert rerun.json()["alerts_generated"] == 0
 
     total_alerts = (
         db.query(TransactionAlert)

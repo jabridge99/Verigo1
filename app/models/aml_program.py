@@ -11,6 +11,8 @@ replaces the item set.
 
 import enum
 import uuid
+from datetime import datetime
+from typing import Any, Optional
 
 from sqlalchemy import (
     JSON,
@@ -23,6 +25,7 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy.orm import Mapped
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -36,38 +39,48 @@ class AMLProgramStatus(str, enum.Enum):
 class AMLProgramRecord(Base):
     __tablename__ = "aml_program_records"
 
-    id = Column(Integer, primary_key=True, index=True)
-    program_id = Column(String(60), unique=True, index=True, nullable=False)
-    organisation_id = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    program_id: Mapped[str] = Column(
+        String(60), unique=True, index=True, nullable=False
+    )
+    organisation_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         unique=True,
         index=True,
         nullable=False,
     )
-    industry_id = Column(String(100), nullable=False)
-    risk_profile = Column(String(20), nullable=False)
-    status = Column(Enum(AMLProgramStatus), default=AMLProgramStatus.active)
-    version = Column(Integer, default=1)
-    generated_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    industry_id: Mapped[str] = Column(String(100), nullable=False)
+    risk_profile: Mapped[str] = Column(String(20), nullable=False)
+    status: Mapped[Optional[AMLProgramStatus]] = Column(
+        Enum(AMLProgramStatus), default=AMLProgramStatus.active
+    )
+    version: Mapped[Optional[int]] = Column(Integer, default=1)
+    generated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 class AMLProgramItem(Base):
     __tablename__ = "aml_program_items"
 
-    id = Column(Integer, primary_key=True, index=True)
-    program_id = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    program_id: Mapped[int] = Column(
         Integer, ForeignKey("aml_program_records.id"), index=True, nullable=False
     )
-    category = Column(
+    category: Mapped[str] = Column(
         String(50), nullable=False
     )  # governance | kyc | monitoring | reporting | training
-    title = Column(String(200), nullable=False)
-    description = Column(Text)
-    review_frequency = Column(String(50))  # e.g. "annual", "quarterly", "monthly"
-    is_required = Column(Boolean, default=True)
-    sort_order = Column(Integer, default=0)
+    title: Mapped[str] = Column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    review_frequency: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # e.g. "annual", "quarterly", "monthly"
+    is_required: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    sort_order: Mapped[Optional[int]] = Column(Integer, default=0)
 
 
 # ── Retention — Verigo's record-of-truth versioning ─────────────────────────
@@ -80,26 +93,30 @@ class AMLProgramItem(Base):
 class AMLProgramVersion(Base):
     __tablename__ = "aml_program_versions"
 
-    id = Column(Integer, primary_key=True, index=True)
-    program_id = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    program_id: Mapped[int] = Column(
         Integer, ForeignKey("aml_program_records.id"), index=True, nullable=False
     )
-    organisation_id = Column(
+    organisation_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
     )
-    version = Column(Integer, nullable=False)
-    industry_id = Column(String(100), nullable=False)
-    risk_profile = Column(String(20), nullable=False)
-    items_snapshot = Column(
+    version: Mapped[int] = Column(Integer, nullable=False)
+    industry_id: Mapped[str] = Column(String(100), nullable=False)
+    risk_profile: Mapped[str] = Column(String(20), nullable=False)
+    items_snapshot: Mapped[Any] = Column(
         JSON, nullable=False
     )  # full item list at time of generation
-    item_count = Column(Integer, nullable=False)
-    content_hash = Column(String(64), nullable=False)  # sha256 of items_snapshot
-    qr_token = Column(String(40), unique=True, index=True, nullable=False)
-    generated_at = Column(DateTime(timezone=True), server_default=func.now())
+    item_count: Mapped[int] = Column(Integer, nullable=False)
+    content_hash: Mapped[str] = Column(
+        String(64), nullable=False
+    )  # sha256 of items_snapshot
+    qr_token: Mapped[str] = Column(String(40), unique=True, index=True, nullable=False)
+    generated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class VersionRetrievalRequest(Base):
@@ -109,16 +126,18 @@ class VersionRetrievalRequest(Base):
 
     __tablename__ = "version_retrieval_requests"
 
-    id = Column(Integer, primary_key=True, index=True)
-    organisation_id = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    organisation_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
     )
-    version = Column(Integer, nullable=False)
-    requested_by = Column(String(200), nullable=False)
-    requested_at = Column(DateTime(timezone=True), server_default=func.now())
+    version: Mapped[int] = Column(Integer, nullable=False)
+    requested_by: Mapped[str] = Column(String(200), nullable=False)
+    requested_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 def new_qr_token() -> str:

@@ -14,14 +14,13 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _current_user, _require_roles
 from app.db.database import get_db
 from app.models.document import DocumentCategory
 from app.models.user import User, UserRole
-from app.schemas.document import DocumentResponse, DocumentUpdate
+from app.schemas.document import DocumentResponse, DocumentUpdate, LegalHoldPayload
 from app.services import document_service as svc
 from app.services.document_service import ALLOWED_MIME, MAX_SIZE
 from app.services.storage.factory import get_storage_provider
@@ -294,10 +293,6 @@ async def delete_document(
 # ── Legal hold ────────────────────────────────────────────────────────────────
 
 
-class LegalHoldPayload(BaseModel):
-    reason: str
-
-
 @router.post("/{doc_id}/legal-hold")
 def place_legal_hold(
     doc_id: str,
@@ -429,7 +424,7 @@ async def upload_new_version(
 
     sha256_hash = hashlib.sha256(content).hexdigest()
 
-    new_doc = svc.create_document(
+    new_doc = await svc.create_document(
         db,
         filename=file.filename or existing.filename,
         content=content,
