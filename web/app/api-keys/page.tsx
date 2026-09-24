@@ -5,42 +5,31 @@ import {
   Key, Plus, Trash2, Eye, EyeOff, Copy, Check, Webhook,
   Globe, AlertTriangle, CheckCircle, XCircle, Play, ChevronDown, ChevronUp,
 } from "lucide-react";
-import { getStoredUser, apiFetch } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface APIKey {
-  key_id: string;
-  name: string;
-  key_prefix: string;
-  status: string;
-  scopes: string[];
-  last_used_at?: string;
-  expires_at?: string;
-  created_at?: string;
-}
-
-interface WebhookEndpoint {
-  webhook_id: string;
-  name: string;
-  url: string;
-  events: string[];
-  status: string;
-  failure_count: number;
-  last_fired_at?: string;
-  created_at?: string;
-}
+import {
+  listApiKeys,
+  createApiKey,
+  revokeApiKey,
+  type ApiKey as APIKey,
+} from "@/lib/api/apiKeys";
+import {
+  listWebhooks,
+  createWebhook as createWebhookApi,
+  deleteWebhook as deleteWebhookApi,
+  testWebhook as testWebhookApi,
+  type WebhookEndpoint,
+} from "@/lib/api/webhooks";
 
 const DEMO_KEYS: APIKey[] = [
-  { key_id: "KEY-ABC123", name: "Production Integration", key_prefix: "tvg_live_X9k2", status: "active", scopes: ["customers:read", "transactions:read", "reports:read"], last_used_at: new Date(Date.now() - 3600000).toISOString(), created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
-  { key_id: "KEY-DEF456", name: "Audit System Connector", key_prefix: "tvg_live_mQ7p", status: "active", scopes: ["audit:read"], created_at: new Date(Date.now() - 86400000 * 14).toISOString() },
-  { key_id: "KEY-GHI789", name: "Legacy Webhook Sync", key_prefix: "tvg_live_rT3n", status: "revoked", scopes: ["customers:read"], created_at: new Date(Date.now() - 86400000 * 90).toISOString() },
+  { id: 1, key_id: "KEY-ABC123", name: "Production Integration", key_prefix: "tvg_live_X9k2", user_id: "demo", status: "active", scopes: ["customers:read", "transactions:read", "reports:read"], last_used_at: new Date(Date.now() - 3600000).toISOString(), created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
+  { id: 2, key_id: "KEY-DEF456", name: "Audit System Connector", key_prefix: "tvg_live_mQ7p", user_id: "demo", status: "active", scopes: ["audit:read"], created_at: new Date(Date.now() - 86400000 * 14).toISOString() },
+  { id: 3, key_id: "KEY-GHI789", name: "Legacy Webhook Sync", key_prefix: "tvg_live_rT3n", user_id: "demo", status: "revoked", scopes: ["customers:read"], created_at: new Date(Date.now() - 86400000 * 90).toISOString() },
 ];
 
 const DEMO_WEBHOOKS: WebhookEndpoint[] = [
-  { webhook_id: "WH-001", name: "Core Banking System", url: "https://api.corebank.example/tvg-events", events: ["aml_alert.created", "transaction.flagged"], status: "active", failure_count: 0, last_fired_at: new Date(Date.now() - 7200000).toISOString(), created_at: new Date(Date.now() - 86400000 * 7).toISOString() },
-  { webhook_id: "WH-002", name: "Compliance Slack Bot", url: "https://hooks.slack.com/services/T000/B000/xxxx", events: ["case.assigned", "case.escalated", "report.approved"], status: "active", failure_count: 0, created_at: new Date(Date.now() - 86400000 * 3).toISOString() },
+  { id: 1, webhook_id: "WH-001", name: "Core Banking System", url: "https://api.corebank.example/tvg-events", events: ["aml_alert.created", "transaction.flagged"], user_id: "demo", status: "active", failure_count: 0, last_fired_at: new Date(Date.now() - 7200000).toISOString(), created_at: new Date(Date.now() - 86400000 * 7).toISOString() },
+  { id: 2, webhook_id: "WH-002", name: "Compliance Slack Bot", url: "https://hooks.slack.com/services/T000/B000/xxxx", events: ["case.assigned", "case.escalated", "report.approved"], user_id: "demo", status: "active", failure_count: 0, created_at: new Date(Date.now() - 86400000 * 3).toISOString() },
 ];
 
 const ALL_EVENTS = [
@@ -53,7 +42,7 @@ const ALL_SCOPES = [
   "transactions:read", "reports:read", "reports:write", "audit:read", "cases:read",
 ];
 
-function relTime(iso?: string) {
+function relTime(iso?: string | null) {
   if (!iso) return "Never";
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
   if (d === 0) return "Today";
@@ -107,13 +96,12 @@ export default function APIKeysPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [kr, wr] = await Promise.all([
-        apiFetch(`${API}/api/v1/api-keys`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/webhooks`, { credentials: "include" }),
+      const [keysData, webhooksData] = await Promise.all([
+        listApiKeys(),
+        listWebhooks(),
       ]);
-      if (!kr.ok || !wr.ok) throw new Error("api");
-      setKeys(await kr.json());
-      setWebhooks(await wr.json());
+      setKeys(keysData);
+      setWebhooks(webhooksData);
     } catch {
       setDemo(true);
     } finally {
@@ -124,14 +112,7 @@ export default function APIKeysPage() {
   const createKey = async () => {
     if (!keyName.trim()) return;
     try {
-      const res = await apiFetch(`${API}/api/v1/api-keys`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: keyName, scopes: keyScopes, expires_days: keyDays ? parseInt(keyDays) : null }),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await createApiKey({ name: keyName, scopes: keyScopes, expires_days: keyDays ? parseInt(keyDays) : null });
       setNewRawKey(data.raw_key);
       setKeys(prev => [data, ...prev]);
       setKeyName(""); setKeyScopes([]); setKeyDays("");
@@ -143,26 +124,19 @@ export default function APIKeysPage() {
   const revokeKey = async (key_id: string) => {
     setKeys(prev => prev.map(k => k.key_id === key_id ? { ...k, status: "revoked" } : k));
     try {
-      await apiFetch(`${API}/api/v1/api-keys/${key_id}`, { method: "DELETE", credentials: "include" });
+      await revokeApiKey(key_id);
     } catch {}
   };
 
   const createWebhook = async () => {
     if (!whName.trim() || !whUrl.trim() || whEvents.length === 0) return;
     try {
-      const res = await apiFetch(`${API}/api/v1/webhooks`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: whName, url: whUrl, events: whEvents }),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await createWebhookApi({ name: whName, url: whUrl, events: whEvents });
       setWebhooks(prev => [data, ...prev]);
     } catch {
       setWebhooks(prev => [{
-        webhook_id: `WH-${Date.now()}`, name: whName, url: whUrl, events: whEvents,
-        status: "active", failure_count: 0, created_at: new Date().toISOString(),
+        id: -Date.now(), webhook_id: `WH-${Date.now()}`, name: whName, url: whUrl, events: whEvents,
+        user_id: "demo", status: "active", failure_count: 0, created_at: new Date().toISOString(),
       }, ...prev]);
     }
     setWhName(""); setWhUrl(""); setWhEvents([]); setShowWHForm(false);
@@ -171,14 +145,13 @@ export default function APIKeysPage() {
   const deleteWebhook = async (webhook_id: string) => {
     setWebhooks(prev => prev.filter(w => w.webhook_id !== webhook_id));
     try {
-      await apiFetch(`${API}/api/v1/webhooks/${webhook_id}`, { method: "DELETE", credentials: "include" });
+      await deleteWebhookApi(webhook_id);
     } catch {}
   };
 
   const testWebhook = async (webhook_id: string) => {
     try {
-      const res = await apiFetch(`${API}/api/v1/webhooks/${webhook_id}/test`, { method: "POST", credentials: "include" });
-      const data = await res.json();
+      const data = await testWebhookApi(webhook_id);
       setTestResults(prev => ({ ...prev, [webhook_id]: data.success }));
     } catch {
       setTestResults(prev => ({ ...prev, [webhook_id]: true }));
