@@ -34,7 +34,7 @@ entity's Compliance Officer.
 
 import enum
 from datetime import date, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -51,6 +51,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.case import Case
+    from app.models.customer import Customer
+    from app.models.monitoring import TransactionAlert
+    from app.models.organisation import Organisation
+    from app.models.professional_assessment import ProfessionalAssessment
+
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -200,8 +208,10 @@ class SMRDecisionLog(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    organisation = relationship("Organisation")
-    customer = relationship("Customer")
-    case = relationship("Case")
-    tmp_alert = relationship("TransactionAlert")
-    ecdd_case = relationship("ProfessionalAssessment")
+    organisation: Mapped["Organisation"] = relationship("Organisation")
+    customer: Mapped["Customer | None"] = relationship("Customer")
+    case: Mapped["Case | None"] = relationship("Case")
+    tmp_alert: Mapped["TransactionAlert | None"] = relationship("TransactionAlert")
+    ecdd_case: Mapped["ProfessionalAssessment | None"] = relationship(
+        "ProfessionalAssessment"
+    )

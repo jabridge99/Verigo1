@@ -1,12 +1,15 @@
 import enum
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.customer import Customer
 
 
 class PortalSessionStatus(str, enum.Enum):
@@ -80,15 +83,17 @@ class CustomerPortalSession(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    portal_documents = relationship(
+    portal_documents: Mapped[list["CustomerPortalDocument"]] = relationship(
         "CustomerPortalDocument", back_populates="session", cascade="all, delete-orphan"
     )
-    questionnaire_responses = relationship(
-        "CustomerPortalQuestionnaireResponse",
-        back_populates="session",
-        cascade="all, delete-orphan",
+    questionnaire_responses: Mapped[list["CustomerPortalQuestionnaireResponse"]] = (
+        relationship(
+            "CustomerPortalQuestionnaireResponse",
+            back_populates="session",
+            cascade="all, delete-orphan",
+        )
     )
-    customer = relationship("Customer", foreign_keys=[customer_id])
+    customer: Mapped["Customer"] = relationship("Customer", foreign_keys=[customer_id])
 
 
 class CustomerPortalDocument(Base):
@@ -122,7 +127,9 @@ class CustomerPortalDocument(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    session = relationship("CustomerPortalSession", back_populates="portal_documents")
+    session: Mapped["CustomerPortalSession"] = relationship(
+        "CustomerPortalSession", back_populates="portal_documents"
+    )
 
 
 class CustomerPortalQuestionnaireResponse(Base):
@@ -152,6 +159,6 @@ class CustomerPortalQuestionnaireResponse(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    session = relationship(
+    session: Mapped["CustomerPortalSession"] = relationship(
         "CustomerPortalSession", back_populates="questionnaire_responses"
     )

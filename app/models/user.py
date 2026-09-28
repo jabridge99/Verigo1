@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -17,6 +17,9 @@ from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 from app.services.crypto import EncryptedMfaSecret
+
+if TYPE_CHECKING:
+    from app.models.organisation import Organisation
 
 
 class UserRole(str, enum.Enum):
@@ -90,7 +93,7 @@ class User(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    organisation = relationship(
+    organisation: Mapped["Organisation | None"] = relationship(
         "Organisation", back_populates="users", foreign_keys=[org_id]
     )
 

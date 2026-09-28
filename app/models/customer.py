@@ -8,7 +8,7 @@ they are set only by the scoring engine or privileged compliance roles.
 
 import enum
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -30,6 +30,20 @@ from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 from app.services.crypto import EncryptedKycString
+
+if TYPE_CHECKING:
+    from app.models.case import Case
+    from app.models.kyc import (
+        CustomerAddressVerification,
+        CustomerEmailVerification,
+        CustomerIdentityDocument,
+        CustomerPhoneVerification,
+        CustomerSelfieVerification,
+    )
+    from app.models.organisation import Organisation
+    from app.models.screening import ScreeningRecord
+    from app.models.transaction import Transaction
+
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -241,66 +255,70 @@ class Customer(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    organisation = relationship("Organisation", back_populates="customers")
-    business_detail = relationship(
+    organisation: Mapped["Organisation"] = relationship(
+        "Organisation", back_populates="customers"
+    )
+    business_detail: Mapped["BusinessDetail | None"] = relationship(
         "BusinessDetail", foreign_keys=[business_detail_id], uselist=False
     )
-    previous_names = relationship(
+    previous_names: Mapped[list["CustomerPreviousName"]] = relationship(
         "CustomerPreviousName", back_populates="customer", cascade="all, delete-orphan"
     )
-    identity_documents = relationship(
+    identity_documents: Mapped[list["CustomerIdentityDocument"]] = relationship(
         "CustomerIdentityDocument",
         back_populates="customer",
         cascade="all, delete-orphan",
     )
-    selfie_verifications = relationship(
+    selfie_verifications: Mapped[list["CustomerSelfieVerification"]] = relationship(
         "CustomerSelfieVerification",
         back_populates="customer",
         cascade="all, delete-orphan",
     )
-    address_verifications = relationship(
+    address_verifications: Mapped[list["CustomerAddressVerification"]] = relationship(
         "CustomerAddressVerification",
         back_populates="customer",
         cascade="all, delete-orphan",
     )
-    phone_verifications = relationship(
+    phone_verifications: Mapped[list["CustomerPhoneVerification"]] = relationship(
         "CustomerPhoneVerification",
         back_populates="customer",
         cascade="all, delete-orphan",
     )
-    email_verifications = relationship(
+    email_verifications: Mapped[list["CustomerEmailVerification"]] = relationship(
         "CustomerEmailVerification",
         back_populates="customer",
         cascade="all, delete-orphan",
     )
-    beneficial_owners = relationship(
+    beneficial_owners: Mapped[list["BeneficialOwner"]] = relationship(
         "BeneficialOwner", back_populates="customer", cascade="all, delete-orphan"
     )
-    corporate_documents = relationship(
+    corporate_documents: Mapped[list["CorporateDocument"]] = relationship(
         "CorporateDocument", back_populates="customer", cascade="all, delete-orphan"
     )
-    screening_records = relationship(
+    screening_records: Mapped[list["ScreeningRecord"]] = relationship(
         "ScreeningRecord", back_populates="customer", cascade="all, delete-orphan"
     )
-    risk_score_history = relationship(
+    risk_score_history: Mapped[list["CustomerRiskScoreHistory"]] = relationship(
         "CustomerRiskScoreHistory",
         back_populates="customer",
         cascade="all, delete-orphan",
     )
-    reviews = relationship(
+    reviews: Mapped[list["CustomerReview"]] = relationship(
         "CustomerReview", back_populates="customer", cascade="all, delete-orphan"
     )
-    notes = relationship(
+    notes: Mapped[list["CustomerNote"]] = relationship(
         "CustomerNote", back_populates="customer", cascade="all, delete-orphan"
     )
-    onboarding_checklist = relationship(
+    onboarding_checklist: Mapped["CustomerOnboardingChecklist | None"] = relationship(
         "CustomerOnboardingChecklist",
         back_populates="customer",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    transactions = relationship("Transaction", back_populates="customer")
-    cases = relationship("Case", back_populates="customer")
+    transactions: Mapped[list["Transaction"]] = relationship(
+        "Transaction", back_populates="customer"
+    )
+    cases: Mapped[list["Case"]] = relationship("Case", back_populates="customer")
 
 
 # ── Previous names ─────────────────────────────────────────────────────────────
@@ -331,7 +349,9 @@ class CustomerPreviousName(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="previous_names")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="previous_names"
+    )
 
 
 # ── Business Detail (KYB) ──────────────────────────────────────────────────────
@@ -503,7 +523,9 @@ class BeneficialOwner(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    customer = relationship("Customer", back_populates="beneficial_owners")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="beneficial_owners"
+    )
 
 
 # ── Corporate Documents (KYB) ──────────────────────────────────────────────────
@@ -562,7 +584,9 @@ class CorporateDocument(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="corporate_documents")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="corporate_documents"
+    )
 
 
 # ── Risk Score History (immutable) ─────────────────────────────────────────────
@@ -608,7 +632,9 @@ class CustomerRiskScoreHistory(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="risk_score_history")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="risk_score_history"
+    )
 
 
 # ── Periodic Review ────────────────────────────────────────────────────────────
@@ -660,7 +686,7 @@ class CustomerReview(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="reviews")
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="reviews")
 
 
 # ── Compliance Notes (append-only) ────────────────────────────────────────────
@@ -694,7 +720,7 @@ class CustomerNote(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="notes")
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="notes")
 
 
 # ── Onboarding Checklist ───────────────────────────────────────────────────────
@@ -758,4 +784,6 @@ class CustomerOnboardingChecklist(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    customer = relationship("Customer", back_populates="onboarding_checklist")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="onboarding_checklist"
+    )

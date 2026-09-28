@@ -559,7 +559,9 @@ class SOFAssessment(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    assessment = relationship("ProfessionalAssessment", back_populates="sof_assessment")
+    assessment: Mapped["ProfessionalAssessment"] = relationship(
+        "ProfessionalAssessment", back_populates="sof_assessment"
+    )
 
 
 class SOWAssessment(Base):
@@ -616,7 +618,9 @@ class SOWAssessment(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    assessment = relationship("ProfessionalAssessment", back_populates="sow_assessment")
+    assessment: Mapped["ProfessionalAssessment"] = relationship(
+        "ProfessionalAssessment", back_populates="sow_assessment"
+    )
 
 
 class TransactionPurposeAssessment(Base):
@@ -667,7 +671,7 @@ class TransactionPurposeAssessment(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    assessment = relationship(
+    assessment: Mapped["ProfessionalAssessment"] = relationship(
         "ProfessionalAssessment", back_populates="purpose_assessment"
     )
 
@@ -746,7 +750,7 @@ class TaxRiskAssessment(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    assessment = relationship(
+    assessment: Mapped["ProfessionalAssessment"] = relationship(
         "ProfessionalAssessment", back_populates="tax_risk_assessment"
     )
 
@@ -817,7 +821,7 @@ class InvestmentLegitimacyAssessment(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    assessment = relationship(
+    assessment: Mapped["ProfessionalAssessment"] = relationship(
         "ProfessionalAssessment", back_populates="investment_assessment"
     )
 
@@ -873,7 +877,9 @@ class ProfessionalJudgmentChecklist(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    assessment = relationship("ProfessionalAssessment", back_populates="checklist")
+    assessment: Mapped["ProfessionalAssessment"] = relationship(
+        "ProfessionalAssessment", back_populates="checklist"
+    )
 
 
 class OrgProfessionalChecklistTemplate(Base):

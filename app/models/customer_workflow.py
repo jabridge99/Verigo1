@@ -17,7 +17,7 @@ Risk is scored across 5 dimensions; decision gateway fires automatically after s
 
 import enum
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -37,6 +37,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.customer import Customer
+
 
 # ── Workflow States ────────────────────────────────────────────────────────────
 
@@ -256,14 +260,16 @@ class CustomerWorkflow(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    customer = relationship("Customer", foreign_keys=[customer_id], uselist=False)
-    events = relationship(
+    customer: Mapped["Customer | None"] = relationship(
+        "Customer", foreign_keys=[customer_id], uselist=False
+    )
+    events: Mapped[list["CustomerWorkflowEvent"]] = relationship(
         "CustomerWorkflowEvent",
         back_populates="workflow",
         cascade="all, delete-orphan",
         order_by="CustomerWorkflowEvent.occurred_at",
     )
-    risk_profile = relationship(
+    risk_profile: Mapped["CustomerRiskProfile | None"] = relationship(
         "CustomerRiskProfile",
         back_populates="workflow",
         uselist=False,
@@ -302,7 +308,9 @@ class CustomerWorkflowEvent(Base):
     )  # action-specific data (risk scores, triggers, etc.)
     occurred_at: Mapped[datetime] = Column(DateTime(timezone=True), nullable=False)
 
-    workflow = relationship("CustomerWorkflow", back_populates="events")
+    workflow: Mapped["CustomerWorkflow"] = relationship(
+        "CustomerWorkflow", back_populates="events"
+    )
 
 
 # ── 5-Dimension Risk Profile ───────────────────────────────────────────────────
@@ -410,4 +418,6 @@ class CustomerRiskProfile(Base):
     )
     assessment_notes: Mapped[Optional[str]] = Column(Text)
 
-    workflow = relationship("CustomerWorkflow", back_populates="risk_profile")
+    workflow: Mapped["CustomerWorkflow"] = relationship(
+        "CustomerWorkflow", back_populates="risk_profile"
+    )

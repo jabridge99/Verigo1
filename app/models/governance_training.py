@@ -197,12 +197,12 @@ class TrainingCourse(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    records = relationship(
+    records: Mapped[list["GovernanceTrainingRecord"]] = relationship(
         "GovernanceTrainingRecord",
         back_populates="course",
         cascade="all, delete-orphan",
     )
-    assignments = relationship(
+    assignments: Mapped[list["TrainingAssignment"]] = relationship(
         "TrainingAssignment", back_populates="course", cascade="all, delete-orphan"
     )
 
@@ -308,7 +308,7 @@ class GovernanceTrainingRecord(Base):
     course: Mapped["TrainingCourse"] = relationship(
         "TrainingCourse", back_populates="records"
     )
-    assignment = relationship(
+    assignment: Mapped["TrainingAssignment | None"] = relationship(
         "TrainingAssignment", back_populates="records", foreign_keys=[assignment_id]
     )
 
@@ -383,7 +383,9 @@ class TrainingAssignment(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    course = relationship("TrainingCourse", back_populates="assignments")
+    course: Mapped["TrainingCourse"] = relationship(
+        "TrainingCourse", back_populates="assignments"
+    )
     records: Mapped[list["GovernanceTrainingRecord"]] = relationship(
         "GovernanceTrainingRecord",
         back_populates="assignment",

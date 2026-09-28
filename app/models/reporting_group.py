@@ -1,12 +1,15 @@
 import enum
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.organisation import Organisation
 
 
 class ReportingGroupStatus(str, enum.Enum):
@@ -58,10 +61,12 @@ class ReportingGroup(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    members = relationship(
+    members: Mapped[list["ReportingGroupMember"]] = relationship(
         "ReportingGroupMember", back_populates="group", cascade="all, delete-orphan"
     )
-    holding_org = relationship("Organisation", foreign_keys=[holding_org_id])
+    holding_org: Mapped["Organisation"] = relationship(
+        "Organisation", foreign_keys=[holding_org_id]
+    )
 
 
 class ReportingGroupMember(Base):
@@ -95,5 +100,7 @@ class ReportingGroupMember(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    group = relationship("ReportingGroup", back_populates="members")
-    org = relationship("Organisation", foreign_keys=[org_id])
+    group: Mapped["ReportingGroup"] = relationship(
+        "ReportingGroup", back_populates="members"
+    )
+    org: Mapped["Organisation"] = relationship("Organisation", foreign_keys=[org_id])

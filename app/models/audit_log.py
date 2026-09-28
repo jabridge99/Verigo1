@@ -5,13 +5,16 @@ Records are NEVER modified after creation.
 
 import enum
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.organisation import Organisation
 
 
 class AuditEventType(str, enum.Enum):
@@ -160,7 +163,9 @@ class AuditLog(Base):
     )
     # Intentionally NO updated_at — immutable record
 
-    organisation = relationship("Organisation", back_populates="audit_logs")
+    organisation: Mapped["Organisation"] = relationship(
+        "Organisation", back_populates="audit_logs"
+    )
 
     __table_args__ = (
         Index("ix_audit_org_event", "org_id", "event_type"),

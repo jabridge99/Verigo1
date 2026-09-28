@@ -20,7 +20,7 @@ Reminder escalation chain: 30d → 14d → 7d → due date → overdue
 
 import enum
 from datetime import date, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -39,6 +39,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.customer import Customer
+    from app.models.organisation import Organisation
 
 
 class CalendarItemType(str, enum.Enum):
@@ -147,9 +151,9 @@ class ComplianceCalendarItem(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    organisation = relationship("Organisation")
-    customer = relationship("Customer")
-    reminders = relationship(
+    organisation: Mapped["Organisation"] = relationship("Organisation")
+    customer: Mapped["Customer | None"] = relationship("Customer")
+    reminders: Mapped[list["ComplianceReminder"]] = relationship(
         "ComplianceReminder",
         back_populates="calendar_item",
         cascade="all, delete-orphan",
@@ -198,5 +202,7 @@ class ComplianceReminder(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    organisation = relationship("Organisation")
-    calendar_item = relationship("ComplianceCalendarItem", back_populates="reminders")
+    organisation: Mapped["Organisation"] = relationship("Organisation")
+    calendar_item: Mapped["ComplianceCalendarItem"] = relationship(
+        "ComplianceCalendarItem", back_populates="reminders"
+    )

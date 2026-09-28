@@ -7,7 +7,7 @@ Results are never overwritten — new records are created on re-verification.
 
 import enum
 from datetime import date, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -25,6 +25,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.customer import Customer
+
 
 # ── Shared enums ───────────────────────────────────────────────────────────────
 
@@ -139,7 +143,9 @@ class CustomerIdentityDocument(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="identity_documents")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="identity_documents"
+    )
 
     from sqlalchemy.orm import relationship
 
@@ -201,7 +207,9 @@ class CustomerSelfieVerification(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="selfie_verifications")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="selfie_verifications"
+    )
 
     from sqlalchemy.orm import relationship
 
@@ -269,7 +277,9 @@ class CustomerAddressVerification(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="address_verifications")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="address_verifications"
+    )
 
     from sqlalchemy.orm import relationship
 
@@ -315,7 +325,9 @@ class CustomerPhoneVerification(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="phone_verifications")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="phone_verifications"
+    )
 
     from sqlalchemy.orm import relationship
 
@@ -358,6 +370,8 @@ class CustomerEmailVerification(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="email_verifications")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="email_verifications"
+    )
 
     from sqlalchemy.orm import relationship

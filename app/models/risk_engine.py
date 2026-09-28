@@ -231,7 +231,9 @@ class RiskFramework(Base):
         cascade="all, delete-orphan",
         order_by="RiskCategory.sort_order",
     )
-    assessments = relationship("RiskAssessmentRun", back_populates="framework")
+    assessments: Mapped[list["RiskAssessmentRun"]] = relationship(
+        "RiskAssessmentRun", back_populates="framework"
+    )
 
 
 class RiskCategory(Base):
@@ -275,7 +277,9 @@ class RiskCategory(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    framework = relationship("RiskFramework", back_populates="categories")
+    framework: Mapped["RiskFramework"] = relationship(
+        "RiskFramework", back_populates="categories"
+    )
     factors: Mapped[list["RiskFactor"]] = relationship(
         "RiskFactor",
         back_populates="category",
@@ -338,9 +342,13 @@ class RiskFactor(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    category = relationship("RiskCategory", back_populates="factors")
-    library_factor = relationship("RiskLibraryFactor")
-    controls = relationship(
+    category: Mapped["RiskCategory"] = relationship(
+        "RiskCategory", back_populates="factors"
+    )
+    library_factor: Mapped["RiskLibraryFactor | None"] = relationship(
+        "RiskLibraryFactor"
+    )
+    controls: Mapped[list["RiskControl"]] = relationship(
         "RiskControl", back_populates="factor", cascade="all, delete-orphan"
     )
 
@@ -375,7 +383,7 @@ class RiskControl(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    factor = relationship("RiskFactor", back_populates="controls")
+    factor: Mapped["RiskFactor"] = relationship("RiskFactor", back_populates="controls")
 
 
 # ── Assessment Run ────────────────────────────────────────────────────────────
@@ -471,10 +479,10 @@ class RiskAssessmentRun(Base):
     framework: Mapped["RiskFramework"] = relationship(
         "RiskFramework", back_populates="assessments"
     )
-    factor_scores = relationship(
+    factor_scores: Mapped[list["RiskFactorScore"]] = relationship(
         "RiskFactorScore", back_populates="assessment", cascade="all, delete-orphan"
     )
-    mitigations = relationship(
+    mitigations: Mapped[list["RiskMitigation"]] = relationship(
         "RiskMitigation", back_populates="assessment", cascade="all, delete-orphan"
     )
 
@@ -554,9 +562,11 @@ class RiskFactorScore(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    assessment = relationship("RiskAssessmentRun", back_populates="factor_scores")
-    factor = relationship("RiskFactor")
-    score_history = relationship(
+    assessment: Mapped["RiskAssessmentRun"] = relationship(
+        "RiskAssessmentRun", back_populates="factor_scores"
+    )
+    factor: Mapped["RiskFactor"] = relationship("RiskFactor")
+    score_history: Mapped[list["RiskScoreHistory"]] = relationship(
         "RiskScoreHistory", back_populates="factor_score", cascade="all, delete-orphan"
     )
 
@@ -604,7 +614,9 @@ class RiskMitigation(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    assessment = relationship("RiskAssessmentRun", back_populates="mitigations")
+    assessment: Mapped["RiskAssessmentRun"] = relationship(
+        "RiskAssessmentRun", back_populates="mitigations"
+    )
 
 
 class RiskScoreHistory(Base):
@@ -645,4 +657,6 @@ class RiskScoreHistory(Base):
         DateTime(timezone=True), server_default=func.now(), index=True
     )
 
-    factor_score = relationship("RiskFactorScore", back_populates="score_history")
+    factor_score: Mapped["RiskFactorScore"] = relationship(
+        "RiskFactorScore", back_populates="score_history"
+    )

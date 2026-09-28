@@ -26,7 +26,7 @@ No rule match constitutes a determination of suspicious activity or criminal con
 
 import enum
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -45,6 +45,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.case import CaseAlert
+    from app.models.customer import Customer
+    from app.models.transaction import Transaction
+
 
 # ── Rule Engine Enums ──────────────────────────────────────────────────────────
 
@@ -250,7 +256,9 @@ class MonitoringRule(Base):
         cascade="all, delete-orphan",
         order_by="RuleConditionGroup.group_order",
     )
-    executions = relationship("RuleExecution", back_populates="rule")
+    executions: Mapped[list["RuleExecution"]] = relationship(
+        "RuleExecution", back_populates="rule"
+    )
 
 
 class RuleConditionGroup(Base):
@@ -275,7 +283,9 @@ class RuleConditionGroup(Base):
         String(255)
     )  # human label for this group
 
-    rule = relationship("MonitoringRule", back_populates="condition_groups")
+    rule: Mapped["MonitoringRule"] = relationship(
+        "MonitoringRule", back_populates="condition_groups"
+    )
     conditions: Mapped[list["RuleCondition"]] = relationship(
         "RuleCondition",
         back_populates="group",
@@ -318,7 +328,9 @@ class RuleCondition(Base):
         String(255)
     )  # human-readable label for UI display
 
-    group = relationship("RuleConditionGroup", back_populates="conditions")
+    group: Mapped["RuleConditionGroup"] = relationship(
+        "RuleConditionGroup", back_populates="conditions"
+    )
 
 
 class RuleExecution(Base):
@@ -350,7 +362,9 @@ class RuleExecution(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    rule = relationship("MonitoringRule", back_populates="executions")
+    rule: Mapped["MonitoringRule"] = relationship(
+        "MonitoringRule", back_populates="executions"
+    )
 
 
 # ── Transaction Alert ──────────────────────────────────────────────────────────
@@ -517,13 +531,17 @@ class TransactionAlert(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    transaction = relationship("Transaction", back_populates="alerts")
-    rule = relationship("MonitoringRule")
-    customer = relationship("Customer")
-    evidence = relationship(
+    transaction: Mapped["Transaction"] = relationship(
+        "Transaction", back_populates="alerts"
+    )
+    rule: Mapped["MonitoringRule | None"] = relationship("MonitoringRule")
+    customer: Mapped["Customer"] = relationship("Customer")
+    evidence: Mapped[list["AlertEvidence"]] = relationship(
         "AlertEvidence", back_populates="alert", cascade="all, delete-orphan"
     )
-    case_links = relationship("CaseAlert", back_populates="alert")
+    case_links: Mapped[list["CaseAlert"]] = relationship(
+        "CaseAlert", back_populates="alert"
+    )
 
 
 class AlertEvidence(Base):
@@ -553,4 +571,6 @@ class AlertEvidence(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    alert = relationship("TransactionAlert", back_populates="evidence")
+    alert: Mapped["TransactionAlert"] = relationship(
+        "TransactionAlert", back_populates="evidence"
+    )

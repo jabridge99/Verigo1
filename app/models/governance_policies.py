@@ -294,25 +294,25 @@ class Policy(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    versions = relationship(
+    versions: Mapped[list["PolicyVersion"]] = relationship(
         "PolicyVersion",
         back_populates="policy",
         cascade="all, delete-orphan",
         order_by="PolicyVersion.created_at",
     )
-    workflow_events = relationship(
+    workflow_events: Mapped[list["PolicyWorkflowEvent"]] = relationship(
         "PolicyWorkflowEvent",
         back_populates="policy",
         cascade="all, delete-orphan",
         order_by="PolicyWorkflowEvent.occurred_at",
     )
-    attestations = relationship(
+    attestations: Mapped[list["PolicyAttestation"]] = relationship(
         "PolicyAttestation", back_populates="policy", cascade="all, delete-orphan"
     )
-    reminders = relationship(
+    reminders: Mapped[list["PolicyReviewReminder"]] = relationship(
         "PolicyReviewReminder", back_populates="policy", cascade="all, delete-orphan"
     )
-    superseded_by = relationship(
+    superseded_by: Mapped["Policy | None"] = relationship(
         "Policy", foreign_keys=[superseded_by_id], uselist=False
     )
 
@@ -400,7 +400,7 @@ class PolicyVersion(Base):
     )
     # NOTE: created_at is populated on insert and NEVER updated (immutable record)
 
-    policy = relationship("Policy", back_populates="versions")
+    policy: Mapped["Policy"] = relationship("Policy", back_populates="versions")
 
     @property
     def version_string(self) -> str:
@@ -467,7 +467,7 @@ class PolicyWorkflowEvent(Base):
     )
     # IMMUTABLE — never updated after insert
 
-    policy = relationship("Policy", back_populates="workflow_events")
+    policy: Mapped["Policy"] = relationship("Policy", back_populates="workflow_events")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -547,8 +547,8 @@ class PolicyAttestation(Base):
     # ── Supporting evidence ───────────────────────────────────────────────────
     comments: Mapped[Optional[str]] = Column(Text)  # optional staff comment
 
-    policy = relationship("Policy", back_populates="attestations")
-    policy_version_obj = relationship("PolicyVersion")
+    policy: Mapped["Policy"] = relationship("Policy", back_populates="attestations")
+    policy_version_obj: Mapped["PolicyVersion | None"] = relationship("PolicyVersion")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -613,7 +613,7 @@ class PolicyReviewReminder(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    policy = relationship("Policy", back_populates="reminders")
+    policy: Mapped["Policy"] = relationship("Policy", back_populates="reminders")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

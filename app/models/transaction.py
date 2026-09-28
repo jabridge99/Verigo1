@@ -19,7 +19,7 @@ remains the sole responsibility of the reporting entity.
 
 import enum
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -39,6 +39,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.case import CaseAlert
+    from app.models.customer import Customer
+    from app.models.monitoring import TransactionAlert
+    from app.models.organisation import Organisation
+
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -257,18 +264,24 @@ class Transaction(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    customer = relationship("Customer", back_populates="transactions")
-    organisation = relationship("Organisation", back_populates="transactions")
-    crypto_detail = relationship(
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="transactions"
+    )
+    organisation: Mapped["Organisation"] = relationship(
+        "Organisation", back_populates="transactions"
+    )
+    crypto_detail: Mapped["TransactionCryptoDetail | None"] = relationship(
         "TransactionCryptoDetail",
         back_populates="transaction",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    alerts = relationship(
+    alerts: Mapped[list["TransactionAlert"]] = relationship(
         "TransactionAlert", back_populates="transaction", cascade="all, delete-orphan"
     )
-    case_links = relationship("CaseAlert", back_populates="transaction")
+    case_links: Mapped[list["CaseAlert"]] = relationship(
+        "CaseAlert", back_populates="transaction"
+    )
 
 
 # ── Crypto Transaction Detail ──────────────────────────────────────────────────
@@ -338,7 +351,9 @@ class TransactionCryptoDetail(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    transaction = relationship("Transaction", back_populates="crypto_detail")
+    transaction: Mapped["Transaction"] = relationship(
+        "Transaction", back_populates="crypto_detail"
+    )
 
 
 # ── Customer Behaviour Profile ─────────────────────────────────────────────────

@@ -11,7 +11,7 @@ Adverse media has its own table (article-level detail).
 
 import enum
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -29,6 +29,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.customer import Customer
+
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -180,7 +184,9 @@ class ScreeningRecord(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    customer = relationship("Customer", back_populates="screening_records")
+    customer: Mapped["Customer"] = relationship(
+        "Customer", back_populates="screening_records"
+    )
     alerts: Mapped[list["ScreeningAlert"]] = relationship(
         "ScreeningAlert",
         back_populates="screening_record",
@@ -243,7 +249,9 @@ class ScreeningAlert(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    screening_record = relationship("ScreeningRecord", back_populates="alerts")
+    screening_record: Mapped["ScreeningRecord"] = relationship(
+        "ScreeningRecord", back_populates="alerts"
+    )
 
 
 # ── Crypto Wallet Screening ────────────────────────────────────────────────────

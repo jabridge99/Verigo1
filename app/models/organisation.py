@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -19,6 +19,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.aml_solution import AMLSolution
+    from app.models.audit_log import AuditLog
+    from app.models.case import Case
+    from app.models.customer import Customer
+    from app.models.transaction import Transaction
+    from app.models.user import User
 
 
 class IndustryType(str, enum.Enum):
@@ -150,19 +158,25 @@ class Organisation(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    users = relationship(
+    users: Mapped[list["User"]] = relationship(
         "User",
         back_populates="organisation",
         cascade="all, delete-orphan",
         foreign_keys="User.org_id",
     )
-    customers = relationship("Customer", back_populates="organisation")
-    aml_solution = relationship(
+    customers: Mapped[list["Customer"]] = relationship(
+        "Customer", back_populates="organisation"
+    )
+    aml_solution: Mapped["AMLSolution | None"] = relationship(
         "AMLSolution", back_populates="organisation", uselist=False
     )
-    transactions = relationship("Transaction", back_populates="organisation")
-    cases = relationship("Case", back_populates="organisation")
-    audit_logs = relationship("AuditLog", back_populates="organisation")
+    transactions: Mapped[list["Transaction"]] = relationship(
+        "Transaction", back_populates="organisation"
+    )
+    cases: Mapped[list["Case"]] = relationship("Case", back_populates="organisation")
+    audit_logs: Mapped[list["AuditLog"]] = relationship(
+        "AuditLog", back_populates="organisation"
+    )
 
 
 class Permission(Base):

@@ -106,7 +106,7 @@ class OnboardingSession(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    audit_logs = relationship(
+    audit_logs: Mapped[list["OnboardingAuditLog"]] = relationship(
         "OnboardingAuditLog",
         back_populates="session",
         cascade="all, delete-orphan",
@@ -130,7 +130,9 @@ class OnboardingAuditLog(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    session = relationship("OnboardingSession", back_populates="audit_logs")
+    session: Mapped["OnboardingSession"] = relationship(
+        "OnboardingSession", back_populates="audit_logs"
+    )
 
 
 class ImportBatch(Base):

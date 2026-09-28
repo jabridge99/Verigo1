@@ -16,7 +16,7 @@ The reporting entity bears sole responsibility for all regulatory decisions.
 
 import enum
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -33,6 +33,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.organisation import Organisation
 
 
 class RecommendationType(str, enum.Enum):
@@ -167,7 +170,7 @@ class RegulatoryRecommendation(Base):
     )
     # No updated_at — status transitions are the only mutations allowed
 
-    organisation = relationship("Organisation")
+    organisation: Mapped["Organisation"] = relationship("Organisation")
 
     __table_args__ = (
         Index("ix_rec_org_status", "org_id", "status"),

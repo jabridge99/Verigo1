@@ -8,7 +8,7 @@ and optional premium service engagements (billed separately).
 
 import enum
 from datetime import date, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -26,6 +26,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.organisation import Organisation
+    from app.models.user import User
+
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -130,23 +135,25 @@ class AMLSolution(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    organisation = relationship("Organisation", back_populates="aml_solution")
-    programs = relationship(
+    organisation: Mapped["Organisation"] = relationship(
+        "Organisation", back_populates="aml_solution"
+    )
+    programs: Mapped[list["AMLProgram"]] = relationship(
         "AMLProgram", back_populates="solution", cascade="all, delete-orphan"
     )
-    risk_assessments = relationship(
+    risk_assessments: Mapped[list["RiskAssessment"]] = relationship(
         "RiskAssessment", back_populates="solution", cascade="all, delete-orphan"
     )
-    policies = relationship(
+    policies: Mapped[list["AMLPolicy"]] = relationship(
         "AMLPolicy", back_populates="solution", cascade="all, delete-orphan"
     )
-    controls = relationship(
+    controls: Mapped[list["Control"]] = relationship(
         "Control", back_populates="solution", cascade="all, delete-orphan"
     )
-    training_records = relationship(
+    training_records: Mapped[list["TrainingRecord"]] = relationship(
         "TrainingRecord", back_populates="solution", cascade="all, delete-orphan"
     )
-    services = relationship(
+    services: Mapped[list["AMLService"]] = relationship(
         "AMLService", back_populates="solution", cascade="all, delete-orphan"
     )
 
@@ -330,7 +337,9 @@ class AMLProgram(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    solution = relationship("AMLSolution", back_populates="programs")
+    solution: Mapped["AMLSolution"] = relationship(
+        "AMLSolution", back_populates="programs"
+    )
 
 
 # ── Risk Assessment ───────────────────────────────────────────────────────────
@@ -398,7 +407,9 @@ class RiskAssessment(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    solution = relationship("AMLSolution", back_populates="risk_assessments")
+    solution: Mapped["AMLSolution"] = relationship(
+        "AMLSolution", back_populates="risk_assessments"
+    )
 
 
 # ── Policies ──────────────────────────────────────────────────────────────────
@@ -452,7 +463,9 @@ class AMLPolicy(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    solution = relationship("AMLSolution", back_populates="policies")
+    solution: Mapped["AMLSolution"] = relationship(
+        "AMLSolution", back_populates="policies"
+    )
 
 
 # ── Controls ──────────────────────────────────────────────────────────────────
@@ -513,7 +526,9 @@ class Control(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    solution = relationship("AMLSolution", back_populates="controls")
+    solution: Mapped["AMLSolution"] = relationship(
+        "AMLSolution", back_populates="controls"
+    )
 
 
 # ── Training Records ──────────────────────────────────────────────────────────
@@ -578,8 +593,10 @@ class TrainingRecord(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    solution = relationship("AMLSolution", back_populates="training_records")
-    user = relationship("User")
+    solution: Mapped["AMLSolution"] = relationship(
+        "AMLSolution", back_populates="training_records"
+    )
+    user: Mapped["User"] = relationship("User")
 
 
 # ── AML Services (premium engagements) ───────────────────────────────────────
@@ -652,4 +669,6 @@ class AMLService(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    solution = relationship("AMLSolution", back_populates="services")
+    solution: Mapped["AMLSolution"] = relationship(
+        "AMLSolution", back_populates="services"
+    )

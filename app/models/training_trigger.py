@@ -231,7 +231,7 @@ class TrainingTriggerRule(Base):
     course: Mapped["TrainingCourse"] = relationship(
         "TrainingCourse", foreign_keys=[course_id]
     )
-    trigger_logs = relationship(
+    trigger_logs: Mapped[list["TrainingTriggerLog"]] = relationship(
         "TrainingTriggerLog", back_populates="rule", cascade="all, delete-orphan"
     )
 
@@ -302,8 +302,10 @@ class TrainingTriggerLog(Base):
         String
     )  # "system" or user_id if manually triggered
 
-    rule = relationship("TrainingTriggerRule", back_populates="trigger_logs")
-    regulatory_update = relationship(
+    rule: Mapped["TrainingTriggerRule | None"] = relationship(
+        "TrainingTriggerRule", back_populates="trigger_logs"
+    )
+    regulatory_update: Mapped["RegulatoryUpdateEvent | None"] = relationship(
         "RegulatoryUpdateEvent", foreign_keys=[regulatory_update_id]
     )
 
@@ -396,8 +398,10 @@ class RegulatoryUpdateEvent(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    linked_course = relationship("TrainingCourse", foreign_keys=[linked_course_id])
-    trigger_logs = relationship(
+    linked_course: Mapped["TrainingCourse | None"] = relationship(
+        "TrainingCourse", foreign_keys=[linked_course_id]
+    )
+    trigger_logs: Mapped[list["TrainingTriggerLog"]] = relationship(
         "TrainingTriggerLog",
         foreign_keys="TrainingTriggerLog.regulatory_update_id",
         back_populates="regulatory_update",

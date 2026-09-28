@@ -11,7 +11,7 @@ to support integrity verification.
 
 import enum
 from datetime import date, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -29,6 +29,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.organisation import Organisation
 
 
 class ReceiptStatus(str, enum.Enum):
@@ -130,8 +133,8 @@ class IFTIReceipt(Base):
     void_reason: Mapped[Optional[str]] = Column(Text)
     # Intentionally NO updated_at — immutable record
 
-    organisation = relationship("Organisation")
-    superseded_by = relationship(
+    organisation: Mapped["Organisation"] = relationship("Organisation")
+    superseded_by: Mapped["IFTIReceipt | None"] = relationship(
         "IFTIReceipt", foreign_keys=[supersedes_id], remote_side="IFTIReceipt.id"
     )
 

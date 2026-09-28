@@ -22,7 +22,7 @@ Decisions to lodge reports with AUSTRAC remain entirely with the reporting entit
 
 import enum
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -43,6 +43,12 @@ from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
 from app.models.customer_workflow import EDDTrigger
+
+if TYPE_CHECKING:
+    from app.models.case import Case
+    from app.models.customer import Customer
+    from app.models.organisation import Organisation
+
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -267,8 +273,8 @@ class IFTIReport(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    organisation = relationship("Organisation")
-    customer = relationship("Customer")
+    organisation: Mapped["Organisation"] = relationship("Organisation")
+    customer: Mapped["Customer | None"] = relationship("Customer")
 
 
 # ── TTR Report ────────────────────────────────────────────────────────────────
@@ -370,8 +376,8 @@ class TTRReport(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    organisation = relationship("Organisation")
-    customer = relationship("Customer")
+    organisation: Mapped["Organisation"] = relationship("Organisation")
+    customer: Mapped["Customer | None"] = relationship("Customer")
 
 
 # ── SMR Report ────────────────────────────────────────────────────────────────
@@ -562,9 +568,9 @@ class SMRReport(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    organisation = relationship("Organisation")
-    customer = relationship("Customer")
-    case = relationship("Case")
+    organisation: Mapped["Organisation"] = relationship("Organisation")
+    customer: Mapped["Customer | None"] = relationship("Customer")
+    case: Mapped["Case | None"] = relationship("Case")
 
 
 # ── Enhanced Customer Due Diligence ──────────────────────────────────────────────
@@ -674,8 +680,8 @@ class ECDDRecord(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    organisation = relationship("Organisation")
-    customer = relationship("Customer")
+    organisation: Mapped["Organisation"] = relationship("Organisation")
+    customer: Mapped["Customer"] = relationship("Customer")
 
 
 # ── Filing Register (immutable) ────────────────────────────────────────────────

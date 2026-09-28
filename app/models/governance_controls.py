@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import enum
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -44,6 +44,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.governance_policies import Policy
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ENUMS
@@ -305,21 +309,23 @@ class GovernanceControl(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    tests = relationship(
+    tests: Mapped[list["ControlTest"]] = relationship(
         "ControlTest",
         back_populates="control",
         cascade="all, delete-orphan",
         order_by="ControlTest.test_date.desc()",
     )
-    evidence = relationship(
+    evidence: Mapped[list["ControlEvidenceItem"]] = relationship(
         "ControlEvidenceItem", back_populates="control", cascade="all, delete-orphan"
     )
-    remediations = relationship(
+    remediations: Mapped[list["ControlRemediationAction"]] = relationship(
         "ControlRemediationAction",
         back_populates="control",
         cascade="all, delete-orphan",
     )
-    linked_policy = relationship("Policy", foreign_keys=[linked_policy_id])
+    linked_policy: Mapped["Policy | None"] = relationship(
+        "Policy", foreign_keys=[linked_policy_id]
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -434,14 +440,18 @@ class ControlTest(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    control = relationship("GovernanceControl", back_populates="tests")
-    findings = relationship(
+    control: Mapped["GovernanceControl"] = relationship(
+        "GovernanceControl", back_populates="tests"
+    )
+    findings: Mapped[list["ControlTestFinding"]] = relationship(
         "ControlTestFinding", back_populates="test", cascade="all, delete-orphan"
     )
-    remediations = relationship(
+    remediations: Mapped[list["ControlRemediationAction"]] = relationship(
         "ControlRemediationAction", back_populates="test", cascade="all, delete-orphan"
     )
-    retest_of = relationship("ControlTest", foreign_keys=[retest_of_id], uselist=False)
+    retest_of: Mapped["ControlTest | None"] = relationship(
+        "ControlTest", foreign_keys=[retest_of_id], uselist=False
+    )
 
     @property
     def pass_rate(self) -> float | None:
@@ -517,8 +527,8 @@ class ControlTestFinding(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    test = relationship("ControlTest", back_populates="findings")
-    remediations = relationship(
+    test: Mapped["ControlTest"] = relationship("ControlTest", back_populates="findings")
+    remediations: Mapped[list["ControlRemediationAction"]] = relationship(
         "ControlRemediationAction",
         back_populates="finding",
         cascade="all, delete-orphan",
@@ -633,9 +643,15 @@ class ControlRemediationAction(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    control = relationship("GovernanceControl", back_populates="remediations")
-    test = relationship("ControlTest", back_populates="remediations")
-    finding = relationship("ControlTestFinding", back_populates="remediations")
+    control: Mapped["GovernanceControl"] = relationship(
+        "GovernanceControl", back_populates="remediations"
+    )
+    test: Mapped["ControlTest | None"] = relationship(
+        "ControlTest", back_populates="remediations"
+    )
+    finding: Mapped["ControlTestFinding | None"] = relationship(
+        "ControlTestFinding", back_populates="remediations"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -681,7 +697,9 @@ class ControlEvidenceItem(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    control = relationship("GovernanceControl", back_populates="evidence")
+    control: Mapped["GovernanceControl"] = relationship(
+        "GovernanceControl", back_populates="evidence"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

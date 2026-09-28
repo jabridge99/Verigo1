@@ -21,7 +21,7 @@ or take other action remain entirely with the reporting entity.
 
 import enum
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -40,6 +40,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.customer import Customer
+    from app.models.monitoring import TransactionAlert
+    from app.models.organisation import Organisation
+    from app.models.transaction import Transaction
+
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -217,18 +224,22 @@ class Case(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    organisation = relationship("Organisation", back_populates="cases")
-    customer = relationship("Customer", back_populates="cases")
-    notes = relationship(
+    organisation: Mapped["Organisation"] = relationship(
+        "Organisation", back_populates="cases"
+    )
+    customer: Mapped["Customer | None"] = relationship(
+        "Customer", back_populates="cases"
+    )
+    notes: Mapped[list["CaseNote"]] = relationship(
         "CaseNote",
         back_populates="case",
         cascade="all, delete-orphan",
         order_by="CaseNote.created_at",
     )
-    evidence = relationship(
+    evidence: Mapped[list["CaseEvidence"]] = relationship(
         "CaseEvidence", back_populates="case", cascade="all, delete-orphan"
     )
-    alert_links = relationship(
+    alert_links: Mapped[list["CaseAlert"]] = relationship(
         "CaseAlert", back_populates="case", cascade="all, delete-orphan"
     )
 
@@ -263,9 +274,13 @@ class CaseAlert(Base):
     )
     notes: Mapped[Optional[str]] = Column(Text)
 
-    case = relationship("Case", back_populates="alert_links")
-    alert = relationship("TransactionAlert", back_populates="case_links")
-    transaction = relationship("Transaction", back_populates="case_links")
+    case: Mapped["Case"] = relationship("Case", back_populates="alert_links")
+    alert: Mapped["TransactionAlert"] = relationship(
+        "TransactionAlert", back_populates="case_links"
+    )
+    transaction: Mapped["Transaction | None"] = relationship(
+        "Transaction", back_populates="case_links"
+    )
 
 
 # ── Case Note (append-only) ────────────────────────────────────────────────────
@@ -308,7 +323,7 @@ class CaseNote(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    case = relationship("Case", back_populates="notes")
+    case: Mapped["Case"] = relationship("Case", back_populates="notes")
 
 
 # ── Case Evidence ──────────────────────────────────────────────────────────────
@@ -356,4 +371,4 @@ class CaseEvidence(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    case = relationship("Case", back_populates="evidence")
+    case: Mapped["Case"] = relationship("Case", back_populates="evidence")
