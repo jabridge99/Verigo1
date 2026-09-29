@@ -7,25 +7,7 @@ import {
   Activity,
 } from "lucide-react";
 import clsx from "clsx";
-import { apiFetch } from '@/lib/auth'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface AuditLog {
-  id: number;
-  log_id: string;
-  action: string;
-  entity_type: string;
-  entity_id: string;
-  actor?: string;
-  actor_role?: string;
-  industry_id?: string;
-  before_state?: Record<string, unknown>;
-  after_state?: Record<string, unknown>;
-  notes?: string;
-  ip_address?: string;
-  created_at?: string;
-}
+import { listAuditLogs, exportAuditLogCsv, type AuditLog } from "@/lib/api/audit";
 
 // Entity type strings as actually written by the backend (both audit tables
 // GET /audit/ merges — see app/api/routes/audit.py). Case-insensitive match
@@ -87,21 +69,16 @@ export default function AuditTrail() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch(`${API}/api/v1/audit/?limit=200`, { credentials: "include" });
-      if (res.ok) {
-        const d: AuditLog[] = await res.json();
-        // The two underlying audit tables this endpoint merges use different
-        // casing conventions for entity_type (snake_case vs PascalCase) --
-        // normalise once here rather than at every lookup/comparison site.
-        setLogs(d.map(l => ({
-          ...l,
-          entity_type: (l.entity_type || "").toLowerCase(),
-          actor_role: l.actor_role ? l.actor_role.toLowerCase() : l.actor_role,
-        })));
-        setLoadError(false);
-      } else {
-        setLoadError(true);
-      }
+      const d = await listAuditLogs({ limit: 200 });
+      // The two underlying audit tables this endpoint merges use different
+      // casing conventions for entity_type (snake_case vs PascalCase) --
+      // normalise once here rather than at every lookup/comparison site.
+      setLogs(d.map(l => ({
+        ...l,
+        entity_type: (l.entity_type || "").toLowerCase(),
+        actor_role: l.actor_role ? l.actor_role.toLowerCase() : l.actor_role,
+      })));
+      setLoadError(false);
     } catch {
       setLoadError(true);
     }
@@ -112,15 +89,12 @@ export default function AuditTrail() {
 
   const exportCSV = async () => {
     try {
-      const res = await apiFetch(`${API}/api/v1/audit/export/csv`, { credentials: "include" });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = "audit_log.csv"; a.click();
-        URL.revokeObjectURL(url);
-        return;
-      }
+      const blob = await exportAuditLogCsv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "audit_log.csv"; a.click();
+      URL.revokeObjectURL(url);
+      return;
     } catch {}
     const rows = [
       ["log_id","action","entity_type","entity_id","actor","actor_role","notes","created_at"],
@@ -147,7 +121,7 @@ export default function AuditTrail() {
     byType: ENTITY_TYPES.slice(1).reduce((acc, t) => ({ ...acc, [t]: logs.filter(l => l.entity_type === t).length }), {} as Record<string, number>),
   };
 
-  const formatTime = (iso?: string) => {
+  const formatTime = (iso?: string | null) => {
     if (!iso) return "—";
     const d = new Date(iso);
     const diff = Date.now() - d.getTime();
