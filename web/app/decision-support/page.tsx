@@ -7,68 +7,20 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import Link from "next/link";
-import { apiFetch } from '@/lib/auth'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const BASE = `${API}/api/v1/rule-builder`;
+import { ApiError } from "@/lib/api/client";
+import {
+  listDecisionPanels,
+  getDecisionPanel,
+  createDecisionPanel,
+  submitReviewStep,
+  getWorkflowHistory,
+  type Panel,
+  type WorkflowStep,
+  type StepType,
+  type DecisionType,
+} from "@/lib/api/decisionSupport";
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
-type StepType = "analyst_review" | "compliance_review" | "mlro_review" | "senior_approval";
-type DecisionType = "approved" | "rejected" | "more_information" | "escalated";
-
-interface Panel {
-  id: string;
-  org_id: string;
-  transaction_id?: string | null;
-  case_id?: string | null;
-  customer_id: string;
-  risk_summary: {
-    customer_risk_score?: number | null;
-    customer_risk_level?: string | null;
-    transaction_risk_score?: number | null;
-    geographic_risk_score?: number | null;
-    product_risk_score?: number | null;
-    behaviour_risk_score?: number | null;
-    risk_matrix_score?: number | null;
-    alert_score?: number | null;
-    final_approval_score?: number | null;
-  };
-  triggered_rules: { rule_id: string }[];
-  required_actions: { text: string; regulatory_basis?: string }[];
-  recommended_actions: { text: string; regulatory_basis?: string }[];
-  reporting_obligations: {
-    potential_ttr?: boolean | null;
-    potential_ifti?: boolean | null;
-    potential_smr?: boolean | null;
-    rationale: Record<string, string>;
-  };
-  outstanding_tasks: unknown[];
-  missing_documents: unknown[];
-  workflow: {
-    current_step?: StepType | null;
-    is_complete: boolean;
-    final_decision?: DecisionType | null;
-    final_decision_by?: string | null;
-    final_decision_at?: string | null;
-    final_decision_notes?: string | null;
-  };
-  generated_by?: string | null;
-  generated_at: string;
-  disclaimer: string;
-}
-
-interface WorkflowStep {
-  id: string;
-  step_type: StepType;
-  step_order: number;
-  decision: DecisionType;
-  reviewer_id?: string | null;
-  review_notes: string;
-  conditions: string[];
-  risk_snapshot?: Record<string, unknown> | null;
-  reviewed_at: string;
-}
 
 const STEP_LABELS: Record<StepType, string> = {
   analyst_review: "Analyst Review",
@@ -101,11 +53,11 @@ export default function DecisionSupportPage() {
 
   const fetchAll = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (completeFilter !== "all") params.set("is_complete", completeFilter === "complete" ? "true" : "false");
-    apiFetch(`${BASE}/decision-support?${params.toString()}`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : []))
+    listDecisionPanels({
+      is_complete: completeFilter !== "all" ? completeFilter === "complete" : undefined,
+    })
       .then(setPanels)
+      .catch(() => setPanels([]))
       .finally(() => setLoading(false));
   }, [completeFilter]);
 
@@ -281,21 +233,14 @@ function CreatePanelDrawer({
     }
     setSaving(true);
     try {
-      const params = new URLSearchParams({ customer_id: customerId });
-      if (transactionId) params.set("transaction_id", transactionId);
-      if (caseId) params.set("case_id", caseId);
-      const res = await apiFetch(`${BASE}/decision-support?${params.toString()}`, {
-        method: "POST",
-        credentials: "include",
+      const panel = await createDecisionPanel({
+        customer_id: customerId,
+        transaction_id: transactionId || undefined,
+        case_id: caseId || undefined,
       });
-      if (res.ok) {
-        onCreated(await res.json());
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Panel generation failed");
-      }
-    } catch {
-      showToast("error", "Panel generation failed");
+      onCreated(panel);
+    } catch (err) {
+      showToast("error", err instanceof ApiError ? err.message : "Panel generation failed");
     } finally {
       setSaving(false);
     }
@@ -537,29 +482,18 @@ function ReviewTab({
     }
     setSubmitting(true);
     try {
-      const res = await apiFetch(`${BASE}/decision-support/${panel.id}/review?step_type=${stepType}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          decision,
-          review_notes: notes,
-          conditions: conditions.split(",").map((c) => c.trim()).filter(Boolean),
-        }),
+      await submitReviewStep(panel.id, stepType, {
+        decision,
+        review_notes: notes,
+        conditions: conditions.split(",").map((c) => c.trim()).filter(Boolean),
       });
-      if (res.ok) {
-        await res.json();
-        const refreshed = await apiFetch(`${BASE}/decision-support/${panel.id}`, { credentials: "include" }).then((r) => r.json());
-        onUpdated(refreshed);
-        showToast("success", "Review recorded");
-        setNotes("");
-        setConditions("");
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Review failed");
-      }
-    } catch {
-      showToast("error", "Review failed");
+      const refreshed = await getDecisionPanel(panel.id);
+      onUpdated(refreshed);
+      showToast("success", "Review recorded");
+      setNotes("");
+      setConditions("");
+    } catch (err) {
+      showToast("error", err instanceof ApiError ? err.message : "Review failed");
     } finally {
       setSubmitting(false);
     }
@@ -610,9 +544,9 @@ function HistoryTab({ panelId }: { panelId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch(`${BASE}/decision-support/${panelId}/workflow-history`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : []))
+    getWorkflowHistory(panelId)
       .then(setSteps)
+      .catch(() => setSteps([]))
       .finally(() => setLoading(false));
   }, [panelId]);
 
