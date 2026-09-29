@@ -27,7 +27,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_roles
+from app.api.deps import (
+    get_current_user,
+    get_db,
+    require_compliance_or_above,
+    require_mlro_or_above,
+)
 from app.models.billing import AddonKey
 from app.models.board_report import (
     BoardReport,
@@ -35,7 +40,6 @@ from app.models.board_report import (
     BoardReportType,
     ReportPeriod,
 )
-from app.models.user import UserRole
 from app.schemas.board_report import DistributeBody, ReportCreate, ReportUpdate
 from app.services import audit_service, billing_service
 from app.services.board_reporting_service import generate_snapshot
@@ -176,7 +180,7 @@ def report_enums():
 def create_report(
     body: ReportCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.compliance)),
+    current_user=Depends(require_compliance_or_above),
 ):
     """
     Create a new board report and auto-populate its snapshot from live compliance data.
@@ -269,7 +273,7 @@ def create_report(
 def regenerate_snapshot(
     report_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.compliance)),
+    current_user=Depends(require_compliance_or_above),
 ):
     """
     Re-run data aggregation to refresh the snapshot with current data.
@@ -349,7 +353,7 @@ def update_report(
     report_id: str,
     body: ReportUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.compliance)),
+    current_user=Depends(require_compliance_or_above),
 ):
     report = _get_report(db, current_user.org_id, report_id)
     if report.status in (
@@ -383,7 +387,7 @@ def submit_for_review(
     report_id: str,
     notes: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.compliance)),
+    current_user=Depends(require_compliance_or_above),
 ):
     report = _get_report(db, current_user.org_id, report_id)
     if report.status != BoardReportStatus.draft:
@@ -415,7 +419,7 @@ def approve_report(
     report_id: str,
     approval_notes: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.mlro)),
+    current_user=Depends(require_mlro_or_above),
 ):
     """MLRO approves the report before Board distribution."""
     report = _get_report(db, current_user.org_id, report_id)
@@ -451,7 +455,7 @@ def return_to_draft(
     report_id: str,
     review_notes: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.mlro)),
+    current_user=Depends(require_mlro_or_above),
 ):
     """Return report from under_review to draft for revision."""
     report = _get_report(db, current_user.org_id, report_id)
@@ -479,7 +483,7 @@ def distribute_report(
     report_id: str,
     body: DistributeBody,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.mlro)),
+    current_user=Depends(require_mlro_or_above),
 ):
     """Record that the approved report has been distributed to Board / committees."""
     report = _get_report(db, current_user.org_id, report_id)
@@ -520,7 +524,7 @@ def distribute_report(
 def archive_report(
     report_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.mlro)),
+    current_user=Depends(require_mlro_or_above),
 ):
     report = _get_report(db, current_user.org_id, report_id)
     if report.status != BoardReportStatus.distributed:
@@ -546,7 +550,7 @@ def create_new_version(
     report_id: str,
     new_ref: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(UserRole.compliance)),
+    current_user=Depends(require_compliance_or_above),
 ):
     """
     Create a revised version of an existing report (e.g. after Board feedback).
