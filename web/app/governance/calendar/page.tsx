@@ -6,33 +6,15 @@ import {
   LayoutList, CalendarDays, GanttChartSquare, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import clsx from "clsx";
-import { apiFetch } from '@/lib/auth'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type ItemType =
-  | "customer_review" | "kyc_expiry" | "edd_review" | "policy_review" | "control_test"
-  | "training_expiry" | "ttr_deadline" | "ifti_deadline" | "smr_deadline"
-  | "aml_program_review" | "risk_assessment_review" | "independent_review"
-  | "high_risk_customer_review" | "austrac_obligation" | "board_reporting" | "other";
-
-type ItemStatus = "scheduled" | "in_progress" | "completed" | "overdue" | "cancelled" | "escalated";
-
-interface CalendarItem {
-  id: string;
-  item_type: ItemType;
-  status: ItemStatus;
-  title: string;
-  description?: string;
-  due_date: string;
-  customer_id?: string | null;
-  assigned_to?: string | null;
-  is_recurring: boolean;
-  recurrence_months?: number | null;
-  is_overdue: boolean;
-  completed_at?: string | null;
-  created_at: string;
-}
+import {
+  listComplianceCalendarItems,
+  getCalendarDashboard,
+  completeCalendarItem,
+  type CalendarItem,
+  type CalendarDashboard as Dashboard,
+  type ItemType,
+  type ItemStatus,
+} from "@/lib/api/complianceCalendar";
 
 const TYPE_LABELS: Record<ItemType, string> = {
   customer_review: "Customer Review Cycle",
@@ -50,6 +32,7 @@ const TYPE_LABELS: Record<ItemType, string> = {
   high_risk_customer_review: "High Risk Customer Review",
   austrac_obligation: "AUSTRAC Obligation",
   board_reporting: "Board Reporting",
+  credential_expiry: "Integration Credential Expiry",
   other: "Other",
 };
 
@@ -72,14 +55,6 @@ const DEMO_ITEMS: CalendarItem[] = [
   { id: "cal_7", item_type: "risk_assessment_review", status: "scheduled", title: "ML/TF Risk Assessment Refresh", due_date: new Date(Date.now() + 18 * 86400000).toISOString().slice(0, 10), is_recurring: true, recurrence_months: 24, is_overdue: false, created_at: new Date().toISOString() },
   { id: "cal_8", item_type: "board_reporting", status: "scheduled", title: "Quarterly Board Compliance Report", due_date: new Date(Date.now() + 9 * 86400000).toISOString().slice(0, 10), is_recurring: true, recurrence_months: 3, is_overdue: false, created_at: new Date().toISOString() },
 ];
-
-interface Dashboard {
-  open_items: number;
-  overdue: number;
-  due_within_30_days: number;
-  by_type: Record<string, number>;
-  pending_reminders: number;
-}
 
 const DEMO_DASHBOARD: Dashboard = {
   open_items: DEMO_ITEMS.filter(i => i.status !== "completed").length,
@@ -107,12 +82,12 @@ export default function ComplianceCalendarPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [iRes, dRes] = await Promise.all([
-        apiFetch(`${API}/api/v1/compliance-calendar`, { credentials: "include" }),
-        apiFetch(`${API}/api/v1/compliance-calendar/dashboard`, { credentials: "include" }),
+      const [items, dash] = await Promise.all([
+        listComplianceCalendarItems().catch(() => null),
+        getCalendarDashboard().catch(() => null),
       ]);
-      if (iRes.ok) { const d = await iRes.json(); if (d.length) setItems(d); }
-      if (dRes.ok) { const d = await dRes.json(); setDashboard(d); }
+      if (items && items.length) setItems(items);
+      if (dash) setDashboard(dash);
     } catch {}
   }, []);
 
@@ -120,13 +95,10 @@ export default function ComplianceCalendarPage() {
 
   const completeItem = async (id: string) => {
     try {
-      await apiFetch(`${API}/api/v1/compliance-calendar/${id}/complete`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
+      await completeCalendarItem(id);
     } catch {}
-    setItems(prev => prev.map(i => i.id === id ? { ...i, status: "completed", completed_at: new Date().toISOString() } : i));
-    setSelected(prev => prev?.id === id ? { ...prev, status: "completed" } : prev);
+    setItems(prev => prev.map(i => i.id === id ? { ...i, status: "completed" as ItemStatus, completed_at: new Date().toISOString() } : i));
+    setSelected(prev => prev?.id === id ? { ...prev, status: "completed" as ItemStatus } : prev);
     showToast("success", "Item marked complete");
   };
 

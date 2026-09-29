@@ -163,7 +163,7 @@ def get_calendar_dashboard(
         "open_items": total,
         "overdue": overdue,
         "due_within_30_days": upcoming_30d,
-        "by_type": {str(t): c for t, c in by_type},
+        "by_type": {t.value: c for t, c in by_type},
         "pending_reminders": pending_reminders,
     }
 
