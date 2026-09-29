@@ -1,25 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { apiFetch as authFetch } from '@/lib/auth'
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-async function apiFetch(path: string) {
-  const res = await authFetch(`${API}${path}`, { credentials: "include" });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
-}
-
-interface Alert { severity: string; type: string; message: string; ip_address?: string }
-interface Summary {
-  period_days: number; total_events: number; failed_logins: number;
-  mfa_failures: number; role_changes: number; user_suspensions: number;
-  invalid_magic_links: number;
-  brute_force_candidates: { ip: string; failed_attempts: number }[];
-}
-interface MfaStatus { total_users: number; mfa_enabled: number; mfa_disabled: number; adoption_pct: number }
-interface Event { event_id: string; event_type: string; user_id: string; ip_address: string; created_at: string }
+import {
+  SecurityAlert as Alert,
+  SecuritySummary as Summary,
+  MfaStatus,
+  SecurityEvent as Event,
+  getSecuritySummary,
+  getSecurityAlerts,
+  getMfaStatus,
+  getSecurityEvents,
+} from "@/lib/api/security";
 
 const SEVERITY_COLOURS: Record<string, string> = {
   critical: "bg-red-900/60 border-red-500 text-red-300",
@@ -61,10 +52,10 @@ export default function SecurityDashboard() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      apiFetch(`/api/v1/security/summary?days=${days}`),
-      apiFetch("/api/v1/security/alerts"),
-      apiFetch("/api/v1/security/mfa-status"),
-      apiFetch(`/api/v1/security/events?days=${days}&limit=20`),
+      getSecuritySummary(days),
+      getSecurityAlerts(),
+      getMfaStatus(),
+      getSecurityEvents(days, 20),
     ])
       .then(([s, a, m, e]) => {
         setSummary(s);
@@ -117,7 +108,7 @@ export default function SecurityDashboard() {
 
         {error && (
           <div className="bg-red-900/40 border border-red-500 rounded-lg p-3 text-red-300 text-sm mb-4">
-            {error} — ensure you are logged in as admin/mlro.
+            {error}
           </div>
         )}
 
