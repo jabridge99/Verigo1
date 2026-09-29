@@ -86,6 +86,7 @@ def create_user(
     password: str,
     role: UserRole = UserRole.analyst,
     org_id: Optional[str] = None,
+    industry_id: Optional[str] = None,
 ) -> User:
     user = User(
         email=email.lower().strip(),
@@ -93,6 +94,7 @@ def create_user(
         hashed_password=hash_password(password),
         role=role,
         org_id=org_id,
+        industry_id=industry_id,
     )
     db.add(user)
     db.commit()

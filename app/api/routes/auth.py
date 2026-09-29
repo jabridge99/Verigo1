@@ -639,6 +639,7 @@ def create_user_admin(
         password=payload.password or secrets.token_urlsafe(16),
         role=(payload.role if payload.role else UserRole.analyst),
         org_id=payload.org_id or current_user.org_id,
+        industry_id=payload.industry_id,
     )
     record_security_event(
         db,

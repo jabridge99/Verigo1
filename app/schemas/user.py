@@ -59,6 +59,7 @@ class UserResponse(BaseModel):
     role: UserRole
     status: UserStatus
     org_id: Optional[str] = None
+    industry_id: Optional[str] = None
     mfa_enabled: bool
     email_verified: bool
     oauth_provider: Optional[str] = None
