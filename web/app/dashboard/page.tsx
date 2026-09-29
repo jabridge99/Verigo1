@@ -8,10 +8,9 @@ import {
   CheckCircle, Clock
 } from 'lucide-react'
 import clsx from 'clsx'
-import { getStoredUser, signOut, apiFetch } from '@/lib/auth'
+import { getStoredUser, signOut } from '@/lib/auth'
 import type { AuthUser } from '@/lib/auth'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { getGlobalDashboard, getComplianceScore, getAlertTrends } from '@/lib/api/dashboard'
 
 const ROLE_COLOR: Record<string, string> = {
   admin:      'bg-red-500/20 text-red-300 border border-red-500/30',
@@ -87,23 +86,21 @@ export default function DashboardPage() {
     }
     setUser(stored)
 
-    apiFetch(`${API}/api/v1/dashboard/global`, { credentials: 'include' })
-      .then(res => (res.ok ? res.json() : Promise.reject()))
+    getGlobalDashboard()
       .then(d => {
         setStats(prev => ({
           ...prev,
-          open_alerts: d.alerts?.open ?? prev.open_alerts,
-          pending_reports: d.reports?.total_pending ?? prev.pending_reports,
-          pending_kyc: (d.customers?.pending_review ?? 0) + (d.customers?.edd_required ?? 0),
-          open_cases: d.cases?.open ?? prev.open_cases,
-          customers_total: d.customers?.total ?? prev.customers_total,
+          open_alerts: d.alerts.open ?? prev.open_alerts,
+          pending_reports: d.reports.total_pending ?? prev.pending_reports,
+          pending_kyc: (d.customers.pending_review ?? 0) + (d.customers.edd_required ?? 0),
+          open_cases: d.cases.open ?? prev.open_cases,
+          customers_total: d.customers.total ?? prev.customers_total,
         }))
-        if (d.customers?.by_risk_level) setRiskBreakdown(d.customers.by_risk_level)
+        if (d.customers.by_risk_level) setRiskBreakdown(d.customers.by_risk_level)
       })
       .catch(() => {})
 
-    apiFetch(`${API}/api/v1/dashboard/compliance-score`, { credentials: 'include' })
-      .then(res => (res.ok ? res.json() : Promise.reject()))
+    getComplianceScore()
       .then(d => {
         if (typeof d.compliance_score === 'number') {
           setStats(prev => ({ ...prev, compliance_score: Math.round(d.compliance_score) }))
@@ -111,11 +108,10 @@ export default function DashboardPage() {
       })
       .catch(() => {})
 
-    apiFetch(`${API}/api/v1/dashboard/trends/alerts`, { credentials: 'include' })
-      .then(res => (res.ok ? res.json() : Promise.reject()))
+    getAlertTrends()
       .then(d => {
         if (Array.isArray(d.data) && d.data.length) {
-          setAlertTrend(d.data.map((p: any) => p.alerts ?? 0))
+          setAlertTrend(d.data.map(p => p.alerts ?? 0))
           setTrendWeeks(d.data.length)
         }
       })
