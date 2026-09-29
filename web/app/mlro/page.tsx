@@ -9,28 +9,18 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
-import { apiFetch } from '@/lib/auth'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface Case {
-  id: string;
-  case_ref: string;
-  customer_id: string;
-  industry_id?: string;
-  title: string;
-  description?: string;
-  severity: string;
-  status: string;
-  assigned_to?: string;
-  alert_ids?: string[];
-  notes?: string;
-  created_at?: string;
-  closed_at?: string;
-  outcome?: string;
-  outcome_notes?: string;
-  closure_reason?: string;
-}
+import {
+  Case,
+  CaseListItem,
+  CaseOutcome,
+  LinkedAlert,
+  listCases,
+  getCase,
+  getCaseAlerts,
+  createCase,
+  transitionCaseStatus,
+  closeCase,
+} from "@/lib/api/cases";
 
 const CLOSE_STATUSES = [
   "closed_no_action", "closed_smr_filed", "closed_referred", "closed_exited", "closed_no_smr",
@@ -74,17 +64,9 @@ const OBLIGATIONS = [
 
 type Tab = "cases" | "create" | "calendar" | "overview";
 
-interface LinkedAlert {
-  id: string;
-  alert_ref: string;
-  category: string;
-  severity: string;
-  status: string;
-}
-
 export default function MLRODashboard() {
   const [tab, setTab] = useState<Tab>("overview");
-  const [cases, setCases] = useState<Case[]>([]);
+  const [cases, setCases] = useState<CaseListItem[]>([]);
   const [search, setSearch] = useState("");
   const [sevFilter, setSevFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -101,8 +83,7 @@ export default function MLRODashboard() {
 
   const fetchCases = useCallback(async () => {
     try {
-      const res = await apiFetch(`${API}/api/v1/cases?limit=100`, { credentials: "include" });
-      if (res.ok) { setCases(await res.json()); } else { showToast("error", "Failed to load cases"); }
+      setCases(await listCases());
     } catch {
       showToast("error", "Failed to load cases");
     }
@@ -116,8 +97,8 @@ export default function MLRODashboard() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await apiFetch(`${API}/api/v1/cases/${selected.id}/alerts`, { credentials: "include" });
-        if (!cancelled) setLinkedAlerts(res.ok ? await res.json() : []);
+        const alerts = await getCaseAlerts(selected.id);
+        if (!cancelled) setLinkedAlerts(alerts);
       } catch {
         if (!cancelled) setLinkedAlerts([]);
       }
@@ -125,16 +106,22 @@ export default function MLRODashboard() {
     return () => { cancelled = true; };
   }, [selected?.id]);
 
-  const updateStatus = async (caseId: string, status: string) => {
+  // Case-list rows (CaseListItem) omit description/outcome/closure fields --
+  // fetch the full detail before showing the panel, rather than opening it
+  // directly off a list row (see lib/api/cases.ts's file-header comment).
+  const selectCase = async (caseId: string) => {
     try {
-      const res = await apiFetch(`${API}/api/v1/cases/${caseId}/status`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ new_status: status }),
-      });
-      if (!res.ok) { showToast("error", "Failed to update case status"); return; }
-      const updated = await res.json();
+      setSelected(await getCase(caseId));
+    } catch {
+      showToast("error", "Failed to load case detail");
+    }
+  };
+
+  const updateStatus = async (caseId: string, status: Case["status"]) => {
+    try {
+      const updated = await transitionCaseStatus(caseId, status);
       setCases(prev => prev.map(c => c.id === caseId ? { ...c, ...updated } : c));
-      setSelected(prev => prev?.id === caseId ? { ...prev, ...updated } : prev);
+      setSelected(prev => prev?.id === caseId ? updated : prev);
       showToast("success", `Case moved to ${status.replace(/_/g, " ")}`);
     } catch {
       showToast("error", "Failed to update case status");
@@ -145,20 +132,15 @@ export default function MLRODashboard() {
     if (!selected || !closeForm) return;
     if (!closeForm.closure_reason.trim()) { showToast("error", "Closure reason is required"); return; }
     try {
-      const res = await apiFetch(`${API}/api/v1/cases/${selected.id}/close`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: closeForm.status,
-          outcome: closeForm.outcome,
-          outcome_notes: closeForm.outcome_notes || undefined,
-          closure_reason: closeForm.closure_reason,
-        }),
+      const updated = await closeCase(selected.id, {
+        status: closeForm.status as Case["status"],
+        outcome: closeForm.outcome as CaseOutcome,
+        outcome_notes: closeForm.outcome_notes || undefined,
+        closure_reason: closeForm.closure_reason,
       });
-      if (!res.ok) { showToast("error", "Failed to close case"); return; }
-      const updated = await res.json();
       const caseId = selected.id;
       setCases(prev => prev.map(c => c.id === caseId ? { ...c, ...updated } : c));
-      setSelected(prev => prev?.id === caseId ? { ...prev, ...updated } : prev);
+      setSelected(prev => prev?.id === caseId ? updated : prev);
       setCloseForm(null);
       showToast("success", `Case closed — ${closeForm.status.replace(/_/g, " ")}`);
     } catch {
@@ -274,14 +256,13 @@ export default function MLRODashboard() {
                 <div className="space-y-2">
                   {cases.filter(c => c.severity === "critical" && !isClosed(c.status)).map(c => (
                     <div key={c.case_ref} className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 flex items-start justify-between gap-4 cursor-pointer hover:bg-red-500/10 transition-colors"
-                      onClick={() => { setSelected(c); setTab("cases"); }}>
+                      onClick={() => { selectCase(c.id); setTab("cases"); }}>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-mono text-xs text-slate-500">{c.case_ref}</span>
                           <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium", STATUS_COLOR[c.status] || "")}>{c.status.replace(/_/g, " ")}</span>
                         </div>
                         <div className="font-semibold text-slate-100 text-sm">{c.title}</div>
-                        <div className="text-xs text-slate-400 mt-1 line-clamp-2">{c.description}</div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-slate-500 shrink-0 mt-1" />
                     </div>
@@ -367,7 +348,7 @@ export default function MLRODashboard() {
                       "rounded-xl border p-4 cursor-pointer transition-all hover:border-brand-500/40",
                       selected?.case_ref === c.case_ref ? "border-brand-500/50 bg-brand-500/5" : "border-navy-700 bg-navy-800/30 hover:bg-navy-800/60"
                     )}
-                    onClick={() => setSelected(c)}>
+                    onClick={() => selectCase(c.id)}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -377,10 +358,8 @@ export default function MLRODashboard() {
                           <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLOR[c.severity] || "")}>{c.severity}</span>
                         </div>
                         <div className="font-semibold text-slate-100 text-sm">{c.title}</div>
-                        {c.description && <div className="text-xs text-slate-400 mt-1 line-clamp-2">{c.description}</div>}
                         <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
                           {c.assigned_to && <span className="flex items-center gap-1"><User className="w-3 h-3" />{c.assigned_to}</span>}
-                          {c.alert_ids?.length ? <span>{c.alert_ids.length} alert{c.alert_ids.length > 1 ? "s" : ""}</span> : null}
                           {c.created_at && <span>{new Date(c.created_at).toLocaleDateString("en-AU")}</span>}
                         </div>
                       </div>
@@ -537,7 +516,7 @@ export default function MLRODashboard() {
                   <div className="border-t border-navy-700 pt-4 space-y-2">
                     <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Quick actions</div>
                     <QuickActions actions={[
-                      { label: "View alerts", href: selected.alert_ids?.length ? `/monitoring?customer=${selected.customer_id}` : "/monitoring", icon: AlertTriangle },
+                      { label: "View alerts", href: linkedAlerts.length ? `/monitoring?customer=${selected.customer_id}` : "/monitoring", icon: AlertTriangle },
                       { label: "File report", href: `/reporting?customer=${selected.customer_id}&action=new&case=${selected.case_ref}`, icon: FileText },
                       { label: "Customer profile", href: `/customers/${selected.customer_id}`, icon: User },
                     ]} />
@@ -606,7 +585,7 @@ export default function MLRODashboard() {
                     {cases.filter(c => !isClosed(c.status)).sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()).map(c => {
                       const ageDays = c.created_at ? Math.floor((Date.now() - new Date(c.created_at).getTime()) / 86400000) : 0;
                       return (
-                        <tr key={c.case_ref} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer" onClick={() => { setSelected(c); setTab("cases"); }}>
+                        <tr key={c.case_ref} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer" onClick={() => { selectCase(c.id); setTab("cases"); }}>
                           <td className="px-4 py-3">
                             <div className="font-mono text-xs text-slate-500">{c.case_ref}</div>
                             <div className="text-slate-200 text-xs font-medium mt-0.5 line-clamp-1">{c.title}</div>
@@ -645,7 +624,7 @@ function CreateCaseForm({
 }) {
   const [form, setForm] = useState({
     customer_id: "", title: "", description: "",
-    severity: "medium", assigned_to: "", created_by: "mlro@firm.com.au",
+    severity: "medium" as Case["severity"],
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -653,12 +632,7 @@ function CreateCaseForm({
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await apiFetch(`${API}/api/v1/cases`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) { onError("Failed to create case"); return; }
-      onCreated(await res.json());
+      onCreated(await createCase(form));
     } catch {
       onError("Failed to create case");
     } finally { setSubmitting(false); }
@@ -677,7 +651,7 @@ function CreateCaseForm({
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-400">Severity *</label>
             <select required className="field-input" value={form.severity}
-              onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
+              onChange={e => setForm(f => ({ ...f, severity: e.target.value as Case["severity"] }))}>
               {["low","medium","high","critical"].map(v => (
                 <option key={v} value={v}>{v.charAt(0).toUpperCase()+v.slice(1)}</option>
               ))}
@@ -694,18 +668,6 @@ function CreateCaseForm({
           <textarea className="field-input min-h-[100px] resize-none"
             placeholder="Describe the suspicious activity, trigger alerts, and initial assessment…"
             value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Assign to</label>
-            <input className="field-input" placeholder="analyst@firm.com.au"
-              value={form.assigned_to} onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Created by</label>
-            <input className="field-input" placeholder="mlro@firm.com.au"
-              value={form.created_by} onChange={e => setForm(f => ({ ...f, created_by: e.target.value }))} />
-          </div>
         </div>
         <button type="submit" disabled={submitting} className="btn-primary w-full justify-center">
           {submitting
