@@ -5,10 +5,12 @@
 //
 // The route file also has a bare GET "" (list_org_integrations, a
 // provider-enriched shape distinct from the catalog's per-provider
-// org_integration), GET /catalog/{slug}, /oauth/authorize+/callback
+// org_integration), GET /catalog/{slug}, and /oauth/authorize+/callback
 // (both permanently 501 -- no provider has a real OAuth2 app configured,
-// see PARKING_LOT.md P45), and /migrate-legacy-connectors -- none called
-// by this page, so scope matched what actually exists.
+// see PARKING_LOT.md P45) -- none called by this page, so scope matched
+// what actually exists. /migrate-legacy-connectors is exported below too:
+// it's this same resource, but called by app/connectors/page.tsx (the
+// `connectors` pilot) rather than this one.
 //
 // Types mirror app/api/routes/integrations.py's _integration_dict()/
 // _provider_dict() literal return shapes and app/models/integration.py's
@@ -193,4 +195,26 @@ export function rotateIntegrationCredentials(slug: string, payload: RotateCreden
 /** POST /integrations/expiry-check */
 export function triggerIntegrationExpiryCheck(): Promise<ExpiryCheckResult> {
   return apiPost('/api/v1/integrations/expiry-check')
+}
+
+export interface MigratedConnector {
+  credential_id: string
+  provider_slug: string
+}
+
+export interface SkippedConnector {
+  credential_id: string
+  reason: string
+}
+
+/** POST /integrations/migrate-legacy-connectors -- mirrors
+ * migrate_legacy_connectors()'s literal return. Called by
+ * app/connectors/page.tsx, not this file's own page. */
+export interface MigrateLegacyConnectorsResult {
+  migrated: MigratedConnector[]
+  skipped: SkippedConnector[]
+}
+
+export function migrateLegacyConnectors(): Promise<MigrateLegacyConnectorsResult> {
+  return apiPost('/api/v1/integrations/migrate-legacy-connectors')
 }
