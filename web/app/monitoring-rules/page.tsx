@@ -5,10 +5,20 @@ import {
   Radar, Plus, RefreshCw, Trash2, X, CheckCircle, AlertTriangle,
 } from "lucide-react";
 import clsx from "clsx";
-import { apiFetch } from "@/lib/auth";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const BASE = `${API}/api/v1/monitoring`;
+import { ApiError } from "@/lib/api/client";
+import {
+  listMonitoringRules,
+  getMonitoringRule,
+  createMonitoringRule,
+  updateMonitoringRule,
+  setMonitoringRuleStatus,
+  deleteMonitoringRule,
+  type Rule,
+  type RuleListItem,
+  type RuleStatus,
+  type Condition,
+  type ConditionGroup,
+} from "@/lib/api/monitoringRules";
 
 // ── Types (mirrors app/models/monitoring.py's MonitoringRule) ──────────────
 // P25: this is the "no-code" transaction-monitoring rule engine that was
@@ -17,8 +27,6 @@ const BASE = `${API}/api/v1/monitoring`;
 // unchanged backend API (app/api/routes/monitoring.py). AutomationRule /
 // Rule Builder (web/app/rule-builder) is a separate, independent engine;
 // this page does not touch it.
-
-type RuleStatus = "active" | "inactive" | "testing" | "archived";
 
 const CATEGORIES = [
   "structuring", "smurfing", "rapid_movement", "high_value", "near_threshold",
@@ -53,45 +61,6 @@ const OPERATORS: { value: string; label: string }[] = [
 
 const LIST_VALUE_OPERATORS = new Set(["in", "not_in", "between"]);
 const NO_VALUE_OPERATORS = new Set(["is_true", "is_false", "is_null"]);
-
-interface Condition {
-  condition_order: number;
-  field_path: string;
-  operator: string;
-  value?: unknown;
-  value_label?: string | null;
-}
-
-interface ConditionGroup {
-  group_order: number;
-  description?: string | null;
-  conditions: Condition[];
-}
-
-interface Rule {
-  id: string;
-  org_id: string;
-  name: string;
-  description?: string | null;
-  rule_ref?: string | null;
-  category: string;
-  alert_type: string;
-  status: RuleStatus;
-  is_system_rule: boolean;
-  alert_severity: string;
-  alert_score: number;
-  alert_title_template?: string | null;
-  lookback_days?: number | null;
-  lookback_count?: number | null;
-  tags: string[];
-  applicable_customer_types: string[];
-  applicable_payment_methods: string[];
-  total_alerts_generated: number;
-  false_positive_rate?: number | null;
-  last_triggered_at?: string | null;
-  created_at: string;
-  condition_groups: ConditionGroup[];
-}
 
 const STATUS_COLOR: Record<RuleStatus, string> = {
   active: "bg-emerald-500/20 text-emerald-300",
@@ -131,10 +100,11 @@ function normaliseGroups(groups: ConditionGroup[]): ConditionGroup[] {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function MonitoringRulesPage() {
-  const [rules, setRules] = useState<Rule[]>([]);
+  const [rules, setRules] = useState<RuleListItem[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Rule | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -147,12 +117,11 @@ export default function MonitoringRulesPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (categoryFilter !== "all") params.set("category", categoryFilter);
-      if (statusFilter !== "all") params.set("rule_status", statusFilter);
-      const res = await apiFetch(`${BASE}/rules?${params.toString()}`, { credentials: "include" });
-      if (res.ok) setRules(await res.json());
-      else showToast("error", "Failed to load monitoring rules");
+      const data = await listMonitoringRules({
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
+        rule_status: statusFilter !== "all" ? statusFilter : undefined,
+      });
+      setRules(data);
     } catch {
       showToast("error", "Failed to load monitoring rules");
     } finally {
@@ -164,40 +133,42 @@ export default function MonitoringRulesPage() {
     fetchAll();
   }, [fetchAll]);
 
-  const deleteRule = async (r: Rule) => {
-    if (!confirm(`Delete "${r.name}"? This cannot be undone.`)) return;
+  // GET /rules only returns the slim RuleListItem shape (no alert_score,
+  // lookback_*, condition_groups, ...) -- the edit drawer needs the full
+  // Rule, fetched separately, or saving would silently reset those fields
+  // to their form defaults.
+  const openRule = async (r: RuleListItem) => {
+    setOpening(r.id);
     try {
-      const res = await apiFetch(`${BASE}/rules/${r.id}`, { method: "DELETE", credentials: "include" });
-      if (res.ok || res.status === 204) {
-        setRules((prev) => prev.filter((x) => x.id !== r.id));
-        if (selected?.id === r.id) setSelected(null);
-        showToast("success", "Rule deleted");
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Delete failed");
-      }
+      setSelected(await getMonitoringRule(r.id));
     } catch {
-      showToast("error", "Delete failed");
+      showToast("error", "Failed to load rule detail");
+    } finally {
+      setOpening(null);
     }
   };
 
-  const toggleStatus = async (r: Rule) => {
+  const deleteRule = async (r: RuleListItem) => {
+    if (!confirm(`Delete "${r.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteMonitoringRule(r.id);
+      setRules((prev) => prev.filter((x) => x.id !== r.id));
+      if (selected?.id === r.id) setSelected(null);
+      showToast("success", "Rule deleted");
+    } catch (err) {
+      showToast("error", err instanceof ApiError ? err.message : "Delete failed");
+    }
+  };
+
+  const toggleStatus = async (r: RuleListItem) => {
     const next: RuleStatus = r.status === "active" ? "inactive" : "active";
     try {
-      const res = await apiFetch(`${BASE}/rules/${r.id}/status?new_status=${next}`, {
-        method: "PATCH",
-        credentials: "include",
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setRules((prev) => prev.map((x) => (x.id === r.id ? updated : x)));
-        showToast("success", `Rule set to ${next}`);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Status update failed");
-      }
-    } catch {
-      showToast("error", "Status update failed");
+      const updated = await setMonitoringRuleStatus(r.id, next);
+      setRules((prev) => prev.map((x) => (x.id === r.id ? updated : x)));
+      if (selected?.id === r.id) setSelected(updated);
+      showToast("success", `Rule set to ${next}`);
+    } catch (err) {
+      showToast("error", err instanceof ApiError ? err.message : "Status update failed");
     }
   };
 
@@ -280,7 +251,7 @@ export default function MonitoringRulesPage() {
                   <tr
                     key={r.id}
                     className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors"
-                    onClick={() => setSelected(r)}
+                    onClick={() => openRule(r)}
                   >
                     <td className="px-4 py-3">
                       <div className="text-slate-200 font-medium flex items-center gap-2">
@@ -288,6 +259,7 @@ export default function MonitoringRulesPage() {
                         {r.is_system_rule && (
                           <span className="text-[10px] uppercase tracking-wide text-slate-500 border border-navy-600 rounded px-1.5 py-0.5">system</span>
                         )}
+                        {opening === r.id && <span className="text-[10px] text-slate-500">opening…</span>}
                       </div>
                       {r.rule_ref && <div className="text-xs text-slate-500">{r.rule_ref}</div>}
                     </td>
@@ -387,7 +359,7 @@ function RuleDrawer({
     setSaving(true);
     try {
       if (isNew) {
-        const payload = {
+        const created = await createMonitoringRule({
           name, description, rule_ref: ruleRef || undefined, category,
           alert_type: alertType, alert_severity: severity, alert_score: alertScore,
           alert_title_template: titleTemplate || undefined,
@@ -395,37 +367,19 @@ function RuleDrawer({
           lookback_count: lookbackCount === "" ? undefined : lookbackCount,
           tags: [], applicable_customer_types: [], applicable_payment_methods: [],
           condition_groups: normaliseGroups(groups),
-        };
-        const res = await apiFetch(`${BASE}/rules`, {
-          method: "POST", credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
         });
-        if (res.ok) onSaved(await res.json(), true);
-        else {
-          const err = await res.json().catch(() => ({}));
-          showToast("error", err.detail || "Create failed");
-        }
+        onSaved(created, true);
       } else {
-        const payload = {
+        const updated = await updateMonitoringRule(rule!.id, {
           name, description, alert_severity: severity, alert_score: alertScore,
           alert_title_template: titleTemplate || undefined,
           lookback_days: lookbackDays === "" ? undefined : lookbackDays,
           lookback_count: lookbackCount === "" ? undefined : lookbackCount,
-        };
-        const res = await apiFetch(`${BASE}/rules/${rule!.id}`, {
-          method: "PUT", credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
         });
-        if (res.ok) onSaved(await res.json(), false);
-        else {
-          const err = await res.json().catch(() => ({}));
-          showToast("error", err.detail || "Save failed");
-        }
+        onSaved(updated, false);
       }
-    } catch {
-      showToast("error", "Save failed");
+    } catch (err) {
+      showToast("error", err instanceof ApiError ? err.message : isNew ? "Create failed" : "Save failed");
     } finally {
       setSaving(false);
     }
