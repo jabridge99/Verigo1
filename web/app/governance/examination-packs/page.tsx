@@ -6,27 +6,19 @@ import {
   Send, Archive,
 } from "lucide-react";
 import clsx from "clsx";
-import { getStoredUser, apiFetch } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import {
+  ExaminationPack as Pack,
+  PackStatus,
+  EXAMINATION_SECTIONS as ALL_SECTIONS,
+  listExaminationPacks,
+  generateExaminationPack,
+  deliverExaminationPack,
+  archiveExaminationPack,
+} from "@/lib/api/examinationPacks";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type PackStatus = "generating" | "ready" | "delivered" | "archived";
-
-interface Pack {
-  id: string;
-  pack_ref: string;
-  status: PackStatus;
-  period_start: string;
-  period_end: string;
-  sections: string[];
-  examiner_name?: string | null;
-  examiner_agency: string;
-  examination_ref?: string | null;
-  summary_metrics?: Record<string, any> | null;
-  generation_errors?: string[] | null;
-  version: number;
-}
 
 const STATUS_COLOR: Record<PackStatus, string> = {
   generating: "bg-amber-500/20 text-amber-300",
@@ -34,12 +26,6 @@ const STATUS_COLOR: Record<PackStatus, string> = {
   delivered: "bg-purple-500/20 text-purple-300",
   archived: "bg-slate-600/20 text-slate-500",
 };
-
-const ALL_SECTIONS = [
-  "aml_program", "customer_profile", "transaction_monitoring", "smr_register",
-  "ifti_register", "ttr_register", "training_records", "independent_reviews",
-  "policy_register", "control_testing", "notification_history",
-];
 
 const SECTION_LABELS: Record<string, string> = {
   aml_program: "AML/CTF Program", customer_profile: "Customer Profile", transaction_monitoring: "Transaction Monitoring",
@@ -49,7 +35,7 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 const DEMO_PACKS: Pack[] = [
-  { id: "ep_1", pack_ref: "EXAM-2026-001", status: "ready", period_start: "2025-01-01", period_end: "2025-12-31", sections: ALL_SECTIONS, examiner_agency: "AUSTRAC", version: 1, summary_metrics: { sections_generated: 11 } },
+  { id: "ep_1", pack_ref: "EXAM-2026-001", org_id: "demo", status: "ready", period_start: "2025-01-01", period_end: "2025-12-31", sections: [...ALL_SECTIONS], examiner_agency: "AUSTRAC", is_confidential: true, version: "1.0", summary_metrics: { sections_generated: 11 } },
 ];
 
 export default function ExaminationPacksPage() {
@@ -60,7 +46,7 @@ export default function ExaminationPacksPage() {
   const [demo, setDemo] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ period_start: "", period_end: "", examiner_name: "", examination_ref: "" });
-  const [sections, setSections] = useState<string[]>(ALL_SECTIONS);
+  const [sections, setSections] = useState<string[]>([...ALL_SECTIONS]);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const showToast = (type: "success" | "error", msg: string) => {
@@ -69,11 +55,10 @@ export default function ExaminationPacksPage() {
 
   const fetchPacks = useCallback(async () => {
     try {
-      const res = await apiFetch(`${API}/api/v1/examination-packs/`, { credentials: "include" });
-      if (!res.ok) throw new Error("api");
-      const d = await res.json();
-      if (Array.isArray(d) && d.length) setPacks(d);
-    } catch { setDemo(true); }
+      const d = await listExaminationPacks();
+      setPacks(d);
+      setDemo(false);
+    } catch { setPacks(DEMO_PACKS); setDemo(true); }
   }, []);
 
   useEffect(() => { if (!user) { router.push("/login"); return; } fetchPacks(); }, []);
@@ -88,49 +73,32 @@ export default function ExaminationPacksPage() {
       return;
     }
     try {
-      const res = await apiFetch(`${API}/api/v1/examination-packs/`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          period_start: form.period_start, period_end: form.period_end,
-          sections: sections.length === ALL_SECTIONS.length ? null : sections,
-          examiner_name: form.examiner_name || null, examination_ref: form.examination_ref || null,
-        }),
+      const created = await generateExaminationPack({
+        period_start: form.period_start, period_end: form.period_end,
+        sections: sections.length === ALL_SECTIONS.length ? null : sections,
+        examiner_name: form.examiner_name || null, examination_ref: form.examination_ref || null,
       });
-      if (res.ok) {
-        const created = await res.json();
-        setPacks(prev => [created, ...prev]);
-        setShowCreate(false);
-        showToast("success", `${created.pack_ref} generated`);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Failed to generate pack");
-      }
-    } catch { showToast("error", "Network error"); }
+      setPacks(prev => [created, ...prev]);
+      setShowCreate(false);
+      showToast("success", `${created.pack_ref} generated`);
+    } catch (e: unknown) { showToast("error", e instanceof Error ? e.message : "Failed to generate pack"); }
   };
 
   const deliver = async (p: Pack) => {
     const notes = prompt("Delivery notes (optional):") || undefined;
     try {
-      const res = await apiFetch(`${API}/api/v1/examination-packs/${p.id}/deliver`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ delivery_notes: notes }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setPacks(prev => prev.map(x => x.id === p.id ? updated : x));
-        showToast("success", `${p.pack_ref} marked delivered`);
-      } else showToast("error", "Failed (MLRO role required, pack must be ready)");
-    } catch { showToast("error", "Network error"); }
+      const updated = await deliverExaminationPack(p.id, notes);
+      setPacks(prev => prev.map(x => x.id === p.id ? updated : x));
+      showToast("success", `${p.pack_ref} marked delivered`);
+    } catch (e: unknown) { showToast("error", e instanceof Error ? e.message : "Failed to deliver pack"); }
   };
 
   const archive = async (p: Pack) => {
     try {
-      const res = await apiFetch(`${API}/api/v1/examination-packs/${p.id}/archive`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        setPacks(prev => prev.map(x => x.id === p.id ? { ...x, status: "archived" as PackStatus } : x));
-        showToast("success", `${p.pack_ref} archived`);
-      } else showToast("error", "Failed to archive");
-    } catch { showToast("error", "Network error"); }
+      await archiveExaminationPack(p.id);
+      setPacks(prev => prev.map(x => x.id === p.id ? { ...x, status: "archived" as PackStatus } : x));
+      showToast("success", `${p.pack_ref} archived`);
+    } catch (e: unknown) { showToast("error", e instanceof Error ? e.message : "Failed to archive pack"); }
   };
 
   return (
