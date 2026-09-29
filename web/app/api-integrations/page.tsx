@@ -1,47 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch as authFetch } from '@/lib/auth'
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await authFetch(`${API}${path}`, {
-    ...opts,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts?.headers || {}) },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  return res.json();
-}
-
-interface OrgIntegration {
-  id: string;
-  provider_id: string;
-  provider_slug: string;
-  is_enabled: boolean;
-  credentials_configured: boolean;
-  credential_expires_at: string | null;
-  oauth_connected: boolean;
-  oauth_expires_at: string | null;
-  health_status: string;
-  consecutive_failures: number;
-  usage_count: number;
-  last_used_at: string | null;
-}
-
-interface Provider {
-  id: string;
-  slug: string;
-  name: string;
-  category: string;
-  integration_type: string;
-  auth_type: string;
-  description: string;
-  capabilities: string[];
-  required_credentials: { key: string; label: string; secret?: boolean }[];
-  org_integration: OrgIntegration | null;
-}
+import {
+  Provider,
+  getIntegrationCatalog,
+  getIntegrationMonitoring,
+  getIntegrationAuditLog,
+  enableIntegration,
+  disableIntegration,
+  testIntegrationConnection,
+  rotateIntegrationCredentials,
+  triggerIntegrationExpiryCheck,
+  MonitoringSummary,
+  IntegrationAuditLogEntry,
+} from "@/lib/api/integrations";
 
 const CATEGORY_LABELS: Record<string, string> = {
   kyc: "KYC",
@@ -92,15 +64,12 @@ function ConnectionWizard({
     setSaving(true);
     setErr("");
     try {
-      await apiFetch(`/api/v1/integrations/${provider.slug}/enable`, {
-        method: "POST",
-        body: JSON.stringify({
-          credentials: fields,
-          config: {},
-          credential_expires_at: expiresAt || null,
-        }),
+      await enableIntegration(provider.slug, {
+        credentials: fields,
+        config: {},
+        credential_expires_at: expiresAt || null,
       });
-      const r = await apiFetch(`/api/v1/integrations/${provider.slug}/test`, { method: "POST" });
+      const r = await testIntegrationConnection(provider.slug);
       setTestResult(r);
       setStep(3);
     } catch (e: unknown) {
@@ -195,10 +164,7 @@ function RotateModal({ provider, onClose, onDone }: { provider: Provider; onClos
     setSaving(true);
     setErr("");
     try {
-      await apiFetch(`/api/v1/integrations/${provider.slug}/rotate-credentials`, {
-        method: "POST",
-        body: JSON.stringify({ new_credentials: fields, reason }),
-      });
+      await rotateIntegrationCredentials(provider.slug, { new_credentials: fields, reason });
       onDone();
       onClose();
     } catch (e: unknown) {
@@ -243,25 +209,25 @@ export default function IntegrationsHubPage() {
   const [search, setSearch] = useState("");
   const [wizardProvider, setWizardProvider] = useState<Provider | null>(null);
   const [rotateProvider, setRotateProvider] = useState<Provider | null>(null);
-  const [monitoring, setMonitoring] = useState<Record<string, unknown> | null>(null);
-  const [auditLog, setAuditLog] = useState<Record<string, unknown>[]>([]);
+  const [monitoring, setMonitoring] = useState<MonitoringSummary | null>(null);
+  const [auditLog, setAuditLog] = useState<IntegrationAuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const loadCatalog = () => {
     setLoading(true);
-    apiFetch(`/api/v1/integrations/catalog${search ? `?search=${encodeURIComponent(search)}` : ""}`)
+    getIntegrationCatalog(search || undefined)
       .then((r) => setByCategory(r.by_category))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   };
 
   const loadMonitoring = () => {
-    apiFetch("/api/v1/integrations/monitoring").then(setMonitoring).catch((e) => setError(e.message));
+    getIntegrationMonitoring().then(setMonitoring).catch((e) => setError(e.message));
   };
 
   const loadAudit = () => {
-    apiFetch("/api/v1/integrations/audit-log").then(setAuditLog).catch((e) => setError(e.message));
+    getIntegrationAuditLog().then(setAuditLog).catch((e) => setError(e.message));
   };
 
   useEffect(() => {
@@ -276,7 +242,7 @@ export default function IntegrationsHubPage() {
 
   const allProviders = useMemo(() => Object.values(byCategory).flat(), [byCategory]);
   const visibleCategories = activeCategory === "all" ? Object.keys(byCategory) : [activeCategory];
-  const expiring = (monitoring?.expiring_within_30_days as { provider_slug: string; credential_type: string; expires_at: string }[]) || [];
+  const expiring = monitoring?.expiring_within_30_days ?? [];
 
   return (
     <div className="min-h-screen bg-[#060d1a] text-white p-6">
@@ -305,7 +271,7 @@ export default function IntegrationsHubPage() {
             <span className="font-semibold">{expiring.length} credential(s) expiring within 30 days:</span>{" "}
             {expiring.map((e) => `${e.provider_slug} (${e.credential_type})`).join(", ")}
             <button
-              onClick={async () => { await apiFetch("/api/v1/integrations/expiry-check", { method: "POST" }); loadMonitoring(); }}
+              onClick={async () => { await triggerIntegrationExpiryCheck(); loadMonitoring(); }}
               className="ml-3 underline">re-check</button>
           </div>
         )}
@@ -361,7 +327,7 @@ export default function IntegrationsHubPage() {
                               <div className="flex gap-2">
                                 <button onClick={() => setRotateProvider(p)} className="text-xs text-blue-400 hover:text-blue-300">Rotate</button>
                                 <button
-                                  onClick={async () => { await apiFetch(`/api/v1/integrations/${p.slug}/disable`, { method: "POST" }); loadCatalog(); }}
+                                  onClick={async () => { await disableIntegration(p.slug); loadCatalog(); }}
                                   className="text-xs text-red-400 hover:text-red-300">Disable</button>
                               </div>
                             ) : (
@@ -396,13 +362,13 @@ export default function IntegrationsHubPage() {
               ))}
             </div>
             <div className="grid gap-2">
-              {(monitoring.integrations as Record<string, unknown>[]).map((i) => (
-                <div key={i.provider_slug as string} className="bg-[#0d1b2e] border border-[#1e3a5f] rounded-lg px-4 py-3 flex items-center justify-between text-sm">
-                  <span>{i.provider_name as string}</span>
+              {monitoring.integrations.map((i) => (
+                <div key={i.provider_slug} className="bg-[#0d1b2e] border border-[#1e3a5f] rounded-lg px-4 py-3 flex items-center justify-between text-sm">
+                  <span>{i.provider_name}</span>
                   <div className="flex items-center gap-4 text-xs text-gray-400">
-                    <span className={`px-2 py-0.5 rounded-full ${HEALTH_COLOURS[i.health_status as string]}`}>{i.health_status as string}</span>
-                    <span>{i.usage_count as number} calls</span>
-                    <span>{i.consecutive_failures as number} failures</span>
+                    <span className={`px-2 py-0.5 rounded-full ${HEALTH_COLOURS[i.health_status]}`}>{i.health_status}</span>
+                    <span>{i.usage_count} calls</span>
+                    <span>{i.consecutive_failures} failures</span>
                   </div>
                 </div>
               ))}
@@ -413,14 +379,14 @@ export default function IntegrationsHubPage() {
         {tab === "audit" && (
           <div className="grid gap-2">
             {auditLog.map((l) => (
-              <div key={l.id as string} className="bg-[#0d1b2e] border border-[#1e3a5f] rounded-lg px-4 py-3 text-sm flex items-center justify-between">
+              <div key={l.id} className="bg-[#0d1b2e] border border-[#1e3a5f] rounded-lg px-4 py-3 text-sm flex items-center justify-between">
                 <div>
-                  <span className="font-mono text-xs text-gray-500">{l.provider_slug as string}</span>{" "}
-                  <span className="font-semibold">{l.event_type as string}</span>
-                  <p className="text-xs text-gray-500">{l.message as string}</p>
+                  <span className="font-mono text-xs text-gray-500">{l.provider_slug}</span>{" "}
+                  <span className="font-semibold">{l.event_type}</span>
+                  <p className="text-xs text-gray-500">{l.message}</p>
                 </div>
                 <span className={`text-xs ${l.success ? "text-green-400" : "text-red-400"}`}>
-                  {l.success ? "✓" : "✗"} {new Date(l.created_at as string).toLocaleString()}
+                  {l.success ? "✓" : "✗"} {new Date(l.created_at).toLocaleString()}
                 </span>
               </div>
             ))}
