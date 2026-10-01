@@ -20,12 +20,13 @@ import {
   type CustomerOverrideInput,
 } from "@/lib/api/customers";
 import { ApiError, API_BASE } from "@/lib/api/client";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 
-const RISK_COLOR: Record<string, string> = {
-  low:      "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-  medium:   "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  high:     "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  critical: "bg-red-500/20 text-red-300 border-red-500/30",
+const RISK_TONE: Record<string, BadgeTone> = {
+  low:      "success",
+  medium:   "warning",
+  high:     "orange",
+  critical: "danger",
 };
 
 const RISK_BAR: Record<string, string> = {
@@ -208,9 +209,7 @@ export default function CustomerDetailPage() {
               {c.is_pep ? <span className="px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30">PEP</span> : null}
               {c.is_sanctions_match ? <span className="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-300 border border-red-500/30">SANCTIONS</span> : null}
               {c.is_adverse_media ? <span className="px-1.5 py-0.5 rounded text-xs bg-orange-500/20 text-orange-300 border border-orange-500/30">ADVERSE MEDIA</span> : null}
-              <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", RISK_COLOR[riskLevel] || "")}>
-                {riskLevel} risk
-              </span>
+              <Badge tone={RISK_TONE[riskLevel] ?? "neutral"} bordered>{riskLevel} risk</Badge>
             </div>
             <p className="text-slate-500 text-sm mt-0.5 font-mono">{c.customer_ref || c.id} · {c.email}</p>
           </div>

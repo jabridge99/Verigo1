@@ -11,6 +11,7 @@ import {
   activateUser,
   type AppUser,
 } from '@/lib/api/users'
+import { Badge, type BadgeTone } from '@/components/ui/badge'
 
 const DEMO_USERS: AppUser[] = [
   { id: 'usr_admin001', email: 'admin@verigo.com', full_name: 'System Administrator', role: 'admin', status: 'active', mfa_enabled: true, email_verified: true, is_super_admin: false, last_login_at: new Date().toISOString(), created_at: new Date(Date.now() - 86400000 * 90).toISOString() },
@@ -21,19 +22,19 @@ const DEMO_USERS: AppUser[] = [
   { id: 'usr_sus001', email: 'suspended@old.com', full_name: 'Old Employee', role: 'analyst', status: 'suspended', mfa_enabled: false, email_verified: true, is_super_admin: false, created_at: new Date(Date.now() - 86400000 * 120).toISOString() },
 ]
 
-const ROLE_COLOR: Record<string, string> = {
-  admin:      'bg-red-500/20 text-red-300 border border-red-500/30',
-  mlro:       'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-  compliance: 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
-  analyst:    'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-  viewer:     'bg-slate-500/20 text-slate-300 border border-slate-500/30',
+const ROLE_TONE: Record<string, BadgeTone> = {
+  admin:      'danger',
+  mlro:       'purple',
+  compliance: 'teal',
+  analyst:    'info',
+  viewer:     'neutral',
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  active:      'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-  suspended:   'bg-red-500/20 text-red-300 border border-red-500/30',
-  pending_mfa: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-  inactive:    'bg-slate-500/20 text-slate-300 border border-slate-500/30',
+const STATUS_TONE: Record<string, BadgeTone> = {
+  active:      'success',
+  suspended:   'danger',
+  pending_mfa: 'warning',
+  inactive:    'muted',
 }
 
 const ROLES = ['admin', 'mlro', 'compliance', 'analyst', 'viewer']
@@ -172,14 +173,10 @@ export default function UsersPage() {
                       {u.industry_id && <div className="text-xs text-brand-400 mt-0.5">{u.industry_id}</div>}
                     </td>
                     <td className="px-5 py-3">
-                      <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', ROLE_COLOR[u.role])}>
-                        {u.role}
-                      </span>
+                      <Badge tone={ROLE_TONE[u.role] ?? 'neutral'} capitalize={false}>{u.role}</Badge>
                     </td>
                     <td className="px-5 py-3">
-                      <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLOR[u.status])}>
-                        {u.status}
-                      </span>
+                      <Badge tone={STATUS_TONE[u.status] ?? 'neutral'} capitalize={false}>{u.status}</Badge>
                     </td>
                     <td className="px-5 py-3">
                       {u.mfa_enabled

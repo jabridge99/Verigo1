@@ -11,13 +11,14 @@ import clsx from 'clsx'
 import { getStoredUser, signOut } from '@/lib/auth'
 import type { AuthUser } from '@/lib/auth'
 import { getGlobalDashboard, getComplianceScore, getAlertTrends } from '@/lib/api/dashboard'
+import { Badge, type BadgeTone } from '@/components/ui/badge'
 
-const ROLE_COLOR: Record<string, string> = {
-  admin:      'bg-red-500/20 text-red-300 border border-red-500/30',
-  mlro:       'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-  compliance: 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
-  analyst:    'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-  viewer:     'bg-slate-500/20 text-slate-300 border border-slate-500/30',
+const ROLE_TONE: Record<string, BadgeTone> = {
+  admin:      'danger',
+  mlro:       'purple',
+  compliance: 'teal',
+  analyst:    'info',
+  viewer:     'neutral',
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -136,9 +137,9 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-2xl font-bold text-white">Welcome back, {user.full_name.split(' ')[0]}</h1>
-              <span className={clsx('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold', ROLE_COLOR[user.role])}>
+              <Badge tone={ROLE_TONE[user.role] ?? 'neutral'} capitalize={false}>
                 {ROLE_LABEL[user.role] ?? user.role}
-              </span>
+              </Badge>
             </div>
             <p className="text-sm text-white/40">{user.email}{user.industry_id ? ` · ${user.industry_id}` : ''}</p>
           </div>
@@ -231,7 +232,7 @@ export default function DashboardPage() {
                     {m.icon}
                   </div>
                   <div className="flex items-center gap-2">
-                    {m.badge && <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full">{m.badge}</span>}
+                    {m.badge && <Badge tone="purple" bordered capitalize={false}>{m.badge}</Badge>}
                     <ChevronRight className="w-4 h-4 text-white/20 group-hover:text-brand-400 transition-colors" />
                   </div>
                 </div>
