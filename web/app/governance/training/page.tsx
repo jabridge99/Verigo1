@@ -6,6 +6,7 @@ import {
   BarChart3, Users, BookOpen, RotateCcw, FileBadge, ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   listCourses,
   listRecords,
@@ -35,13 +36,13 @@ const INDUSTRY_PACKS = [
 
 const TRAINING_ROLES = ["admin", "mlro", "compliance", "analyst", "viewer", "director", "operations_staff", "auditor"];
 
-const STATUS_COLOR: Record<TrainingStatus, string> = {
-  assigned: "bg-slate-600/20 text-slate-400",
-  in_progress: "bg-brand-500/20 text-brand-300",
-  completed: "bg-emerald-500/20 text-emerald-300",
-  overdue: "bg-red-500/20 text-red-300",
-  expired: "bg-amber-500/20 text-amber-300",
-  exempt: "bg-slate-700/30 text-slate-500",
+const STATUS_TONE: Record<TrainingStatus, BadgeTone> = {
+  assigned: "muted",
+  in_progress: "info",
+  completed: "success",
+  overdue: "danger",
+  expired: "warning",
+  exempt: "muted",
 };
 
 const DEMO_COURSES: Course[] = [
@@ -364,9 +365,7 @@ function RecordsTab({ records, courseName, onComplete, onRetake, onRenew }: {
               <td className="px-4 py-3 text-xs text-slate-500">{new Date(r.due_date).toLocaleDateString("en-AU")}</td>
               <td className="px-4 py-3 text-xs text-slate-400">{r.score ?? "—"}</td>
               <td className="px-4 py-3">
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[r.status])}>
-                  {r.status.replace("_", " ")}
-                </span>
+                <Badge tone={STATUS_TONE[r.status]}>{r.status.replace("_", " ")}</Badge>
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-1.5">

@@ -5,6 +5,7 @@ import {
   Radar, Plus, RefreshCw, Trash2, X, CheckCircle, AlertTriangle,
 } from "lucide-react";
 import clsx from "clsx";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { ApiError } from "@/lib/api/client";
 import {
   listMonitoringRules,
@@ -62,18 +63,18 @@ const OPERATORS: { value: string; label: string }[] = [
 const LIST_VALUE_OPERATORS = new Set(["in", "not_in", "between"]);
 const NO_VALUE_OPERATORS = new Set(["is_true", "is_false", "is_null"]);
 
-const STATUS_COLOR: Record<RuleStatus, string> = {
-  active: "bg-emerald-500/20 text-emerald-300",
-  inactive: "bg-slate-600/20 text-slate-400",
-  testing: "bg-amber-500/20 text-amber-300",
-  archived: "bg-slate-700/30 text-slate-500",
+const STATUS_TONE: Record<RuleStatus, BadgeTone> = {
+  active: "success",
+  inactive: "muted",
+  testing: "warning",
+  archived: "muted",
 };
 
-const SEVERITY_COLOR: Record<string, string> = {
-  low: "bg-slate-600/20 text-slate-400",
-  medium: "bg-amber-500/20 text-amber-300",
-  high: "bg-orange-500/20 text-orange-300",
-  critical: "bg-red-500/20 text-red-300",
+const SEVERITY_TONE: Record<string, BadgeTone> = {
+  low: "muted",
+  medium: "warning",
+  high: "orange",
+  critical: "danger",
 };
 
 function emptyGroup(order: number): ConditionGroup {
@@ -265,14 +266,10 @@ export default function MonitoringRulesPage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{r.category.replace(/_/g, " ")}</td>
                     <td className="px-4 py-3">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", SEVERITY_COLOR[r.alert_severity])}>
-                        {r.alert_severity}
-                      </span>
+                      <Badge tone={SEVERITY_TONE[r.alert_severity]}>{r.alert_severity}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[r.status])}>
-                        {r.status}
-                      </span>
+                      <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{r.total_alerts_generated}</td>
                     <td className="px-4 py-3 text-xs text-slate-400">

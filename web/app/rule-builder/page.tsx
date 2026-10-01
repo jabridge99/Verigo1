@@ -6,6 +6,7 @@ import {
   CheckCircle, AlertTriangle, ChevronDown, ChevronRight, X, Beaker,
 } from "lucide-react";
 import clsx from "clsx";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   listRules,
   getRuleBuilderReference,
@@ -28,11 +29,11 @@ import { ApiError } from "@/lib/api/client";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-const STATUS_COLOR: Record<RuleStatus, string> = {
-  active: "bg-emerald-500/20 text-emerald-300",
-  inactive: "bg-slate-600/20 text-slate-400",
-  testing: "bg-amber-500/20 text-amber-300",
-  archived: "bg-slate-700/30 text-slate-500",
+const STATUS_TONE: Record<RuleStatus, BadgeTone> = {
+  active: "success",
+  inactive: "muted",
+  testing: "warning",
+  archived: "muted",
 };
 
 function emptyGroup(): ConditionGroup {
@@ -166,7 +167,7 @@ export default function RuleBuilderPage() {
             className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
           >
             <option value="all">Status — All</option>
-            {Object.keys(STATUS_COLOR).map((s) => (
+            {Object.keys(STATUS_TONE).map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -230,9 +231,7 @@ export default function RuleBuilderPage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{r.priority}</td>
                     <td className="px-4 py-3">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[r.status])}>
-                        {r.status}
-                      </span>
+                      <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{r.trigger_count}</td>
                     <td className="px-4 py-3 text-right">
@@ -418,7 +417,7 @@ function RuleDrawer({
                 <div>
                   <label className="text-xs text-slate-500 block mb-1">Status</label>
                   <select value={status} onChange={(e) => setStatus(e.target.value as RuleStatus)} className="field-input">
-                    {Object.keys(STATUS_COLOR).map((s) => (
+                    {Object.keys(STATUS_TONE).map((s) => (
                       <option key={s} value={s}>
                         {s} {s === "testing" ? "(shadow mode — logs only)" : ""}
                       </option>
