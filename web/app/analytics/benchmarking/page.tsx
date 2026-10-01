@@ -4,31 +4,16 @@ import { useState, useEffect, useCallback } from "react";
 import { BarChartHorizontal, TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
 import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import { MetricComparison as MetricRow, getBenchmarkDashboard } from "@/lib/api/benchmarks";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface MetricRow {
-  metric: string;
-  label: string;
-  unit: string;
-  your_value: number;
-  industry: string;
-  industry_median: number;
-  industry_p25: number;
-  industry_p75: number;
-  your_percentile: number;
-  vs_median: string;
-  rating: "top_quartile" | "above_median" | "below_median" | "bottom_quartile" | "informational" | "no_benchmark";
-  higher_is_better: boolean;
-  org_count: number;
-}
+const DEMO_INDUSTRY = "remittance";
 
 const DEMO_METRICS: MetricRow[] = [
-  { metric: "training_completion_pct", label: "Training Completion Rate", unit: "%", your_value: 87.4, industry: "remittance", industry_median: 71.0, industry_p25: 58.0, industry_p75: 82.0, your_percentile: 87, vs_median: "+16.4%", rating: "top_quartile", higher_is_better: true, org_count: 12 },
-  { metric: "high_risk_customer_pct", label: "High-Risk Customer %", unit: "%", your_value: 17.0, industry: "remittance", industry_median: 13.5, industry_p25: 9.0, industry_p75: 19.0, your_percentile: 62, vs_median: "+3.5%", rating: "below_median", higher_is_better: false, org_count: 12 },
-  { metric: "smr_rate_per_1k", label: "SMR Rate (per 1,000 txns)", unit: "/1k", your_value: 1.6, industry: "remittance", industry_median: 2.1, industry_p25: 1.2, industry_p75: 3.0, your_percentile: 34, vs_median: "-0.5", rating: "informational", higher_is_better: false, org_count: 12 },
-  { metric: "open_alert_pct", label: "Open Alert %", unit: "%", your_value: 4.1, industry: "remittance", industry_median: 6.8, industry_p25: 3.5, industry_p75: 9.2, your_percentile: 78, vs_median: "-2.7%", rating: "top_quartile", higher_is_better: false, org_count: 12 },
-  { metric: "control_effectiveness_pct", label: "Control Effectiveness", unit: "%", your_value: 91.2, industry: "remittance", industry_median: 84.0, industry_p25: 75.0, industry_p75: 93.0, your_percentile: 71, vs_median: "+7.2%", rating: "above_median", higher_is_better: true, org_count: 12 },
+  { metric: "training_completion_pct", label: "Training Completion Rate", unit: "%", your_value: 87.4, industry_median: 71.0, industry_p25: 58.0, industry_p75: 82.0, your_percentile: 87, vs_median: 16.4, vs_median_pct: "+16.4", rating: "top_quartile", higher_is_better: true, org_count: 12 },
+  { metric: "high_risk_customer_pct", label: "High-Risk Customer %", unit: "%", your_value: 17.0, industry_median: 13.5, industry_p25: 9.0, industry_p75: 19.0, your_percentile: 62, vs_median: 3.5, vs_median_pct: "+3.5", rating: "below_median", higher_is_better: false, org_count: 12 },
+  { metric: "smr_rate_per_1k", label: "SMR Rate (per 1,000 txns)", unit: "/1k", your_value: 1.6, industry_median: 2.1, industry_p25: 1.2, industry_p75: 3.0, your_percentile: 34, vs_median: -0.5, vs_median_pct: "-0.5", rating: "informational", higher_is_better: false, org_count: 12 },
+  { metric: "open_alert_pct", label: "Open Alert %", unit: "%", your_value: 4.1, industry_median: 6.8, industry_p25: 3.5, industry_p75: 9.2, your_percentile: 78, vs_median: -2.7, vs_median_pct: "-2.7", rating: "top_quartile", higher_is_better: false, org_count: 12 },
+  { metric: "control_effectiveness_pct", label: "Control Effectiveness", unit: "%", your_value: 91.2, industry_median: 84.0, industry_p25: 75.0, industry_p75: 93.0, your_percentile: 71, vs_median: 7.2, vs_median_pct: "+7.2", rating: "above_median", higher_is_better: true, org_count: 12 },
 ];
 
 const RATING_STYLE: Record<string, string> = {
@@ -54,18 +39,19 @@ export default function BenchmarkingPage() {
   const [metrics, setMetrics] = useState<MetricRow[]>(DEMO_METRICS);
   const [demo, setDemo] = useState(false);
   const [orgCount, setOrgCount] = useState(12);
+  const [industry, setIndustry] = useState(DEMO_INDUSTRY);
   const user = typeof window !== "undefined" ? getStoredUser() : null;
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/benchmarks/dashboard`, { credentials: "include" });
-      if (!res.ok) throw new Error("api");
-      const data = await res.json();
-      const rows: MetricRow[] = Array.isArray(data) ? data : data.metrics ?? [];
-      if (!rows.length) throw new Error("empty");
-      setMetrics(rows);
-      setOrgCount(rows[0]?.org_count ?? 0);
+      const data = await getBenchmarkDashboard();
+      setMetrics(data.metrics);
+      setIndustry(data.industry);
+      setOrgCount(data.metrics[0]?.org_count ?? 0);
+      setDemo(false);
     } catch {
+      setMetrics(DEMO_METRICS);
+      setIndustry(DEMO_INDUSTRY);
       setDemo(true);
     }
   }, []);
@@ -96,17 +82,30 @@ export default function BenchmarkingPage() {
 
         <div className="space-y-4">
           {metrics.map((m) => {
-            const range = m.industry_p75 - m.industry_p25 || 1;
-            const yourPos = Math.min(100, Math.max(0, ((m.your_value - m.industry_p25) / range) * 100));
-            const medianPos = Math.min(100, Math.max(0, ((m.industry_median - m.industry_p25) / range) * 100));
-            const TrendIcon = m.rating === "no_benchmark" ? Minus : m.higher_is_better === (m.your_value >= m.industry_median) ? TrendingUp : TrendingDown;
+            // rating === "no_benchmark" (no published industry benchmark for
+            // this metric/period, e.g. <3 peer orgs reporting yet -- the
+            // common state for a new org) means industry_p25/p75/median and
+            // your_percentile are absent from the API response entirely, not
+            // just null -- confirmed live. Guard on that rather than doing
+            // arithmetic against undefined values (NaN range-bar positions).
+            const hasBenchmark = m.industry_p25 != null && m.industry_p75 != null && m.industry_median != null;
+            const range = hasBenchmark ? (m.industry_p75! - m.industry_p25!) || 1 : 1;
+            const yourPos = hasBenchmark && m.your_value != null
+              ? Math.min(100, Math.max(0, ((m.your_value - m.industry_p25!) / range) * 100))
+              : 0;
+            const medianPos = hasBenchmark
+              ? Math.min(100, Math.max(0, ((m.industry_median! - m.industry_p25!) / range) * 100))
+              : 0;
+            const TrendIcon = !hasBenchmark || m.your_value == null
+              ? Minus
+              : m.higher_is_better === (m.your_value >= m.industry_median!) ? TrendingUp : TrendingDown;
 
             return (
               <div key={m.metric} className="rounded-xl border border-white/10 bg-white/5 p-5">
                 <div className="flex items-start justify-between flex-wrap gap-2 mb-3">
                   <div>
                     <div className="font-semibold text-sm">{m.label}</div>
-                    <div className="text-xs text-slate-500">Industry: {m.industry} · {m.org_count} orgs reporting</div>
+                    <div className="text-xs text-slate-500">Industry: {industry} · {m.org_count} orgs reporting</div>
                   </div>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 ${RATING_STYLE[m.rating]}`}>
                     <TrendIcon className="w-3 h-3" />{RATING_LABEL[m.rating]}
@@ -115,30 +114,36 @@ export default function BenchmarkingPage() {
 
                 <div className="grid grid-cols-3 gap-4 mb-3 text-center">
                   <div>
-                    <div className="text-xl font-bold text-white">{m.your_value}{m.unit}</div>
+                    <div className="text-xl font-bold text-white">{m.your_value != null ? `${m.your_value}${m.unit}` : "—"}</div>
                     <div className="text-xs text-slate-500">Your value</div>
                   </div>
                   <div>
-                    <div className="text-xl font-bold text-slate-300">{m.industry_median}{m.unit}</div>
+                    <div className="text-xl font-bold text-slate-300">{hasBenchmark ? `${m.industry_median}${m.unit}` : "—"}</div>
                     <div className="text-xs text-slate-500">Industry median</div>
                   </div>
                   <div>
-                    <div className="text-xl font-bold text-indigo-400">{m.your_percentile}th</div>
+                    <div className="text-xl font-bold text-indigo-400">{hasBenchmark && m.your_percentile != null ? `${m.your_percentile}th` : "—"}</div>
                     <div className="text-xs text-slate-500">Your percentile</div>
                   </div>
                 </div>
 
-                {/* p25 — p75 range bar with your value + median markers */}
-                <div className="relative h-3 rounded-full bg-white/10 mt-2">
-                  <div className="absolute inset-y-0 bg-indigo-500/30 rounded-full" style={{ left: "0%", width: "100%" }} />
-                  <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-slate-300 border border-navy-900" style={{ left: `calc(${medianPos}% - 4px)` }} title="Industry median" />
-                  <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-500 border-2 border-navy-900" style={{ left: `calc(${yourPos}% - 6px)` }} title="Your value" />
-                </div>
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>p25: {m.industry_p25}{m.unit}</span>
-                  <span className="text-slate-400">vs median: {m.vs_median}</span>
-                  <span>p75: {m.industry_p75}{m.unit}</span>
-                </div>
+                {hasBenchmark ? (
+                  <>
+                    {/* p25 — p75 range bar with your value + median markers */}
+                    <div className="relative h-3 rounded-full bg-white/10 mt-2">
+                      <div className="absolute inset-y-0 bg-indigo-500/30 rounded-full" style={{ left: "0%", width: "100%" }} />
+                      <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-slate-300 border border-navy-900" style={{ left: `calc(${medianPos}% - 4px)` }} title="Industry median" />
+                      <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-500 border-2 border-navy-900" style={{ left: `calc(${yourPos}% - 6px)` }} title="Your value" />
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                      <span>p25: {m.industry_p25}{m.unit}</span>
+                      <span className="text-slate-400">vs median: {m.vs_median_pct != null ? `${m.vs_median_pct}${m.unit}` : "—"}</span>
+                      <span>p75: {m.industry_p75}{m.unit}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-500 mt-2">Not enough industry peers reporting yet to benchmark this metric (requires ≥3 organisations).</p>
+                )}
               </div>
             );
           })}

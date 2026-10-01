@@ -6,35 +6,18 @@ import {
   ClipboardCheck, Wrench, User,
 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type RiskArea =
-  | "cdd" | "edd" | "pep_screening" | "sanctions_screening" | "transaction_monitoring"
-  | "ifti_reporting" | "smr_reporting" | "ttr_reporting" | "travel_rule"
-  | "record_keeping" | "training" | "governance" | "beneficial_ownership"
-  | "outsourcing" | "custom";
-
-type ControlStatus = "active" | "inactive" | "under_review" | "remediation" | "suspended";
-type Effectiveness = "effective" | "largely_effective" | "partially_effective" | "ineffective" | "not_tested";
-type Frequency = "continuous" | "daily" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual" | "ad_hoc" | "per_transaction";
-
-interface Control {
-  id: string;
-  control_ref: string;
-  name: string;
-  description?: string | null;
-  control_type: string;
-  risk_area: RiskArea;
-  control_owner: string;
-  business_unit?: string | null;
-  frequency: Frequency;
-  is_key_control: boolean;
-  status: ControlStatus;
-  effectiveness: Effectiveness;
-  last_tested_date?: string | null;
-  next_test_date?: string | null;
-}
+import {
+  listControls,
+  listControlTests,
+  recordControlTest,
+  createControl,
+  type Control,
+  type RiskArea,
+  type ControlStatus,
+  type Effectiveness,
+  type Frequency,
+  type ControlTest,
+} from "@/lib/api/governanceControls";
 
 const RISK_AREA_LABELS: Record<RiskArea, string> = {
   cdd: "CDD", edd: "EDD", pep_screening: "PEP Screening", sanctions_screening: "Sanctions Screening",
@@ -77,7 +60,7 @@ export default function ControlsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [riskAreaFilter, setRiskAreaFilter] = useState("all");
   const [selected, setSelected] = useState<Control | null>(null);
-  const [tests, setTests] = useState<any[]>([]);
+  const [tests, setTests] = useState<ControlTest[]>([]);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const showToast = (type: "success" | "error", msg: string) => {
@@ -86,8 +69,8 @@ export default function ControlsPage() {
 
   const fetchControls = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setControls(d); }
+      const d = await listControls();
+      if (d.length) setControls(d);
     } catch {}
   }, []);
 
@@ -96,8 +79,7 @@ export default function ControlsPage() {
   const openControl = async (c: Control) => {
     setSelected(c);
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls/${c.id}/tests`, { credentials: "include" });
-      setTests(res.ok ? await res.json() : []);
+      setTests(await listControlTests(c.id));
     } catch { setTests([]); }
   };
 
@@ -107,25 +89,30 @@ export default function ControlsPage() {
       sample_size: 10,
       passed_samples: result === "pass" ? 10 : 4,
       failed_samples: result === "pass" ? 0 : 6,
-      result: result === "pass" ? "pass" : "fail",
+      result: result === "pass" ? "pass" as const : "fail" as const,
     };
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls/${control.id}/tests`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const test = await res.json();
-        setTests(prev => [test, ...prev]);
-        const newEff: Effectiveness = result === "pass" ? "effective" : "ineffective";
-        setControls(prev => prev.map(c => c.id === control.id ? { ...c, effectiveness: newEff, last_tested_date: payload.test_date } : c));
-        setSelected(prev => prev ? { ...prev, effectiveness: newEff, last_tested_date: payload.test_date } : prev);
-        showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"}`);
-        return;
-      }
+      const test = await recordControlTest(control.id, payload);
+      setTests(prev => [test, ...prev]);
+      const newEff: Effectiveness = result === "pass" ? "effective" : "ineffective";
+      setControls(prev => prev.map(c => c.id === control.id ? { ...c, effectiveness: newEff, last_tested_date: payload.test_date } : c));
+      setSelected(prev => prev ? { ...prev, effectiveness: newEff, last_tested_date: payload.test_date } : prev);
+      showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"}`);
+      return;
     } catch {}
     const newEff: Effectiveness = result === "pass" ? "effective" : "ineffective";
-    setTests(prev => [{ id: `t_${Date.now()}`, ...payload, calculated_effectiveness: newEff, created_at: new Date().toISOString() }, ...prev]);
+    const demoTest: ControlTest = {
+      id: `t_${Date.now()}`,
+      control_id: control.id,
+      tester_id: "demo",
+      ...payload,
+      calculated_effectiveness: newEff,
+      action_required: false,
+      retest_required: false,
+      is_finalised: true,
+      created_at: new Date().toISOString(),
+    };
+    setTests(prev => [demoTest, ...prev]);
     setControls(prev => prev.map(c => c.id === control.id ? { ...c, effectiveness: newEff, last_tested_date: payload.test_date } : c));
     setSelected(prev => prev ? { ...prev, effectiveness: newEff, last_tested_date: payload.test_date } : prev);
     showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"}`);
@@ -392,12 +379,7 @@ function CreateControlForm({ onCreated }: { onCreated: (c: Control) => void }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onCreated(await res.json());
+      onCreated(await createControl(form));
     } catch {
       onCreated(buildControl());
     } finally { setSubmitting(false); }

@@ -29,9 +29,12 @@ Statutory deadline: 10 business days from receiving/sending the instruction.
 """
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 
 from sqlalchemy import JSON, Column, Date, DateTime, Float, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import Mapped
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -61,107 +64,137 @@ class IFTIERecord(Base):
 
     __tablename__ = "ifti_e_records"
 
-    id = Column(Integer, primary_key=True, index=True)
-    ifti_e_id = Column(String(60), unique=True, index=True, nullable=False)
-    industry_id = Column(String(60), index=True)
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    ifti_e_id: Mapped[str] = Column(String(60), unique=True, index=True, nullable=False)
+    industry_id: Mapped[Optional[str]] = Column(String(60), index=True)
 
-    direction = Column(SAEnum(IFTIEDirection), nullable=False, index=True)
-    mode = Column(SAEnum(IFTIEMode), nullable=False, default=IFTIEMode.structured)
-    status = Column(SAEnum(IFTIEStatus), default=IFTIEStatus.draft)
+    direction: Mapped[IFTIEDirection] = Column(
+        SAEnum(IFTIEDirection), nullable=False, index=True
+    )
+    mode: Mapped[IFTIEMode] = Column(
+        SAEnum(IFTIEMode), nullable=False, default=IFTIEMode.structured
+    )
+    status: Mapped[Optional[IFTIEStatus]] = Column(
+        SAEnum(IFTIEStatus), default=IFTIEStatus.draft
+    )
 
     # ── Transaction details ───────────────────────────────────────────────────
-    date_received = Column(Date, nullable=False)  # Date instruction received/sent
-    date_available = Column(Date, nullable=False)  # Date funds made available
-    currency_code = Column(String(3), default="AUD")
-    total_amount = Column(Float, nullable=False)
-    transaction_reference = Column(String(100))
+    date_received: Mapped[date] = Column(
+        Date, nullable=False
+    )  # Date instruction received/sent
+    date_available: Mapped[date] = Column(
+        Date, nullable=False
+    )  # Date funds made available
+    currency_code: Mapped[Optional[str]] = Column(String(3), default="AUD")
+    total_amount: Mapped[float] = Column(Float, nullable=False)
+    transaction_reference: Mapped[Optional[str]] = Column(String(100))
 
     # Payment purpose / bank instructions (IFTI-E specific)
-    details_of_payment = Column(String(140))  # detailsOfPayment — free text
-    sender_to_receiver_info = Column(Text)  # senderToReceiverInfo (6×35 char lines)
+    details_of_payment: Mapped[Optional[str]] = Column(
+        String(140)
+    )  # detailsOfPayment — free text
+    sender_to_receiver_info: Mapped[Optional[str]] = Column(
+        Text
+    )  # senderToReceiverInfo (6×35 char lines)
 
     # ── Swift mode ────────────────────────────────────────────────────────────
     # Only populated when mode == "swift"
-    swift_msg = Column(Text)  # Raw SWIFT message text
+    swift_msg: Mapped[Optional[str]] = Column(Text)  # Raw SWIFT message text
 
     # ── Payer (ordering customer / sending party) ─────────────────────────────
-    payer_same_as_swift_ord_cust = Column(String(3))  # YesNo — swift mode only
-    payer_full_name = Column(String(200))
-    payer_other_name = Column(String(200))
-    payer_dob = Column(Date)
-    payer_address = Column(String(300))
-    payer_city = Column(String(100))
-    payer_state = Column(String(50))
-    payer_postcode = Column(String(20))
-    payer_country = Column(String(100))
-    payer_postal_address = Column(String(300))
-    payer_postal_city = Column(String(100))
-    payer_postal_state = Column(String(50))
-    payer_postal_postcode = Column(String(20))
-    payer_postal_country = Column(String(100))
-    payer_phone = Column(String(50))
-    payer_email = Column(String(200))
-    payer_occupation = Column(String(200))
-    payer_abn = Column(String(50))
-    payer_acn = Column(String(9))
-    payer_arbn = Column(String(9))
-    payer_account_number = Column(String(100))
-    payer_business_structure = Column(String(100))
+    payer_same_as_swift_ord_cust: Mapped[Optional[str]] = Column(
+        String(3)
+    )  # YesNo — swift mode only
+    payer_full_name: Mapped[Optional[str]] = Column(String(200))
+    payer_other_name: Mapped[Optional[str]] = Column(String(200))
+    payer_dob: Mapped[Optional[date]] = Column(Date)
+    payer_address: Mapped[Optional[str]] = Column(String(300))
+    payer_city: Mapped[Optional[str]] = Column(String(100))
+    payer_state: Mapped[Optional[str]] = Column(String(50))
+    payer_postcode: Mapped[Optional[str]] = Column(String(20))
+    payer_country: Mapped[Optional[str]] = Column(String(100))
+    payer_postal_address: Mapped[Optional[str]] = Column(String(300))
+    payer_postal_city: Mapped[Optional[str]] = Column(String(100))
+    payer_postal_state: Mapped[Optional[str]] = Column(String(50))
+    payer_postal_postcode: Mapped[Optional[str]] = Column(String(20))
+    payer_postal_country: Mapped[Optional[str]] = Column(String(100))
+    payer_phone: Mapped[Optional[str]] = Column(String(50))
+    payer_email: Mapped[Optional[str]] = Column(String(200))
+    payer_occupation: Mapped[Optional[str]] = Column(String(200))
+    payer_abn: Mapped[Optional[str]] = Column(String(50))
+    payer_acn: Mapped[Optional[str]] = Column(String(9))
+    payer_arbn: Mapped[Optional[str]] = Column(String(9))
+    payer_account_number: Mapped[Optional[str]] = Column(String(100))
+    payer_business_structure: Mapped[Optional[str]] = Column(String(100))
     # Payer ID documents
-    payer_id1_type = Column(String(100))
-    payer_id1_number = Column(String(100))
-    payer_id1_issuer = Column(String(200))
-    payer_id2_type = Column(String(100))
-    payer_id2_number = Column(String(100))
-    payer_id2_issuer = Column(String(200))
-    payer_electronic_source = Column(String(200))
+    payer_id1_type: Mapped[Optional[str]] = Column(String(100))
+    payer_id1_number: Mapped[Optional[str]] = Column(String(100))
+    payer_id1_issuer: Mapped[Optional[str]] = Column(String(200))
+    payer_id2_type: Mapped[Optional[str]] = Column(String(100))
+    payer_id2_number: Mapped[Optional[str]] = Column(String(100))
+    payer_id2_issuer: Mapped[Optional[str]] = Column(String(200))
+    payer_electronic_source: Mapped[Optional[str]] = Column(String(200))
 
     # ── Payer's financial institution ─────────────────────────────────────────
-    payer_instn_name = Column(String(200))  # InstitutionBrief.name
-    payer_instn_code = Column(String(11))  # InstitutionBrief.code — SWIFT BIC
-    payer_instn_address = Column(String(300))
-    payer_instn_city = Column(String(100))
-    payer_instn_country = Column(String(100))
+    payer_instn_name: Mapped[Optional[str]] = Column(
+        String(200)
+    )  # InstitutionBrief.name
+    payer_instn_code: Mapped[Optional[str]] = Column(
+        String(11)
+    )  # InstitutionBrief.code — SWIFT BIC
+    payer_instn_address: Mapped[Optional[str]] = Column(String(300))
+    payer_instn_city: Mapped[Optional[str]] = Column(String(100))
+    payer_instn_country: Mapped[Optional[str]] = Column(String(100))
 
     # ── Correspondent / intermediary banks (0..*) ────────────────────────────
     # Stored as JSON array: [{name, code, address, city, country}, ...]
     # code = SWIFT BIC or routing number
-    correspondent_instns = Column(JSON, default=list)
+    correspondent_instns: Mapped[Optional[Any]] = Column(JSON, default=list)
 
     # ── Payee's financial institution ─────────────────────────────────────────
-    payee_instn_name = Column(String(200))  # InstitutionBrief.name (MANDATORY)
-    payee_instn_code = Column(String(11))  # InstitutionBrief.code — SWIFT BIC
-    payee_instn_address = Column(String(300))
-    payee_instn_city = Column(String(100))
-    payee_instn_country = Column(String(100))  # MANDATORY
+    payee_instn_name: Mapped[Optional[str]] = Column(
+        String(200)
+    )  # InstitutionBrief.name (MANDATORY)
+    payee_instn_code: Mapped[Optional[str]] = Column(
+        String(11)
+    )  # InstitutionBrief.code — SWIFT BIC
+    payee_instn_address: Mapped[Optional[str]] = Column(String(300))
+    payee_instn_city: Mapped[Optional[str]] = Column(String(100))
+    payee_instn_country: Mapped[Optional[str]] = Column(String(100))  # MANDATORY
 
     # ── Payee (beneficiary customer) ──────────────────────────────────────────
-    payee_full_name = Column(String(200))
-    payee_dob = Column(Date)
-    payee_business_name = Column(String(200))
-    payee_address = Column(String(300))
-    payee_city = Column(String(100))
-    payee_state = Column(String(50))
-    payee_postcode = Column(String(20))
-    payee_country = Column(String(100))
-    payee_phone = Column(String(50))
-    payee_email = Column(String(200))
-    payee_occupation = Column(String(200))
-    payee_abn = Column(String(50))
-    payee_acn = Column(String(9))
-    payee_arbn = Column(String(9))
-    payee_account_number = Column(String(100))
-    payee_account_iban = Column(String(34))  # IBAN (international accounts)
-    payee_business_structure = Column(String(100))
+    payee_full_name: Mapped[Optional[str]] = Column(String(200))
+    payee_dob: Mapped[Optional[date]] = Column(Date)
+    payee_business_name: Mapped[Optional[str]] = Column(String(200))
+    payee_address: Mapped[Optional[str]] = Column(String(300))
+    payee_city: Mapped[Optional[str]] = Column(String(100))
+    payee_state: Mapped[Optional[str]] = Column(String(50))
+    payee_postcode: Mapped[Optional[str]] = Column(String(20))
+    payee_country: Mapped[Optional[str]] = Column(String(100))
+    payee_phone: Mapped[Optional[str]] = Column(String(50))
+    payee_email: Mapped[Optional[str]] = Column(String(200))
+    payee_occupation: Mapped[Optional[str]] = Column(String(200))
+    payee_abn: Mapped[Optional[str]] = Column(String(50))
+    payee_acn: Mapped[Optional[str]] = Column(String(9))
+    payee_arbn: Mapped[Optional[str]] = Column(String(9))
+    payee_account_number: Mapped[Optional[str]] = Column(String(100))
+    payee_account_iban: Mapped[Optional[str]] = Column(
+        String(34)
+    )  # IBAN (international accounts)
+    payee_business_structure: Mapped[Optional[str]] = Column(String(100))
 
     # ── Reporter ──────────────────────────────────────────────────────────────
-    reporter_full_name = Column(String(200))
-    reporter_job_title = Column(String(200))
-    reporter_phone = Column(String(50))
-    reporter_email = Column(String(200))
+    reporter_full_name: Mapped[Optional[str]] = Column(String(200))
+    reporter_job_title: Mapped[Optional[str]] = Column(String(200))
+    reporter_phone: Mapped[Optional[str]] = Column(String(50))
+    reporter_email: Mapped[Optional[str]] = Column(String(200))
 
     # ── Audit ─────────────────────────────────────────────────────────────────
-    created_by = Column(String(60))
-    submitted_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(String(60))
+    submitted_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )

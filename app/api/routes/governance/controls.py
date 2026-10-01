@@ -28,14 +28,16 @@ from app.api.deps import (
     require_compliance_or_above,
 )
 from app.db.database import get_db
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditEventType, AuditLog
 from app.models.governance_controls import (
     CONTROL_REF_PREFIX,
     DEFAULT_EFFECTIVENESS_THRESHOLDS,
     DEFAULT_REMEDIATION_SLA_DAYS,
     DEFAULT_SEVERITY_DEDUCTIONS,
     ControlEffectiveness,
+    ControlEvidenceItem,
     ControlRemediationAction,
+    ControlRiskArea,
     ControlStatus,
     ControlTest,
     ControlTestFinding,
@@ -50,6 +52,8 @@ from app.schemas.governance import (
     ControlTestCreate,
     ControlTestResponse,
     ControlUpdate,
+    EvidenceCreate,
+    EvidenceResponse,
     FindingCreate,
     RemediationCreate,
     RemediationResponse,
@@ -91,7 +95,7 @@ def _get_test(test_id: str, control_id: str, db: Session) -> ControlTest:
     return t
 
 
-def _next_control_ref(risk_area: str, org_id: str, db: Session) -> str:
+def _next_control_ref(risk_area: ControlRiskArea, org_id: str, db: Session) -> str:
     prefix = CONTROL_REF_PREFIX.get(risk_area, "CTL-GOV")
     count = (
         db.query(GovernanceControl)
@@ -125,7 +129,7 @@ def _calculate_effectiveness(
         return ControlEffectiveness.not_tested, 0.0
 
     base = (passed / total) * 100.0
-    deduction = sum(ded.get(f.severity.value, 0) for f in findings)
+    deduction = sum(ded.get(f.severity, 0) for f in findings)
     score = max(0.0, base - deduction)
 
     if score >= thresh["effective"]:
@@ -204,7 +208,7 @@ def create_control(
     control = GovernanceControl(
         org_id=oid,
         solution_id=sol.id,
-        control_ref=_next_control_ref(payload.risk_area.value, oid, db),
+        control_ref=_next_control_ref(payload.risk_area, oid, db),
         name=payload.name,
         description=payload.description,
         objective=payload.objective,
@@ -232,10 +236,14 @@ def create_control(
         AuditLog(
             org_id=oid,
             actor_id=current_user.id,
+            event_type=AuditEventType.other,
             action="governance.control.create",
-            entity_type="GovernanceControl",
-            entity_id=control.id,
-            detail={"ref": control.control_ref, "risk_area": payload.risk_area.value},
+            object_type="GovernanceControl",
+            object_id=control.id,
+            new_value={
+                "ref": control.control_ref,
+                "risk_area": payload.risk_area.value,
+            },
         )
     )
     db.commit()
@@ -302,10 +310,11 @@ def update_control(
         AuditLog(
             org_id=control.org_id,
             actor_id=current_user.id,
+            event_type=AuditEventType.other,
             action="governance.control.update",
-            entity_type="GovernanceControl",
-            entity_id=control.id,
-            detail={"fields": list(updates.keys())},
+            object_type="GovernanceControl",
+            object_id=control.id,
+            new_value={"fields": list(updates.keys())},
         )
     )
     db.commit()
@@ -414,14 +423,14 @@ def finalise_test(
     )
 
     test.calculated_effectiveness = rating
-    test.effectiveness_score = eff_score
+    test.effectiveness_score = eff_score  # type: ignore[assignment]
     test.action_required = rating in (
         ControlEffectiveness.ineffective,
         ControlEffectiveness.partially_effective,
     )
     test.is_finalised = True
-    test.finalised_by = current_user.id
-    test.finalised_at = datetime.now(timezone.utc)
+    test.reviewed_by = current_user.id
+    test.reviewed_at = datetime.now(timezone.utc)
 
     _refresh_control_effectiveness(control, db)
 
@@ -430,7 +439,7 @@ def finalise_test(
 
     for finding in findings:
         if finding.severity in (FindingSeverity.critical, FindingSeverity.high):
-            sla_days = DEFAULT_REMEDIATION_SLA_DAYS.get(finding.severity.value, 30)
+            sla_days = DEFAULT_REMEDIATION_SLA_DAYS.get(finding.severity, 30)
             existing = (
                 db.query(ControlRemediationAction)
                 .filter(
@@ -460,10 +469,11 @@ def finalise_test(
         AuditLog(
             org_id=control.org_id,
             actor_id=current_user.id,
+            event_type=AuditEventType.control_test_completed,
             action="governance.control.test.finalised",
-            entity_type="ControlTest",
-            entity_id=test_id,
-            detail={"effectiveness": rating.value, "score": eff_score},
+            object_type="ControlTest",
+            object_id=test_id,
+            new_value={"effectiveness": rating.value, "score": eff_score},
         )
     )
     db.commit()
@@ -608,6 +618,48 @@ def update_remediation(
     db.commit()
     db.refresh(rem)
     return rem
+
+
+# ── Evidence (ongoing operational evidence, distinct from test evidence) ───────
+
+
+@router.get("/{control_id}/evidence", response_model=List[EvidenceResponse])
+def list_evidence(
+    control_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _get_control(control_id, org_id_for(current_user), db)
+    return (
+        db.query(ControlEvidenceItem)
+        .filter(ControlEvidenceItem.control_id == control_id)
+        .order_by(ControlEvidenceItem.evidence_date.desc())
+        .all()
+    )
+
+
+@router.post("/{control_id}/evidence", response_model=EvidenceResponse, status_code=201)
+def add_evidence(
+    control_id: str,
+    payload: EvidenceCreate,
+    current_user: User = Depends(require_compliance_or_above),
+    db: Session = Depends(get_db),
+):
+    control = _get_control(control_id, org_id_for(current_user), db)
+    item = ControlEvidenceItem(
+        control_id=control_id,
+        org_id=control.org_id,
+        title=payload.title,
+        description=payload.description,
+        evidence_date=payload.evidence_date,
+        document_id=payload.document_id,
+        evidence_type=payload.evidence_type,
+        uploaded_by=current_user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 # ── Open remediations (org-wide dashboard view) ────────────────────────────────

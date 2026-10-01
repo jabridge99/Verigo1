@@ -9,8 +9,32 @@ import {
 import { getStoredUser } from "@/lib/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import {
+  listPlans,
+  getMySubscription,
+  listInvoices,
+  createCheckout,
+  changePlan,
+  getCustomerPortalUrl,
+  cancelSubscription,
+  adminListAllSubscriptions,
+  adminUpdateSubscription,
+  adminActivateSubscription,
+  adminTerminateSubscription,
+  adminFeatureMatrix,
+  adminToggleFeature,
+} from "@/lib/api/billing";
+import {
+  getMyStorageConfig,
+  setMyStorageConfig,
+  clearMyStorageConfig,
+  adminGetStorageConfig,
+  adminSetStorageConfig,
+  adminClearStorageConfig,
+  type StorageConfig,
+} from "@/lib/api/storage";
+import { ApiError } from "@/lib/api/client";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 interface Plan {
@@ -33,10 +57,10 @@ interface Subscription {
   custom_monthly_aud: number | null;
   custom_annual_aud: number | null;
   annual_discount_pct: number;
-  trial_ends_at?: string;
-  current_period_end?: string;
+  trial_ends_at?: string | null;
+  current_period_end?: string | null;
   cancel_at_period_end: boolean;
-  notes?: string;
+  notes?: string | null;
 }
 
 interface Invoice {
@@ -45,12 +69,12 @@ interface Invoice {
   tax_aud: number;
   total_aud: number;
   status: string;
-  period_start?: string;
-  period_end?: string;
-  paid_at?: string;
-  stripe_hosted_url?: string;
-  stripe_pdf_url?: string;
-  created_at?: string;
+  period_start?: string | null;
+  period_end?: string | null;
+  paid_at?: string | null;
+  stripe_hosted_url?: string | null;
+  stripe_pdf_url?: string | null;
+  created_at?: string | null;
 }
 
 // ── Demo data ──────────────────────────────────────────────────────────────────
@@ -76,16 +100,15 @@ const DEMO_INVOICES: Invoice[] = [
 
 // ── Storage config ───────────────────────────────────────────────────────────
 
-interface StorageConfig {
-  backend: string;
-  bucket?: string;
-  region?: string;
-  access_key?: string;
-  endpoint_url?: string;
-  account_name?: string;
-  container?: string;
-  configured: boolean;
-  verified?: boolean | null;
+// StorageConfig's non-backend fields are Optional[str] on the backend (nullable
+// and non-string configured/verified alongside them) — filter to the string
+// fields only when seeding the form, rather than spreading the whole response.
+function toFormFields(cfg: StorageConfig): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const [k, v] of Object.entries(cfg)) {
+    if (typeof v === "string") fields[k] = v;
+  }
+  return fields;
 }
 
 const BACKEND_FIELDS: Record<string, { key: string; label: string; secret?: boolean }[]> = {
@@ -150,32 +173,24 @@ function MyStoragePanel({ plan }: { plan?: string }) {
 
   const load = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/storage/config`, { credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await getMyStorageConfig();
       setConfig(data);
-      if (data.configured) setForm({ backend: data.backend, ...data });
+      if (data.configured) setForm(toFormFields(data));
     } catch {}
   };
 
   const save = async () => {
     setSaving(true); setMsg("");
     try {
-      const res = await fetch(`${API}/api/v1/storage/config`, {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Save failed");
+      const data = await setMyStorageConfig(form);
       setConfig(data);
       setMsg(data.verified ? "Connected and verified." : "Saved — connection could not be verified, check credentials.");
-    } catch (e: any) { setMsg(e.message); }
+    } catch (e) { setMsg(e instanceof ApiError ? e.message : "Save failed"); }
     finally { setSaving(false); }
   };
 
   const disconnect = async () => {
-    await fetch(`${API}/api/v1/storage/config`, { method: "DELETE", credentials: "include" });
+    await clearMyStorageConfig();
     setConfig({ backend: "local", configured: false });
     setForm({ backend: "s3" });
     setMsg("Reverted to the platform default storage.");
@@ -243,33 +258,25 @@ function AdminStoragePanel() {
     if (!industryId) return;
     setMsg("");
     try {
-      const res = await fetch(`${API}/api/v1/storage/admin/${industryId}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Tenant not found or lookup failed");
-      const data = await res.json();
+      const data = await adminGetStorageConfig(industryId);
       setCurrent(data);
-      setForm({ backend: data.backend, ...data });
-    } catch (e: any) { setMsg(e.message); setCurrent(null); }
+      setForm(toFormFields(data));
+    } catch { setMsg("Tenant not found or lookup failed"); setCurrent(null); }
   };
 
   const save = async () => {
     setSaving(true); setMsg("");
     try {
-      const res = await fetch(`${API}/api/v1/storage/admin/${industryId}`, {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Save failed");
+      const data = await adminSetStorageConfig(industryId, form);
       setCurrent(data);
       setMsg(data.verified ? "Connected and verified." : "Saved — connection could not be verified.");
-    } catch (e: any) { setMsg(e.message); }
+    } catch (e) { setMsg(e instanceof ApiError ? e.message : "Save failed"); }
     finally { setSaving(false); }
   };
 
   const clear = async () => {
     if (!industryId) return;
-    await fetch(`${API}/api/v1/storage/admin/${industryId}`, { method: "DELETE", credentials: "include" });
+    await adminClearStorageConfig(industryId);
     setCurrent({ backend: "local", configured: false });
     setMsg("Reverted to the platform default storage.");
   };
@@ -331,16 +338,10 @@ function AdminPricingPanel({ sub, onUpdate }: { sub: Subscription | null; onUpda
       if (customMonthly) body.custom_monthly_aud = parseFloat(customMonthly);
       if (customAnnual)  body.custom_annual_aud  = parseFloat(customAnnual);
       if (discountPct)   body.annual_discount_pct = parseFloat(discountPct);
-      const res = await fetch(`${API}/api/v1/billing/admin/${industryId}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error((await res.json()).detail ?? "Save failed");
+      await adminUpdateSubscription(industryId, body);
       setMsg("Saved successfully");
       onUpdate();
-    } catch (e: any) { setMsg(e.message); }
+    } catch (e: any) { setMsg(e instanceof ApiError ? e.message : "Save failed"); }
     finally { setSaving(false); }
   };
 
@@ -417,7 +418,7 @@ function AdminPricingPanel({ sub, onUpdate }: { sub: Subscription | null; onUpda
 interface FeatureRow {
   code: string;
   name: string;
-  category?: string;
+  category?: string | null;
   plans: Record<string, boolean>;
 }
 
@@ -433,9 +434,7 @@ function FeatureToggleMatrix() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/billing/admin/features`, { credentials: "include" });
-      if (!res.ok) throw new Error();
-      setRows(await res.json());
+      setRows(await adminFeatureMatrix());
     } catch {
       setRows([]);
     } finally {
@@ -448,13 +447,7 @@ function FeatureToggleMatrix() {
     setSavingKey(key);
     setRows(prev => prev.map(r => r.code === code ? { ...r, plans: { ...r.plans, [plan]: enabled } } : r));
     try {
-      const res = await fetch(`${API}/api/v1/billing/admin/features/${plan}/${code}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
-      if (!res.ok) throw new Error();
+      await adminToggleFeature(plan, code, enabled);
     } catch {
       // revert on failure
       setRows(prev => prev.map(r => r.code === code ? { ...r, plans: { ...r.plans, [plan]: !enabled } } : r));
@@ -529,7 +522,7 @@ const PLAN_BADGE: Record<string, string> = {
   vvip:         "bg-rose-500/20 text-rose-400",
 };
 
-function fmtDate(iso?: string) {
+function fmtDate(iso?: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 }
@@ -571,15 +564,14 @@ function BillingContent() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [pr, sr, ir] = await Promise.all([
-        fetch(`${API}/api/v1/billing/plans?discount_pct=${interval === "annual" ? 20 : 0}`),
-        fetch(`${API}/api/v1/billing/subscription`, { credentials: "include" }),
-        fetch(`${API}/api/v1/billing/invoices`, { credentials: "include" }),
+      const [plansResult, subResult, invoicesResult] = await Promise.all([
+        listPlans(interval === "annual" ? 20 : 0),
+        getMySubscription(),
+        listInvoices().catch(() => null),
       ]);
-      if (!pr.ok || !sr.ok) throw new Error("api");
-      setPlans(await pr.json());
-      setSub(await sr.json());
-      if (ir.ok) setInvoices(await ir.json());
+      setPlans(plansResult);
+      setSub(subResult);
+      if (invoicesResult) setInvoices(invoicesResult);
     } catch {
       setDemo(true);
     } finally {
@@ -593,24 +585,32 @@ function BillingContent() {
       return;
     }
     setCheckingOut(planKey);
+    // An org with an active/trialing/past-due subscription already has a
+    // real Stripe subscription — /checkout always creates a brand-new one,
+    // which would double-bill them. Route plan changes through
+    // /subscription/change-plan instead, which modifies the existing
+    // subscription in place.
+    const hasActiveSubscription =
+      sub && ["active", "trialing", "past_due"].includes(sub.status);
     try {
-      const res = await fetch(`${API}/api/v1/billing/checkout`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      if (hasActiveSubscription) {
+        setSub(await changePlan(planKey, interval));
+      } else {
+        const { checkout_url } = await createCheckout({
           plan: planKey,
           interval,
           success_url: `${APP_URL}/billing?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${APP_URL}/billing`,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      const { checkout_url } = await res.json();
-      window.location.href = checkout_url;
+        });
+        window.location.href = checkout_url;
+      }
     } catch {
-      // Mock mode — simulate redirect
-      alert(`[Demo] Would redirect to Stripe Checkout for ${planKey} ${interval} plan.`);
+      // Mock mode — simulate the outcome
+      alert(
+        hasActiveSubscription
+          ? `[Demo] Would change your plan to ${planKey} (${interval}).`
+          : `[Demo] Would redirect to Stripe Checkout for ${planKey} ${interval} plan.`
+      );
     } finally {
       setCheckingOut(null);
     }
@@ -618,9 +618,7 @@ function BillingContent() {
 
   const openPortal = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/billing/portal?return_url=${encodeURIComponent(APP_URL + "/billing")}`, { credentials: "include" });
-      if (!res.ok) throw new Error();
-      const { portal_url } = await res.json();
+      const { portal_url } = await getCustomerPortalUrl(APP_URL + "/billing");
       window.location.href = portal_url;
     } catch {
       alert("[Demo] Would open Stripe Customer Portal.");
@@ -629,7 +627,7 @@ function BillingContent() {
 
   const cancelSub = async () => {
     try {
-      await fetch(`${API}/api/v1/billing/subscription/cancel?at_period_end=true`, { method: "POST", credentials: "include" });
+      await cancelSubscription(true);
       setSub(prev => prev ? { ...prev, cancel_at_period_end: true } : prev);
     } catch {
       setSub(prev => prev ? { ...prev, cancel_at_period_end: true } : prev);
@@ -762,9 +760,9 @@ function BillingContent() {
             {/* Plan cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {(plans.length ? plans : [
-                { plan: "starter", name: "Starter", monthly_aud: 59, annual_aud: 599, annual_discount_pct: 20, features: ["Up to 500 customers","AML monitoring","KYC/KYB","AUSTRAC reporting","Standard support"], limits: {} },
-                { plan: "professional", name: "Professional", monthly_aud: 79, annual_aud: 799, annual_discount_pct: 20, features: ["5,000 customers","Rule builder","ECDD","Case management","Webhooks & API","50 GB vault","Priority support"], limits: {} },
-                { plan: "enterprise", name: "Enterprise", monthly_aud: 299, annual_aud: 2999, annual_discount_pct: 20, features: ["Unlimited customers","White-label","Custom domain","Multi-tenant","500 GB vault","SLA 99.9%","Dedicated AM"], limits: {} },
+                { plan: "starter", name: "Compliance", monthly_aud: 299, annual_aud: 2990, annual_discount_pct: 20, features: ["Up to 50 customers","1 seat","Real sanctions & PEP screening","AUSTRAC reporting","Email support"], limits: {} },
+                { plan: "professional", name: "Scale", monthly_aud: 799, annual_aud: 7990, annual_discount_pct: 20, features: ["Up to 200 customers","5 seats","Rule builder","ECDD","Case management","Webhooks & API","15 GB vault","Priority support"], limits: {} },
+                { plan: "enterprise", name: "Enterprise", monthly_aud: 2999, annual_aud: 29990, annual_discount_pct: 20, features: ["Multi-entity / multi-brand, 500 customers","White-label","Custom domain","Multi-tenant","50 GB vault","SLA 99.9%","Dedicated AM"], limits: {} },
                 { plan: "vvip", name: "VVIP", monthly_aud: null, annual_aud: null, annual_discount_pct: 20, features: ["Everything in Enterprise","Custom SLA","On-site training","Regulatory liaison","Custom integrations"], limits: {} },
               ]).map(p => {
                 const isCurrent = sub?.plan === p.plan;
@@ -941,11 +939,7 @@ function AllSubscriptions() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/billing/admin/all`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error();
-      setSubs(await res.json());
+      setSubs(await adminListAllSubscriptions());
     } catch {
       setSubs([DEMO_SUB]);
     } finally {
@@ -956,12 +950,10 @@ function AllSubscriptions() {
   const act = async (industryId: string, action: "activate" | "terminate") => {
     setActing(`${industryId}:${action}`);
     try {
-      const res = await fetch(`${API}/api/v1/billing/admin/${industryId}/${action}`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error();
-      const updated = await res.json();
+      const updated =
+        action === "activate"
+          ? await adminActivateSubscription(industryId)
+          : await adminTerminateSubscription(industryId);
       setSubs(prev => prev.map(s => s.industry_id === industryId ? updated : s));
     } catch {
       // no-op in demo/mock mode

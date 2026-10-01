@@ -43,4 +43,12 @@ def get_provider() -> CryptoWalletProvider:
     if provider == "trm_labs":
         raise NotImplementedError(f"{provider} provider not yet implemented")
 
-    raise NotImplementedError("No crypto wallet screening provider configured")
+    # Default ("internal", or any unrecognised value): OFAC's self-hosted
+    # sanctioned-address list (see ofac_sdn.py) -- free, no API key, no
+    # enterprise add-on gate. Previously this default silently fell through
+    # to NotImplementedError, which the crypto-wallet route caught and
+    # treated as "no provider configured", falling back to simulation
+    # without surfacing that anywhere.
+    from .ofac_sdn import OFACSDNProvider
+
+    return OFACSDNProvider()

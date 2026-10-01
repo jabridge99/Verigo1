@@ -121,6 +121,25 @@ class TransactionCreate(BaseModel):
         return v
 
 
+class TransactionBatchItem(TransactionCreate):
+    """One row of a batch/API ingestion request (P27). Same shape as
+    TransactionCreate, except the customer may be identified by either
+    the internal customer_id or the org-facing customer_ref (the latter
+    is what an external core-banking feed would actually know)."""
+
+    customer_id: Optional[str] = None
+    customer_ref: Optional[str] = None
+
+
+class TransactionBatchRequest(BaseModel):
+    """POST /transactions/batch — programmatic/API-key-driven bulk
+    ingestion. Capped at 500 per request to keep processing (which runs
+    the full monitoring pipeline per row) within a single request's
+    timeout; a larger feed should be split into multiple batch calls."""
+
+    transactions: list[TransactionBatchItem] = Field(..., min_length=1, max_length=500)
+
+
 class TransactionUpdate(BaseModel):
     """Only non-risk, non-scoring fields may be updated after creation."""
 

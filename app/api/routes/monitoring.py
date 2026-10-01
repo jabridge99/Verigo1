@@ -11,6 +11,7 @@ Roles:
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -38,8 +39,34 @@ from app.schemas.monitoring import (
     MonitoringRuleOut,
     MonitoringRuleUpdate,
 )
+from app.services import audit_service
 
 router = APIRouter(prefix="/monitoring", tags=["Monitoring Rules"])
+
+
+def _log(
+    db: Session,
+    current_user: User,
+    org_id: str,
+    entity_id: str,
+    action: str,
+    after_state: Optional[dict] = None,
+) -> None:
+    """
+    Monitoring rule audit trail. A MonitoringRule change is a compliance-
+    configuration change -- it changes which transactions raise alerts --
+    and had no audit coverage at all before this.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="monitoring_rule",
+        entity_id=entity_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state=after_state,
+    )
 
 
 def _get_rule_or_404(rule_id: str, org_id: str, db: Session) -> MonitoringRule:
@@ -130,6 +157,14 @@ def create_rule(
 
     db.commit()
     db.refresh(rule)
+    _log(
+        db,
+        current_user,
+        org_id,
+        rule.id,
+        action="monitoring_rule_created",
+        after_state={"name": rule.name, "category": rule.category.value},
+    )
     return rule
 
 
@@ -161,12 +196,21 @@ def update_rule(
                 detail="System rules can only be modified by administrators.",
             )
 
-    for k, v in payload.model_dump(exclude_none=True).items():
+    changed = payload.model_dump(exclude_none=True)
+    for k, v in changed.items():
         setattr(rule, k, v)
 
     rule.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(rule)
+    _log(
+        db,
+        current_user,
+        org_id,
+        rule.id,
+        action="monitoring_rule_updated",
+        after_state={k: str(v) for k, v in changed.items()},
+    )
     return rule
 
 
@@ -190,6 +234,14 @@ def set_rule_status(
     rule.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(rule)
+    _log(
+        db,
+        current_user,
+        org_id,
+        rule.id,
+        action="monitoring_rule_status_changed",
+        after_state={"status": rule.status.value},
+    )
     return rule
 
 
@@ -208,5 +260,14 @@ def delete_rule(
             detail="System rules cannot be deleted. Set status to inactive to disable.",
         )
 
+    rule_id_val, rule_name = rule.id, rule.name
     db.delete(rule)
     db.commit()
+    _log(
+        db,
+        current_user,
+        org_id,
+        rule_id_val,
+        action="monitoring_rule_deleted",
+        after_state={"name": rule_name},
+    )

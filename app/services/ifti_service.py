@@ -30,8 +30,9 @@ Usage:
 from __future__ import annotations
 
 import io
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
+from uuid import uuid4
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -1037,3 +1038,60 @@ def get_ifti(db, ifti_id: str) -> Optional[IFTIRecord]:
     from app.models.ifti import IFTIRecord
 
     return db.query(IFTIRecord).filter(IFTIRecord.ifti_id == ifti_id).first()
+
+
+# ── Generate from transaction ───────────────────────────────────────────────
+
+IFTI_DEADLINE_DAYS = 14  # 10 business days ~= 14 calendar days, matching the
+# same simplified (non-business-day-aware) convention reporting_service.py
+# already uses for TTR/SMR/IFTIReport due dates.
+
+
+def generate_ifti_from_transaction(
+    txn, customer, created_by: str, org_code: Optional[str] = None
+) -> IFTIRecord:
+    """
+    Populate a draft IFTIRecord from a cross-border transaction + its customer.
+    Returns an unsaved ORM object -- caller must db.add() and db.commit().
+    """
+    direction = (
+        IFTIDirection.incoming
+        if txn.direction.value == "incoming"
+        else IFTIDirection.outgoing
+    )
+    txn_date = (
+        txn.transaction_date.date()
+        if isinstance(txn.transaction_date, datetime)
+        else txn.transaction_date
+    )
+    due_date = (datetime.now(timezone.utc) + timedelta(days=IFTI_DEADLINE_DAYS)).date()
+
+    return IFTIRecord(
+        ifti_id=f"IFTI-{uuid4().hex[:12].upper()}",
+        industry_id=txn.org_id,
+        direction=direction,
+        created_by=created_by,
+        date_received=txn_date,
+        date_available=txn_date,
+        currency_code=txn.currency,
+        total_amount=txn.amount,
+        transaction_reference=txn.reference,
+        due_date=due_date,
+        oc_full_name=customer.full_name,
+        oc_dob=getattr(customer, "date_of_birth", None),
+        oc_address=getattr(customer, "address_line1", None),
+        oc_city=getattr(customer, "city", None),
+        oc_state=getattr(customer, "state", None),
+        oc_postcode=getattr(customer, "postcode", None),
+        oc_country=getattr(customer, "country_of_residence", None),
+        oc_phone=getattr(customer, "phone", None),
+        oc_email=getattr(customer, "email", None),
+        oc_occupation=getattr(customer, "occupation", None),
+        oc_account_number=getattr(txn, "source_account_number", None),
+        bc_full_name=txn.destination_account_name,
+        bc_account_number=txn.destination_account_number,
+        bc_institution_name=txn.destination_bank_name,
+        bc_institution_country=txn.destination_country,
+        bc_country=txn.destination_country,
+        reason_for_transfer=txn.purpose,
+    )

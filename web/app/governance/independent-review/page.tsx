@@ -9,79 +9,27 @@ import clsx from "clsx";
 import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type ReviewStatus = "planned" | "in_progress" | "findings_issued" | "response_due" | "completed" | "archived";
-type FindingRisk = "low" | "medium" | "high" | "critical";
-type FindingStatus = "open" | "response_submitted" | "in_remediation" | "closed" | "overdue" | "accepted_risk";
-
-interface Review {
-  id: string;
-  review_ref: string;
-  review_type: string;
-  review_scope: string;
-  status: ReviewStatus;
-  overall_rating?: string | null;
-  title: string;
-  reviewer_name?: string | null;
-  reviewer_firm?: string | null;
-  review_period_start?: string | null;
-  review_period_end?: string | null;
-  finding_count_critical: number;
-  finding_count_high: number;
-  finding_count_medium: number;
-  finding_count_low: number;
-  management_response_due?: string | null;
-  board_acknowledged: boolean;
-  report_ref?: string | null;
-}
-
-interface Finding {
-  id: string;
-  finding_ref: string;
-  finding_number: number;
-  title: string;
-  description: string;
-  risk_rating: FindingRisk;
-  category: string;
-  status: FindingStatus;
-  regulatory_reference?: string | null;
-  policy_reference?: string | null;
-  affected_areas?: string[] | null;
-  management_response?: string | null;
-  response_due_date?: string | null;
-  closed_at?: string | null;
-  closure_evidence?: string | null;
-}
-
-interface Recommendation {
-  id: string;
-  recommendation_ref: string;
-  description: string;
-  priority: string;
-  status: string;
-  target_date?: string | null;
-}
-
-interface ActionItem {
-  id: string;
-  action_ref: string;
-  title: string;
-  status: string;
-  assigned_to?: string | null;
-  due_date?: string | null;
-  is_overdue: boolean;
-  completion_evidence?: string | null;
-}
-
-interface Dashboard {
-  review: { id: string; review_ref: string; status: string; overall_rating?: string | null; board_acknowledged: boolean };
-  findings: { total: number; by_risk: Record<string, number>; by_status: Record<string, number>; overdue: Finding[] };
-  recommendations: { total: number; open: number; accepted: number; in_progress: number; completed: number; rejected: number; overdue: Recommendation[] };
-  actions: { total: number; planned: number; in_progress: number; completed: number; verified: number; overdue: ActionItem[] };
-  disclaimer: string;
-}
+import {
+  listReviews,
+  getOrgDashboard,
+  getReviewDashboard,
+  listFindings,
+  listRecommendations,
+  listActions,
+  submitFindingResponse,
+  startFindingRemediation,
+  closeFinding as closeFindingApi,
+  boardAcknowledge as boardAcknowledgeApi,
+  type Review,
+  type Finding,
+  type Recommendation,
+  type ActionItem,
+  type ReviewDashboard as Dashboard,
+  type OrgDashboard,
+  type FindingRisk,
+  type FindingStatus,
+  type ReviewStatus,
+} from "@/lib/api/independentReview";
 
 const RISK_COLOR: Record<FindingRisk, string> = {
   critical: "bg-red-500/20 text-red-300 border-red-500/30",
@@ -125,7 +73,7 @@ export default function IndependentReviewPage() {
 
   const [tab, setTab] = useState<Tab>("reviews");
   const [reviews, setReviews] = useState<Review[]>(DEMO_REVIEWS);
-  const [orgDash, setOrgDash] = useState<any>(null);
+  const [orgDash, setOrgDash] = useState<OrgDashboard | null>(null);
   const [demo, setDemo] = useState(false);
   const [selected, setSelected] = useState<Review | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -140,15 +88,16 @@ export default function IndependentReviewPage() {
   };
 
   const fetchReviews = useCallback(async () => {
-    try {
-      const [rRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/independent-reviews`, { credentials: "include" }),
-        fetch(`${API}/api/v1/independent-reviews/org-dashboard`, { credentials: "include" }),
-      ]);
-      if (rRes.ok) { const d = await rRes.json(); if (d.items?.length) setReviews(d.items); }
-      else throw new Error("api");
-      if (dRes.ok) setOrgDash(await dRes.json());
-    } catch { setDemo(true); }
+    const [reviewsResult, dashResult] = await Promise.allSettled([
+      listReviews(),
+      getOrgDashboard(),
+    ]);
+    if (reviewsResult.status === "fulfilled") {
+      if (reviewsResult.value.items.length) setReviews(reviewsResult.value.items);
+    } else {
+      setDemo(true);
+    }
+    if (dashResult.status === "fulfilled") setOrgDash(dashResult.value);
   }, []);
 
   useEffect(() => { if (!user) { router.push("/login"); return; } fetchReviews(); }, []);
@@ -156,16 +105,14 @@ export default function IndependentReviewPage() {
   const openReview = async (r: Review) => {
     setSelected(r);
     setSelectedFinding(null);
-    try {
-      const [dRes, fRes] = await Promise.all([
-        fetch(`${API}/api/v1/independent-reviews/${r.id}/dashboard`, { credentials: "include" }),
-        fetch(`${API}/api/v1/independent-reviews/${r.id}/findings`, { credentials: "include" }),
-      ]);
-      setDashboard(dRes.ok ? await dRes.json() : null);
-      if (fRes.ok) { const d = await fRes.json(); setFindings(d.items?.length ? d.items : DEMO_FINDINGS); }
-      else setFindings(DEMO_FINDINGS);
-    } catch {
-      setDashboard(null);
+    const [dashResult, findingsResult] = await Promise.allSettled([
+      getReviewDashboard(r.id),
+      listFindings(r.id),
+    ]);
+    setDashboard(dashResult.status === "fulfilled" ? dashResult.value : null);
+    if (findingsResult.status === "fulfilled" && findingsResult.value.items.length) {
+      setFindings(findingsResult.value.items);
+    } else {
       setFindings(DEMO_FINDINGS);
     }
   };
@@ -174,14 +121,14 @@ export default function IndependentReviewPage() {
     setSelectedFinding(f);
     if (!selected) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/recommendations`, { credentials: "include" });
-      const recs: Recommendation[] = res.ok ? (await res.json()).items ?? [] : [];
+      const recResult = await listRecommendations(selected.id, f.id);
+      const recs = recResult.items;
       setRecommendations(recs);
       const acts: Record<string, ActionItem[]> = {};
       await Promise.all(recs.map(async (rec) => {
         try {
-          const ar = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/recommendations/${rec.id}/actions`, { credentials: "include" });
-          acts[rec.id] = ar.ok ? (await ar.json()).items ?? [] : [];
+          const ar = await listActions(selected.id, f.id, rec.id);
+          acts[rec.id] = ar.items;
         } catch { acts[rec.id] = []; }
       }));
       setActionsByRec(acts);
@@ -193,27 +140,21 @@ export default function IndependentReviewPage() {
     const evidence = prompt("Closure evidence (required):");
     if (!evidence) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/close?closure_evidence=${encodeURIComponent(evidence)}`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const updated = await res.json();
-        setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
-        setSelectedFinding(updated);
-        showToast("success", `${f.finding_ref} closed`);
-      } else showToast("error", "Failed to close finding");
-    } catch { showToast("error", "Network error"); }
+      const updated = await closeFindingApi(selected.id, f.id, evidence);
+      setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
+      setSelectedFinding(updated);
+      showToast("success", `${f.finding_ref} closed`);
+    } catch { showToast("error", "Failed to close finding"); }
   };
 
   const startRemediation = async (f: Finding) => {
     if (!selected) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/start-remediation`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const updated = await res.json();
-        setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
-        setSelectedFinding(updated);
-        showToast("success", "Remediation started");
-      } else showToast("error", "Failed to transition finding");
-    } catch { showToast("error", "Network error"); }
+      const updated = await startFindingRemediation(selected.id, f.id);
+      setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
+      setSelectedFinding(updated);
+      showToast("success", "Remediation started");
+    } catch { showToast("error", "Failed to transition finding"); }
   };
 
   const submitResponse = async (f: Finding) => {
@@ -221,26 +162,20 @@ export default function IndependentReviewPage() {
     const response = prompt("Management response:");
     if (!response) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/submit-response?management_response=${encodeURIComponent(response)}`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const updated = await res.json();
-        setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
-        setSelectedFinding(updated);
-        showToast("success", "Management response submitted");
-      } else showToast("error", "Failed to submit response");
-    } catch { showToast("error", "Network error"); }
+      const updated = await submitFindingResponse(selected.id, f.id, response);
+      setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
+      setSelectedFinding(updated);
+      showToast("success", "Management response submitted");
+    } catch { showToast("error", "Failed to submit response"); }
   };
 
   const boardAcknowledge = async (r: Review) => {
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${r.id}/board-acknowledge`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const updated = await res.json();
-        setReviews(prev => prev.map(x => x.id === r.id ? updated : x));
-        if (selected?.id === r.id) setSelected(updated);
-        showToast("success", "Board acknowledgement recorded");
-      } else showToast("error", "Failed (MLRO role required)");
-    } catch { showToast("error", "Network error"); }
+      const updated = await boardAcknowledgeApi(r.id);
+      setReviews(prev => prev.map(x => x.id === r.id ? updated : x));
+      if (selected?.id === r.id) setSelected(updated);
+      showToast("success", "Board acknowledgement recorded");
+    } catch { showToast("error", "Failed (MLRO role required)"); }
   };
 
   return (

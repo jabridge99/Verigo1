@@ -1,80 +1,48 @@
-from datetime import date, datetime
+"""
+Schemas for app/api/routes/aml_program.py (prefix /aml-program), which
+operates on app.models.aml_solution (AMLProgram, AMLSolution, RiskAssessment)
+- a distinct model domain from app.models.aml_program, which
+app/schemas/aml_program.py itself backs (used by organisations.py's
+/organisations/{org_id}/aml-program endpoints and verify.py). Named after
+the model module these schemas actually validate against, not the route's
+prefix, to avoid conflating the two.
+"""
+
+from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.models.aml_solution import (
-    ProgramStatus,
-    RiskAppetite,
-    ServiceStatus,
-    ServiceType,
-    SolutionStatus,
-)
-
-# ── AML Solution ──────────────────────────────────────────────────────────────
+from app.models.aml_solution import RiskAppetite
 
 
-class AMLSolutionResponse(BaseModel):
-    id: str
-    org_id: str
-    status: SolutionStatus
-    template_industry: Optional[str]
-    activated_at: Optional[datetime]
-    created_by: str
-    created_at: Optional[datetime]
-
-    model_config = {"from_attributes": True}
-
-
-# ── AML Program ───────────────────────────────────────────────────────────────
-
-
-class AMLProgramResponse(BaseModel):
-    id: str
-    solution_id: str
-    org_id: str
-    version: str
-    status: ProgramStatus
-    risk_appetite: Optional[RiskAppetite]
-    is_legacy_part_ab: bool
-    overview: Optional[str]
-    scope: Optional[str]
-    designated_services: Optional[str]
-    ewra_summary: Optional[str]
-    cdd_individuals: Optional[str]
-    cdd_companies: Optional[str]
-    ongoing_cdd: Optional[str]
-    transaction_monitoring: Optional[str]
-    pep_procedures: Optional[str]
-    sanctions_procedures: Optional[str]
-    smr_procedures: Optional[str]
-    ttr_procedures: Optional[str]
-    ifti_procedures: Optional[str]
-    travel_rule_procedures: Optional[str]
-    training_program_summary: Optional[str]
-    record_keeping: Optional[str]
-    independent_review: Optional[str]
-    effective_date: Optional[date]
-    review_due_date: Optional[date]
-    approved_by: Optional[str]
-    approved_at: Optional[datetime]
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
-
-    model_config = {"from_attributes": True}
-
-
-class AMLProgramUpdate(BaseModel):
-    """All fields optional — PATCH semantics."""
-
+class ProgramCreate(BaseModel):
+    version: str = Field(..., min_length=1, max_length=20, description="e.g. 1.0, 2.1")
+    risk_appetite: RiskAppetite = RiskAppetite.medium
     overview: Optional[str] = None
     scope: Optional[str] = None
     designated_services: Optional[str] = None
+    compliance_officer_name: Optional[str] = None
+    compliance_officer_role: Optional[str] = None
+    effective_date: Optional[date] = None
+    review_due_date: Optional[date] = None
+    is_legacy_part_ab: bool = False
+
+
+class ProgramUpdate(BaseModel):
+    risk_appetite: Optional[RiskAppetite] = None
+    overview: Optional[str] = None
+    scope: Optional[str] = None
+    designated_services: Optional[str] = None
+    compliance_officer_name: Optional[str] = None
+    compliance_officer_role: Optional[str] = None
+    # Section fields — free-text narrative
     ewra_summary: Optional[str] = None
     risk_factors_customer: Optional[str] = None
     risk_factors_product: Optional[str] = None
     risk_factors_channel: Optional[str] = None
     risk_factors_geography: Optional[str] = None
+    risk_factors_proliferation: Optional[str] = None
     cdd_individuals: Optional[str] = None
     cdd_companies: Optional[str] = None
     cdd_trusts: Optional[str] = None
@@ -96,35 +64,46 @@ class AMLProgramUpdate(BaseModel):
     independent_review: Optional[str] = None
     effective_date: Optional[date] = None
     review_due_date: Optional[date] = None
-    risk_appetite: Optional[RiskAppetite] = None
 
 
-class AMLProgramApproveRequest(BaseModel):
-    comments: Optional[str] = None
+class ProgramReview(BaseModel):
+    review_notes: str = Field(..., min_length=20)
+    next_review_date: Optional[date] = None
+    changes_required: bool = False
 
 
-# ── AML Service ───────────────────────────────────────────────────────────────
+class RiskAssessmentCreate(BaseModel):
+    title: str = Field(..., min_length=5, max_length=255)
+    assessment_date: date
+    customer_risk_rating: Optional[str] = None
+    product_risk_rating: Optional[str] = None
+    channel_risk_rating: Optional[str] = None
+    geography_risk_rating: Optional[str] = None
+    inherent_risk_score: Optional[float] = Field(None, ge=0, le=25)
+    control_effectiveness_score: Optional[float] = Field(None, ge=0, le=5)
+    residual_risk_score: Optional[float] = Field(None, ge=0, le=25)
+    findings: Optional[str] = None
+    recommendations: Optional[str] = None
+    action_items: Optional[str] = None
+    next_review_date: Optional[date] = None
 
 
-class AMLServiceResponse(BaseModel):
-    id: str
-    solution_id: str
-    org_id: str
-    service_type: ServiceType
-    status: ServiceStatus
-    title: str
-    description: Optional[str]
-    deadline: Optional[date]
-    target_date: Optional[date]
-    invoiced: bool
-    quoted_amount_aud: Optional[float]
-
-    model_config = {"from_attributes": True}
+class RiskAssessmentUpdate(BaseModel):
+    customer_risk_rating: Optional[str] = None
+    product_risk_rating: Optional[str] = None
+    channel_risk_rating: Optional[str] = None
+    geography_risk_rating: Optional[str] = None
+    inherent_risk_score: Optional[float] = Field(None, ge=0, le=25)
+    control_effectiveness_score: Optional[float] = Field(None, ge=0, le=5)
+    residual_risk_score: Optional[float] = Field(None, ge=0, le=25)
+    findings: Optional[str] = None
+    recommendations: Optional[str] = None
+    action_items: Optional[str] = None
+    next_review_date: Optional[date] = None
 
 
-class AMLServiceRequestUpdate(BaseModel):
-    status: Optional[ServiceStatus] = None
-    quoted_amount_aud: Optional[float] = None
-    invoiced: Optional[bool] = None
-    invoice_reference: Optional[str] = None
-    notes: Optional[str] = None
+class AustracDetails(BaseModel):
+    austrac_enrolment_date: Optional[date] = None
+    austrac_registration_date: Optional[date] = None
+    austrac_registration_expiry: Optional[date] = None
+    designated_business_group: Optional[str] = None

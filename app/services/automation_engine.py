@@ -276,6 +276,7 @@ def _action_create_case(db, params, org_id, entity_type, entity_id, actor_id) ->
         status=CaseStatus.open,
         title=params.get("title", "Case opened by automation rule"),
         description=params.get("description"),
+        created_by=actor_id,
     )
     db.add(case)
     db.commit()

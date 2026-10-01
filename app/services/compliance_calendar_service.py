@@ -283,7 +283,7 @@ def escalate_overdue_items(
         .filter(
             ComplianceCalendarItem.org_id == org_id,
             ComplianceCalendarItem.is_overdue == True,
-            ComplianceCalendarItem.escalated_to == None,
+            ComplianceCalendarItem.escalated_to.is_(None),
         )
         .all()
     )

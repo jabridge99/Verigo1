@@ -1,24 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts?.headers || {}) },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  return res.json();
-}
-
-interface Credential {
-  credential_id: string; provider: string; label: string;
-  key_hint: string; status: string; is_default: boolean;
-  last_tested_at: string | null; last_error: string | null;
-}
+import {
+  Connector as Credential,
+  listConnectors,
+  testConnector,
+  deleteConnector,
+} from "@/lib/api/connectors";
+import { migrateLegacyConnectors, MigrateLegacyConnectorsResult } from "@/lib/api/integrations";
 
 const PROVIDER_CATEGORIES: Record<string, { label: string; providers: string[] }> = {
   identity_verification: { label: "Identity Verification", providers: ["greenid", "sumsub", "trulioo", "jumio", "onfido"] },
@@ -69,13 +58,13 @@ export default function ConnectorsPage() {
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState<string | null>(null);
   const [migrating, setMigrating] = useState(false);
-  const [migrateResult, setMigrateResult] = useState<{ migrated: unknown[]; skipped: unknown[] } | null>(null);
+  const [migrateResult, setMigrateResult] = useState<MigrateLegacyConnectorsResult | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
   const [error, setError] = useState("");
 
   const load = () => {
     setLoading(true);
-    apiFetch("/api/v1/connectors/")
+    listConnectors()
       .then(setCreds).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   };
@@ -85,7 +74,7 @@ export default function ConnectorsPage() {
   const testCred = async (id: string) => {
     setTesting(id);
     try {
-      const r = await apiFetch(`/api/v1/connectors/${id}/test`, { method: "POST" });
+      const r = await testConnector(id);
       setTestResults((prev) => ({ ...prev, [id]: { success: r.success, message: r.message } }));
       load();
     } catch (e: unknown) {
@@ -95,15 +84,18 @@ export default function ConnectorsPage() {
 
   const deleteCred = async (id: string) => {
     if (!confirm("Delete this credential?")) return;
-    await apiFetch(`/api/v1/connectors/${id}`, { method: "DELETE" });
-    load();
+    try {
+      await deleteConnector(id);
+      load();
+    } catch (e: unknown) {
+      setError(String(e));
+    }
   };
 
   const migrate = async () => {
     setMigrating(true);
     try {
-      const r = await apiFetch("/api/v1/integrations/migrate-legacy-connectors", { method: "POST" });
-      setMigrateResult(r);
+      setMigrateResult(await migrateLegacyConnectors());
     } catch (e: unknown) {
       setError(String(e));
     } finally {
@@ -112,7 +104,7 @@ export default function ConnectorsPage() {
   };
 
   const allProviders = new Set(Object.values(PROVIDER_CATEGORIES).flatMap((c) => c.providers));
-  const configuredProviders = new Set(creds.map((c) => c.provider));
+  const configuredProviders = new Set<string>(creds.map((c) => c.provider));
   const unconfigured = [...allProviders].filter((p) => !configuredProviders.has(p));
 
   return (

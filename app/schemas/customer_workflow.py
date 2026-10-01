@@ -5,6 +5,16 @@ from pydantic import BaseModel, Field
 
 from app.models.customer_workflow import WorkflowAction, WorkflowState
 
+# Mirrors DISCLAIMER in app/api/routes/risk_assessment.py (the org-level EWRA
+# engine) — this is the same governance boundary applied to the per-customer
+# onboarding risk engine, which previously carried no disclaimer at all.
+CUSTOMER_RISK_DISCLAIMER = (
+    "This customer risk assessment is a configurable scoring tool only. Risk ratings, "
+    "weightings, and CDD/EDD routing decisions remain the sole responsibility of the "
+    "reporting entity's compliance function. The platform does not determine final risk "
+    "outcomes, provide legal or compliance advice, or accept liability for risk outcomes."
+)
+
 
 class WorkflowActionRequest(BaseModel):
     action: WorkflowAction
@@ -20,10 +30,10 @@ class WorkflowEventResponse(BaseModel):
     actor_id: Optional[str]
     actor_role: Optional[str]
     comments: Optional[str]
-    metadata: Optional[Dict[str, Any]]
+    metadata: Optional[Dict[str, Any]] = Field(validation_alias="event_metadata")
     occurred_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class WorkflowResponse(BaseModel):
@@ -102,6 +112,7 @@ class RiskAssessmentResponse(BaseModel):
     weights: Dict[str, float]
     cdd_level: str
     workflow_state_after: str  # state the workflow moved to
+    disclaimer: str = CUSTOMER_RISK_DISCLAIMER
 
 
 class RiskProfileResponse(BaseModel):
@@ -124,6 +135,7 @@ class RiskProfileResponse(BaseModel):
     channel: Optional[str]
     assessed_by: Optional[str]
     assessed_at: Optional[datetime]
+    disclaimer: str = CUSTOMER_RISK_DISCLAIMER
 
     model_config = {"from_attributes": True}
 

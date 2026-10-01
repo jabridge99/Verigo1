@@ -830,3 +830,10 @@ export const industries: Industry[] = [
 ]
 
 export const getIndustry = (slug: string) => industries.find(i => i.slug === slug)
+
+// 'reporting_group' is structural, not a real AUSTRAC IndustryType (see the
+// IndustryId comment above) -- it has a real marketing/solutions page, but
+// picking it in an org's own industry selector 422s against the backend's
+// select-industry validation. Onboarding/signup pickers should use this
+// list instead of the raw `industries` array.
+export const selectableIndustries = industries.filter(i => i.id !== 'reporting_group')

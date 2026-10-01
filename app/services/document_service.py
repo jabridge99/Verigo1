@@ -74,6 +74,8 @@ async def create_document(
     entity_id: Optional[str] = None,
     sha256_hash: Optional[str] = None,
     retention_category: Optional[str] = None,
+    version: int = 1,
+    previous_version_id: Optional[int] = None,
 ) -> Document:
     key = _storage_key(industry_id, filename)
     provider = get_storage_provider(industry_id)
@@ -93,6 +95,8 @@ async def create_document(
         organisation_id=organisation_id,
         sha256_hash=sha256_hash,
         retention_category=retention_category,
+        version=version,
+        previous_version_id=previous_version_id,
     )
     db.add(doc)
     db.commit()

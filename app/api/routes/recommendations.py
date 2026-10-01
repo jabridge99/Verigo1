@@ -15,7 +15,6 @@ The reporting entity bears sole responsibility for all regulatory decisions.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -32,6 +31,8 @@ from app.models.regulatory_recommendation import (
     RegulatoryRecommendation,
 )
 from app.models.user import User
+from app.schemas.regulatory_recommendation import ActionRequest, DismissRequest
+from app.services import audit_service
 from app.services.recommendation_engine import (
     action_recommendation,
     dismiss_recommendation,
@@ -39,19 +40,31 @@ from app.services.recommendation_engine import (
 
 router = APIRouter(prefix="/recommendations", tags=["Regulatory Recommendations"])
 
+
+def _log(db: Session, current_user: User, rec_id: str, action: str, notes: str) -> None:
+    """
+    A compliance officer acting on or dismissing a system-generated
+    regulatory recommendation is exactly the kind of decision that needs a
+    queryable record of who, when, and why -- dismiss_rec()'s own docstring
+    already claims "Dismissal is auditable", but nothing wrote it anywhere.
+    """
+    audit_service.log_action(
+        db,
+        action=action,
+        entity_type="regulatory_recommendation",
+        entity_id=rec_id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id_for(current_user),
+        notes=notes,
+    )
+
+
 DISCLAIMER = (
     "Recommendations are compliance workflow guidance only. "
     "The reporting entity bears sole responsibility for all regulatory decisions, "
     "including whether to lodge reports with AUSTRAC."
 )
-
-
-class ActionRequest(BaseModel):
-    action_taken: str
-
-
-class DismissRequest(BaseModel):
-    dismissed_reason: str
 
 
 def _rec_dict(r: RegulatoryRecommendation) -> dict:
@@ -215,6 +228,7 @@ def action_rec(
         )
     except ValueError as e:
         raise HTTPException(409, str(e))
+    _log(db, current_user, rec_id, "recommendation_actioned", payload.action_taken)
     return _rec_dict(rec)
 
 
@@ -240,4 +254,5 @@ def dismiss_rec(
         )
     except ValueError as e:
         raise HTTPException(409, str(e))
+    _log(db, current_user, rec_id, "recommendation_dismissed", payload.dismissed_reason)
     return _rec_dict(rec)

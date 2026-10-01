@@ -111,6 +111,9 @@ class ECDDCreate(BaseModel):
 class ECDDDecisionRequest(BaseModel):
     status: str  # pending | completed | rejected
     decision_notes: str
+    # Required when status == "rejected": "service_declined" (never onboarded)
+    # or "relationship_exited" (existing customer offboarded) -- P34.
+    rejection_type: Optional[str] = None
 
 
 class ECDDResponse(BaseModel):
@@ -133,6 +136,7 @@ class ECDDResponse(BaseModel):
     recommendation: Optional[str]
     analyst_notes: Optional[str]
     status: str
+    rejection_type: Optional[str] = None
     decision_notes: Optional[str] = None
     decided_by: Optional[str] = None
     decided_at: Optional[datetime] = None

@@ -18,17 +18,17 @@ import uuid
 from datetime import date as _date_type
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _require_roles
 from app.db.database import get_db
 from app.models.ifti_e import IFTIEDirection, IFTIEMode, IFTIERecord, IFTIEStatus
 from app.models.user import User, UserRole
+from app.schemas.ifti_e import IFTIECreate, IFTIEUpdate
 from app.services.ifti_e_service import generate_ifti_e_excel, get_ifti_e, list_ifti_e
 
 router = APIRouter(prefix="/ifti-e", tags=["IFTI-E Reports"])
@@ -38,170 +38,6 @@ _READER = _require_roles(
 )
 _WRITER = _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
 _SUBMITTER = _require_roles(UserRole.admin, UserRole.mlro)
-
-
-# ── Pydantic schemas ──────────────────────────────────────────────────────────
-
-
-class IFTIECreate(BaseModel):
-    direction: IFTIEDirection
-    mode: IFTIEMode = IFTIEMode.structured
-    date_received: str  # DD/MM/YYYY
-    date_available: str  # DD/MM/YYYY
-    currency_code: str = "AUD"
-    total_amount: float
-    transaction_reference: Optional[str] = None
-    details_of_payment: Optional[str] = None  # max 140 chars
-    sender_to_receiver_info: Optional[str] = None
-
-    # Swift mode
-    swift_msg: Optional[str] = None
-    payer_same_as_swift_ord_cust: Optional[str] = None  # Yes/No
-
-    # Payer
-    payer_full_name: Optional[str] = None
-    payer_other_name: Optional[str] = None
-    payer_dob: Optional[str] = None  # DD/MM/YYYY
-    payer_address: Optional[str] = None
-    payer_city: Optional[str] = None
-    payer_state: Optional[str] = None
-    payer_postcode: Optional[str] = None
-    payer_country: Optional[str] = None
-    payer_postal_address: Optional[str] = None
-    payer_postal_city: Optional[str] = None
-    payer_postal_state: Optional[str] = None
-    payer_postal_postcode: Optional[str] = None
-    payer_postal_country: Optional[str] = None
-    payer_phone: Optional[str] = None
-    payer_email: Optional[str] = None
-    payer_occupation: Optional[str] = None
-    payer_abn: Optional[str] = None
-    payer_acn: Optional[str] = None
-    payer_arbn: Optional[str] = None
-    payer_account_number: Optional[str] = None
-    payer_business_structure: Optional[str] = None
-    payer_id1_type: Optional[str] = None
-    payer_id1_number: Optional[str] = None
-    payer_id1_issuer: Optional[str] = None
-    payer_id2_type: Optional[str] = None
-    payer_id2_number: Optional[str] = None
-    payer_id2_issuer: Optional[str] = None
-    payer_electronic_source: Optional[str] = None
-
-    # Payer institution
-    payer_instn_name: Optional[str] = None
-    payer_instn_code: Optional[str] = None  # SWIFT BIC
-    payer_instn_address: Optional[str] = None
-    payer_instn_city: Optional[str] = None
-    payer_instn_country: Optional[str] = None
-
-    # Correspondent banks — [{name, code, address, city, country}]
-    correspondent_instns: Optional[List[dict]] = None
-
-    # Payee institution (MANDATORY in structured mode)
-    payee_instn_name: Optional[str] = None
-    payee_instn_code: Optional[str] = None  # SWIFT BIC
-    payee_instn_address: Optional[str] = None
-    payee_instn_city: Optional[str] = None
-    payee_instn_country: Optional[str] = None  # MANDATORY
-
-    # Payee
-    payee_full_name: Optional[str] = None
-    payee_dob: Optional[str] = None  # DD/MM/YYYY
-    payee_business_name: Optional[str] = None
-    payee_address: Optional[str] = None
-    payee_city: Optional[str] = None
-    payee_state: Optional[str] = None
-    payee_postcode: Optional[str] = None
-    payee_country: Optional[str] = None
-    payee_phone: Optional[str] = None
-    payee_email: Optional[str] = None
-    payee_occupation: Optional[str] = None
-    payee_abn: Optional[str] = None
-    payee_acn: Optional[str] = None
-    payee_arbn: Optional[str] = None
-    payee_account_number: Optional[str] = None
-    payee_account_iban: Optional[str] = None
-    payee_business_structure: Optional[str] = None
-
-    # Reporter
-    reporter_full_name: Optional[str] = None
-    reporter_job_title: Optional[str] = None
-    reporter_phone: Optional[str] = None
-    reporter_email: Optional[str] = None
-
-
-class IFTIEUpdate(BaseModel):
-    mode: Optional[IFTIEMode] = None
-    date_received: Optional[str] = None
-    date_available: Optional[str] = None
-    currency_code: Optional[str] = None
-    total_amount: Optional[float] = None
-    transaction_reference: Optional[str] = None
-    details_of_payment: Optional[str] = None
-    sender_to_receiver_info: Optional[str] = None
-    swift_msg: Optional[str] = None
-    payer_same_as_swift_ord_cust: Optional[str] = None
-    payer_full_name: Optional[str] = None
-    payer_other_name: Optional[str] = None
-    payer_dob: Optional[str] = None
-    payer_address: Optional[str] = None
-    payer_city: Optional[str] = None
-    payer_state: Optional[str] = None
-    payer_postcode: Optional[str] = None
-    payer_country: Optional[str] = None
-    payer_postal_address: Optional[str] = None
-    payer_postal_city: Optional[str] = None
-    payer_postal_state: Optional[str] = None
-    payer_postal_postcode: Optional[str] = None
-    payer_postal_country: Optional[str] = None
-    payer_phone: Optional[str] = None
-    payer_email: Optional[str] = None
-    payer_occupation: Optional[str] = None
-    payer_abn: Optional[str] = None
-    payer_acn: Optional[str] = None
-    payer_arbn: Optional[str] = None
-    payer_account_number: Optional[str] = None
-    payer_business_structure: Optional[str] = None
-    payer_id1_type: Optional[str] = None
-    payer_id1_number: Optional[str] = None
-    payer_id1_issuer: Optional[str] = None
-    payer_id2_type: Optional[str] = None
-    payer_id2_number: Optional[str] = None
-    payer_id2_issuer: Optional[str] = None
-    payer_electronic_source: Optional[str] = None
-    payer_instn_name: Optional[str] = None
-    payer_instn_code: Optional[str] = None
-    payer_instn_address: Optional[str] = None
-    payer_instn_city: Optional[str] = None
-    payer_instn_country: Optional[str] = None
-    correspondent_instns: Optional[List[dict]] = None
-    payee_instn_name: Optional[str] = None
-    payee_instn_code: Optional[str] = None
-    payee_instn_address: Optional[str] = None
-    payee_instn_city: Optional[str] = None
-    payee_instn_country: Optional[str] = None
-    payee_full_name: Optional[str] = None
-    payee_dob: Optional[str] = None
-    payee_business_name: Optional[str] = None
-    payee_address: Optional[str] = None
-    payee_city: Optional[str] = None
-    payee_state: Optional[str] = None
-    payee_postcode: Optional[str] = None
-    payee_country: Optional[str] = None
-    payee_phone: Optional[str] = None
-    payee_email: Optional[str] = None
-    payee_occupation: Optional[str] = None
-    payee_abn: Optional[str] = None
-    payee_acn: Optional[str] = None
-    payee_arbn: Optional[str] = None
-    payee_account_number: Optional[str] = None
-    payee_account_iban: Optional[str] = None
-    payee_business_structure: Optional[str] = None
-    reporter_full_name: Optional[str] = None
-    reporter_job_title: Optional[str] = None
-    reporter_phone: Optional[str] = None
-    reporter_email: Optional[str] = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -325,7 +161,7 @@ def list_records(
 ):
     records = list_ifti_e(
         db,
-        current_user.organisation_id,
+        current_user.org_id,
         direction=direction,
         status=status.value if status else None,
     )
@@ -355,7 +191,7 @@ def create_record(
 
     record = IFTIERecord(
         ifti_e_id=f"IFTIE-{uuid.uuid4().hex[:12].upper()}",
-        industry_id=current_user.organisation_id,
+        industry_id=current_user.org_id,
         created_by=current_user.id,
     )
     _apply_create(payload, record)
@@ -371,7 +207,7 @@ def get_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(_READER),
 ):
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
     return _record_dict(r)
@@ -385,7 +221,7 @@ def update_record(
     current_user: User = Depends(_WRITER),
 ):
     """Draft and ready records may be edited. Submitted records are immutable."""
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
     if r.status == IFTIEStatus.submitted:
@@ -409,7 +245,7 @@ def mark_ready(
     db: Session = Depends(get_db),
     current_user: User = Depends(_WRITER),
 ):
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
     if r.status != IFTIEStatus.draft:
@@ -426,7 +262,7 @@ def submit_record(
     current_user: User = Depends(_SUBMITTER),
 ):
     """Mark as submitted. MLRO/admin only. Records become immutable after submission."""
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
     if r.status != IFTIEStatus.ready:
@@ -447,7 +283,7 @@ def export_excel(
     Download an AUSTRAC-compatible IFTI-E Excel workbook for this record.
     The file matches the AUSTRAC IFTI-E v1.3 template format.
     """
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
 
@@ -470,7 +306,7 @@ def export_excel_bulk(
     """Export all matching records into a single AUSTRAC IFTI-E Excel workbook."""
     records = list_ifti_e(
         db,
-        current_user.organisation_id,
+        current_user.org_id,
         direction=direction,
         status=status.value if status else None,
     )
@@ -497,7 +333,7 @@ def austrac_payload(
     The platform provides compliance tooling only — lodgement decisions remain
     with the reporting entity.
     """
-    r = get_ifti_e(db, record_id, current_user.organisation_id)
+    r = get_ifti_e(db, record_id, current_user.org_id)
     if not r:
         raise HTTPException(404, "IFTI-E record not found.")
 

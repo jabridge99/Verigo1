@@ -22,9 +22,33 @@ Smoke test for two more cross-tenant IDOR fixes found during the Critical
 import uuid
 from datetime import date, datetime, timezone
 
+from app.models.aml_solution import AMLSolution
 from app.models.document import Document, DocumentCategory, DocumentStatus
-from app.models.risk_engine import AssessmentStatus, RiskAssessmentRun, RiskScoreHistory
+from app.models.risk_engine import (
+    AssessmentStatus,
+    RiskAssessmentRun,
+    RiskCategory,
+    RiskCategoryType,
+    RiskFactor,
+    RiskFactorScore,
+    RiskFramework,
+    RiskScoreHistory,
+)
 from tests.conftest import UserRole, _auth, _make_org, _make_user
+
+
+def _make_framework(db, org_id) -> RiskFramework:
+    solution = AMLSolution(org_id=org_id, created_by="someone")
+    db.add(solution)
+    db.commit()
+    db.refresh(solution)
+    framework = RiskFramework(
+        solution_id=solution.id, org_id=org_id, industry="remittance", created_by="someone"
+    )
+    db.add(framework)
+    db.commit()
+    db.refresh(framework)
+    return framework
 
 
 def _make_document(db, org_id, legal_hold=True) -> Document:
@@ -61,8 +85,9 @@ def test_delete_document_denies_cross_tenant_before_legal_hold_leak(
 
 
 def _make_run(db, org_id) -> RiskAssessmentRun:
+    framework = _make_framework(db, org_id)
     run = RiskAssessmentRun(
-        framework_id=f"rf_{uuid.uuid4().hex[:10]}",
+        framework_id=framework.id,
         org_id=org_id,
         title="Test Run",
         assessment_date=date.today(),
@@ -75,11 +100,31 @@ def _make_run(db, org_id) -> RiskAssessmentRun:
 
 
 def _make_history_row(db, org_id, factor_score_id) -> RiskScoreHistory:
+    run = _make_run(db, org_id)
+    category = RiskCategory(
+        framework_id=run.framework_id,
+        org_id=org_id,
+        category_type=RiskCategoryType.customer,
+        name="Customer Risk",
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    factor = RiskFactor(category_id=category.id, org_id=org_id, name="Test Factor")
+    db.add(factor)
+    db.commit()
+    db.refresh(factor)
+    factor_score = RiskFactorScore(
+        id=factor_score_id, assessment_id=run.id, factor_id=factor.id, org_id=org_id
+    )
+    db.add(factor_score)
+    db.commit()
+
     row = RiskScoreHistory(
         factor_score_id=factor_score_id,
         org_id=org_id,
-        assessment_id=f"rar_{uuid.uuid4().hex[:8]}",
-        factor_id=f"rfact_{uuid.uuid4().hex[:8]}",
+        assessment_id=run.id,
+        factor_id=factor.id,
         changed_by="someone",
         changed_at=datetime.now(timezone.utc),
     )

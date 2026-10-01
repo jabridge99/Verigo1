@@ -26,6 +26,7 @@ from app.models.monitoring import AlertSeverity, AlertStatus, TransactionAlert
 from app.models.report import IFTIReport, ReportStatus, SMRReport, TTRReport
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -210,20 +211,20 @@ def global_dashboard(
         ComplianceCalendarItem.due_date >= now,
         ComplianceCalendarItem.due_date <= now + timedelta(days=7),
         ComplianceCalendarItem.status.in_(
-            [CalendarItemStatus.open, CalendarItemStatus.in_progress]
+            [CalendarItemStatus.scheduled, CalendarItemStatus.in_progress]
         ),
     ).count()
     upcoming_30d = cal_q.filter(
         ComplianceCalendarItem.due_date >= now,
         ComplianceCalendarItem.due_date <= now + timedelta(days=30),
         ComplianceCalendarItem.status.in_(
-            [CalendarItemStatus.open, CalendarItemStatus.in_progress]
+            [CalendarItemStatus.scheduled, CalendarItemStatus.in_progress]
         ),
     ).count()
     overdue_items = cal_q.filter(
         ComplianceCalendarItem.due_date < now,
         ComplianceCalendarItem.status.in_(
-            [CalendarItemStatus.open, CalendarItemStatus.in_progress]
+            [CalendarItemStatus.scheduled, CalendarItemStatus.in_progress]
         ),
     ).count()
 
@@ -333,10 +334,10 @@ def remittance_dashboard(
         Transaction.transaction_date >= prev_30d,
     ).count()
 
-    # IFTI candidates: cross-border >= AUD 10,000 pending reporting
+    # IFTI candidates: cross-border >= statutory threshold, pending reporting
     ifti_candidates = txn_q.filter(
         Transaction.is_cross_border == True,
-        Transaction.amount_aud >= 10_000,
+        Transaction.amount_aud >= TTR_CTR_THRESHOLD_AUD,
         Transaction.transaction_date >= prev_30d,
     ).count()
     ifti_pending = (
@@ -456,7 +457,7 @@ def crypto_dashboard(
                 [
                     AlertCategory.crypto_mixer,
                     AlertCategory.darknet_exposure,
-                    AlertCategory.crypto_anomaly,
+                    AlertCategory.wallet_risk,
                 ]
             ),
             TransactionAlert.status.in_(_open_alert_statuses()),
@@ -885,7 +886,7 @@ def compliance_score(
             ComplianceCalendarItem.due_date < now,
             ComplianceCalendarItem.status.in_(
                 [
-                    CalendarItemStatus.open,
+                    CalendarItemStatus.scheduled,
                     CalendarItemStatus.in_progress,
                 ]
             ),

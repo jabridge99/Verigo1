@@ -8,17 +8,17 @@ import {
   CheckCircle, Clock
 } from 'lucide-react'
 import clsx from 'clsx'
-import { getStoredUser, clearUser } from '@/lib/auth'
+import { getStoredUser, signOut } from '@/lib/auth'
 import type { AuthUser } from '@/lib/auth'
+import { getGlobalDashboard, getComplianceScore, getAlertTrends } from '@/lib/api/dashboard'
+import { Badge, type BadgeTone } from '@/components/ui/badge'
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-
-const ROLE_COLOR: Record<string, string> = {
-  admin:      'bg-red-500/20 text-red-300 border border-red-500/30',
-  mlro:       'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-  compliance: 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
-  analyst:    'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-  viewer:     'bg-slate-500/20 text-slate-300 border border-slate-500/30',
+const ROLE_TONE: Record<string, BadgeTone> = {
+  admin:      'danger',
+  mlro:       'purple',
+  compliance: 'teal',
+  analyst:    'info',
+  viewer:     'neutral',
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -87,23 +87,21 @@ export default function DashboardPage() {
     }
     setUser(stored)
 
-    fetch(`${API}/api/v1/dashboard/global`, { credentials: 'include' })
-      .then(res => (res.ok ? res.json() : Promise.reject()))
+    getGlobalDashboard()
       .then(d => {
         setStats(prev => ({
           ...prev,
-          open_alerts: d.alerts?.open ?? prev.open_alerts,
-          pending_reports: d.reports?.total_pending ?? prev.pending_reports,
-          pending_kyc: (d.customers?.pending_review ?? 0) + (d.customers?.edd_required ?? 0),
-          open_cases: d.cases?.open ?? prev.open_cases,
-          customers_total: d.customers?.total ?? prev.customers_total,
+          open_alerts: d.alerts.open ?? prev.open_alerts,
+          pending_reports: d.reports.total_pending ?? prev.pending_reports,
+          pending_kyc: (d.customers.pending_review ?? 0) + (d.customers.edd_required ?? 0),
+          open_cases: d.cases.open ?? prev.open_cases,
+          customers_total: d.customers.total ?? prev.customers_total,
         }))
-        if (d.customers?.by_risk_level) setRiskBreakdown(d.customers.by_risk_level)
+        if (d.customers.by_risk_level) setRiskBreakdown(d.customers.by_risk_level)
       })
       .catch(() => {})
 
-    fetch(`${API}/api/v1/dashboard/compliance-score`, { credentials: 'include' })
-      .then(res => (res.ok ? res.json() : Promise.reject()))
+    getComplianceScore()
       .then(d => {
         if (typeof d.compliance_score === 'number') {
           setStats(prev => ({ ...prev, compliance_score: Math.round(d.compliance_score) }))
@@ -111,11 +109,10 @@ export default function DashboardPage() {
       })
       .catch(() => {})
 
-    fetch(`${API}/api/v1/dashboard/trends/alerts`, { credentials: 'include' })
-      .then(res => (res.ok ? res.json() : Promise.reject()))
+    getAlertTrends()
       .then(d => {
         if (Array.isArray(d.data) && d.data.length) {
-          setAlertTrend(d.data.map((p: any) => p.alerts ?? 0))
+          setAlertTrend(d.data.map(p => p.alerts ?? 0))
           setTrendWeeks(d.data.length)
         }
       })
@@ -123,7 +120,7 @@ export default function DashboardPage() {
   }, [router])
 
   function logout() {
-    clearUser()
+    signOut()
     router.replace('/login')
   }
 
@@ -140,9 +137,9 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-2xl font-bold text-white">Welcome back, {user.full_name.split(' ')[0]}</h1>
-              <span className={clsx('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold', ROLE_COLOR[user.role])}>
+              <Badge tone={ROLE_TONE[user.role] ?? 'neutral'} capitalize={false}>
                 {ROLE_LABEL[user.role] ?? user.role}
-              </span>
+              </Badge>
             </div>
             <p className="text-sm text-white/40">{user.email}{user.industry_id ? ` · ${user.industry_id}` : ''}</p>
           </div>
@@ -235,7 +232,7 @@ export default function DashboardPage() {
                     {m.icon}
                   </div>
                   <div className="flex items-center gap-2">
-                    {m.badge && <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full">{m.badge}</span>}
+                    {m.badge && <Badge tone="purple" bordered capitalize={false}>{m.badge}</Badge>}
                     <ChevronRight className="w-4 h-4 text-white/20 group-hover:text-brand-400 transition-colors" />
                   </div>
                 </div>

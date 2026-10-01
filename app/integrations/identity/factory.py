@@ -19,6 +19,6 @@ def get_provider() -> IdentityProvider:
 
     raise NotImplementedError(
         f"No hosted identity provider configured for IDENTITY_PROVIDER={provider!r} — "
-        "internal verification uses app.services.identity_verification directly, "
+        "internal verification uses app.services.document_verification directly, "
         "not this provider abstraction."
     )

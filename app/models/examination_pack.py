@@ -21,9 +21,12 @@ Sections included:
 from __future__ import annotations
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Enum, String, Text, func
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -54,41 +57,47 @@ EXAMINATION_SECTIONS = [
 class ExaminationPack(Base):
     __tablename__ = "examination_packs"
 
-    id = Column(String, primary_key=True, default=lambda: f"ep_{uuid4().hex[:12]}")
-    org_id = Column(String, nullable=False, index=True)
-    pack_ref = Column(String(50), unique=True, nullable=False)
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ep_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(String, nullable=False, index=True)
+    pack_ref: Mapped[str] = Column(String(50), unique=True, nullable=False)
     # e.g. "EXAM-2026-001" — sequential per org
 
     # ── Examination scope ─────────────────────────────────────────────────────
-    period_start = Column(Date, nullable=False)
-    period_end = Column(Date, nullable=False)
-    sections = Column(JSON, default=list)  # subset of EXAMINATION_SECTIONS
+    period_start: Mapped[date] = Column(Date, nullable=False)
+    period_end: Mapped[date] = Column(Date, nullable=False)
+    sections: Mapped[Optional[Any]] = Column(
+        JSON, default=list
+    )  # subset of EXAMINATION_SECTIONS
 
     # ── Examiner details ──────────────────────────────────────────────────────
-    examiner_name = Column(String(255))
-    examiner_agency = Column(String(100), default="AUSTRAC")
-    examination_ref = Column(String(100))  # AUSTRAC's own reference number
+    examiner_name: Mapped[Optional[str]] = Column(String(255))
+    examiner_agency: Mapped[Optional[str]] = Column(String(100), default="AUSTRAC")
+    examination_ref: Mapped[Optional[str]] = Column(
+        String(100)
+    )  # AUSTRAC's own reference number
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
-    status = Column(
+    status: Mapped[ExaminationPackStatus] = Column(
         Enum(ExaminationPackStatus),
         default=ExaminationPackStatus.draft,
         nullable=False,
         index=True,
     )
-    requested_by = Column(String, nullable=False)
-    generated_at = Column(DateTime(timezone=True))
-    delivered_at = Column(DateTime(timezone=True))
-    delivered_by = Column(String)
-    delivery_notes = Column(Text)
+    requested_by: Mapped[str] = Column(String, nullable=False)
+    generated_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    delivered_at: Mapped[Optional[datetime]] = Column(DateTime(timezone=True))
+    delivered_by: Mapped[Optional[str]] = Column(String)
+    delivery_notes: Mapped[Optional[str]] = Column(Text)
 
     # ── Frozen snapshot (JSON) ────────────────────────────────────────────────
-    snapshot_data = Column(JSON, default=dict)
+    snapshot_data: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # Structure: { "section_name": { ...data... }, ... }
     # Frozen at generation time — never changes after status = ready
 
     # ── Summary metrics (top-level, for quick display) ────────────────────────
-    summary_metrics = Column(JSON, default=dict)
+    summary_metrics: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {
     #   "total_customers": 412,
     #   "high_risk_customers": 18,
@@ -100,12 +109,16 @@ class ExaminationPack(Base):
     #   ...
     # }
 
-    generation_errors = Column(
+    generation_errors: Mapped[Optional[Any]] = Column(
         JSON, default=list
     )  # any section errors during generation
 
-    is_confidential = Column(Boolean, default=True)
-    version = Column(String(10), default="1.0")
+    is_confidential: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    version: Mapped[Optional[str]] = Column(String(10), default="1.0")
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )

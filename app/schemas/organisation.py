@@ -3,7 +3,12 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
-from app.models.organisation import MembershipStatus, OrganisationStatus, RiskProfile
+from app.models.organisation import (
+    IndustryType,
+    MembershipStatus,
+    OrganisationStatus,
+    RiskProfile,
+)
 
 
 class OrganisationCreate(BaseModel):
@@ -23,9 +28,14 @@ class OrganisationUpdate(BaseModel):
     compliance_officer_email: Optional[str] = None
 
 
+class IndustrySelectRequest(BaseModel):
+    industry_type: IndustryType
+
+
 class OrganisationResponse(BaseModel):
     id: str
     name: str
+    industry_type: IndustryType
     industry_id: Optional[str] = None
     risk_profile: Optional[RiskProfile] = None
     status: OrganisationStatus
@@ -52,6 +62,10 @@ class MemberAdd(BaseModel):
 class MemberUpdate(BaseModel):
     role_key: Optional[str] = None
     status: Optional[MembershipStatus] = None
+
+
+class TransferOwnershipRequest(BaseModel):
+    new_owner_user_id: str
 
 
 class MemberResponse(BaseModel):

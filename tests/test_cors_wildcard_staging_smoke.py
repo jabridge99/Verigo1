@@ -41,3 +41,25 @@ def test_explicit_cors_origin_allowed_in_staging():
 def test_wildcard_cors_allowed_in_development():
     s = Settings(environment="development", cors_origins="*", secret_key="x")
     assert s.cors_origins_list == ["*"]
+
+
+def test_default_secret_key_rejected_in_staging():
+    # Previously only environment == "production" checked this -- a staging
+    # deploy left at the default secret would sign valid auth tokens using
+    # a value visible in the public source, same class of hole as wildcard
+    # CORS in staging above.
+    with pytest.raises(ValueError, match="SECRET_KEY"):
+        Settings(
+            environment="staging",
+            cors_origins="https://staging.example.com",
+            secret_key="change-me-in-production",
+        )
+
+
+def test_default_secret_key_allowed_in_development():
+    s = Settings(
+        environment="development",
+        cors_origins="*",
+        secret_key="change-me-in-production",
+    )
+    assert s.secret_key == "change-me-in-production"

@@ -6,72 +6,34 @@ import {
   CheckCircle, AlertTriangle, ChevronDown, ChevronRight, X, Beaker,
 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const BASE = `${API}/api/v1/rule-builder`;
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import {
+  listRules,
+  getRuleBuilderReference,
+  createRule,
+  updateRule,
+  deleteRule as deleteRuleApi,
+  testRule,
+  listRuleExecutions,
+  listRuleVersions,
+  type Rule,
+  type Reference,
+  type Condition,
+  type ConditionGroup,
+  type Action,
+  type RuleStatus,
+  type RuleExecution as Execution,
+  type RuleVersion as Version,
+} from "@/lib/api/ruleBuilder";
+import { ApiError } from "@/lib/api/client";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type RuleStatus = "active" | "inactive" | "testing" | "archived";
-
-interface Condition {
-  field: string;
-  operator: string;
-  value: unknown;
-  value_label?: string | null;
-  negate: boolean;
-}
-
-interface ConditionGroup {
-  logic: "AND" | "OR";
-  description?: string | null;
-  negate: boolean;
-  conditions: Condition[];
-  groups: ConditionGroup[];
-}
-
-interface Action {
-  action_type: string;
-  params: Record<string, unknown>;
-  delay_minutes: number;
-  description?: string | null;
-}
-
-interface Rule {
-  id: string;
-  rule_ref: string;
-  name: string;
-  description?: string | null;
-  event_type: string;
-  status: RuleStatus;
-  is_system: boolean;
-  priority: number;
-  condition_groups: ConditionGroup[];
-  actions: Action[];
-  applicable_industries: string[];
-  tags: string[];
-  trigger_count: number;
-  last_triggered_at?: string | null;
-  last_executed_at?: string | null;
-  created_by?: string | null;
-  created_at: string;
-  updated_at?: string | null;
-}
-
-interface Reference {
-  event_types: { value: string; label: string }[];
-  action_types: { value: string; label: string }[];
-  operators: { value: string; label: string }[];
-  condition_fields: Record<string, string[]>;
-  action_params_reference: Record<string, { required?: string[]; optional?: string[]; note?: string }>;
-  disclaimer: string;
-}
-
-const STATUS_COLOR: Record<RuleStatus, string> = {
-  active: "bg-emerald-500/20 text-emerald-300",
-  inactive: "bg-slate-600/20 text-slate-400",
-  testing: "bg-amber-500/20 text-amber-300",
-  archived: "bg-slate-700/30 text-slate-500",
+const STATUS_TONE: Record<RuleStatus, BadgeTone> = {
+  active: "success",
+  inactive: "muted",
+  testing: "warning",
+  archived: "muted",
 };
 
 function emptyGroup(): ConditionGroup {
@@ -122,12 +84,12 @@ export default function RuleBuilderPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [rRes, refRes] = await Promise.all([
-        fetch(`${BASE}/rules`, { credentials: "include" }),
-        fetch(`${BASE}/rules/reference`, { credentials: "include" }),
+      const [rulesData, referenceData] = await Promise.all([
+        listRules(),
+        getRuleBuilderReference(),
       ]);
-      if (rRes.ok) setRules(await rRes.json());
-      if (refRes.ok) setReference(await refRes.json());
+      setRules(rulesData);
+      setReference(referenceData);
     } catch {
       showToast("error", "Failed to load rules");
     } finally {
@@ -148,34 +110,21 @@ export default function RuleBuilderPage() {
   const deleteRule = async (id: string) => {
     if (!confirm("Delete this rule? This cannot be undone.")) return;
     try {
-      const res = await fetch(`${BASE}/rules/${id}`, { method: "DELETE", credentials: "include" });
-      if (res.ok || res.status === 204) {
-        setRules((prev) => prev.filter((r) => r.id !== id));
-        if (selected?.id === id) setSelected(null);
-        showToast("success", "Rule deleted");
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Delete failed");
-      }
-    } catch {
-      showToast("error", "Delete failed");
+      await deleteRuleApi(id);
+      setRules((prev) => prev.filter((r) => r.id !== id));
+      if (selected?.id === id) setSelected(null);
+      showToast("success", "Rule deleted");
+    } catch (e) {
+      showToast("error", e instanceof ApiError ? e.message : "Delete failed");
     }
   };
 
   const toggleStatus = async (r: Rule) => {
     const next: RuleStatus = r.status === "active" ? "inactive" : "active";
     try {
-      const res = await fetch(`${BASE}/rules/${r.id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setRules((prev) => prev.map((x) => (x.id === r.id ? updated : x)));
-        showToast("success", `Rule set to ${next}`);
-      }
+      const updated = await updateRule(r.id, { status: next });
+      setRules((prev) => prev.map((x) => (x.id === r.id ? updated : x)));
+      showToast("success", `Rule set to ${next}`);
     } catch {
       showToast("error", "Status update failed");
     }
@@ -218,7 +167,7 @@ export default function RuleBuilderPage() {
             className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
           >
             <option value="all">Status — All</option>
-            {Object.keys(STATUS_COLOR).map((s) => (
+            {Object.keys(STATUS_TONE).map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -282,9 +231,7 @@ export default function RuleBuilderPage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{r.priority}</td>
                     <td className="px-4 py-3">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[r.status])}>
-                        {r.status}
-                      </span>
+                      <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{r.trigger_count}</td>
                     <td className="px-4 py-3 text-right">
@@ -387,21 +334,10 @@ function RuleDrawer({
         actions,
         ...(isNew ? {} : { status }),
       };
-      const res = await fetch(isNew ? `${BASE}/rules` : `${BASE}/rules/${rule!.id}`, {
-        method: isNew ? "POST" : "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const saved = await res.json();
-        onSaved(saved, isNew);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Save failed");
-      }
-    } catch {
-      showToast("error", "Save failed");
+      const saved = isNew ? await createRule(payload) : await updateRule(rule!.id, payload);
+      onSaved(saved, isNew);
+    } catch (e) {
+      showToast("error", e instanceof ApiError ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -481,7 +417,7 @@ function RuleDrawer({
                 <div>
                   <label className="text-xs text-slate-500 block mb-1">Status</label>
                   <select value={status} onChange={(e) => setStatus(e.target.value as RuleStatus)} className="field-input">
-                    {Object.keys(STATUS_COLOR).map((s) => (
+                    {Object.keys(STATUS_TONE).map((s) => (
                       <option key={s} value={s}>
                         {s} {s === "testing" ? "(shadow mode — logs only)" : ""}
                       </option>
@@ -789,14 +725,7 @@ function TestPanel({ rule }: { rule: Rule }) {
     }
     setRunning(true);
     try {
-      const res = await fetch(`${BASE}/rules/${rule.id}/test`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: parsed }),
-      });
-      if (res.ok) setResult(await res.json());
-      else setError("Test failed");
+      setResult(await testRule(rule.id, parsed));
     } catch {
       setError("Test failed");
     } finally {
@@ -833,27 +762,14 @@ function TestPanel({ rule }: { rule: Rule }) {
 
 // ── Executions panel ──────────────────────────────────────────────────────────
 
-interface Execution {
-  id: string;
-  event_type: string;
-  entity_type?: string | null;
-  entity_id?: string | null;
-  conditions_matched: boolean;
-  actions_executed: { action_type: string; result?: string }[];
-  is_shadow_mode: boolean;
-  execution_time_ms?: number | null;
-  error_message?: string | null;
-  executed_at: string;
-}
-
 function ExecutionsPanel({ ruleId }: { ruleId: string }) {
   const [execs, setExecs] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/rules/${ruleId}/executions`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : []))
+    listRuleExecutions(ruleId)
       .then(setExecs)
+      .catch(() => setExecs([]))
       .finally(() => setLoading(false));
   }, [ruleId]);
 
@@ -887,24 +803,14 @@ function ExecutionsPanel({ ruleId }: { ruleId: string }) {
 
 // ── Versions panel ────────────────────────────────────────────────────────────
 
-interface Version {
-  id: string;
-  version_number: number;
-  name: string;
-  status: string;
-  change_summary?: string | null;
-  changed_by?: string | null;
-  created_at: string;
-}
-
 function VersionsPanel({ ruleId }: { ruleId: string }) {
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/rules/${ruleId}/versions`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : []))
+    listRuleVersions(ruleId)
       .then(setVersions)
+      .catch(() => setVersions([]))
       .finally(() => setLoading(false));
   }, [ruleId]);
 

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD, risk_rating_pct
+
 DISCLAIMER = (
     "Recommendations are compliance workflow guidance only. "
     "The platform does not make compliance decisions, provide legal advice, "
@@ -291,7 +293,7 @@ def generate_assessment_recommendations(
                 "documentation",
                 "AML/CTF Act 2006 s.43 — Threshold Transaction Reports",
             )
-        if is_cross_border and amount >= 10_000:
+        if is_cross_border and amount >= TTR_CTR_THRESHOLD_AUD:
             _add(
                 "Review transaction for IFTI obligation",
                 "Linked transaction is cross-border and may trigger IFTI reporting.",
@@ -317,10 +319,39 @@ def generate_assessment_recommendations(
     return recs
 
 
+# Point weights below are red-flag counts, not a percentage — normalised
+# against this ceiling before rating (see compute_assessment_risk_rating).
+# TAX_INDICATOR_TYPICAL_MAX is the number of standard AUSTRAC/FATF tax-risk
+# indicators on TaxRiskAssessment today (app/models/professional_assessment.py);
+# reviewers can also flag custom_indicators beyond that fixed list, so a real
+# score can exceed this ceiling — risk_rating_pct() clamps at 100%, so it
+# degrades to "at least critical" rather than erroring. If more standard
+# indicators (an "additional line") are added to that model, bump this
+# constant to match so the scale stays calibrated.
+SOF_MAX_SCORE = 3  # evidence_insufficient(2) + additional_info_required(1)
+SOW_MAX_SCORE = 6  # profile_inconsistent(4) + additional_review_required(2)
+TAX_INDICATOR_TYPICAL_MAX = 10
+TAX_MAX_SCORE = TAX_INDICATOR_TYPICAL_MAX * 2
+INVESTMENT_MAX_SCORE = 5  # high_risk_jurisdiction(3) + unverified_ownership(2)
+PEP_MAX_SCORE = 5
+PROFESSIONAL_ASSESSMENT_MAX_SCORE = (
+    SOF_MAX_SCORE + SOW_MAX_SCORE + TAX_MAX_SCORE + INVESTMENT_MAX_SCORE + PEP_MAX_SCORE
+)  # 39 today
+
+
 def compute_assessment_risk_rating(assessment) -> str:
     """
     Derive an overall risk rating from completed assessment sections.
     Returns: low | medium | high | critical
+
+    The point total below is this assessment's own domain-specific scoring
+    (SOF/SOW/tax/investment/PEP red flags) — that logic is unchanged. What's
+    shared with the rest of the codebase is only the final step: converting
+    the point total into a low/medium/high/critical label goes through
+    risk_engine.risk_rating_pct(), the same ISO 31000-derived boundaries
+    every other risk-scoring module in this codebase rates against, instead
+    of this function's own previously-independent 12/7/3 cut points.
+
     Used to auto-suggest the overall_risk_rating field (human confirms).
     """
     score = 0
@@ -355,10 +386,4 @@ def compute_assessment_risk_rating(assessment) -> str:
     if customer_is_pep:
         score += 5
 
-    if score >= 12:
-        return "critical"
-    elif score >= 7:
-        return "high"
-    elif score >= 3:
-        return "medium"
-    return "low"
+    return risk_rating_pct(score, PROFESSIONAL_ASSESSMENT_MAX_SCORE)

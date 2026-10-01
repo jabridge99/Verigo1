@@ -9,14 +9,29 @@ Roles:
   POST /transactions/{id}/run-monitoring — compliance+
   GET  /transactions/{id}/receipt — analyst+  (full receipt for reporting)
   GET  /transactions/{id}/summary — analyst+  (lightweight summary)
+  POST /transactions/batch — analyst+  (programmatic/API-key batch ingestion, P27)
+  GET  /transactions/import/template — analyst+
+  GET  /transactions/import/field-guide — analyst+
+  POST /transactions/import/upload — compliance+  (CSV/Excel batch ingestion, P27)
+
+P27 note: a single transaction can already be pushed programmatically
+today via POST /transactions with an X-API-Key header (app/api/deps.py's
+get_current_user accepts either a user JWT or an org API key) — the gap
+this file's batch/import endpoints close is the lack of any *batch* path,
+which is what a real core-banking/payments feed or a one-off bulk upload
+actually needs. A true inbound webhook receiver (a third-party system
+pushing to VeriGo on its own schedule, vs. VeriGo's existing outbound
+webhooks in app/api/routes/webhooks.py) and a per-vendor core-banking
+connector remain out of scope here — see PARKING_LOT.md, P27.
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -36,7 +51,6 @@ from app.models.regulatory_recommendation import (
 from app.models.risk_matrix import (
     OrgApprovalQuestion,
     OrgMonitoringConfig,
-    QuestionAnswer,
     TransactionQuestionResponse,
 )
 from app.models.transaction import (
@@ -45,20 +59,26 @@ from app.models.transaction import (
     TransactionStatus,
 )
 from app.models.user import User
+from app.schemas.risk_matrix import AnswerQuestionsRequest, QuestionAnswerItem
 from app.schemas.transaction import (
+    TransactionBatchItem,
+    TransactionBatchRequest,
     TransactionCreate,
     TransactionListOut,
     TransactionOut,
     TransactionUpdate,
 )
 from app.schemas.transaction_receipt import TransactionReceipt, build_receipt
+from app.services.audit_service import log_action
 from app.services.monitoring_engine import run_monitoring
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
 from app.services.risk_matrix_service import (
     compute_final_approval_score,
     compute_question_score,
 )
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
+log = logging.getLogger("verigo.api.transactions")
 
 
 def _get_transaction_or_404(txn_id: str, org_id: str, db: Session) -> Transaction:
@@ -81,7 +101,7 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_analyst_or_above),
 ):
-    """Record a new transaction. Risk scoring and monitoring are handled separately."""
+    """Record a new transaction. Automatically runs the monitoring engine against it."""
     org_id = org_id_for(current_user)
 
     # Verify customer belongs to org
@@ -146,7 +166,451 @@ def create_transaction(
         triggered_by=current_user.id,
     )
 
+    # Real monitoring pipeline (MonitoringRule + behaviour-signal scoring --
+    # distinct from the automation rules above). Was never actually called
+    # here despite this route's own /run-monitoring sibling endpoint
+    # docstring claiming it happens "automatically...in production" --
+    # every transaction sat unscored unless something separately called
+    # that endpoint afterward.
+    run_monitoring(txn, customer, db)
+    db.commit()
+
+    log_action(
+        db,
+        action="transaction_recorded",
+        entity_type="transaction",
+        entity_id=txn.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={
+            "transaction_ref": txn.transaction_ref,
+            "amount": str(txn.amount),
+            "currency": txn.currency,
+            "customer_id": txn.customer_id,
+        },
+    )
+
     return txn
+
+
+# ── Batch / bulk ingestion (P27) ────────────────────────────────────────────
+
+
+def _ingest_batch_item(
+    db: Session,
+    org_id: str,
+    item: TransactionBatchItem,
+    current_user: User,
+    seen_refs: set,
+) -> dict:
+    """
+    Create one Transaction from a batch/import row, running it through the
+    same monitoring + automation pipeline as POST /transactions so an
+    ingested transaction is treated identically to a manually-entered one.
+
+    Never raises for expected failure modes (missing customer, duplicate
+    ref) -- returns a dict with outcome in {"created","skipped","error"}
+    so the caller can process every row in a batch even when some fail
+    (partial-failure semantics), and so the same transaction_ref can be
+    re-submitted safely after a failed/partial batch (idempotent retry).
+    """
+    ref = item.transaction_ref
+
+    if ref in seen_refs:
+        return {
+            "outcome": "skipped",
+            "transaction_ref": ref,
+            "reason": "Duplicate transaction_ref within this batch",
+        }
+
+    customer = None
+    if item.customer_id:
+        customer = (
+            db.query(Customer)
+            .filter(Customer.id == item.customer_id, Customer.org_id == org_id)
+            .first()
+        )
+    if not customer and item.customer_ref:
+        customer = (
+            db.query(Customer)
+            .filter(
+                Customer.customer_ref == item.customer_ref, Customer.org_id == org_id
+            )
+            .first()
+        )
+    if not customer:
+        identifier = item.customer_id or item.customer_ref or "(none given)"
+        return {
+            "outcome": "error",
+            "transaction_ref": ref,
+            "reason": f"Customer '{identifier}' not found in this organisation",
+        }
+
+    existing = (
+        db.query(Transaction)
+        .filter(Transaction.transaction_ref == ref, Transaction.org_id == org_id)
+        .first()
+    )
+    if existing:
+        seen_refs.add(ref)
+        return {
+            "outcome": "skipped",
+            "transaction_ref": ref,
+            "reason": f"Transaction reference already exists (id: {existing.id})",
+        }
+
+    payload_dict = item.model_dump(
+        exclude={"crypto_detail", "customer_ref", "customer_id"}
+    )
+    txn = Transaction(
+        id=f"txn_{uuid4().hex[:12]}",
+        org_id=org_id,
+        customer_id=customer.id,
+        created_by=current_user.id,
+        **payload_dict,
+    )
+    db.add(txn)
+
+    if item.crypto_detail:
+        crypto = TransactionCryptoDetail(
+            id=f"cdet_{uuid4().hex[:10]}",
+            transaction_id=txn.id,
+            org_id=org_id,
+            **item.crypto_detail.model_dump(),
+        )
+        db.add(crypto)
+
+    db.flush()
+    seen_refs.add(ref)
+
+    from app.models.automation_rule import RuleEventType
+    from app.services.automation_engine import (
+        evaluate_automation_rules,
+        transaction_context,
+    )
+
+    evaluate_automation_rules(
+        db,
+        RuleEventType.transaction_created,
+        org_id,
+        "transaction",
+        txn.id,
+        transaction_context(txn),
+        triggered_by=current_user.id,
+    )
+
+    alerts = run_monitoring(txn, customer, db)
+
+    log_action(
+        db,
+        action="transaction_recorded",
+        entity_type="transaction",
+        entity_id=txn.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={
+            "transaction_ref": txn.transaction_ref,
+            "amount": str(txn.amount),
+            "currency": txn.currency,
+            "customer_id": txn.customer_id,
+            "ingested_via": "batch",
+        },
+    )
+
+    return {
+        "outcome": "created",
+        "transaction_ref": ref,
+        "transaction_id": txn.id,
+        "customer_id": customer.id,
+        "alerts_generated": len(alerts),
+    }
+
+
+_INGEST_DISCLAIMER = (
+    "Ingested transactions are run through the same monitoring engine as "
+    "manually-entered ones. Alerts generated are indicators for human "
+    "review only. No alert or import outcome constitutes a finding of "
+    "suspicious activity or criminal conduct. All regulatory decisions "
+    "remain with the reporting entity."
+)
+
+
+@router.post("/batch", status_code=status.HTTP_200_OK)
+def batch_create_transactions(
+    payload: TransactionBatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Programmatic bulk transaction ingestion — up to 500 transactions per
+    call. Intended for a core-banking/payments feed or any system pushing
+    transaction volume into VeriGo on a schedule (authenticate with an
+    org API key via the X-API-Key header, or a user JWT).
+
+    Each item identifies its customer via customer_id or customer_ref
+    (the customer must already exist — this endpoint does not create
+    customers). Re-submitting a transaction_ref that already exists is a
+    safe no-op (reported under 'skipped'), so a failed or partial batch
+    can be safely retried in full.
+
+    One bad row (unknown customer, duplicate ref) never aborts the whole
+    batch — every row is attempted and reported individually.
+    """
+    org_id = org_id_for(current_user)
+    seen_refs: set = set()
+    created, skipped, errors = [], [], []
+
+    for item in payload.transactions:
+        result = _ingest_batch_item(db, org_id, item, current_user, seen_refs)
+        if result["outcome"] == "created":
+            created.append(result)
+        elif result["outcome"] == "skipped":
+            skipped.append(result)
+        else:
+            errors.append(result)
+
+    db.commit()
+
+    return {
+        "status": "complete",
+        "submitted": len(payload.transactions),
+        "created": len(created),
+        "skipped": len(skipped),
+        "errors": len(errors),
+        "created_transactions": created,
+        "skipped_transactions": skipped,
+        "error_transactions": errors,
+        "disclaimer": _INGEST_DISCLAIMER,
+    }
+
+
+@router.get("/import/template")
+def download_transaction_import_template(
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Download the transaction bulk import CSV template.
+
+    The template contains:
+      - Row 1: Column headers (canonical field names)
+      - Row 2: Field descriptions (prefixed with # — skipped on import)
+      - Row 3: Domestic transfer example
+      - Row 4: Cross-border transfer example
+
+    All # prefixed rows are ignored during import. Column headers are
+    alias-tolerant — common variations accepted.
+
+    After filling in the template, upload via:
+      POST /api/v1/transactions/import/upload
+
+    Every row's customer_ref must match an existing customer's
+    customer_ref (see GET /customers/) — this template does not create
+    customers.
+    """
+    from fastapi.responses import Response
+
+    from app.services.transaction_bulk_import import generate_csv_template
+
+    content = generate_csv_template()
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="verigo_transaction_import_template.csv"'
+        },
+    )
+
+
+@router.get("/import/field-guide")
+def transaction_import_field_guide(
+    current_user: User = Depends(require_analyst_or_above),
+):
+    """
+    Returns the full field guide for the transaction import template.
+    Includes accepted aliases, examples, and field descriptions.
+    """
+    from app.services.transaction_bulk_import import get_template_field_guide
+
+    return {
+        "total_fields": len(get_template_field_guide()),
+        "fields": get_template_field_guide(),
+        "notes": [
+            "Rows prefixed with # in any column are treated as comments and skipped",
+            "customer_ref must match an existing customer — this import does not create customers",
+            "Re-uploading a file containing a transaction_ref already imported is a safe no-op "
+            "(that row is skipped, not duplicated) — safe to retry a failed or partial upload",
+            "Every created transaction is run through the same monitoring engine as a "
+            "manually-entered one",
+            "Column headers are alias-tolerant — see 'accepted_aliases' for each field",
+        ],
+    }
+
+
+@router.post("/import/upload")
+async def bulk_import_transactions(
+    file: UploadFile = File(
+        ..., description="CSV or Excel (.xlsx) transaction import file"
+    ),
+    current_user: User = Depends(require_compliance_or_above),
+    db: Session = Depends(get_db),
+):
+    """
+    Bulk import transactions from a CSV or Excel (.xlsx) file — for a
+    one-off upload (e.g. a bank statement export) rather than a
+    programmatic feed (see POST /transactions/batch for that).
+
+    Accepted formats:
+      - text/csv — UTF-8 or Latin-1 encoded
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet (.xlsx)
+      - application/octet-stream (auto-detected by extension)
+
+    Processing:
+      1. Parse file → validate each row (required fields, valid enum
+         values, parseable amount/date)
+      2. Resolve each row's customer_ref against an existing customer
+      3. Skip rows whose transaction_ref already exists (safe retry)
+      4. Create Transaction records and run the monitoring engine
+      5. Return import summary with created/skipped/error detail
+
+    DISCLAIMER: Imported transactions are run through the same monitoring
+    engine as manually-entered ones. Alerts generated are indicators for
+    human review only. All regulatory decisions remain with the
+    reporting entity.
+    """
+    from app.services.transaction_bulk_import import parse_csv, parse_excel
+
+    if file is None:
+        raise HTTPException(
+            422,
+            "No file uploaded. Provide a CSV or Excel file as multipart form-data field 'file'.",
+        )
+
+    filename = file.filename or ""
+    content = await file.read()
+
+    if not content:
+        raise HTTPException(422, "Uploaded file is empty")
+
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    content_type = file.content_type or ""
+
+    if ext in ("xlsx", "xls") or "spreadsheet" in content_type:
+        try:
+            rows, warnings, parse_errors = parse_excel(content)
+        except ImportError:
+            raise HTTPException(
+                500, "Excel support requires openpyxl — contact your administrator"
+            )
+    elif ext == "csv" or "csv" in content_type or "text" in content_type:
+        rows, warnings, parse_errors = parse_csv(content)
+    else:
+        rows, warnings, parse_errors = parse_csv(content)
+
+    if not rows and parse_errors:
+        return {
+            "status": "failed",
+            "message": "No valid rows found in file",
+            "errors": parse_errors,
+            "warnings": warnings,
+            "created": 0,
+            "skipped": 0,
+        }
+
+    org_id = org_id_for(current_user)
+    seen_refs: set = set()
+    created, skipped, errors = [], [], []
+
+    for i, row in enumerate(rows):
+        try:
+            kwargs: dict = {
+                "transaction_ref": row.get("transaction_ref"),
+                "customer_ref": row.get("customer_ref"),
+                "transaction_type": row.get("transaction_type", "").lower(),
+                "direction": row.get("direction", "").lower(),
+                "payment_method": row.get("payment_method", "").lower(),
+                "amount": float(row.get("amount", 0) or 0),
+                "transaction_date": row.get("transaction_date"),
+            }
+            if row.get("delivery_channel"):
+                kwargs["delivery_channel"] = row["delivery_channel"].lower()
+            if row.get("currency"):
+                kwargs["currency"] = row["currency"].upper()
+            if row.get("amount_aud"):
+                kwargs["amount_aud"] = float(row["amount_aud"])
+            if row.get("is_cross_border"):
+                kwargs["is_cross_border"] = row["is_cross_border"].strip().lower() in (
+                    "true",
+                    "1",
+                    "yes",
+                    "y",
+                )
+            if row.get("source_country"):
+                kwargs["source_country"] = row["source_country"].upper()
+            if row.get("destination_country"):
+                kwargs["destination_country"] = row["destination_country"].upper()
+            for field in (
+                "purpose",
+                "description",
+                "reference",
+                "customer_reference",
+                "source_account_name",
+                "source_account_number",
+                "source_bsb",
+                "source_bank_name",
+                "destination_account_name",
+                "destination_account_number",
+                "destination_bsb",
+                "destination_bank_name",
+                "merchant_name",
+                "counterparty_name",
+                "counterparty_type",
+            ):
+                if row.get(field):
+                    kwargs[field] = row[field]
+
+            item = TransactionBatchItem(**kwargs)
+        except ValidationError as e:
+            errors.append(
+                f"Row {i + 2}: {row.get('transaction_ref', '(no ref)')}: {e.errors()[0]['msg']}"
+            )
+            continue
+
+        result = _ingest_batch_item(db, org_id, item, current_user, seen_refs)
+        if result["outcome"] == "created":
+            created.append(result)
+        elif result["outcome"] == "skipped":
+            skipped.append(result)
+        else:
+            errors.append(f"Row {i + 2}: {result['reason']}")
+
+    db.commit()
+
+    all_errors = parse_errors + errors
+
+    log.info(
+        "transaction_bulk_import.complete org=%s created=%d skipped=%d errors=%d by=%s",
+        org_id,
+        len(created),
+        len(skipped),
+        len(all_errors),
+        current_user.id,
+    )
+
+    return {
+        "status": "complete",
+        "file": filename,
+        "rows_parsed": len(rows),
+        "created": len(created),
+        "skipped": len(skipped),
+        "error_count": len(all_errors),
+        "created_transactions": created,
+        "skipped_rows": skipped,
+        "errors": all_errors,
+        "warnings": warnings,
+        "disclaimer": _INGEST_DISCLAIMER,
+    }
 
 
 @router.get("", response_model=list[TransactionListOut])
@@ -198,7 +662,8 @@ def update_transaction(
     current_user: User = Depends(require_compliance_or_above),
 ):
     """Update non-risk fields. Risk fields are engine-only and cannot be patched."""
-    txn = _get_transaction_or_404(txn_id, org_id_for(current_user), db)
+    org_id = org_id_for(current_user)
+    txn = _get_transaction_or_404(txn_id, org_id, db)
 
     if txn.status == TransactionStatus.completed:
         raise HTTPException(
@@ -206,12 +671,23 @@ def update_transaction(
             detail="Completed transactions are immutable.",
         )
 
-    for k, v in payload.model_dump(exclude_none=True).items():
+    changed_fields = payload.model_dump(exclude_none=True)
+    for k, v in changed_fields.items():
         setattr(txn, k, v)
 
     txn.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(txn)
+    log_action(
+        db,
+        action="transaction_updated",
+        entity_type="transaction",
+        entity_id=txn.id,
+        actor=current_user.email,
+        actor_role=current_user.role.value if current_user.role else None,
+        organisation_id=org_id,
+        after_state={k: str(v) for k, v in changed_fields.items()},
+    )
     return txn
 
 
@@ -223,8 +699,9 @@ def run_monitoring_on_transaction(
 ):
     """
     Manually trigger the monitoring engine against a specific transaction.
-    This is automatically triggered on transaction creation in production;
-    this endpoint supports re-evaluation and backfill use cases.
+    This runs automatically on transaction creation (POST /transactions);
+    this endpoint supports re-evaluation and backfill use cases (e.g. after
+    a rule is edited, or for transactions imported before this existed).
 
     DISCLAIMER: Alerts generated are indicators for human review only.
     """
@@ -380,7 +857,7 @@ def get_transaction_summary(
     )
 
     amount_aud = txn.amount_aud or txn.amount
-    TTR_THRESHOLD = 10_000.0
+    TTR_THRESHOLD = TTR_CTR_THRESHOLD_AUD
 
     return {
         "transaction_id": txn.id,
@@ -477,16 +954,6 @@ def get_transaction_recommendations(
 
 
 # ── Pre-Approval Question Checklist ───────────────────────────────────────────
-
-
-class QuestionAnswerItem(BaseModel):
-    question_id: str
-    answer: QuestionAnswer
-    notes: Optional[str] = None
-
-
-class AnswerQuestionsRequest(BaseModel):
-    answers: list[QuestionAnswerItem]
 
 
 @router.get("/{txn_id}/approval-checklist")

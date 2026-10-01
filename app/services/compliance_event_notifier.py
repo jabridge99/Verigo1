@@ -161,14 +161,15 @@ def _send_email_for(db: Session, notif: Notification) -> None:
             return
         # Generic compliance alert email for new event types
         em.send_compliance_notification(
-            to_email=user.email,
-            to_name=getattr(user, "full_name", user.email) or user.email,
+            to=user.email,
+            full_name=getattr(user, "full_name", user.email) or user.email,
             subject=notif.title,
+            title=notif.title,
             body=notif.body,
-            priority=notif.priority.value
+            action_url=notif.link,
+            urgency=notif.priority.value
             if hasattr(notif.priority, "value")
             else notif.priority,
-            link=notif.link,
         )
         notif.emailed = True
     except Exception as exc:

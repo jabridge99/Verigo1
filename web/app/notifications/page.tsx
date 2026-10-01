@@ -4,23 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import { Bell, CheckCheck, AlertTriangle, Info, FileText, UserCheck, Shield, Zap, Clock } from "lucide-react";
 import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface Notif {
-  id: number;
-  notif_id: string;
-  notif_type: string;
-  priority: string;
-  title: string;
-  body: string;
-  link?: string;
-  entity_type?: string;
-  entity_id?: string;
-  read: boolean;
-  emailed: boolean;
-  created_at?: string;
-}
+import {
+  listNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  type Notification as Notif,
+} from "@/lib/api/notifications";
 
 const DEMO: Notif[] = [
   { id: 1, notif_id: "NOTIF-001", notif_type: "alert", priority: "urgent", title: "AML Alert: Structuring Pattern", body: "Customer ACE-00192 has triggered a structuring alert — 9 transactions under $10,000 in 48 hours.", link: "/monitoring", entity_type: "customer", entity_id: "ACE-00192", read: false, emailed: true, created_at: new Date(Date.now() - 3600000).toISOString() },
@@ -62,7 +51,7 @@ const PRIORITY_BADGE: Record<string, string> = {
   low:    "bg-slate-500/20 text-slate-400 border border-slate-500/30",
 };
 
-function relativeTime(iso?: string): string {
+function relativeTime(iso?: string | null): string {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
@@ -91,11 +80,7 @@ export default function NotificationsPage() {
   const fetchNotifs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/notifications?limit=100`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("api error");
-      setNotifs(await res.json());
+      setNotifs(await listNotifications({ limit: 100 }));
     } catch {
       setNotifs(DEMO);
       setDemo(true);
@@ -107,18 +92,14 @@ export default function NotificationsPage() {
   const markRead = async (notif_id: string) => {
     setNotifs(prev => prev.map(n => n.notif_id === notif_id ? { ...n, read: true } : n));
     try {
-      await fetch(`${API}/api/v1/notifications/${notif_id}/read`, {
-        method: "POST", credentials: "include",
-      });
+      await markNotificationRead(notif_id);
     } catch {}
   };
 
   const markAllRead = async () => {
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
     try {
-      await fetch(`${API}/api/v1/notifications/read-all`, {
-        method: "POST", credentials: "include",
-      });
+      await markAllNotificationsRead();
     } catch {}
   };
 
