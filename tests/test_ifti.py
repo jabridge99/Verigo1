@@ -267,3 +267,45 @@ class TestIFTIExport:
     def test_analyst_cannot_export(self, client, analyst_headers):
         resp = client.get("/api/v1/ifti/export/outgoing", headers=analyst_headers)
         assert resp.status_code == 403
+
+    def test_export_falls_back_to_acn_arbn_when_no_abn(self):
+        """A customer identified by ACN or ARBN rather than ABN (both real,
+        schema-recognized identifiers per IFTI-DRA-1-2.xsd) must still show up
+        in the exported spreadsheet's combined "ABN, ACN or ARBN" column."""
+        import io
+
+        from openpyxl import load_workbook
+
+        from app.models.ifti import IFTIDirection, IFTIRecord
+        from app.services.ifti_service import IFTI_OUT_COLUMNS, generate_ifti_excel
+
+        record = IFTIRecord(
+            ifti_id="IFTI-TEST0001",
+            direction=IFTIDirection.outgoing,
+            date_received="2025-06-01",
+            date_available="2025-06-02",
+            total_amount=1000.0,
+            oc_full_name="Ordering Co Pty Ltd",
+            oc_acn="123456789",  # no oc_abn set
+            bc_full_name="Beneficiary Co",
+            bc_arbn="987654321",  # no bc_abn set
+        )
+
+        wb = load_workbook(io.BytesIO(generate_ifti_excel([record], "outgoing")))
+        ws = wb["IFTI-DRA OUT"]
+
+        oc_abn_col = next(
+            i
+            for i, (section, label) in enumerate(IFTI_OUT_COLUMNS, start=1)
+            if section == "Ordering customer business details"
+            and label == "ABN, ACN or ARBN"
+        )
+        bc_abn_col = next(
+            i
+            for i, (section, label) in enumerate(IFTI_OUT_COLUMNS, start=1)
+            if section == "Beneficiary customer business details"
+            and label == "ABN, ACN or ARBN"
+        )
+
+        assert ws.cell(row=3, column=oc_abn_col).value == "123456789"
+        assert ws.cell(row=3, column=bc_abn_col).value == "987654321"
