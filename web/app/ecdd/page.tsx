@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { listCustomers } from '@/lib/api/customers'
 import {
   listEcddRecords,
@@ -41,12 +42,20 @@ const TRIGGER_OPTIONS: { value: string; label: string; primary?: boolean }[] = [
 ];
 const TRIGGER_LABEL: Record<string, string> = Object.fromEntries(TRIGGER_OPTIONS.map(o => [o.value, o.label]));
 
-const REC_COLOR: Record<string, string> = {
-  approve:  "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-  monitor:  "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  reject:   "bg-red-500/20 text-red-300 border-red-500/30",
+const REC_TONE: Record<string, BadgeTone> = {
+  approve:  "success",
+  monitor:  "warning",
+  reject:   "danger",
 };
 
+const STATUS_TONE: Record<string, BadgeTone> = {
+  pending:   "neutral",
+  completed: "teal",
+  rejected:  "danger",
+};
+
+// Local color map for the decision-status toggle buttons (not a Badge pill —
+// uses "border-current" to pick up the active selection's own text color).
 const STATUS_COLOR: Record<string, string> = {
   pending:   "bg-slate-500/20 text-slate-300",
   completed: "bg-teal-500/20 text-teal-300",
@@ -272,15 +281,15 @@ export default function ECDDDashboard() {
                       </td>
                       <td className="px-4 py-3">
                         {r.recommendation && (
-                          <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", REC_COLOR[r.recommendation] || "")}>
+                          <Badge tone={REC_TONE[r.recommendation] ?? "neutral"} bordered>
                             {r.recommendation}
-                          </span>
+                          </Badge>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[r.status] || "")}>
+                        <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>
                           {r.status}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500">
                         {r.created_at ? new Date(r.created_at).toLocaleDateString("en-AU") : "—"}
@@ -317,13 +326,13 @@ export default function ECDDDashboard() {
                 <div className="font-mono text-xs text-slate-500 mb-1">{selected.ecdd_id}</div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {selected.recommendation && (
-                    <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", REC_COLOR[selected.recommendation] || "")}>
+                    <Badge tone={REC_TONE[selected.recommendation] ?? "neutral"} bordered>
                       {selected.recommendation}
-                    </span>
+                    </Badge>
                   )}
-                  <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status] || "")}>
+                  <Badge tone={STATUS_TONE[selected.status] ?? "neutral"}>
                     {selected.status}
-                  </span>
+                  </Badge>
                 </div>
               </div>
               <div className="flex items-center gap-1">

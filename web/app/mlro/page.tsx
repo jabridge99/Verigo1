@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   Case,
   CaseListItem,
@@ -30,28 +31,28 @@ const CASE_OUTCOMES = [
   "controls_enhanced", "edd_completed", "no_action_required", "other",
 ];
 
-const SEV_COLOR: Record<string, string> = {
-  low:      "bg-slate-500/20 text-slate-300 border-slate-500/30",
-  medium:   "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  high:     "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  critical: "bg-red-500/20 text-red-300 border-red-500/30",
+const SEV_TONE: Record<string, BadgeTone> = {
+  low:      "neutral",
+  medium:   "warning",
+  high:     "orange",
+  critical: "danger",
 };
 
 const SEV_DOT: Record<string, string> = {
   low: "bg-slate-400", medium: "bg-amber-400", high: "bg-orange-400", critical: "bg-red-500",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  open:                  "bg-red-500/20 text-red-300",
-  under_investigation:   "bg-blue-500/20 text-blue-300",
-  additional_information:"bg-sky-500/20 text-sky-300",
-  escalated:              "bg-purple-500/20 text-purple-300",
-  decision:               "bg-amber-500/20 text-amber-300",
-  closed_no_action:       "bg-teal-500/20 text-teal-300",
-  closed_smr_filed:       "bg-emerald-500/20 text-emerald-300",
-  closed_referred:        "bg-orange-500/20 text-orange-300",
-  closed_exited:          "bg-slate-500/20 text-slate-300",
-  closed_no_smr:          "bg-teal-500/20 text-teal-300",
+const STATUS_TONE: Record<string, BadgeTone> = {
+  open:                  "danger",
+  under_investigation:   "info",
+  additional_information:"sky",
+  escalated:              "purple",
+  decision:               "warning",
+  closed_no_action:       "teal",
+  closed_smr_filed:       "success",
+  closed_referred:        "orange",
+  closed_exited:          "neutral",
+  closed_no_smr:          "teal",
 };
 
 const OBLIGATIONS = [
@@ -260,7 +261,7 @@ export default function MLRODashboard() {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-mono text-xs text-slate-500">{c.case_ref}</span>
-                          <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium", STATUS_COLOR[c.status] || "")}>{c.status.replace(/_/g, " ")}</span>
+                          <Badge tone={STATUS_TONE[c.status] ?? "neutral"} capitalize={false}>{c.status.replace(/_/g, " ")}</Badge>
                         </div>
                         <div className="font-semibold text-slate-100 text-sm">{c.title}</div>
                       </div>
@@ -354,8 +355,8 @@ export default function MLRODashboard() {
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <div className={`w-2 h-2 rounded-full shrink-0 ${SEV_DOT[c.severity]}`} />
                           <span className="font-mono text-xs text-slate-500">{c.case_ref}</span>
-                          <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium", STATUS_COLOR[c.status] || "")}>{c.status.replace(/_/g," ")}</span>
-                          <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLOR[c.severity] || "")}>{c.severity}</span>
+                          <Badge tone={STATUS_TONE[c.status] ?? "neutral"} capitalize={false}>{c.status.replace(/_/g," ")}</Badge>
+                          <Badge tone={SEV_TONE[c.severity] ?? "neutral"} bordered>{c.severity}</Badge>
                         </div>
                         <div className="font-semibold text-slate-100 text-sm">{c.title}</div>
                         <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
@@ -383,8 +384,8 @@ export default function MLRODashboard() {
                     <div>
                       <div className="font-mono text-xs text-slate-500 mb-1">{selected.case_ref}</div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLOR[selected.severity] || "")}>{selected.severity}</span>
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status] || "")}>{selected.status.replace(/_/g," ")}</span>
+                        <Badge tone={SEV_TONE[selected.severity] ?? "neutral"} bordered>{selected.severity}</Badge>
+                        <Badge tone={STATUS_TONE[selected.status] ?? "neutral"}>{selected.status.replace(/_/g," ")}</Badge>
                       </div>
                     </div>
                     <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 lg:hidden">&times;</button>
@@ -421,7 +422,7 @@ export default function MLRODashboard() {
                             className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-navy-700 bg-navy-900/40 hover:border-brand-500/40 transition-colors text-xs">
                             <span className="font-mono text-slate-400">{a.alert_ref}</span>
                             <span className="text-slate-300 capitalize">{a.category.replace(/_/g, " ")}</span>
-                            <span className={clsx("px-2 py-0.5 rounded-full font-medium border capitalize", SEV_COLOR[a.severity] || "")}>{a.severity}</span>
+                            <Badge tone={SEV_TONE[a.severity] ?? "neutral"} bordered>{a.severity}</Badge>
                           </Link>
                         ))}
                       </div>
@@ -590,8 +591,8 @@ export default function MLRODashboard() {
                             <div className="font-mono text-xs text-slate-500">{c.case_ref}</div>
                             <div className="text-slate-200 text-xs font-medium mt-0.5 line-clamp-1">{c.title}</div>
                           </td>
-                          <td className="px-4 py-3"><span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLOR[c.severity] || "")}>{c.severity}</span></td>
-                          <td className="px-4 py-3"><span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[c.status] || "")}>{c.status.replace(/_/g," ")}</span></td>
+                          <td className="px-4 py-3"><Badge tone={SEV_TONE[c.severity] ?? "neutral"} bordered>{c.severity}</Badge></td>
+                          <td className="px-4 py-3"><Badge tone={STATUS_TONE[c.status] ?? "neutral"}>{c.status.replace(/_/g," ")}</Badge></td>
                           <td className="px-4 py-3"><span className={`text-xs font-medium ${ageDays > 7 ? "text-red-400" : ageDays > 3 ? "text-amber-400" : "text-slate-400"}`}>{ageDays === 0 ? "Today" : `${ageDays}d`}</span></td>
                           <td className="px-4 py-3 text-xs text-slate-500">{c.assigned_to || "—"}</td>
                         </tr>

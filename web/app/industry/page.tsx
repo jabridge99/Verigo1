@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Building2, Search, CheckCircle, XCircle, Clock, Shield, ChevronRight, Globe, Phone, Mail, Hash, AlertTriangle, Edit2, Save, X } from 'lucide-react'
 import clsx from 'clsx'
+import { Badge, type BadgeTone } from '@/components/ui/badge'
 import {
   Tenant,
   TenantListItem,
@@ -32,10 +33,10 @@ const INDUSTRY_LABELS: Record<string, string> = {
   casino: 'Casino / Gaming',
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  active: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-  suspended: 'bg-red-500/20 text-red-300 border border-red-500/30',
-  pending: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+const STATUS_TONE: Record<string, BadgeTone> = {
+  active: 'success',
+  suspended: 'danger',
+  pending: 'warning',
 }
 const STATUS_ICON: Record<string, React.ReactNode> = {
   active: <CheckCircle className="w-3 h-3" />,
@@ -196,9 +197,9 @@ export default function IndustryPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-white text-sm truncate">{t.name}</span>
-                          <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium shrink-0', STATUS_COLOR[t.status])}>
-                            {STATUS_ICON[t.status]} {t.status}
-                          </span>
+                          <Badge tone={STATUS_TONE[t.status] ?? 'neutral'} bordered icon={STATUS_ICON[t.status]} capitalize={false} className="shrink-0">
+                            {t.status}
+                          </Badge>
                         </div>
                         <div className="text-xs text-white/40">{INDUSTRY_LABELS[t.industry_id] ?? t.industry_id}</div>
                         <div className="text-xs text-white/30 mt-1">{t.tenant_id}</div>
@@ -234,9 +235,9 @@ export default function IndustryPage() {
                   </div>
                   <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
                     <div className="flex items-center justify-between">
-                      <span className={clsx('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium', STATUS_COLOR[selected.status])}>
-                        {STATUS_ICON[selected.status]} {selected.status.charAt(0).toUpperCase() + selected.status.slice(1)}
-                      </span>
+                      <Badge tone={STATUS_TONE[selected.status] ?? 'neutral'} bordered icon={STATUS_ICON[selected.status]} size="md">
+                        {selected.status}
+                      </Badge>
                       <div className="flex gap-2">
                         {selected.status !== 'active' && <button onClick={() => doAction(selected.tenant_id, 'activate')} className="px-3 py-1 rounded-lg bg-emerald-600/20 text-emerald-300 text-xs hover:bg-emerald-600/30">Activate</button>}
                         {selected.status === 'active' && <button onClick={() => doAction(selected.tenant_id, 'suspend')} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-300 text-xs hover:bg-red-600/30">Suspend</button>}
