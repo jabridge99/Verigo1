@@ -276,14 +276,16 @@ class TestIFTIExport:
 
         from openpyxl import load_workbook
 
+        from datetime import date
+
         from app.models.ifti import IFTIDirection, IFTIRecord
         from app.services.ifti_service import IFTI_OUT_COLUMNS, generate_ifti_excel
 
         record = IFTIRecord(
             ifti_id="IFTI-TEST0001",
             direction=IFTIDirection.outgoing,
-            date_received="2025-06-01",
-            date_available="2025-06-02",
+            date_received=date(2025, 6, 1),
+            date_available=date(2025, 6, 2),
             total_amount=1000.0,
             oc_full_name="Ordering Co Pty Ltd",
             oc_acn="123456789",  # no oc_abn set
@@ -309,3 +311,42 @@ class TestIFTIExport:
 
         assert ws.cell(row=3, column=oc_abn_col).value == "123456789"
         assert ws.cell(row=3, column=bc_abn_col).value == "987654321"
+
+    def test_export_date_and_amount_cells_match_austrac_template_format(self):
+        """Date and amount columns must be real typed cells formatted exactly
+        like AUSTRAC's own IFTI-DRA_OUT.xls/IFTI-DRA_IN.xls templates
+        (dd/mmm/yyyy dates, #,##0.00 amounts) — not plain text."""
+        import io
+        from datetime import date, datetime
+
+        from openpyxl import load_workbook
+
+        from app.models.ifti import IFTIDirection, IFTIRecord
+        from app.services.ifti_service import generate_ifti_excel
+
+        record = IFTIRecord(
+            ifti_id="IFTI-TEST0002",
+            direction=IFTIDirection.outgoing,
+            date_received=date(2026, 5, 12),
+            date_available=date(2026, 5, 12),
+            total_amount=2000.0,
+            oc_full_name="Test Ordering Customer",
+            oc_dob=date(1989, 10, 11),
+        )
+
+        wb = load_workbook(io.BytesIO(generate_ifti_excel([record], "outgoing")))
+        ws = wb["IFTI-DRA OUT"]
+
+        date_received_cell = ws.cell(row=3, column=1)
+        date_available_cell = ws.cell(row=3, column=2)
+        amount_cell = ws.cell(row=3, column=4)
+        oc_dob_cell = ws.cell(row=3, column=10)
+
+        assert date_received_cell.value == datetime(2026, 5, 12)
+        assert date_received_cell.number_format == "dd/mmm/yyyy"
+        assert date_available_cell.number_format == "dd/mmm/yyyy"
+        assert oc_dob_cell.value == datetime(1989, 10, 11)
+        assert oc_dob_cell.number_format == "dd/mmm/yyyy"
+
+        assert amount_cell.value == 2000.0
+        assert amount_cell.number_format == "#,##0.00"

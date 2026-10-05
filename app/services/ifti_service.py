@@ -30,7 +30,7 @@ Usage:
 from __future__ import annotations
 
 import io
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import uuid4
 
@@ -597,20 +597,11 @@ IFTI_IN_COLUMNS: list[tuple[str, str]] = [
 ]
 
 
-def _fmt_date(d) -> str:
-    """Format date as DD/MM/YYYY string for AUSTRAC."""
-    if d is None:
-        return ""
-    if isinstance(d, (date, datetime)):
-        return d.strftime("%d/%m/%Y")
-    return str(d)
-
-
 def _row_out(r: IFTIRecord) -> list:
     """Map IFTIRecord → 112-value list matching IFTI-OUT column order."""
     return [
-        _fmt_date(r.date_received),
-        _fmt_date(r.date_available),
+        r.date_received,
+        r.date_available,
         r.currency_code or "AUD",
         r.total_amount or "",
         r.transfer_type or "Money",
@@ -619,7 +610,7 @@ def _row_out(r: IFTIRecord) -> list:
         # Ordering customer
         r.oc_full_name or "",
         r.oc_other_name or "",
-        _fmt_date(r.oc_dob),
+        r.oc_dob,
         r.oc_address or "",
         r.oc_city or "",
         r.oc_state or "",
@@ -649,7 +640,7 @@ def _row_out(r: IFTIRecord) -> list:
         r.oc_electronic_source or "",
         # Beneficiary customer
         r.bc_full_name or "",
-        _fmt_date(r.bc_dob),
+        r.bc_dob,
         r.bc_business_name or "",
         r.bc_address or "",
         r.bc_city or "",
@@ -688,7 +679,7 @@ def _row_out(r: IFTIRecord) -> list:
         # Sending instruction (if different)
         r.send_full_name or "",
         r.send_other_name or "",
-        _fmt_date(r.send_dob),
+        r.send_dob,
         r.send_address or "",
         r.send_city or "",
         r.send_state or "",
@@ -737,8 +728,8 @@ def _row_out(r: IFTIRecord) -> list:
 def _row_in(r: IFTIRecord) -> list:
     """Map IFTIRecord → 115-value list matching IFTI-IN column order."""
     return [
-        _fmt_date(r.date_received),
-        _fmt_date(r.date_available),
+        r.date_received,
+        r.date_available,
         r.currency_code or "AUD",
         r.total_amount or "",
         r.transfer_type or "Money",
@@ -747,7 +738,7 @@ def _row_in(r: IFTIRecord) -> list:
         # Ordering customer
         r.oc_full_name or "",
         r.oc_other_name or "",
-        _fmt_date(r.oc_dob),
+        r.oc_dob,
         r.oc_address or "",
         r.oc_city or "",
         r.oc_state or "",
@@ -767,7 +758,7 @@ def _row_in(r: IFTIRecord) -> list:
         r.oc_business_structure or "",
         # Beneficiary customer (no ID section for IN)
         r.bc_full_name or "",
-        _fmt_date(r.bc_dob),
+        r.bc_dob,
         r.bc_business_name or "",
         r.bc_address or "",
         r.bc_city or "",
@@ -791,7 +782,7 @@ def _row_in(r: IFTIRecord) -> list:
         # Accept instruction block (IN: full details + yes/no at end)
         r.accept_full_name or "",
         r.accept_other_name or "",
-        _fmt_date(r.accept_dob),
+        r.accept_dob,
         r.accept_address or "",
         r.accept_city or "",
         r.accept_state or "",
@@ -818,7 +809,7 @@ def _row_in(r: IFTIRecord) -> list:
         # Sending instruction (if different) — IN has country fields
         r.send_full_name or "",
         r.send_other_name or "",
-        _fmt_date(r.send_dob),
+        r.send_dob,
         r.send_address or "",
         r.send_city or "",
         r.send_state or "",
@@ -927,6 +918,24 @@ def generate_ifti_excel(
         cell.alignment = _CENTER
         cell.border = _BORDER
 
+    # Column-level number formats, matching the real AUSTRAC template exactly
+    # (date-of-birth/transaction-date columns are real date cells formatted
+    # "dd/mmm/yyyy", not text; "Total amount/value" is a real number cell
+    # formatted "#,##0.00" — confirmed against AUSTRAC's own IFTI-DRA_IN.xls
+    # and IFTI-DRA_OUT.xls templates, not guessed).
+    _DATE_FORMAT = "dd/mmm/yyyy"
+    _AMOUNT_FORMAT = "#,##0.00"
+    column_formats: list[Optional[str]] = []
+    for _, label in columns:
+        if label == "Date of birth (if an individual)" or label.startswith(
+            "Date money/property"
+        ):
+            column_formats.append(_DATE_FORMAT)
+        elif label == "Total amount/value":
+            column_formats.append(_AMOUNT_FORMAT)
+        else:
+            column_formats.append(None)
+
     # ── Rows 3+: Data ─────────────────────────────────────────────────────────
     for ri, record in enumerate(records, start=3):
         row_data = row_mapper(record)
@@ -934,6 +943,9 @@ def generate_ifti_excel(
             cell = ws.cell(row=ri, column=ci, value=value)
             cell.font = _DATA_FONT
             cell.alignment = _LEFT
+            fmt = column_formats[ci - 1]
+            if fmt and value is not None and value != "":
+                cell.number_format = fmt
             cell.border = _BORDER
 
     # ── Column widths ─────────────────────────────────────────────────────────
@@ -971,24 +983,42 @@ def generate_ifti_excel(
     ws.freeze_panes = "A3"
 
     # ── Instructions sheet ────────────────────────────────────────────────────
+    # Text and row placement verified verbatim against AUSTRAC's own
+    # IFTI-DRA_IN.xls / IFTI-DRA_OUT.xls templates, not paraphrased.
     wi = wb.create_sheet("Instructions")
-    wi["A1"] = (
+    wi["A3"] = (
         "International Funds Transfer Instruction Report under a Designated Remittance Arrangement"
     )
-    wi["A1"].font = Font(bold=True, size=11)
-    wi["A3"] = (
+    wi["A3"].font = Font(bold=True, size=10)
+    wi["A4"] = (
         "Complete this form if you are a reporting entity receiving an international funds transfer "
         "instruction under a designated remittance arrangement as specified under items 3 and 4 of "
         "section 46 of the Anti-Money Laundering and Counter-Terrorism Financing Act 2006 (AML/CTF Act)."
     )
     wi["A5"] = (
+        "For assistance in completing this form, refer to the relevant explanatory guide, or visit "
+        "www.austrac.gov.au or call 1300 021 037."
+    )
+    wi["A6"] = (
         "Once complete, copy and paste the reports from this spreadsheet into the AUSTRAC Online "
         "spreadsheet and use the 'submit' button to send the reports to AUSTRAC."
     )
     wi["A7"] = (
-        "This spreadsheet may only be used to report transactions which involved no more than a single "
-        "ordering customer and beneficiary customer."
+        "Please note: This spreadsheet may only be used to report transactions which involved no more "
+        "than a single ordering customer and beneficiary customer. If you are reporting an international "
+        "funds transfer instruction which involves multiple transferors or multiple transferees, use the "
+        "single data entry reporting method instead."
     )
+    wi["A8"] = "Privacy statement"
+    wi["A8"].font = Font(bold=True, size=8)
+    wi["A9"] = (
+        "AUSTRAC is collecting the information on this form as required under section 45 of the "
+        "AML/CTF Act. Information reported to AUSTRAC is made available to certain revenue, law "
+        "enforcement, national security, regulatory and social justice bodies and may be disclosed to "
+        "other Commonwealth and international bodies pursuant to Part 11, Division 4 of the AML/CTF Act."
+    )
+    for cell in ("A4", "A5", "A6", "A7", "A9"):
+        wi[cell].font = Font(size=8)
     wi.column_dimensions["A"].width = 120
     for row in wi.iter_rows():
         for c in row:
