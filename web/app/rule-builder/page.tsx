@@ -8,6 +8,7 @@ import {
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
 import {
   listRules,
   getRuleBuilderReference,
@@ -333,11 +334,7 @@ function RuleDrawer({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={onClose}>
-      <div
-        className="w-full max-w-3xl bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Drawer onClose={onClose} size="3xl">
         <div className="flex items-start justify-between">
           <div>
             <div className="text-xs text-slate-500 mb-1">{isNew ? "New automation rule" : rule!.rule_ref}</div>
@@ -473,8 +470,7 @@ function RuleDrawer({
         {!isNew && tab === "test" && <TestPanel rule={rule!} />}
         {!isNew && tab === "executions" && <ExecutionsPanel ruleId={rule!.id} />}
         {!isNew && tab === "versions" && <VersionsPanel ruleId={rule!.id} />}
-      </div>
-    </div>
+    </Drawer>
   );
 }
 

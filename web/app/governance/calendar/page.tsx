@@ -8,6 +8,7 @@ import {
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
 import {
   listComplianceCalendarItems,
   getCalendarDashboard,
@@ -257,8 +258,7 @@ export default function ComplianceCalendarPage() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-md bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <Drawer onClose={() => setSelected(null)} size="md">
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-xs text-slate-500 mb-1">{TYPE_LABELS[selected.item_type]}</div>
@@ -290,8 +290,7 @@ export default function ComplianceCalendarPage() {
                 <CheckCircle className="w-4 h-4" /> Mark Complete
               </button>
             )}
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {toast && (

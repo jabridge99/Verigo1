@@ -11,6 +11,7 @@ import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
 import { listCustomers } from '@/lib/api/customers'
 import {
   listAlerts,
@@ -403,8 +404,7 @@ function MonitoringDashboard() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-md bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <Drawer onClose={() => setSelected(null)} size="md">
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-mono text-xs text-slate-500 mb-1">{selected.alert_id}</div>
@@ -440,8 +440,7 @@ function MonitoringDashboard() {
                 { label: "File Report", href: `/reporting?customer=${selected.customer_id ?? ""}&action=new&alert=${selected.alert_id}`, icon: FileText },
               ]} />
             </div>
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {toast && (

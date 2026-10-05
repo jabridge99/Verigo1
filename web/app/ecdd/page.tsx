@@ -9,6 +9,7 @@ import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
 import { listCustomers } from '@/lib/api/customers'
 import {
   listEcddRecords,
@@ -320,8 +321,7 @@ export default function ECDDDashboard() {
 
       {/* Detail drawer */}
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-lg bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <Drawer onClose={() => setSelected(null)} size="lg">
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-mono text-xs text-slate-500 mb-1">{selected.ecdd_id}</div>
@@ -424,8 +424,7 @@ export default function ECDDDashboard() {
             </div>
 
             <DecisionPanel record={selected} onDecide={decideECDD} />
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {toast && (

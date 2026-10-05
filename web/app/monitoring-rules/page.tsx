@@ -7,6 +7,7 @@ import {
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
 import { ApiError } from "@/lib/api/client";
 import {
   listMonitoringRules,
@@ -380,11 +381,7 @@ function RuleDrawer({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={onClose}>
-      <div
-        className="w-full max-w-2xl bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Drawer onClose={onClose} size="2xl">
         <div className="flex items-start justify-between">
           <div>
             <div className="text-xs text-slate-500 mb-1">{isNew ? "New monitoring rule" : rule!.rule_ref || rule!.id}</div>
@@ -496,8 +493,7 @@ function RuleDrawer({
         >
           {saving ? "Saving…" : isNew ? "Create Rule" : "Save Changes"}
         </button>
-      </div>
-    </div>
+    </Drawer>
   );
 }
 
