@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import {
   listComplianceCalendarItems,
   getCalendarDashboard,
@@ -178,47 +179,47 @@ export default function ComplianceCalendarPage() {
       <div className="max-w-7xl mx-auto px-6 py-6">
         {view === "list" && (
           <div className="overflow-x-auto rounded-xl border border-navy-700">
-            <table className="w-full text-sm">
-              <thead className="bg-navy-800 border-b border-navy-700">
+            <Table>
+              <TableHead>
                 <tr>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Title</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Type</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Due Date</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Recurring</th>
-                  <th className="px-4 py-3" />
+                  <TableHeaderCell>Title</TableHeaderCell>
+                  <TableHeaderCell>Type</TableHeaderCell>
+                  <TableHeaderCell>Due Date</TableHeaderCell>
+                  <TableHeaderCell>Status</TableHeaderCell>
+                  <TableHeaderCell>Recurring</TableHeaderCell>
+                  <TableHeaderCell />
                 </tr>
-              </thead>
-              <tbody>
+              </TableHead>
+              <TableBody>
                 {sorted.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-12 text-slate-500">No calendar items found</td></tr>
+                  <TableEmptyRow colSpan={6}>No calendar items found</TableEmptyRow>
                 ) : sorted.map(i => (
-                  <tr key={i.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(i)}>
-                    <td className="px-4 py-3 text-slate-200">{i.title}</td>
-                    <td className="px-4 py-3 text-slate-400 text-xs">{TYPE_LABELS[i.item_type]}</td>
-                    <td className={clsx("px-4 py-3 text-xs", i.is_overdue ? "text-red-400 font-medium" : "text-slate-400")}>
+                  <TableRow key={i.id} onClick={() => setSelected(i)}>
+                    <TableCell className="text-slate-200">{i.title}</TableCell>
+                    <TableCell className="text-slate-400 text-xs">{TYPE_LABELS[i.item_type]}</TableCell>
+                    <TableCell className={clsx("text-xs", i.is_overdue ? "text-red-400 font-medium" : "text-slate-400")}>
                       {new Date(i.due_date).toLocaleDateString("en-AU")}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       <Badge tone={STATUS_TONE[i.status]}>
                         {i.status.replace("_", " ")}
                       </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500">
                       {i.is_recurring ? `Every ${i.recurrence_months}mo` : "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       {i.status !== "completed" && (
                         <button onClick={e => { e.stopPropagation(); completeItem(i.id); }}
                           className="text-xs text-emerald-400 hover:text-emerald-300 font-medium">
                           Complete
                         </button>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
 

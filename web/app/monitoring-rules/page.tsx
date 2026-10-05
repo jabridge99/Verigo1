@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import { ApiError } from "@/lib/api/client";
 import {
   listMonitoringRules,
@@ -230,31 +231,27 @@ export default function MonitoringRulesPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-6">
         <div className="overflow-x-auto rounded-xl border border-navy-700">
-          <table className="w-full text-sm">
-            <thead className="bg-navy-800 border-b border-navy-700">
+          <Table>
+            <TableHead>
               <tr>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Rule</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Severity</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Alerts</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">False +ve</th>
-                <th className="px-4 py-3" />
+                <TableHeaderCell>Rule</TableHeaderCell>
+                <TableHeaderCell>Category</TableHeaderCell>
+                <TableHeaderCell>Severity</TableHeaderCell>
+                <TableHeaderCell>Status</TableHeaderCell>
+                <TableHeaderCell>Alerts</TableHeaderCell>
+                <TableHeaderCell>False +ve</TableHeaderCell>
+                <TableHeaderCell />
               </tr>
-            </thead>
-            <tbody>
+            </TableHead>
+            <TableBody>
               {loading ? (
-                <tr><td colSpan={7} className="text-center py-12 text-slate-500">Loading…</td></tr>
+                <TableEmptyRow colSpan={7}>Loading…</TableEmptyRow>
               ) : rules.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-12 text-slate-500">No monitoring rules found</td></tr>
+                <TableEmptyRow colSpan={7}>No monitoring rules found</TableEmptyRow>
               ) : (
                 rules.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors"
-                    onClick={() => openRule(r)}
-                  >
-                    <td className="px-4 py-3">
+                  <TableRow key={r.id} onClick={() => openRule(r)}>
+                    <TableCell>
                       <div className="text-slate-200 font-medium flex items-center gap-2">
                         {r.name}
                         {r.is_system_rule && (
@@ -263,19 +260,19 @@ export default function MonitoringRulesPage() {
                         {opening === r.id && <span className="text-[10px] text-slate-500">opening…</span>}
                       </div>
                       {r.rule_ref && <div className="text-xs text-slate-500">{r.rule_ref}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{r.category.replace(/_/g, " ")}</td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">{r.category.replace(/_/g, " ")}</TableCell>
+                    <TableCell>
                       <Badge tone={SEVERITY_TONE[r.alert_severity]}>{r.alert_severity}</Badge>
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{r.total_alerts_generated}</td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">{r.total_alerts_generated}</TableCell>
+                    <TableCell className="text-xs text-slate-400">
                       {r.false_positive_rate != null ? `${Math.round(r.false_positive_rate * 100)}%` : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                    </TableCell>
+                    <TableCell className="text-right">
                       <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
                         <button onClick={() => toggleStatus(r)} className="text-xs text-brand-400 hover:text-brand-300 font-medium">
                           {r.status === "active" ? "Disable" : "Activate"}
@@ -286,12 +283,12 @@ export default function MonitoringRulesPage() {
                           </button>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 

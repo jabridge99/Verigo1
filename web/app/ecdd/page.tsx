@@ -8,6 +8,7 @@ import {
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import { listCustomers } from '@/lib/api/customers'
 import {
   listEcddRecords,
@@ -241,35 +242,35 @@ export default function ECDDDashboard() {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-navy-700">
-              <table className="w-full text-sm">
-                <thead className="bg-navy-800 border-b border-navy-700">
+              <Table>
+                <TableHead>
                   <tr>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">ECDD ID</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Trigger</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Risk Score</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Flags</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Recommendation</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Created</th>
-                    <th className="px-4 py-3" />
+                    <TableHeaderCell>ECDD ID</TableHeaderCell>
+                    <TableHeaderCell>Trigger</TableHeaderCell>
+                    <TableHeaderCell>Risk Score</TableHeaderCell>
+                    <TableHeaderCell>Flags</TableHeaderCell>
+                    <TableHeaderCell>Recommendation</TableHeaderCell>
+                    <TableHeaderCell>Status</TableHeaderCell>
+                    <TableHeaderCell>Created</TableHeaderCell>
+                    <TableHeaderCell />
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-12 text-slate-500">No ECDD records found</td></tr>
+                    <TableEmptyRow colSpan={8}>No ECDD records found</TableEmptyRow>
                   ) : filtered.map(r => (
-                    <tr key={r.ecdd_id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(r)}>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-400">{r.ecdd_id}</td>
-                      <td className="px-4 py-3 max-w-xs">
+                    <TableRow key={r.ecdd_id} onClick={() => setSelected(r)}>
+                      <TableCell className="font-mono text-xs text-slate-400">{r.ecdd_id}</TableCell>
+                      <TableCell className="max-w-xs">
                         <div className="text-slate-300 text-xs line-clamp-2">{TRIGGER_LABEL[r.trigger_reason] || r.trigger_reason}{r.trigger_reason === "other" && r.trigger_reason_other ? ` — ${r.trigger_reason_other}` : ""}</div>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <span className={`font-bold text-sm ${SCORE_COLOR(r.enhanced_risk_score)}`}>
                           {r.enhanced_risk_score.toFixed(0)}
                         </span>
                         <span className="text-slate-600 text-xs">/100</span>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <div className="flex gap-1 flex-wrap">
                           {r.pep_status ? <span className="px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30">PEP</span> : null}
                           {r.adverse_media_found ? <span className="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-300 border border-red-500/30">Adverse</span> : null}
@@ -278,29 +279,29 @@ export default function ECDDDashboard() {
                           {!r.pep_status && !r.adverse_media_found && r.beneficial_owner_verified && r.source_of_wealth_verified
                             ? <span className="text-slate-600 text-xs">None</span> : null}
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         {r.recommendation && (
                           <Badge tone={REC_TONE[r.recommendation] ?? "neutral"} bordered>
                             {r.recommendation}
                           </Badge>
                         )}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>
                           {r.status}
                         </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500">
                         {r.created_at ? new Date(r.created_at).toLocaleDateString("en-AU") : "—"}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <Eye className="w-4 h-4 text-slate-600 hover:text-brand-400 transition-colors" />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {records.length} records</div>
           </div>
