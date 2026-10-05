@@ -50,6 +50,7 @@ export default function UsersPage() {
   const [newForm, setNewForm] = useState({ ...DEFAULT_NEW })
   const [saving, setSaving] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     const stored = getStoredUser()
@@ -71,9 +72,13 @@ export default function UsersPage() {
 
   async function toggleStatus(u: AppUser) {
     const action = u.status === 'active' ? 'suspend' : 'activate'
+    setError('')
     try {
       await (action === 'suspend' ? suspendUser(u.id) : activateUser(u.id))
-    } catch {}
+    } catch {
+      setError(`Failed to ${action} user.`)
+      return
+    }
     const newStatus = action === 'suspend' ? 'suspended' : 'active'
     setUsers(prev => prev.map(x => x.id === u.id ? { ...x, status: newStatus } : x))
     if (selected?.id === u.id) setSelected(s => s ? { ...s, status: newStatus } : s)
@@ -122,6 +127,8 @@ export default function UsersPage() {
             <Plus className="w-4 h-4" /> Add User
           </button>
         </div>
+
+        {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

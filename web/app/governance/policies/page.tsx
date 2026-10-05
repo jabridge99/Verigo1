@@ -137,7 +137,7 @@ export default function PoliciesPage() {
     const newStatus = STATUS_MAP[action] ?? policy.status;
     setPolicies(prev => prev.map(p => p.id === policy.id ? { ...p, status: newStatus } : p));
     setSelected(prev => prev ? { ...prev, status: newStatus } : prev);
-    showToast("success", `Policy moved to ${newStatus.replace("_", " ")}`);
+    showToast("success", `Policy moved to ${newStatus.replace("_", " ")} (demo)`);
   };
 
   const exportPdf = (policy: Policy) => {

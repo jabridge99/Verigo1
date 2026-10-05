@@ -93,14 +93,19 @@ export default function NotificationsPage() {
     setNotifs(prev => prev.map(n => n.notif_id === notif_id ? { ...n, read: true } : n));
     try {
       await markNotificationRead(notif_id);
-    } catch {}
+    } catch {
+      setNotifs(prev => prev.map(n => n.notif_id === notif_id ? { ...n, read: false } : n));
+    }
   };
 
   const markAllRead = async () => {
+    const prevState = notifs;
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
     try {
       await markAllNotificationsRead();
-    } catch {}
+    } catch {
+      setNotifs(prevState);
+    }
   };
 
   const types = ["all", ...Array.from(new Set(notifs.map(n => n.notif_type)))];

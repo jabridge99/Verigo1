@@ -2103,6 +2103,29 @@ Both share one row-ingestion function (`_ingest_batch_item` in `app/api/routes/t
 
 ---
 
+## Silent `catch {}` cleanup, 2026-10-05 — the ~30-site gap STRUCTURE_REVIEW.md flagged as separate from the C2 pilots
+
+**Scope:** STRUCTURE_REVIEW.md's C2 entry closes with "the ~30 pre-existing silent-`catch{}` sites across the codebase (distinct from the specific ones fixed during individual pilots) remain a related but separate cleanup." `grep`'d the frontend for empty `catch {}` blocks: exactly 30, matching that count precisely.
+
+**Classified every site individually before touching anything** — this is not a mechanical "add error handling everywhere" sweep. Two legitimate, pre-existing patterns account for most of the 30 and were deliberately left alone:
+- **Read-with-demo-fallback** (a `GET` whose catch leaves the page's `DEMO_*` seed state in place, confirmed and explicitly endorsed in multiple C2 pilot writeups above as "a distinct, reasonable, pre-existing product decision") — `users.tsx`'s/`customers.tsx`'s/`billing.tsx`'s/etc. initial-load fetches, `Navbar.tsx`'s notification-count poll, `ecdd.tsx`'s debounced customer-search autocomplete, `lib/auth.ts`'s `localStorage` guards (private-browsing/storage-disabled is an expected, silently-ignorable failure mode there).
+- **Honestly-labeled demo fallback** — several mutating actions (`governance/training.tsx`'s `completeRecord`/`retakeRecord`/`renewRecord`/`seedPack`/`seedStandard`) already show a toast explicitly suffixed `"(demo)"` on API failure, which is truthful, not deceptive, UX — left untouched.
+
+**What was a real bug, and fixed — the same "fabricated client-side success" class already named and fixed repeatedly during the C2 pilots above (`industry`/tenants, `board-reports`), just not yet swept for the remaining 30 sites:**
+- **`users.tsx`'s `toggleStatus`** (suspend/activate) — called the API, then updated local state *unconditionally* regardless of whether the call threw, with no error shown at all. Fixed to only flip state on success and show `Failed to {suspend|activate} user.` via a new `error` state + banner (matching `industry.tsx`'s already-established `error`/banner convention) on failure.
+- **`governance/training.tsx`'s `AssignTab`** — the one site in that file *without* the sibling functions' `"(demo)"` honesty labeling: always called `onAssigned()` (which shows a bare "Training assigned." success toast) regardless of outcome. Fixed by threading an `ok: boolean` through the callback, matching the file's own parent-owns-the-toast convention rather than inventing a new one.
+- **`governance/policies.tsx`'s `runWorkflowAction`, `governance/controls.tsx`'s `recordTest`, `governance/calendar.tsx`'s `completeItem`** — all three are genuine demo-mode pages (confirmed via their own `DEMO_*` seed constants, same product pattern as `training.tsx`), but their mutating-action fallback toasts were missing the `"(demo)"` label `training.tsx`'s siblings already use — making an API failure visually indistinguishable from a real save. Fixed by adding the same label, not by re-architecting the already-accepted demo-fallback UX.
+- **`ecdd.tsx`'s `decideECDD`** — same missing-label gap, same fix.
+- **`notifications.tsx`'s `markRead`/`markAllRead`** — optimistic read-state update with no revert on failure (lower-stakes than the above — a stale "read" flag, not a false compliance-action claim — but still state silently drifting from the backend's truth). Fixed to revert on failure.
+- **`api-keys.tsx`'s `revokeKey`/`deleteWebhook`, `documents.tsx`'s `handleArchive`/`handleDelete`** — same optimistic-update-with-no-revert pattern; neither file has any toast infrastructure at all, so rather than inventing new UI the fix is the minimal, safe piece — revert the optimistic state change on failure, keeping the UI truthful about what's actually persisted. `handleDelete` (a user-confirmed permanent delete) also gets an `alert()` on failure, matching this same file's own existing `alert()` convention used elsewhere on the page.
+
+**Left alone after inspection, not just skipped:** `monitoring/page.tsx`'s `runMonitoringOnTransaction` catch (the transaction itself already succeeded and is correctly reported; the alert count simply can't be confirmed — degraded information, not a false claim) and `audit.tsx`'s CSV-export catch (a genuine, working fallback that regenerates a correct CSV client-side from already-loaded data, not a silent failure).
+
+**Verified:** `tsc --noEmit` clean; `npm run lint` clean (0 errors, same 22 pre-existing warnings); `npm test` 19/19; `npm run build` succeeded. Live check via `next dev` + Playwright with no backend running (so every fixed call site's *failure* path, not just its happy path, was actually exercised): on `users.tsx`, clicked Suspend on a real row — status stayed `active` and `Failed to suspend user.` rendered; on `governance/training.tsx`'s Assign tab, submitted the form — the toast read `Failed to assign training.` rather than a false "Training assigned."
+**Detail:** `web/app/users/page.tsx`, `web/app/governance/training/page.tsx`, `web/app/governance/policies/page.tsx`, `web/app/governance/controls/page.tsx`, `web/app/governance/calendar/page.tsx`, `web/app/ecdd/page.tsx`, `web/app/notifications/page.tsx`, `web/app/api-keys/page.tsx`, `web/app/documents/page.tsx`.
+
+---
+
 ## Dependency CVE fix, 2026-10-01 — next 16.3.5 → 16.3.8
 
 **What happened:** CI's `npm audit --omit=dev --audit-level=high` step started failing on this PR's head after a routine commit that touched no frontend code (`PARKING_LOT.md` only) — not a regression from that commit, but GHSA-vcvr-r3jv-pc5j (critical RCE in `next/og`'s `ImageResponse`, affecting `next` 16.2.0-16.3.5) being published after the lockfile was last generated, confirmed by checking the advisory's affected range against the pinned version.

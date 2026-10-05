@@ -118,7 +118,7 @@ export default function ControlsPage() {
     setTests(prev => [demoTest, ...prev]);
     setControls(prev => prev.map(c => c.id === control.id ? { ...c, effectiveness: newEff, last_tested_date: payload.test_date } : c));
     setSelected(prev => prev ? { ...prev, effectiveness: newEff, last_tested_date: payload.test_date } : prev);
-    showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"}`);
+    showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"} (demo)`);
   };
 
   const filtered = controls.filter(c => {

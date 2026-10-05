@@ -109,7 +109,7 @@ export default function ECDDDashboard() {
     } catch {}
     setRecords(prev => prev.map(r => r.ecdd_id === ecddId ? { ...r, status, decision_notes: decisionNotes, last_revised_at: now } : r));
     setSelected(prev => prev?.ecdd_id === ecddId ? { ...prev, status, decision_notes: decisionNotes, last_revised_at: now } : prev);
-    showToast("success", `${ecddId} marked ${status}`);
+    showToast("success", `${ecddId} marked ${status} (demo)`);
   };
 
   const exportEcdd = (r: ECDDRecord) => {

@@ -206,7 +206,10 @@ export default function TrainingPage() {
           <RecordsTab records={records} courseName={courseName} onComplete={completeRecord} onRetake={retakeRecord} onRenew={renewRecord} />
         )}
         {tab === "assign" && (
-          <AssignTab courses={courses} onAssigned={() => { showToast("success", "Training assigned."); fetchAll(); }} />
+          <AssignTab courses={courses} onAssigned={(ok) => {
+            showToast(ok ? "success" : "error", ok ? "Training assigned." : "Failed to assign training.");
+            if (ok) fetchAll();
+          }} />
         )}
         {tab === "report" && <ReportTab report={report} />}
       </div>
@@ -401,7 +404,7 @@ function RecordsTab({ records, courseName, onComplete, onRetake, onRenew }: {
   );
 }
 
-function AssignTab({ courses, onAssigned }: { courses: Course[]; onAssigned: () => void }) {
+function AssignTab({ courses, onAssigned }: { courses: Course[]; onAssigned: (ok: boolean) => void }) {
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const [userIds, setUserIds] = useState("");
   const [roles, setRoles] = useState<string[]>([]);
@@ -421,12 +424,15 @@ function AssignTab({ courses, onAssigned }: { courses: Course[]; onAssigned: () 
       due_date: dueDate,
       trigger: "manual",
     };
+    let ok = true;
     try {
       await createAssignment(payload);
-    } catch {}
+    } catch {
+      ok = false;
+    }
     setSubmitting(false);
-    onAssigned();
-    setUserIds(""); setRoles([]);
+    onAssigned(ok);
+    if (ok) { setUserIds(""); setRoles([]); }
   };
 
   return (

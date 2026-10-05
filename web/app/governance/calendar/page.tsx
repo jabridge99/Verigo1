@@ -97,12 +97,15 @@ export default function ComplianceCalendarPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const completeItem = async (id: string) => {
+    let demo = false;
     try {
       await completeCalendarItem(id);
-    } catch {}
+    } catch {
+      demo = true;
+    }
     setItems(prev => prev.map(i => i.id === id ? { ...i, status: "completed" as ItemStatus, completed_at: new Date().toISOString() } : i));
     setSelected(prev => prev?.id === id ? { ...prev, status: "completed" as ItemStatus } : prev);
-    showToast("success", "Item marked complete");
+    showToast("success", demo ? "Item marked complete (demo)" : "Item marked complete");
   };
 
   const filtered = items.filter(i =>

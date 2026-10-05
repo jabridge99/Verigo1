@@ -162,18 +162,25 @@ export default function DocumentsPage() {
   };
 
   const handleArchive = async (doc_id: string) => {
+    const prevDocs = docs;
     setDocs(prev => prev.map(d => d.doc_id === doc_id ? { ...d, status: "archived" } : d));
     try {
       await archiveDocument(doc_id);
-    } catch {}
+    } catch {
+      setDocs(prevDocs);
+    }
   };
 
   const handleDelete = async (doc_id: string) => {
     if (!confirm("Permanently delete this document?")) return;
+    const prevDocs = docs;
     setDocs(prev => prev.filter(d => d.doc_id !== doc_id));
     try {
       await deleteDocument(doc_id);
-    } catch {}
+    } catch {
+      setDocs(prevDocs);
+      alert("Failed to delete document.");
+    }
   };
 
   const visible = docs.filter(d => {

@@ -122,10 +122,13 @@ export default function APIKeysPage() {
   };
 
   const revokeKey = async (key_id: string) => {
+    const prevKeys = keys;
     setKeys(prev => prev.map(k => k.key_id === key_id ? { ...k, status: "revoked" } : k));
     try {
       await revokeApiKey(key_id);
-    } catch {}
+    } catch {
+      setKeys(prevKeys);
+    }
   };
 
   const createWebhook = async () => {
@@ -143,10 +146,13 @@ export default function APIKeysPage() {
   };
 
   const deleteWebhook = async (webhook_id: string) => {
+    const prevWebhooks = webhooks;
     setWebhooks(prev => prev.filter(w => w.webhook_id !== webhook_id));
     try {
       await deleteWebhookApi(webhook_id);
-    } catch {}
+    } catch {
+      setWebhooks(prevWebhooks);
+    }
   };
 
   const testWebhook = async (webhook_id: string) => {
