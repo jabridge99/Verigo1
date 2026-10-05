@@ -6,8 +6,11 @@ import { cn } from '@/lib/utils'
  * text-sm">` / `<thead className="bg-navy-800 border-b border-navy-700">`
  * / `<tr className="border-b border-navy-800 hover:bg-navy-800/40
  * cursor-pointer transition-colors">` pattern duplicated byte-for-byte
- * across ~11 page files. See STRUCTURE_REVIEW.md section C2 for the
- * backlog item this is part of (same item as `badge.tsx`).
+ * across ~11 page files (most, not all, also pass `onClick` on that
+ * `<tr>` — a few render static, non-clickable rows with the same border/
+ * hover treatment; `TableRow` handles both, see its own comment). See
+ * STRUCTURE_REVIEW.md section C2 for the backlog item this is part of
+ * (same item as `badge.tsx`).
  *
  * Surveyed, not guessed: this is the dominant shell shared by the
  * surveyed candidates (ecdd, monitoring-rules, mlro, monitoring,
@@ -38,18 +41,22 @@ const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes
 )
 TableBody.displayName = 'TableBody'
 
-export interface TableRowProps extends React.HTMLAttributes<HTMLTableRowElement> {
-  /** The hover/cursor-pointer treatment every surveyed clickable row uses. Set false for a non-clickable row. */
-  interactive?: boolean
-}
+export type TableRowProps = React.HTMLAttributes<HTMLTableRowElement>
 
+/**
+ * `hover:bg-navy-800/40` applies regardless (every surveyed row, clickable
+ * or not, used it); `cursor-pointer` only applies when `onClick` is passed
+ * — e.g. `governance/training`'s rows have the hover treatment but no row
+ * click handler, so they shouldn't look clickable.
+ */
 const TableRow = React.forwardRef<HTMLTableRowElement, TableRowProps>(
-  ({ className, interactive = true, ...props }, ref) => (
+  ({ className, onClick, ...props }, ref) => (
     <tr
       ref={ref}
+      onClick={onClick}
       className={cn(
-        'border-b border-navy-800 transition-colors',
-        interactive && 'hover:bg-navy-800/40 cursor-pointer',
+        'border-b border-navy-800 hover:bg-navy-800/40 transition-colors',
+        onClick && 'cursor-pointer',
         className
       )}
       {...props}

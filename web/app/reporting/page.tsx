@@ -8,6 +8,7 @@ import {
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import {
   listTtrReports,
   listSmrReports,
@@ -381,43 +382,43 @@ export default function ReportingDashboard() {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-navy-700">
-              <table className="w-full text-sm">
-                <thead className="bg-navy-800 border-b border-navy-700">
+              <Table>
+                <TableHead>
                   <tr>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Report</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Type</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Amount</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Due</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Created</th>
-                    <th className="px-4 py-3" />
+                    <TableHeaderCell>Report</TableHeaderCell>
+                    <TableHeaderCell>Type</TableHeaderCell>
+                    <TableHeaderCell>Status</TableHeaderCell>
+                    <TableHeaderCell>Amount</TableHeaderCell>
+                    <TableHeaderCell>Due</TableHeaderCell>
+                    <TableHeaderCell>Created</TableHeaderCell>
+                    <TableHeaderCell />
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-500">No reports found</td></tr>
+                    <TableEmptyRow colSpan={7}>No reports found</TableEmptyRow>
                   ) : filtered.map(r => {
                     const dr = daysRemaining(r.due_date);
                     return (
-                    <tr key={r.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(r)}>
-                      <td className="px-4 py-3">
+                    <TableRow key={r.id} onClick={() => setSelected(r)}>
+                      <TableCell>
                         <div className="font-mono text-xs text-slate-500 mb-0.5">{r.report_ref}</div>
                         <div className="text-slate-200 text-xs font-medium line-clamp-1 max-w-xs">{r.title}</div>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <Badge tone={TYPE_TONE[r.report_type] ?? "neutral"} bordered capitalize={false}>
                           {r.austrac_report_type}
                         </Badge>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>
                           {r.status.replace(/_/g, " ")}
                         </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-300">
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-300">
                         {r.total_amount_flagged > 0 ? `AUD $${r.total_amount_flagged.toLocaleString()}` : "—"}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         {r.due_date ? (
                           <div className={clsx("text-xs font-medium", (dr ?? 99) <= 1 ? "text-red-400" : (dr ?? 99) <= 3 ? "text-amber-400" : "text-slate-400")}>
                             {dr === 0 ? "Due today" : dr === 1 ? "1 day left" : dr !== undefined ? `${dr}d` : "—"}
@@ -425,17 +426,17 @@ export default function ReportingDashboard() {
                         ) : r.submitted_at ? (
                           <span className="text-xs text-teal-400">Submitted</span>
                         ) : <span className="text-slate-600">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500">
                         {r.created_at ? new Date(r.created_at).toLocaleDateString("en-AU") : "—"}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <Eye className="w-4 h-4 text-slate-600 hover:text-brand-400 transition-colors" />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );})}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {reports.length} reports</div>
           </div>

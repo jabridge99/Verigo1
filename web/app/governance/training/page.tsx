@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import {
   listCourses,
   listRecords,
@@ -344,30 +345,30 @@ function RecordsTab({ records, courseName, onComplete, onRetake, onRenew }: {
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-navy-700">
-      <table className="w-full text-sm">
-        <thead className="bg-navy-800 border-b border-navy-700">
+      <Table>
+        <TableHead>
           <tr>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">User</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Course</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Due</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Score</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Actions</th>
+            <TableHeaderCell>User</TableHeaderCell>
+            <TableHeaderCell>Course</TableHeaderCell>
+            <TableHeaderCell>Due</TableHeaderCell>
+            <TableHeaderCell>Score</TableHeaderCell>
+            <TableHeaderCell>Status</TableHeaderCell>
+            <TableHeaderCell>Actions</TableHeaderCell>
           </tr>
-        </thead>
-        <tbody>
+        </TableHead>
+        <TableBody>
           {records.length === 0 ? (
-            <tr><td colSpan={6} className="text-center py-12 text-slate-500">No training records found</td></tr>
+            <TableEmptyRow colSpan={6}>No training records found</TableEmptyRow>
           ) : records.map(r => (
-            <tr key={r.id} className="border-b border-navy-800 hover:bg-navy-800/40 transition-colors">
-              <td className="px-4 py-3 text-slate-300">{r.user_id}</td>
-              <td className="px-4 py-3 text-slate-300">{courseName(r.course_id)}</td>
-              <td className="px-4 py-3 text-xs text-slate-500">{new Date(r.due_date).toLocaleDateString("en-AU")}</td>
-              <td className="px-4 py-3 text-xs text-slate-400">{r.score ?? "—"}</td>
-              <td className="px-4 py-3">
+            <TableRow key={r.id}>
+              <TableCell className="text-slate-300">{r.user_id}</TableCell>
+              <TableCell className="text-slate-300">{courseName(r.course_id)}</TableCell>
+              <TableCell className="text-xs text-slate-500">{new Date(r.due_date).toLocaleDateString("en-AU")}</TableCell>
+              <TableCell className="text-xs text-slate-400">{r.score ?? "—"}</TableCell>
+              <TableCell>
                 <Badge tone={STATUS_TONE[r.status]}>{r.status.replace("_", " ")}</Badge>
-              </td>
-              <td className="px-4 py-3">
+              </TableCell>
+              <TableCell>
                 <div className="flex items-center gap-1.5">
                   {(r.status === "assigned" || r.status === "in_progress") && (
                     <button onClick={() => onComplete(r, 88)} className="p-1.5 rounded-lg hover:bg-navy-700 text-emerald-400" title="Mark complete">
@@ -391,11 +392,11 @@ function RecordsTab({ records, courseName, onComplete, onRetake, onRenew }: {
                     </a>
                   )}
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -503,28 +504,28 @@ function ReportTab({ report }: { report: any }) {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-navy-700">
-        <table className="w-full text-sm">
-          <thead className="bg-navy-800 border-b border-navy-700">
+        <Table>
+          <TableHead>
             <tr>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Training Type</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Assigned</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Completed</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Overdue</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Completion %</th>
+              <TableHeaderCell>Training Type</TableHeaderCell>
+              <TableHeaderCell>Assigned</TableHeaderCell>
+              <TableHeaderCell>Completed</TableHeaderCell>
+              <TableHeaderCell>Overdue</TableHeaderCell>
+              <TableHeaderCell>Completion %</TableHeaderCell>
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {report.by_training_type.map((row: any) => (
               <tr key={row.training_type} className="border-b border-navy-800">
-                <td className="px-4 py-3 text-slate-300 capitalize">{row.training_type.replace(/_/g, " ")}</td>
-                <td className="px-4 py-3 text-slate-400">{row.total_assigned}</td>
-                <td className="px-4 py-3 text-emerald-400">{row.completed}</td>
-                <td className="px-4 py-3 text-red-400">{row.overdue}</td>
-                <td className="px-4 py-3 text-slate-300">{row.completion_pct}%</td>
+                <TableCell className="text-slate-300 capitalize">{row.training_type.replace(/_/g, " ")}</TableCell>
+                <TableCell className="text-slate-400">{row.total_assigned}</TableCell>
+                <TableCell className="text-emerald-400">{row.completed}</TableCell>
+                <TableCell className="text-red-400">{row.overdue}</TableCell>
+                <TableCell className="text-slate-300">{row.completion_pct}%</TableCell>
               </tr>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <p className="text-[11px] text-slate-600">
         This summary is a governance tooling output only and does not constitute regulatory certification.

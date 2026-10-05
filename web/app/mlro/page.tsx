@@ -10,6 +10,7 @@ import {
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } from "@/components/ui/table";
 import {
   Case,
   CaseListItem,
@@ -572,34 +573,34 @@ export default function MLRODashboard() {
             <div>
               <h3 className="text-sm font-semibold text-slate-300 mb-3">Open cases by age</h3>
               <div className="overflow-x-auto rounded-xl border border-navy-700">
-                <table className="w-full text-sm">
-                  <thead className="bg-navy-800 border-b border-navy-700">
+                <Table>
+                  <TableHead>
                     <tr>
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium">Case</th>
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium">Severity</th>
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium">Age</th>
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium">Assigned</th>
+                      <TableHeaderCell>Case</TableHeaderCell>
+                      <TableHeaderCell>Severity</TableHeaderCell>
+                      <TableHeaderCell>Status</TableHeaderCell>
+                      <TableHeaderCell>Age</TableHeaderCell>
+                      <TableHeaderCell>Assigned</TableHeaderCell>
                     </tr>
-                  </thead>
-                  <tbody>
+                  </TableHead>
+                  <TableBody>
                     {cases.filter(c => !isClosed(c.status)).sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()).map(c => {
                       const ageDays = c.created_at ? Math.floor((Date.now() - new Date(c.created_at).getTime()) / 86400000) : 0;
                       return (
-                        <tr key={c.case_ref} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer" onClick={() => { selectCase(c.id); setTab("cases"); }}>
-                          <td className="px-4 py-3">
+                        <TableRow key={c.case_ref} onClick={() => { selectCase(c.id); setTab("cases"); }}>
+                          <TableCell>
                             <div className="font-mono text-xs text-slate-500">{c.case_ref}</div>
                             <div className="text-slate-200 text-xs font-medium mt-0.5 line-clamp-1">{c.title}</div>
-                          </td>
-                          <td className="px-4 py-3"><Badge tone={SEV_TONE[c.severity] ?? "neutral"} bordered>{c.severity}</Badge></td>
-                          <td className="px-4 py-3"><Badge tone={STATUS_TONE[c.status] ?? "neutral"}>{c.status.replace(/_/g," ")}</Badge></td>
-                          <td className="px-4 py-3"><span className={`text-xs font-medium ${ageDays > 7 ? "text-red-400" : ageDays > 3 ? "text-amber-400" : "text-slate-400"}`}>{ageDays === 0 ? "Today" : `${ageDays}d`}</span></td>
-                          <td className="px-4 py-3 text-xs text-slate-500">{c.assigned_to || "—"}</td>
-                        </tr>
+                          </TableCell>
+                          <TableCell><Badge tone={SEV_TONE[c.severity] ?? "neutral"} bordered>{c.severity}</Badge></TableCell>
+                          <TableCell><Badge tone={STATUS_TONE[c.status] ?? "neutral"}>{c.status.replace(/_/g," ")}</Badge></TableCell>
+                          <TableCell><span className={`text-xs font-medium ${ageDays > 7 ? "text-red-400" : ageDays > 3 ? "text-amber-400" : "text-slate-400"}`}>{ageDays === 0 ? "Today" : `${ageDays}d`}</span></TableCell>
+                          <TableCell className="text-xs text-slate-500">{c.assigned_to || "—"}</TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </div>

@@ -8,6 +8,8 @@ import {
 import clsx from "clsx";
 import Link from "next/link";
 import { ApiError } from "@/lib/api/client";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import {
   listDecisionPanels,
   getDecisionPanel,
@@ -29,6 +31,16 @@ const STEP_LABELS: Record<StepType, string> = {
   senior_approval: "Senior Approval",
 };
 
+const DECISION_TONE: Record<DecisionType, BadgeTone> = {
+  approved: "success",
+  rejected: "danger",
+  more_information: "warning",
+  escalated: "sky",
+};
+
+// Local color map, kept only for the "complete" workflow's detail-panel
+// decision chip below — that one uses rounded-lg (a rectangular chip),
+// not Badge's rounded-full pill shape, so it stays a plain span.
 const DECISION_COLOR: Record<DecisionType, string> = {
   approved: "bg-emerald-500/20 text-emerald-300",
   rejected: "bg-red-500/20 text-red-300",
@@ -109,66 +121,58 @@ export default function DecisionSupportPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-6">
         <div className="overflow-x-auto rounded-xl border border-navy-700">
-          <table className="w-full text-sm">
-            <thead className="bg-navy-800 border-b border-navy-700">
+          <Table>
+            <TableHead>
               <tr>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Customer</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Risk</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Reporting</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Step</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Decision</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Generated</th>
+                <TableHeaderCell>Customer</TableHeaderCell>
+                <TableHeaderCell>Risk</TableHeaderCell>
+                <TableHeaderCell>Reporting</TableHeaderCell>
+                <TableHeaderCell>Step</TableHeaderCell>
+                <TableHeaderCell>Decision</TableHeaderCell>
+                <TableHeaderCell>Generated</TableHeaderCell>
               </tr>
-            </thead>
-            <tbody>
+            </TableHead>
+            <TableBody>
               {loading ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500">Loading…</td>
-                </tr>
+                <TableEmptyRow colSpan={6}>Loading…</TableEmptyRow>
               ) : panels.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500">No decision support panels found</td>
-                </tr>
+                <TableEmptyRow colSpan={6}>No decision support panels found</TableEmptyRow>
               ) : (
                 panels.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors"
-                    onClick={() => setSelected(p)}
-                  >
-                    <td className="px-4 py-3">
+                  <TableRow key={p.id} onClick={() => setSelected(p)}>
+                    <TableCell>
                       <div className="text-slate-200 font-medium">{p.customer_id}</div>
                       {p.transaction_id && <div className="text-xs text-slate-500">txn {p.transaction_id}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">
                       {p.risk_summary.customer_risk_level || "—"}
                       {p.risk_summary.alert_score != null && ` · alert ${p.risk_summary.alert_score.toFixed(0)}`}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">
                       {[
                         p.reporting_obligations.potential_ttr && "TTR",
                         p.reporting_obligations.potential_ifti && "IFTI",
                         p.reporting_obligations.potential_smr && "SMR",
                       ].filter(Boolean).join(", ") || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">
                       {p.workflow.current_step ? STEP_LABELS[p.workflow.current_step] : "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       {p.workflow.final_decision ? (
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", DECISION_COLOR[p.workflow.final_decision])}>
+                        <Badge tone={DECISION_TONE[p.workflow.final_decision]}>
                           {p.workflow.final_decision.replace("_", " ")}
-                        </span>
+                        </Badge>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600/20 text-slate-400">pending</span>
+                        <Badge tone="muted">pending</Badge>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{new Date(p.generated_at).toLocaleString("en-AU")}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500">{new Date(p.generated_at).toLocaleString("en-AU")}</TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 
@@ -559,9 +563,9 @@ function HistoryTab({ panelId }: { panelId: string }) {
         <div key={s.id} className="rounded-lg border border-navy-700 bg-navy-800 p-3 text-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="font-medium text-slate-200">{STEP_LABELS[s.step_type]}</span>
-            <span className={clsx("px-2 py-0.5 rounded-full font-medium capitalize", DECISION_COLOR[s.decision])}>
+            <Badge tone={DECISION_TONE[s.decision]}>
               {s.decision.replace("_", " ")}
-            </span>
+            </Badge>
           </div>
           <div className="text-slate-400">{s.review_notes}</div>
           {s.conditions?.length > 0 && (

@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import {
   listControls,
   listControlTests,
@@ -206,45 +207,45 @@ export default function ControlsPage() {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-navy-700">
-              <table className="w-full text-sm">
-                <thead className="bg-navy-800 border-b border-navy-700">
+              <Table>
+                <TableHead>
                   <tr>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Ref</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Control</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Risk Area</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Owner</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Frequency</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Effectiveness</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
+                    <TableHeaderCell>Ref</TableHeaderCell>
+                    <TableHeaderCell>Control</TableHeaderCell>
+                    <TableHeaderCell>Risk Area</TableHeaderCell>
+                    <TableHeaderCell>Owner</TableHeaderCell>
+                    <TableHeaderCell>Frequency</TableHeaderCell>
+                    <TableHeaderCell>Effectiveness</TableHeaderCell>
+                    <TableHeaderCell>Status</TableHeaderCell>
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-500">No controls found</td></tr>
+                    <TableEmptyRow colSpan={7}>No controls found</TableEmptyRow>
                   ) : filtered.map(c => (
-                    <tr key={c.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => openControl(c)}>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-400">{c.control_ref}</td>
-                      <td className="px-4 py-3 text-slate-200">
+                    <TableRow key={c.id} onClick={() => openControl(c)}>
+                      <TableCell className="font-mono text-xs text-slate-400">{c.control_ref}</TableCell>
+                      <TableCell className="text-slate-200">
                         {c.name}
                         {c.is_key_control && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-brand-500/20 text-brand-300 border border-brand-500/30">KEY</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-400">{RISK_AREA_LABELS[c.risk_area]}</td>
-                      <td className="px-4 py-3 text-xs text-slate-400">{c.control_owner}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500 capitalize">{c.frequency.replace("_", " ")}</td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-400">{RISK_AREA_LABELS[c.risk_area]}</TableCell>
+                      <TableCell className="text-xs text-slate-400">{c.control_owner}</TableCell>
+                      <TableCell className="text-xs text-slate-500 capitalize">{c.frequency.replace("_", " ")}</TableCell>
+                      <TableCell>
                         <span className={clsx("font-medium text-xs capitalize", EFFECTIVENESS_COLOR[c.effectiveness])}>
                           {c.effectiveness.replace(/_/g, " ")}
                         </span>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <Badge tone={STATUS_TONE[c.status]}>
                           {c.status.replace("_", " ")}
                         </Badge>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {controls.length} controls</div>
           </div>

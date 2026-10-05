@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import {
   listPolicies,
   listPolicyVersions,
@@ -223,48 +224,48 @@ export default function PoliciesPage() {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-navy-700">
-              <table className="w-full text-sm">
-                <thead className="bg-navy-800 border-b border-navy-700">
+              <Table>
+                <TableHead>
                   <tr>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Policy No.</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Title</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Type</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Version</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Review Due</th>
-                    <th className="px-4 py-3" />
+                    <TableHeaderCell>Policy No.</TableHeaderCell>
+                    <TableHeaderCell>Title</TableHeaderCell>
+                    <TableHeaderCell>Type</TableHeaderCell>
+                    <TableHeaderCell>Version</TableHeaderCell>
+                    <TableHeaderCell>Status</TableHeaderCell>
+                    <TableHeaderCell>Review Due</TableHeaderCell>
+                    <TableHeaderCell />
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-500">No policies found</td></tr>
+                    <TableEmptyRow colSpan={7}>No policies found</TableEmptyRow>
                   ) : filtered.map(p => {
                     const overdue = new Date(p.review_due_date) < new Date() && p.status === "published";
                     return (
-                      <tr key={p.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => openPolicy(p)}>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-400">{p.policy_number}</td>
-                        <td className="px-4 py-3 text-slate-200">{p.title}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">{TYPE_LABELS[p.policy_type]}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">{p.version_major}.{p.version_minor}</td>
-                        <td className="px-4 py-3">
+                      <TableRow key={p.id} onClick={() => openPolicy(p)}>
+                        <TableCell className="font-mono text-xs text-slate-400">{p.policy_number}</TableCell>
+                        <TableCell className="text-slate-200">{p.title}</TableCell>
+                        <TableCell className="text-xs text-slate-400">{TYPE_LABELS[p.policy_type]}</TableCell>
+                        <TableCell className="text-xs text-slate-400">{p.version_major}.{p.version_minor}</TableCell>
+                        <TableCell>
                           <Badge tone={STATUS_TONE[p.status]}>
                             {p.status.replace("_", " ")}
                           </Badge>
-                        </td>
-                        <td className={clsx("px-4 py-3 text-xs", overdue ? "text-red-400 font-medium" : "text-slate-500")}>
+                        </TableCell>
+                        <TableCell className={clsx("text-xs", overdue ? "text-red-400 font-medium" : "text-slate-500")}>
                           {new Date(p.review_due_date).toLocaleDateString("en-AU")}
-                        </td>
-                        <td className="px-4 py-3">
+                        </TableCell>
+                        <TableCell>
                           <button onClick={e => { e.stopPropagation(); exportPdf(p); }} title="Export PDF"
                             className="text-slate-500 hover:text-brand-400 transition-colors">
                             <Download className="w-4 h-4" />
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {policies.length} policies</div>
           </div>

@@ -10,6 +10,7 @@ import clsx from "clsx";
 import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import { listCustomers } from '@/lib/api/customers'
 import {
   listAlerts,
@@ -271,37 +272,37 @@ function MonitoringDashboard() {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-navy-700">
-              <table className="w-full text-sm">
-                <thead className="bg-navy-800 border-b border-navy-700">
+              <Table>
+                <TableHead>
                   <tr>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium w-6" />
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Alert</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Type</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Severity</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Time</th>
-                    <th className="px-4 py-3" />
+                    <TableHeaderCell className="w-6" />
+                    <TableHeaderCell>Alert</TableHeaderCell>
+                    <TableHeaderCell>Type</TableHeaderCell>
+                    <TableHeaderCell>Severity</TableHeaderCell>
+                    <TableHeaderCell>Status</TableHeaderCell>
+                    <TableHeaderCell>Time</TableHeaderCell>
+                    <TableHeaderCell />
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-500">No alerts match your filters</td></tr>
+                    <TableEmptyRow colSpan={7}>No alerts match your filters</TableEmptyRow>
                   ) : filtered.map(a => (
-                    <tr key={a.alert_id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(a)}>
-                      <td className="px-4 py-3"><div className={`w-2 h-2 rounded-full ${SEV_DOT[a.severity] || "bg-slate-500"}`} /></td>
-                      <td className="px-4 py-3">
+                    <TableRow key={a.alert_id} onClick={() => setSelected(a)}>
+                      <TableCell><div className={`w-2 h-2 rounded-full ${SEV_DOT[a.severity] || "bg-slate-500"}`} /></TableCell>
+                      <TableCell>
                         <div className="font-mono text-xs text-slate-500 mb-0.5">{a.alert_id}</div>
                         <div className="text-slate-300 text-xs line-clamp-1 max-w-sm">{a.description}</div>
-                      </td>
-                      <td className="px-4 py-3"><span className="text-xs text-slate-400">{TYPE_LABELS[a.alert_type] || a.alert_type}</span></td>
-                      <td className="px-4 py-3"><Badge tone={SEV_TONE[a.severity] ?? "neutral"} bordered>{a.severity}</Badge></td>
-                      <td className="px-4 py-3"><Badge tone={STATUS_TONE[a.status] ?? "neutral"}>{a.status.replace(/_/g, " ")}</Badge></td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{a.created_at ? new Date(a.created_at).toLocaleString("en-AU", { dateStyle: "short", timeStyle: "short" }) : "—"}</td>
-                      <td className="px-4 py-3"><Eye className="w-4 h-4 text-slate-600 hover:text-brand-400 transition-colors" /></td>
-                    </tr>
+                      </TableCell>
+                      <TableCell><span className="text-xs text-slate-400">{TYPE_LABELS[a.alert_type] || a.alert_type}</span></TableCell>
+                      <TableCell><Badge tone={SEV_TONE[a.severity] ?? "neutral"} bordered>{a.severity}</Badge></TableCell>
+                      <TableCell><Badge tone={STATUS_TONE[a.status] ?? "neutral"}>{a.status.replace(/_/g, " ")}</Badge></TableCell>
+                      <TableCell className="text-xs text-slate-500">{a.created_at ? new Date(a.created_at).toLocaleString("en-AU", { dateStyle: "short", timeStyle: "short" }) : "—"}</TableCell>
+                      <TableCell><Eye className="w-4 h-4 text-slate-600 hover:text-brand-400 transition-colors" /></TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {alerts.length} alerts</div>
           </div>

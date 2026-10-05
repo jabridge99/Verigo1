@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
 import {
   listRules,
   getRuleBuilderReference,
@@ -191,50 +192,38 @@ export default function RuleBuilderPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-6">
         <div className="overflow-x-auto rounded-xl border border-navy-700">
-          <table className="w-full text-sm">
-            <thead className="bg-navy-800 border-b border-navy-700">
+          <Table>
+            <TableHead>
               <tr>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Rule</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Event</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Priority</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Triggers</th>
-                <th className="px-4 py-3" />
+                <TableHeaderCell>Rule</TableHeaderCell>
+                <TableHeaderCell>Event</TableHeaderCell>
+                <TableHeaderCell>Priority</TableHeaderCell>
+                <TableHeaderCell>Status</TableHeaderCell>
+                <TableHeaderCell>Triggers</TableHeaderCell>
+                <TableHeaderCell />
               </tr>
-            </thead>
-            <tbody>
+            </TableHead>
+            <TableBody>
               {loading ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500">
-                    Loading…
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={6}>Loading…</TableEmptyRow>
               ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500">
-                    No rules found
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={6}>No rules found</TableEmptyRow>
               ) : (
                 filtered.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors"
-                    onClick={() => setSelected(r)}
-                  >
-                    <td className="px-4 py-3">
+                  <TableRow key={r.id} onClick={() => setSelected(r)}>
+                    <TableCell>
                       <div className="text-slate-200 font-medium">{r.name}</div>
                       <div className="text-xs text-slate-500">{r.rule_ref}</div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">
                       {reference?.event_types.find((e) => e.value === r.event_type)?.label || r.event_type}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{r.priority}</td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">{r.priority}</TableCell>
+                    <TableCell>
                       <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{r.trigger_count}</td>
-                    <td className="px-4 py-3 text-right">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">{r.trigger_count}</TableCell>
+                    <TableCell className="text-right">
                       <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => toggleStatus(r)}
@@ -251,12 +240,12 @@ export default function RuleBuilderPage() {
                           </button>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 
