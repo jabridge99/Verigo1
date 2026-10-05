@@ -9,6 +9,7 @@ import {
 import clsx from "clsx";
 import { DEMO_CUSTOMERS } from "@/lib/demoCustomers";
 import QuickActions from "@/components/QuickActions";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { listCustomers } from '@/lib/api/customers'
 import {
   listAlerts,
@@ -68,24 +69,24 @@ function mapAlert(raw: RawAlert): Alert {
   };
 }
 
-const SEV_COLORS: Record<string, string> = {
-  critical: "bg-red-500/20 text-red-300 border-red-500/30",
-  high:     "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  medium:   "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  low:      "bg-blue-500/20 text-blue-300 border-blue-500/30",
+const SEV_TONE: Record<string, BadgeTone> = {
+  critical: "danger",
+  high:     "orange",
+  medium:   "warning",
+  low:      "info",
 };
 
 const SEV_DOT: Record<string, string> = {
   critical: "bg-red-500", high: "bg-orange-500", medium: "bg-amber-500", low: "bg-blue-500",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  open:         "bg-slate-500/20 text-slate-300",
-  under_review: "bg-purple-500/20 text-purple-300",
-  escalated:    "bg-red-500/20 text-red-300",
-  dismissed:    "bg-slate-600/20 text-slate-500",
-  resolved:     "bg-emerald-500/20 text-emerald-300",
-  reported:     "bg-brand-500/20 text-brand-300",
+const STATUS_TONE: Record<string, BadgeTone> = {
+  open:         "neutral",
+  under_review: "purple",
+  escalated:    "danger",
+  dismissed:    "muted",
+  resolved:     "success",
+  reported:     "info",
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -293,8 +294,8 @@ function MonitoringDashboard() {
                         <div className="text-slate-300 text-xs line-clamp-1 max-w-sm">{a.description}</div>
                       </td>
                       <td className="px-4 py-3"><span className="text-xs text-slate-400">{TYPE_LABELS[a.alert_type] || a.alert_type}</span></td>
-                      <td className="px-4 py-3"><span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLORS[a.severity])}>{a.severity}</span></td>
-                      <td className="px-4 py-3"><span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLORS[a.status] || "bg-slate-500/20 text-slate-400")}>{a.status.replace(/_/g, " ")}</span></td>
+                      <td className="px-4 py-3"><Badge tone={SEV_TONE[a.severity] ?? "neutral"} bordered>{a.severity}</Badge></td>
+                      <td className="px-4 py-3"><Badge tone={STATUS_TONE[a.status] ?? "neutral"}>{a.status.replace(/_/g, " ")}</Badge></td>
                       <td className="px-4 py-3 text-xs text-slate-500">{a.created_at ? new Date(a.created_at).toLocaleString("en-AU", { dateStyle: "short", timeStyle: "short" }) : "—"}</td>
                       <td className="px-4 py-3"><Eye className="w-4 h-4 text-slate-600 hover:text-brand-400 transition-colors" /></td>
                     </tr>
@@ -363,7 +364,7 @@ function MonitoringDashboard() {
                 <div className="space-y-2">
                   {Object.entries(stats.by_status).map(([status, count]) => (
                     <div key={status} className="flex items-center justify-between text-sm py-1 border-b border-navy-700 last:border-0">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs capitalize", STATUS_COLORS[status] || "bg-slate-500/20 text-slate-400")}>{status.replace(/_/g, " ")}</span>
+                      <Badge tone={STATUS_TONE[status] ?? "neutral"}>{status.replace(/_/g, " ")}</Badge>
                       <span className="font-semibold text-slate-200">{count}</span>
                     </div>
                   ))}
@@ -406,7 +407,7 @@ function MonitoringDashboard() {
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-mono text-xs text-slate-500 mb-1">{selected.alert_id}</div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLORS[selected.severity])}>{selected.severity}</span>
+                <Badge tone={SEV_TONE[selected.severity] ?? "neutral"} bordered>{selected.severity}</Badge>
               </div>
               <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
             </div>
@@ -414,7 +415,7 @@ function MonitoringDashboard() {
             <div><div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Description</div><div className="text-sm text-slate-300 leading-relaxed">{selected.description}</div></div>
             {selected.rule_name && <div><div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Rule</div><div className="text-sm text-slate-300">{selected.rule_name}</div></div>}
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-slate-500 mb-0.5">Status</div><span className={clsx("px-2 py-0.5 rounded-full text-xs capitalize", STATUS_COLORS[selected.status] || "")}>{selected.status.replace(/_/g, " ")}</span></div>
+              <div><div className="text-xs text-slate-500 mb-0.5">Status</div><Badge tone={STATUS_TONE[selected.status] ?? "neutral"}>{selected.status.replace(/_/g, " ")}</Badge></div>
               {selected.assigned_to && <div><div className="text-xs text-slate-500 mb-0.5">Assigned to</div><div className="text-slate-300 text-xs">{selected.assigned_to}</div></div>}
               <div><div className="text-xs text-slate-500 mb-0.5">Created</div><div className="text-slate-400 text-xs">{selected.created_at ? new Date(selected.created_at).toLocaleString("en-AU") : "—"}</div></div>
             </div>
@@ -722,7 +723,7 @@ function TransactionEntryPanel({ defaultCustomerId, onCreate }: { defaultCustome
               {risk.rules.map(r => (
                 <div key={r.label} className="flex items-center justify-between text-sm">
                   <span className="text-slate-300">{r.label}</span>
-                  <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", SEV_COLORS[r.severity])}>{r.severity}</span>
+                  <Badge tone={SEV_TONE[r.severity] ?? "neutral"} bordered>{r.severity}</Badge>
                 </div>
               ))}
             </div>

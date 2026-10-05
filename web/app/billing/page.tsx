@@ -9,6 +9,7 @@ import {
 import { getStoredUser } from "@/lib/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   listPlans,
   getMySubscription,
@@ -635,13 +636,13 @@ function BillingContent() {
     setShowCancelConfirm(false);
   };
 
-  const STATUS_COLOR: Record<string, string> = {
-    active: "bg-green-500/20 text-green-400",
-    trialing: "bg-blue-500/20 text-blue-400",
-    past_due: "bg-red-500/20 text-red-400",
-    canceled: "bg-slate-500/20 text-slate-400",
-    unpaid: "bg-red-500/20 text-red-400",
-    free_trial: "bg-blue-500/20 text-blue-400",
+  const STATUS_TONE: Record<string, BadgeTone> = {
+    active: "success",
+    trialing: "info",
+    past_due: "danger",
+    canceled: "muted",
+    unpaid: "danger",
+    free_trial: "info",
   };
 
   return (
@@ -673,9 +674,9 @@ function BillingContent() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1)}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[sub.status] ?? "bg-slate-500/20 text-slate-400"}`}>
+                  <Badge tone={STATUS_TONE[sub.status] ?? "neutral"} capitalize={false}>
                     {sub.status}
-                  </span>
+                  </Badge>
                   {sub.cancel_at_period_end && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/20">
                       Cancels {fmtDate(sub.current_period_end)}

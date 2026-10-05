@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   listTtrReports,
   listSmrReports,
@@ -73,19 +74,19 @@ const TYPE_LABELS: Record<string, string> = {
   smr: "SMR — Suspicious Matter",
 };
 
-const TYPE_COLOR: Record<string, string> = {
-  ttr: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  ifti: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
-  smr: "bg-red-500/20 text-red-300 border-red-500/30",
+const TYPE_TONE: Record<string, BadgeTone> = {
+  ttr: "info",
+  ifti: "sky",
+  smr: "danger",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  draft:        "bg-slate-500/20 text-slate-300",
-  under_review: "bg-purple-500/20 text-purple-300",
-  approved:     "bg-emerald-500/20 text-emerald-300",
-  submitted:    "bg-brand-500/20 text-brand-300",
-  acknowledged: "bg-teal-500/20 text-teal-300",
-  rejected:     "bg-red-500/20 text-red-300",
+const STATUS_TONE: Record<string, BadgeTone> = {
+  draft:        "neutral",
+  under_review: "purple",
+  approved:     "success",
+  submitted:    "info",
+  acknowledged: "teal",
+  rejected:     "danger",
 };
 
 const STATUTORY_INFO: Record<string, { deadline: string; obligation: string; form: string }> = {
@@ -404,14 +405,14 @@ export default function ReportingDashboard() {
                         <div className="text-slate-200 text-xs font-medium line-clamp-1 max-w-xs">{r.title}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border", TYPE_COLOR[r.report_type] || "bg-slate-500/20 text-slate-400")}>
+                        <Badge tone={TYPE_TONE[r.report_type] ?? "neutral"} bordered capitalize={false}>
                           {r.austrac_report_type}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[r.status] || "bg-slate-500/20 text-slate-400")}>
+                        <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>
                           {r.status.replace(/_/g, " ")}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-300">
                         {r.total_amount_flagged > 0 ? `AUD $${r.total_amount_flagged.toLocaleString()}` : "—"}
@@ -451,9 +452,9 @@ export default function ReportingDashboard() {
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-mono text-xs text-slate-500 mb-1">{selected.report_ref}</div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border", TYPE_COLOR[selected.report_type] || "")}>
+                <Badge tone={TYPE_TONE[selected.report_type] ?? "neutral"} bordered capitalize={false}>
                   {selected.austrac_report_type}
-                </span>
+                </Badge>
                 {selected.priority && (
                   <span className="ml-2 text-xs font-medium capitalize text-slate-400">
                     {selected.priority} priority
@@ -487,7 +488,7 @@ export default function ReportingDashboard() {
 
             <div className="grid grid-cols-2 gap-3 text-sm">
               {[
-                { label: "Status", value: <span className={clsx("px-2 py-0.5 rounded-full text-xs capitalize", STATUS_COLOR[selected.status] || "")}>{selected.status.replace(/_/g," ")}</span> },
+                { label: "Status", value: <Badge tone={STATUS_TONE[selected.status] ?? "neutral"}>{selected.status.replace(/_/g," ")}</Badge> },
                 { label: "Amount", value: selected.total_amount_flagged > 0 ? `AUD $${selected.total_amount_flagged.toLocaleString()}` : "—" },
                 { label: "Days remaining", value: (() => { const dr = daysRemaining(selected.due_date); return dr !== undefined ? `${dr}d` : "—"; })() },
                 { label: "Prepared by", value: selected.prepared_by || "—" },
