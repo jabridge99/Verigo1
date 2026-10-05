@@ -6,6 +6,7 @@ import {
   ClipboardCheck, Wrench, User,
 } from "lucide-react";
 import clsx from "clsx";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   listControls,
   listControlTests,
@@ -27,12 +28,12 @@ const RISK_AREA_LABELS: Record<RiskArea, string> = {
   outsourcing: "Outsourcing", custom: "Custom",
 };
 
-const STATUS_COLOR: Record<ControlStatus, string> = {
-  active: "bg-emerald-500/20 text-emerald-300",
-  inactive: "bg-slate-600/20 text-slate-500",
-  under_review: "bg-brand-500/20 text-brand-300",
-  remediation: "bg-amber-500/20 text-amber-300",
-  suspended: "bg-red-500/20 text-red-300",
+const STATUS_TONE: Record<ControlStatus, BadgeTone> = {
+  active: "success",
+  inactive: "muted",
+  under_review: "info",
+  remediation: "warning",
+  suspended: "danger",
 };
 
 const EFFECTIVENESS_COLOR: Record<Effectiveness, string> = {
@@ -200,7 +201,7 @@ export default function ControlsPage() {
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
                 className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
                 <option value="all">Status — All</option>
-                {Object.keys(STATUS_COLOR).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                {Object.keys(STATUS_TONE).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
               </select>
             </div>
 
@@ -236,9 +237,9 @@ export default function ControlsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[c.status])}>
+                        <Badge tone={STATUS_TONE[c.status]}>
                           {c.status.replace("_", " ")}
-                        </span>
+                        </Badge>
                       </td>
                     </tr>
                   ))}
@@ -270,9 +271,9 @@ export default function ControlsPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status])}>
+              <Badge tone={STATUS_TONE[selected.status]}>
                 {selected.status.replace("_", " ")}
-              </span>
+              </Badge>
               <span className={clsx("text-xs font-medium capitalize", EFFECTIVENESS_COLOR[selected.effectiveness])}>
                 {selected.effectiveness.replace(/_/g, " ")}
               </span>

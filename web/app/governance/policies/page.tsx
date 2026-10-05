@@ -6,6 +6,7 @@ import {
   History, ShieldCheck, ArrowRight, Archive,
 } from "lucide-react";
 import clsx from "clsx";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   listPolicies,
   listPolicyVersions,
@@ -41,15 +42,15 @@ const TYPE_LABELS: Record<PolicyType, string> = {
   other: "Other",
 };
 
-const STATUS_COLOR: Record<PolicyStatus, string> = {
-  draft: "bg-slate-500/20 text-slate-300",
-  internal_review: "bg-brand-500/20 text-brand-300",
-  compliance_review: "bg-brand-500/20 text-brand-300",
-  pending_approval: "bg-amber-500/20 text-amber-300",
-  published: "bg-emerald-500/20 text-emerald-300",
-  periodic_review: "bg-amber-500/20 text-amber-300",
-  superseded: "bg-slate-600/20 text-slate-500",
-  archived: "bg-slate-600/20 text-slate-500",
+const STATUS_TONE: Record<PolicyStatus, BadgeTone> = {
+  draft: "neutral",
+  internal_review: "info",
+  compliance_review: "info",
+  pending_approval: "warning",
+  published: "success",
+  periodic_review: "warning",
+  superseded: "muted",
+  archived: "muted",
 };
 
 const NEXT_ACTIONS: Record<PolicyStatus, { action: string; label: string }[]> = {
@@ -217,7 +218,7 @@ export default function PoliciesPage() {
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
                 className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
                 <option value="all">Status — All</option>
-                {Object.keys(STATUS_COLOR).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                {Object.keys(STATUS_TONE).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
               </select>
             </div>
 
@@ -246,9 +247,9 @@ export default function PoliciesPage() {
                         <td className="px-4 py-3 text-xs text-slate-400">{TYPE_LABELS[p.policy_type]}</td>
                         <td className="px-4 py-3 text-xs text-slate-400">{p.version_major}.{p.version_minor}</td>
                         <td className="px-4 py-3">
-                          <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[p.status])}>
+                          <Badge tone={STATUS_TONE[p.status]}>
                             {p.status.replace("_", " ")}
-                          </span>
+                          </Badge>
                         </td>
                         <td className={clsx("px-4 py-3 text-xs", overdue ? "text-red-400 font-medium" : "text-slate-500")}>
                           {new Date(p.review_due_date).toLocaleDateString("en-AU")}
@@ -294,9 +295,9 @@ export default function PoliciesPage() {
               </div>
             </div>
 
-            <span className={clsx("inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status])}>
+            <Badge tone={STATUS_TONE[selected.status]}>
               {selected.status.replace("_", " ")}
-            </span>
+            </Badge>
 
             {selected.summary && (
               <div>

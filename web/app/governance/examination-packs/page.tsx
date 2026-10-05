@@ -8,6 +8,7 @@ import {
 import clsx from "clsx";
 import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   ExaminationPack as Pack,
   PackStatus,
@@ -20,11 +21,11 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-const STATUS_COLOR: Record<PackStatus, string> = {
-  generating: "bg-amber-500/20 text-amber-300",
-  ready: "bg-emerald-500/20 text-emerald-300",
-  delivered: "bg-purple-500/20 text-purple-300",
-  archived: "bg-slate-600/20 text-slate-500",
+const STATUS_TONE: Record<PackStatus, BadgeTone> = {
+  generating: "warning",
+  ready: "success",
+  delivered: "purple",
+  archived: "muted",
 };
 
 const SECTION_LABELS: Record<string, string> = {
@@ -169,9 +170,9 @@ export default function ExaminationPacksPage() {
                   <div className="font-medium text-slate-100 mt-0.5">{p.period_start} → {p.period_end}</div>
                   <div className="text-xs text-slate-500 mt-1">{p.sections.length} sections{p.examiner_name ? ` · ${p.examiner_name}` : ""}</div>
                 </div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize whitespace-nowrap", STATUS_COLOR[p.status])}>
+                <Badge tone={STATUS_TONE[p.status]} nowrap>
                   {p.status}
-                </span>
+                </Badge>
               </div>
 
               {p.generation_errors && p.generation_errors.length > 0 && (

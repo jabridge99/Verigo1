@@ -6,6 +6,7 @@ import {
   LayoutList, CalendarDays, GanttChartSquare, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import clsx from "clsx";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   listComplianceCalendarItems,
   getCalendarDashboard,
@@ -36,13 +37,13 @@ const TYPE_LABELS: Record<ItemType, string> = {
   other: "Other",
 };
 
-const STATUS_COLOR: Record<ItemStatus, string> = {
-  scheduled: "bg-slate-500/20 text-slate-300",
-  in_progress: "bg-brand-500/20 text-brand-300",
-  completed: "bg-emerald-500/20 text-emerald-300",
-  overdue: "bg-red-500/20 text-red-300",
-  cancelled: "bg-slate-600/20 text-slate-500",
-  escalated: "bg-amber-500/20 text-amber-300",
+const STATUS_TONE: Record<ItemStatus, BadgeTone> = {
+  scheduled: "neutral",
+  in_progress: "info",
+  completed: "success",
+  overdue: "danger",
+  cancelled: "muted",
+  escalated: "warning",
 };
 
 const DEMO_ITEMS: CalendarItem[] = [
@@ -168,7 +169,7 @@ export default function ComplianceCalendarPage() {
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
               className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500">
               <option value="all">Status — All</option>
-              {Object.keys(STATUS_COLOR).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+              {Object.keys(STATUS_TONE).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
             </select>
           </div>
         </div>
@@ -199,9 +200,9 @@ export default function ComplianceCalendarPage() {
                       {new Date(i.due_date).toLocaleDateString("en-AU")}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[i.status])}>
+                      <Badge tone={STATUS_TONE[i.status]}>
                         {i.status.replace("_", " ")}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">
                       {i.is_recurring ? `Every ${i.recurrence_months}mo` : "—"}
@@ -245,9 +246,9 @@ export default function ComplianceCalendarPage() {
                 <div className={clsx("text-xs font-medium", i.is_overdue ? "text-red-400" : "text-slate-400")}>
                   {new Date(i.due_date).toLocaleDateString("en-AU")}
                 </div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[i.status])}>
+                <Badge tone={STATUS_TONE[i.status]}>
                   {i.status.replace("_", " ")}
-                </span>
+                </Badge>
               </div>
             ))}
           </div>
@@ -264,9 +265,9 @@ export default function ComplianceCalendarPage() {
               </div>
               <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
             </div>
-            <span className={clsx("inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status])}>
+            <Badge tone={STATUS_TONE[selected.status]}>
               {selected.status.replace("_", " ")}
-            </span>
+            </Badge>
             {selected.description && (
               <div className="text-sm text-slate-300 leading-relaxed">{selected.description}</div>
             )}

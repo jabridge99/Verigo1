@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   listReviews,
   getOrgDashboard,
@@ -31,29 +32,29 @@ import {
   type ReviewStatus,
 } from "@/lib/api/independentReview";
 
-const RISK_COLOR: Record<FindingRisk, string> = {
-  critical: "bg-red-500/20 text-red-300 border-red-500/30",
-  high: "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  medium: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  low: "bg-slate-500/20 text-slate-300 border-slate-500/30",
+const RISK_TONE: Record<FindingRisk, BadgeTone> = {
+  critical: "danger",
+  high: "orange",
+  medium: "warning",
+  low: "neutral",
 };
 
-const FINDING_STATUS_COLOR: Record<string, string> = {
-  open: "bg-slate-500/20 text-slate-300",
-  response_submitted: "bg-brand-500/20 text-brand-300",
-  in_remediation: "bg-amber-500/20 text-amber-300",
-  closed: "bg-emerald-500/20 text-emerald-300",
-  overdue: "bg-red-500/20 text-red-300",
-  accepted_risk: "bg-purple-500/20 text-purple-300",
+const FINDING_STATUS_TONE: Record<string, BadgeTone> = {
+  open: "neutral",
+  response_submitted: "info",
+  in_remediation: "warning",
+  closed: "success",
+  overdue: "danger",
+  accepted_risk: "purple",
 };
 
-const REVIEW_STATUS_COLOR: Record<ReviewStatus, string> = {
-  planned: "bg-slate-500/20 text-slate-300",
-  in_progress: "bg-brand-500/20 text-brand-300",
-  findings_issued: "bg-amber-500/20 text-amber-300",
-  response_due: "bg-orange-500/20 text-orange-300",
-  completed: "bg-emerald-500/20 text-emerald-300",
-  archived: "bg-slate-600/20 text-slate-500",
+const REVIEW_STATUS_TONE: Record<ReviewStatus, BadgeTone> = {
+  planned: "neutral",
+  in_progress: "info",
+  findings_issued: "warning",
+  response_due: "orange",
+  completed: "success",
+  archived: "muted",
 };
 
 const DEMO_REVIEWS: Review[] = [
@@ -240,9 +241,9 @@ export default function IndependentReviewPage() {
                   <div className="font-medium text-slate-100 mt-0.5">{r.title}</div>
                   <div className="text-xs text-slate-500 mt-1">{r.reviewer_firm || r.reviewer_name || "—"}</div>
                 </div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize whitespace-nowrap", REVIEW_STATUS_COLOR[r.status])}>
+                <Badge tone={REVIEW_STATUS_TONE[r.status]} nowrap>
                   {r.status.replace(/_/g, " ")}
-                </span>
+                </Badge>
               </div>
               <div className="flex items-center gap-3 mt-3 text-xs">
                 {r.finding_count_critical > 0 && <span className="text-red-400 font-medium">{r.finding_count_critical} critical</span>}
@@ -298,15 +299,15 @@ export default function IndependentReviewPage() {
                   <div key={f.id} onClick={() => openFinding(f)}
                     className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer hover:border-brand-500/30 transition-colors",
                       selectedFinding?.id === f.id ? "border-brand-500/50 bg-navy-800/60" : "border-navy-700 bg-navy-900")}>
-                    <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap", RISK_COLOR[f.risk_rating])}>
+                    <Badge tone={RISK_TONE[f.risk_rating]} bordered nowrap capitalize={false}>
                       {f.risk_rating}
-                    </span>
+                    </Badge>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-slate-200 truncate">Finding #{String(f.finding_number).padStart(3, "0")} — {f.title}</div>
                     </div>
-                    <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize whitespace-nowrap", FINDING_STATUS_COLOR[f.status])}>
+                    <Badge tone={FINDING_STATUS_TONE[f.status]} nowrap>
                       {f.status.replace(/_/g, " ")}
-                    </span>
+                    </Badge>
                     <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />
                   </div>
                 ))}
@@ -320,9 +321,9 @@ export default function IndependentReviewPage() {
                     <div className="text-xs text-slate-500">{selectedFinding.finding_ref} · {selectedFinding.category.replace(/_/g, " ")}</div>
                     <h4 className="font-semibold text-slate-100">{selectedFinding.title}</h4>
                   </div>
-                  <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap", RISK_COLOR[selectedFinding.risk_rating])}>
+                  <Badge tone={RISK_TONE[selectedFinding.risk_rating]} bordered nowrap capitalize={false}>
                     Risk: {selectedFinding.risk_rating}
-                  </span>
+                  </Badge>
                 </div>
                 <p className="text-sm text-slate-400 mb-3">{selectedFinding.description}</p>
 

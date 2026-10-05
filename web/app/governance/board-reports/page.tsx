@@ -8,6 +8,7 @@ import {
 import clsx from "clsx";
 import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   BoardReport as Report,
   ReportStatus,
@@ -30,12 +31,12 @@ const TYPE_LABELS: Record<ReportType, string> = {
   annual_aml: "Annual AML/CTF Program Report",
 };
 
-const STATUS_COLOR: Record<ReportStatus, string> = {
-  draft: "bg-slate-500/20 text-slate-300",
-  under_review: "bg-brand-500/20 text-brand-300",
-  approved: "bg-emerald-500/20 text-emerald-300",
-  distributed: "bg-purple-500/20 text-purple-300",
-  archived: "bg-slate-600/20 text-slate-500",
+const STATUS_TONE: Record<ReportStatus, BadgeTone> = {
+  draft: "neutral",
+  under_review: "info",
+  approved: "success",
+  distributed: "purple",
+  archived: "muted",
 };
 
 const DEMO_REPORTS: Report[] = [
@@ -153,9 +154,9 @@ export default function BoardReportsPage() {
                   <div className="font-medium text-slate-100 mt-0.5">{r.title}</div>
                   <div className="text-xs text-slate-500 mt-1">{r.period_start} → {r.period_end}</div>
                 </div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize whitespace-nowrap", STATUS_COLOR[r.status])}>
+                <Badge tone={STATUS_TONE[r.status]} nowrap>
                   {r.status.replace(/_/g, " ")}
-                </span>
+                </Badge>
               </div>
 
               <div className="flex items-center gap-2 mt-4 flex-wrap">
