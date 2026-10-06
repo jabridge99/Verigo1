@@ -1,0 +1,1168 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="http://austrac.gov.au/schema/reporting/TTR-FBS-3-0"
+           xmlns:xlink="http://www.w3.org/1999/xlink"
+           xmlns:d="http://docbook.org/ns/docbook"
+           targetNamespace="http://austrac.gov.au/schema/reporting/TTR-FBS-3-0"
+           elementFormDefault="qualified"
+           xml:lang="en">
+<!--Reports made using this XML schema are pursuant to the requirements of section 43 of the AML/CTF Act. Criminal penalties may apply for providing false or misleading information and civil penalties may apply for failing to supply information.-->
+   <xs:annotation>
+      <xs:documentation source="titlePage">
+         <d:title>Electronic report file format specification –
+        threshold transaction report (financial and bullion services)</d:title>
+         <d:author>
+            <d:orgname>Australian Transaction Reports and Analysis Centre (AUSTRAC)</d:orgname>
+            <d:uri>http://www.austrac.gov.au/</d:uri>
+         </d:author>
+         <d:revhistory>
+            <d:revision>
+               <d:revnumber>3.0a</d:revnumber>
+               <d:date>April 2025</d:date>
+            </d:revision>
+         </d:revhistory>
+         <d:copyright>
+            <d:year>2018</d:year>
+            <d:holder>Commonwealth of Australia</d:holder>
+         </d:copyright>
+         <d:keywordset>
+            <d:keyword>AUSTRAC</d:keyword>
+            <d:keyword>TTR-FBS</d:keyword>
+            <d:keyword>Threshold transaction report, financial and bullion services</d:keyword>
+            <d:keyword>Report file format</d:keyword>
+            <d:keyword>User guide</d:keyword>
+            <d:keyword>Schema reference</d:keyword>
+            <d:keyword>XSD reference</d:keyword>
+         </d:keywordset>
+      </xs:documentation>
+   </xs:annotation>
+   <xs:element name="ttr-fbsList">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element name="reNumber" type="RENumber"/>
+            <xs:element name="fileName" type="TTRFBSFileName"/>
+            <xs:element name="reportCount" type="ReportCount"/>
+            <xs:element ref="ttr-fbs" maxOccurs="unbounded"/>
+         </xs:sequence>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="ttr-fbs">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element ref="header"/>
+            <xs:element ref="customer" maxOccurs="unbounded"/>
+            <xs:choice>
+               <xs:sequence>
+                  <xs:element ref="representedOrganisation" minOccurs="0" maxOccurs="unbounded"/>
+                  <xs:element ref="individualConductingTxn" maxOccurs="unbounded"/>
+               </xs:sequence>
+               <xs:element ref="methodOfConductingTxn"/>
+            </xs:choice>
+            <xs:element ref="recipient" maxOccurs="unbounded"/>
+            <xs:element ref="transaction"/>
+         </xs:sequence>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="header">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element name="txnRefNo" type="TRN" minOccurs="0"/>
+            <xs:element name="interceptFlag" type="xs:token" fixed="Y" minOccurs="0"/>
+            <xs:element name="reportingBranch" type="Branch"/>
+         </xs:sequence>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="customer">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element name="fullName" type="Name"/>
+            <xs:element name="altName" type="Name" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="mainAddress" type="Address"/>
+            <xs:element name="postalAddress" type="Address" minOccurs="0"/>
+            <xs:element name="phone" type="PhoneNum" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="email" type="Email" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="indOcc" type="IndustryOccupation" minOccurs="0"/>
+            <xs:element name="abn" type="ABN" minOccurs="0"/>
+            <xs:element name="acn" type="ACN" minOccurs="0"/>
+            <xs:element name="arbn" type="ARBN" minOccurs="0"/>
+            <xs:element name="businessStruct" type="BusinessStructure" minOccurs="0"/>
+            <xs:element name="dob" type="DateOfBirth" minOccurs="0"/>
+            <xs:element ref="account" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="digitalCurrencyWallet" type="DigitalCurrencyWallet" minOccurs="0"
+                        maxOccurs="unbounded"/>
+            <xs:element name="identification" type="Identification" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="electDataSrc" type="ElectronicDataSource" minOccurs="0"
+                        maxOccurs="unbounded"/>
+            <xs:element name="deviceIdentifier" type="DeviceIdentifier" minOccurs="0"
+                        maxOccurs="unbounded"/>
+         </xs:sequence>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="representedOrganisation">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element name="fullName" type="Name" minOccurs="0"/>
+            <xs:element name="mainAddress" type="Address" minOccurs="0"/>
+            <xs:element name="abn" type="ABN" minOccurs="0"/>
+            <xs:element name="acn" type="ACN" minOccurs="0"/>
+            <xs:element name="arbn" type="ARBN" minOccurs="0"/>
+         </xs:sequence>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="individualConductingTxn">
+      <xs:complexType>
+         <xs:choice>
+            <xs:element name="sameAsCustomer" type="PartyReference"/>
+            <xs:sequence>
+               <xs:choice>
+                  <xs:element name="employeeOfCustomer" type="PartyReference"/>
+                  <xs:element name="representsOrganisation" type="PartyReference" minOccurs="0"/>
+               </xs:choice>
+               <xs:element name="fullName" type="Name"/>
+               <xs:element name="altName" type="Name" minOccurs="0" maxOccurs="unbounded"/>
+               <xs:element name="mainAddress" type="Address" minOccurs="0"/>
+               <xs:element name="postalAddress" type="Address" minOccurs="0"/>
+               <xs:element name="phone" type="PhoneNum" minOccurs="0" maxOccurs="unbounded"/>
+               <xs:element name="email" type="Email" minOccurs="0" maxOccurs="unbounded"/>
+               <xs:element name="indOcc" type="IndustryOccupation" minOccurs="0"/>
+               <xs:element name="dob" type="DateOfBirth" minOccurs="0"/>
+               <xs:element name="identification" type="Identification" minOccurs="0" maxOccurs="unbounded"/>
+               <xs:element name="electDataSrc" type="ElectronicDataSource" minOccurs="0"
+                           maxOccurs="unbounded"/>
+               <xs:element name="deviceIdentifier" type="DeviceIdentifier" minOccurs="0"
+                           maxOccurs="unbounded"/>
+               <xs:element name="agencyAuthorisation" type="Authorisation" minOccurs="0"
+                           maxOccurs="unbounded"/>
+            </xs:sequence>
+         </xs:choice>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="methodOfConductingTxn">
+      <xs:complexType>
+         <xs:choice>
+            <xs:element name="method" type="TransactionMethod"/>
+            <xs:element name="otherMethod" type="xs:token"/>
+         </xs:choice>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="recipient">
+      <xs:complexType>
+         <xs:choice>
+            <xs:element name="sameAsCustomer" type="PartyReference"/>
+            <xs:sequence>
+               <xs:element name="sameAsRepresentedOrganisation" type="PartyReference"/>
+               <xs:element ref="account" minOccurs="0" maxOccurs="unbounded"/>
+               <xs:element name="digitalCurrencyWallet" type="DigitalCurrencyWallet" minOccurs="0"
+                           maxOccurs="unbounded"/>
+            </xs:sequence>
+            <xs:sequence>
+               <xs:element name="sameAsIndividualConductingTxn" type="PartyReference"/>
+               <xs:element ref="account" minOccurs="0" maxOccurs="unbounded"/>
+               <xs:element name="digitalCurrencyWallet" type="DigitalCurrencyWallet" minOccurs="0"
+                           maxOccurs="unbounded"/>
+            </xs:sequence>
+            <xs:sequence>
+               <xs:element name="fullName" type="Name"/>
+               <xs:element name="mainAddress" type="Address" minOccurs="0"/>
+               <xs:element ref="account" minOccurs="0" maxOccurs="unbounded"/>
+               <xs:element name="digitalCurrencyWallet" type="DigitalCurrencyWallet" minOccurs="0"
+                           maxOccurs="unbounded"/>
+               <xs:element name="dob" type="DateOfBirth" minOccurs="0"/>
+            </xs:sequence>
+         </xs:choice>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="transaction">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element name="designatedSvc" type="DesignatedSvc"/>
+            <xs:element name="txnDate" type="AUSTRACDate"/>
+            <xs:element name="totalAmount" type="AudAmount"/>
+            <xs:element ref="moneyReceived"/>
+            <xs:element ref="moneyProvided"/>
+         </xs:sequence>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="account">
+      <xs:complexType>
+         <xs:complexContent>
+            <xs:extension base="AccountOptBSB">
+               <xs:choice>
+                  <xs:element name="type" type="AccountType"/>
+                  <xs:element name="otherDesc" type="AcctOtherDesc"/>
+               </xs:choice>
+            </xs:extension>
+         </xs:complexContent>
+      </xs:complexType>
+   </xs:element>
+   <xs:simpleType name="AccountType">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="BULLION"/>
+         <xs:enumeration value="CHEQUE"/>
+         <xs:enumeration value="CREDIT"/>
+         <xs:enumeration value="CUSTODY"/>
+         <xs:enumeration value="FCUR"/>
+         <xs:enumeration value="HIRE"/>
+         <xs:enumeration value="INS"/>
+         <xs:enumeration value="INVEST"/>
+         <xs:enumeration value="LOAN"/>
+         <xs:enumeration value="PENSION"/>
+         <xs:enumeration value="REMIT"/>
+         <xs:enumeration value="RETIRE"/>
+         <xs:enumeration value="SUPER"/>
+         <xs:enumeration value="VALCARD"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="DesignatedSvc">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="ACC_DEP"/>
+         <xs:enumeration value="BULSER"/>
+         <xs:enumeration value="BUS_LOAN"/>
+         <xs:enumeration value="BUS_RSA"/>
+         <xs:enumeration value="CHQACCSS"/>
+         <xs:enumeration value="CRDACCSS"/>
+         <xs:enumeration value="CUR_EXCH"/>
+         <xs:enumeration value="CUST_DEP"/>
+         <xs:enumeration value="DCE"/>
+         <xs:enumeration value="DEBTINST"/>
+         <xs:enumeration value="FIN_EFT"/>
+         <xs:enumeration value="LEASING"/>
+         <xs:enumeration value="LIFE_INS"/>
+         <xs:enumeration value="PAYORDRS"/>
+         <xs:enumeration value="PAYROLL"/>
+         <xs:enumeration value="PENSIONS"/>
+         <xs:enumeration value="RS"/>
+         <xs:enumeration value="SECURITY"/>
+         <xs:enumeration value="SUPERANN"/>
+         <xs:enumeration value="TRAVLCHQ"/>
+         <xs:enumeration value="VALCARDS"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:element name="transactionMoneyReceived">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element ref="moneyReceived"/>
+         </xs:sequence>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="transactionMoneyProvided">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element ref="moneyProvided"/>
+         </xs:sequence>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="cash">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element name="ausCash" type="AudAmount" minOccurs="0"/>
+            <xs:element name="foreignCash" type="CurrencyAmount" minOccurs="0" maxOccurs="unbounded"/>
+         </xs:sequence>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="moneyReceived">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element ref="cash" minOccurs="0"/>
+            <xs:element ref="nonCashReceived" minOccurs="0"/>
+            <xs:element name="digitalCurrency" type="DigitalCurrency" minOccurs="0"
+                        maxOccurs="unbounded"/>
+         </xs:sequence>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="nonCashReceived">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element name="fai" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="iti" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="dti" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="chi" type="NonCashAmountChequeOptional" minOccurs="0"
+                        maxOccurs="unbounded"/>
+            <xs:element name="bci" type="NonCashAmountChequeOptional" minOccurs="0"
+                        maxOccurs="unbounded"/>
+            <xs:element name="bdi" type="NonCashAmountChequeOptional" minOccurs="0"
+                        maxOccurs="unbounded"/>
+            <xs:element name="tci" type="NonCashAmountChequeOptional" minOccurs="0"
+                        maxOccurs="unbounded"/>
+            <xs:element name="moi" type="NonCashAmountChequeOptional" minOccurs="0"
+                        maxOccurs="unbounded"/>
+            <xs:element name="ldi" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="ndi" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="bpi" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="dfi" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="sei" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="bui" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="svi" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="oti" type="NonCashAmountOther" minOccurs="0" maxOccurs="unbounded"/>
+         </xs:sequence>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="moneyProvided">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element ref="cash" minOccurs="0"/>
+            <xs:element ref="nonCashProvided" minOccurs="0"/>
+            <xs:element name="digitalCurrency" type="DigitalCurrency" minOccurs="0"
+                        maxOccurs="unbounded"/>
+         </xs:sequence>
+         <xs:attributeGroup ref="RequiredAttrs"/>
+      </xs:complexType>
+   </xs:element>
+   <xs:element name="nonCashProvided">
+      <xs:complexType>
+         <xs:sequence>
+            <xs:element name="fao" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="ito" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="dto" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="cho" type="NonCashAmountCheque" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="bco" type="NonCashAmountCheque" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="bdo" type="NonCashAmountCheque" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="tco" type="NonCashAmountCheque" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="moo" type="NonCashAmountCheque" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="hpo" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="lro" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="ndo" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="cpo" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="dfo" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="seo" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="buo" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="sio" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="sto" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="fco" type="NonCashAmount" minOccurs="0"/>
+            <xs:element name="oto" type="NonCashAmountOther" minOccurs="0" maxOccurs="unbounded"/>
+         </xs:sequence>
+      </xs:complexType>
+   </xs:element>
+   <xs:attributeGroup name="RequiredAttrs">
+      <xs:attribute name="id" type="xs:ID" use="required"/>
+   </xs:attributeGroup>
+   <xs:attributeGroup name="OptionalAttrs">
+      <xs:attribute name="id" type="xs:ID"/>
+   </xs:attributeGroup>
+   <xs:simpleType name="RENumber">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9]{1,7}"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="IFTIDRAFileName">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[iI][fF][tT][iI]\-[dD][rR][aA]20[0-9][0-9](0[1-9]|1[0-2])(0[1-9]|[1-2][0-9]|3[0-1])[0-9][0-9]\.[xX][mM][lL]"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="IFTIEFileName">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[iI][fF][tT][iI]\-[eE]20[0-9][0-9](0[1-9]|1[0-2])(0[1-9]|[1-2][0-9]|3[0-1])[0-9][0-9]\.[xX][mM][lL]"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="SMRFileName">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[sS][mM][rR]20[0-9][0-9](0[1-9]|1[0-2])(0[1-9]|[1-2][0-9]|3[0-1])[0-9][0-9]\.[xX][mM][lL]"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="TTRFBSFileName">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[tT][tT][rR]\-[fF][bB][sS]20[0-9][0-9](0[1-9]|1[0-2])(0[1-9]|[1-2][0-9]|3[0-1])[0-9][0-9]\.[xX][mM][lL]"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="TTRGSFileName">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[tT][tT][rR]\-[gG][sS]20[0-9][0-9](0[1-9]|1[0-2])(0[1-9]|[1-2][0-9]|3[0-1])[0-9][0-9]\.[xX][mM][lL]"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="TTRISIFileName">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[tT][tT][rR]\-[iI][sS][iI]20[0-9][0-9](0[1-9]|1[0-2])(0[1-9]|[1-2][0-9]|3[0-1])[0-9][0-9]\.[xX][mM][lL]"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="TTRMSBFileName">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[tT][tT][rR]\-[mM][sS][bB]20[0-9][0-9](0[1-9]|1[0-2])(0[1-9]|[1-2][0-9]|3[0-1])[0-9][0-9]\.[xX][mM][lL]"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="ReportCount">
+      <xs:restriction base="xs:positiveInteger">
+         <xs:totalDigits value="6"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="ReportType">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="IFTI-E"/>
+         <xs:enumeration value="IFTI-DRA"/>
+         <xs:enumeration value="TTR-MSB"/>
+         <xs:enumeration value="TTR-GS"/>
+         <xs:enumeration value="TTR-ISI"/>
+         <xs:enumeration value="TTR-FBS"/>
+         <xs:enumeration value="SMR"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="Name">
+      <xs:restriction base="xs:string">
+         <xs:maxLength value="140"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="NameType">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="M"/>
+         <xs:enumeration value="A"/>
+         <xs:enumeration value="T"/>
+         <xs:enumeration value="S"/>
+         <xs:enumeration value="B"/>
+         <xs:enumeration value="H"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="AddrType">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="M"/>
+         <xs:enumeration value="P"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="Addr">
+      <xs:restriction base="xs:string">
+         <xs:maxLength value="140"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="Suburb">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="35"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="State">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="35"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="Postcode">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="15"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="Country">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="35"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="Address">
+      <xs:sequence>
+         <xs:element name="addr" type="Addr"/>
+         <xs:element name="suburb" type="Suburb"/>
+         <xs:element name="state" type="State" minOccurs="0"/>
+         <xs:element name="postcode" type="Postcode" minOccurs="0"/>
+         <xs:element name="country" type="Country"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="AddressBasic">
+      <xs:sequence>
+         <xs:element name="addr" type="Addr"/>
+         <xs:element name="suburb" type="Suburb" minOccurs="0"/>
+         <xs:element name="state" type="State" minOccurs="0"/>
+         <xs:element name="postcode" type="Postcode" minOccurs="0"/>
+         <xs:element name="country" type="Country" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="AddressAllOptional">
+      <xs:sequence>
+         <xs:element name="addr" type="Addr" minOccurs="0"/>
+         <xs:element name="suburb" type="Suburb" minOccurs="0"/>
+         <xs:element name="state" type="State" minOccurs="0"/>
+         <xs:element name="postcode" type="Postcode" minOccurs="0"/>
+         <xs:element name="country" type="Country" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="AddressWithType">
+      <xs:sequence>
+         <xs:element name="type" type="AddrType"/>
+         <xs:element name="addr" type="Addr"/>
+         <xs:element name="suburb" type="Suburb" minOccurs="0"/>
+         <xs:element name="state" type="State" minOccurs="0"/>
+         <xs:element name="postcode" type="Postcode" minOccurs="0"/>
+         <xs:element name="country" type="Country"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="AddressNoCountry">
+      <xs:sequence>
+         <xs:element name="addr" type="Addr"/>
+         <xs:element name="suburb" type="Suburb"/>
+         <xs:element name="state" type="State"/>
+         <xs:element name="postcode" type="Postcode"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:simpleType name="AcctType">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="BETTING"/>
+         <xs:enumeration value="BULLION"/>
+         <xs:enumeration value="CHEQUE"/>
+         <xs:enumeration value="CREDIT"/>
+         <xs:enumeration value="CUSTODY"/>
+         <xs:enumeration value="ECUR"/>
+         <xs:enumeration value="FCUR"/>
+         <xs:enumeration value="INS"/>
+         <xs:enumeration value="INVEST"/>
+         <xs:enumeration value="HIRE"/>
+         <xs:enumeration value="LOAN"/>
+         <xs:enumeration value="OTHER"/>
+         <xs:enumeration value="PENSION"/>
+         <xs:enumeration value="REMIT"/>
+         <xs:enumeration value="RETIRE"/>
+         <xs:enumeration value="VALCARD"/>
+         <xs:enumeration value="SUPER"/>
+         <xs:enumeration value="TRADE"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="AcctOtherDesc">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="20"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="AcctTitle">
+      <xs:restriction base="xs:string">
+         <xs:maxLength value="140"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="AcctBSB">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9]{6}"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="AcctNumber">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="34"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="DigitalCurrencyWallet">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9a-zA-Z]{0,1024}"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="AccountOptBSB">
+      <xs:sequence>
+         <xs:element name="title" type="AcctTitle"/>
+         <xs:element name="bsb" type="AcctBSB" minOccurs="0"/>
+         <xs:element name="number" type="AcctNumber"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:element name="accountOptBSB" type="AccountOptBSB"/>
+   <xs:complexType name="AccountAllOptional">
+      <xs:sequence>
+         <xs:element name="title" type="AcctTitle" minOccurs="0"/>
+         <xs:element name="bsb" type="AcctBSB" minOccurs="0"/>
+         <xs:element name="number" type="AcctNumber" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:element name="accountAllOptional" type="AccountAllOptional"/>
+   <xs:complexType name="AccountNoBSB">
+      <xs:sequence>
+         <xs:element name="title" type="AcctTitle"/>
+         <xs:element name="number" type="AcctNumber"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:element name="accountNoBSB" type="AccountNoBSB"/>
+   <xs:complexType name="AccountNoTitle">
+      <xs:sequence>
+         <xs:element name="bsb" type="AcctBSB" minOccurs="0"/>
+         <xs:element name="number" type="AcctNumber"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="AccountBrief">
+      <xs:sequence>
+         <xs:element name="bsb" type="AcctBSB" minOccurs="0"/>
+         <xs:element name="number" type="AcctNumber" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:element name="accountNoTitle" type="AccountNoTitle"/>
+   <xs:simpleType name="IdType">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="A"/>
+         <xs:enumeration value="C"/>
+         <xs:enumeration value="D"/>
+         <xs:enumeration value="P"/>
+         <xs:enumeration value="T"/>
+         <xs:enumeration value="ARNU"/>
+         <xs:enumeration value="CUST"/>
+         <xs:enumeration value="BENE"/>
+         <xs:enumeration value="BCNO"/>
+         <xs:enumeration value="BUSR"/>
+         <xs:enumeration value="EMID"/>
+         <xs:enumeration value="EMPL"/>
+         <xs:enumeration value="IDNT"/>
+         <xs:enumeration value="MEMB"/>
+         <xs:enumeration value="PHOT"/>
+         <xs:enumeration value="SECU"/>
+         <xs:enumeration value="SOID"/>
+         <xs:enumeration value="SOSE"/>
+         <xs:enumeration value="STUD"/>
+         <xs:enumeration value="TXID"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="IdTypeGovtIssued">
+      <xs:restriction base="IdType">
+         <xs:enumeration value="P"/>
+         <xs:enumeration value="ARNU"/>
+         <xs:enumeration value="BCNO"/>
+         <xs:enumeration value="IDNT"/>
+         <xs:enumeration value="SOSE"/>
+         <xs:enumeration value="TXID"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="IdNumber">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="20"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="IdIssuer">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="100"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="Identification">
+      <xs:sequence>
+         <xs:choice>
+            <xs:element name="type" type="IdType"/>
+            <xs:element name="typeOther">
+               <xs:simpleType>
+                  <xs:restriction base="xs:token">
+                     <xs:maxLength value="30"/>
+                  </xs:restriction>
+               </xs:simpleType>
+            </xs:element>
+         </xs:choice>
+         <xs:element name="number" type="IdNumber" minOccurs="0"/>
+         <xs:element name="issuer" type="IdIssuer" minOccurs="0"/>
+         <xs:element name="country" type="Country" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="IdentificationMandatoryNumber">
+      <xs:sequence>
+         <xs:choice minOccurs="0">
+            <xs:element name="type" type="IdType"/>
+            <xs:element name="typeOther">
+               <xs:simpleType>
+                  <xs:restriction base="xs:token">
+                     <xs:maxLength value="30"/>
+                  </xs:restriction>
+               </xs:simpleType>
+            </xs:element>
+         </xs:choice>
+         <xs:element name="number" type="IdNumber"/>
+         <xs:element name="issuer" type="IdIssuer" minOccurs="0"/>
+         <xs:element name="country" type="Country" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="IdentificationNoCountry">
+      <xs:sequence>
+         <xs:choice>
+            <xs:element name="type" type="IdType"/>
+            <xs:element name="typeOther">
+               <xs:simpleType>
+                  <xs:restriction base="xs:token">
+                     <xs:maxLength value="30"/>
+                  </xs:restriction>
+               </xs:simpleType>
+            </xs:element>
+         </xs:choice>
+         <xs:element name="number" type="IdNumber" minOccurs="0"/>
+         <xs:element name="issuer" type="IdIssuer" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="Authorisation">
+      <xs:simpleContent>
+         <xs:extension base="xs:token">
+            <xs:attribute name="refId" type="xs:IDREF"/>
+         </xs:extension>
+      </xs:simpleContent>
+   </xs:complexType>
+   <xs:simpleType name="PhoneNum">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="20"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="Email">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="250"/>
+         <xs:pattern value="[^@]+@[^@]+"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="TransactionMethod">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="ARMOURED_CAR_SERVICE"/>
+         <xs:enumeration value="ATM_DEPOSIT"/>
+         <xs:enumeration value="NIGHT_QUICK_DEPOSIT"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="IndOccDesc">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="150"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="IndOccType">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="I"/>
+         <xs:enumeration value="M"/>
+         <xs:enumeration value="O"/>
+         <xs:enumeration value="S"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="IndOccCode">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9]{4}"/>
+         <xs:pattern value="[0-9]{4}-?[0-9]{2}"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="IndustryOccupation">
+      <xs:choice>
+         <xs:sequence>
+            <xs:element name="type" type="IndOccType"/>
+            <xs:element name="code" type="IndOccCode"/>
+         </xs:sequence>
+         <xs:element name="description" type="IndOccDesc"/>
+      </xs:choice>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:simpleType name="ABN">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9]{11}"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="ACN">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9]{9}"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="ARBN">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9]{9}"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="CustNumber">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="35"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="BusinessStructure">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="A"/>
+         <xs:enumeration value="C"/>
+         <xs:enumeration value="G"/>
+         <xs:enumeration value="P"/>
+         <xs:enumeration value="R"/>
+         <xs:enumeration value="T"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="ElectronicDataSource">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="70"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="DeviceIdentifier">
+      <xs:sequence>
+         <xs:choice>
+            <xs:element name="type" type="DeviceType"/>
+            <xs:element name="typeOther">
+               <xs:simpleType>
+                  <xs:restriction base="xs:token">
+                     <xs:maxLength value="30"/>
+                  </xs:restriction>
+               </xs:simpleType>
+            </xs:element>
+         </xs:choice>
+         <xs:element name="identifier" type="IdNumber"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:simpleType name="DeviceType">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="IMEI"/>
+         <xs:enumeration value="IMSI"/>
+         <xs:enumeration value="IP"/>
+         <xs:enumeration value="MAC"/>
+         <xs:enumeration value="SEID"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="PlaceOfBirth">
+      <xs:sequence>
+         <xs:element name="town" type="Suburb" minOccurs="0"/>
+         <xs:element name="country" type="Country" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:simpleType name="DateNoTimeZone">
+      <xs:restriction base="xs:date">
+         <xs:pattern value="[0-9]{4}\-[0-9]{2}\-[0-9]{2}"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="AUSTRACDate">
+      <xs:restriction base="DateNoTimeZone">
+         <xs:minInclusive value="2000-01-01"/>
+         <xs:maxInclusive value="2035-12-31"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="DateOfBirth">
+      <xs:restriction base="DateNoTimeZone">
+         <xs:minInclusive value="1870-01-01"/>
+         <xs:maxInclusive value="2035-12-31"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="SMRDate">
+      <xs:restriction base="DateNoTimeZone">
+         <xs:minInclusive value="1800-01-01"/>
+         <xs:maxInclusive value="2099-12-31"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="CurrencyCode">
+      <xs:restriction base="xs:token">
+         <xs:length value="3"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="SignedAmount">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="\-?[0-9]{1,15}([\.,][0-9]{0,2})?"/>
+         <xs:pattern value="\-?[0-9]{1,3}(,[0-9]{3}){0,4}(\.[0-9]{0,2})?"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="Amount">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9]{1,15}([\.,][0-9]{0,2})?"/>
+         <xs:pattern value="[0-9]{1,3}(,[0-9]{3}){0,4}(\.[0-9]{0,2})?"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="CurrencyAmount">
+      <xs:sequence>
+         <xs:element name="currency" type="CurrencyCode"/>
+         <xs:element name="amount" type="Amount"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="AudAmount">
+      <xs:sequence>
+         <xs:element name="currency" type="CurrencyCode" fixed="AUD"/>
+         <xs:element name="amount" type="Amount"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:simpleType name="DecimalNumber">
+      <xs:restriction base="xs:token">
+         <xs:pattern value="[0-9]{1,15}([\.,][0-9]{0,10})?"/>
+         <xs:pattern value="[0-9]{1,3}(,[0-9]{3}){0,4}(\.[0-9]{0,10})?"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="InstnCode">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="12"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="InstnName">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="35"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="InstnCity">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="35"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="InstnCountry">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="35"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="InstitutionFull">
+      <xs:sequence>
+         <xs:element name="code" type="InstnCode"/>
+         <xs:element name="name" type="InstnName"/>
+         <xs:element name="addr" type="Addr"/>
+         <xs:element name="acctNumber" type="AcctNumber"/>
+         <xs:element name="branchId" type="BranchId"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="InstitutionBrief">
+      <xs:choice>
+         <xs:element name="code" type="InstnCode"/>
+         <xs:sequence>
+            <xs:element name="name" type="InstnName" minOccurs="0"/>
+            <xs:element name="city" type="InstnCity" minOccurs="0"/>
+            <xs:element name="country" type="InstnCountry" minOccurs="0"/>
+         </xs:sequence>
+      </xs:choice>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="InstitutionWithAccount">
+      <xs:sequence>
+         <xs:element name="acctNumber" type="AcctNumber" minOccurs="0"/>
+         <xs:element name="name" type="InstnName"/>
+         <xs:element name="city" type="InstnCity"/>
+         <xs:element name="country" type="InstnCountry" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="InstitutionWithBranch">
+      <xs:sequence>
+         <xs:element name="name" type="InstnName"/>
+         <xs:element name="branch" type="BranchName"/>
+         <xs:element name="country" type="InstnCountry" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:simpleType name="BranchId">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="35"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="BranchName">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="120"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="Branch">
+      <xs:sequence>
+         <xs:element name="branchId" type="BranchId" minOccurs="0"/>
+         <xs:element name="name" type="BranchName"/>
+         <xs:element name="address" type="AddressNoCountry"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="BranchOptAddr">
+      <xs:sequence>
+         <xs:element name="branchId" type="BranchId" minOccurs="0"/>
+         <xs:element name="name" type="BranchName"/>
+         <xs:element name="address" type="AddressNoCountry" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="BranchOptCountry">
+      <xs:sequence>
+         <xs:element name="branchId" type="BranchId" minOccurs="0"/>
+         <xs:element name="fullName" type="BranchName" minOccurs="0"/>
+         <xs:element name="mainAddress" type="AddressBasic" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="AusBranch">
+      <xs:sequence>
+         <xs:choice minOccurs="0">
+            <xs:element name="bsb" type="AcctBSB"/>
+            <xs:element name="branchId" type="BranchId"/>
+         </xs:choice>
+         <xs:element name="name" type="BranchName" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:simpleType name="Direction">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="I"/>
+         <xs:enumeration value="O"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="TfrType">
+      <xs:choice>
+         <xs:element name="money" type="xs:token" fixed=""/>
+         <xs:element name="property">
+            <xs:complexType>
+               <xs:sequence>
+                  <xs:element name="desc">
+                     <xs:simpleType>
+                        <xs:restriction base="xs:token">
+                           <xs:maxLength value="20"/>
+                        </xs:restriction>
+                     </xs:simpleType>
+                  </xs:element>
+               </xs:sequence>
+            </xs:complexType>
+         </xs:element>
+      </xs:choice>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:simpleType name="TRN">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="40"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="REReportRef">
+      <xs:restriction base="xs:token">
+         <xs:maxLength value="40"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:complexType name="NonCashAmount">
+      <xs:sequence>
+         <xs:element name="amount" type="Amount"/>
+      </xs:sequence>
+   </xs:complexType>
+   <xs:complexType name="NonCashAmountCheque">
+      <xs:sequence>
+         <xs:element name="amount" type="Amount"/>
+         <xs:element name="cheque" type="Cheque"/>
+      </xs:sequence>
+   </xs:complexType>
+   <xs:complexType name="NonCashAmountChequeOptional">
+      <xs:sequence>
+         <xs:element name="amount" type="Amount"/>
+         <xs:element name="cheque" type="Cheque" minOccurs="0"/>
+      </xs:sequence>
+   </xs:complexType>
+   <xs:complexType name="NonCashAmountECurrency">
+      <xs:sequence>
+         <xs:element name="amount" type="Amount"/>
+         <xs:element name="eCurrency" type="ECurrency" maxOccurs="unbounded"/>
+      </xs:sequence>
+   </xs:complexType>
+   <xs:complexType name="NonCashAmountOther">
+      <xs:sequence>
+         <xs:element name="amount" type="Amount"/>
+         <xs:element name="desc">
+            <xs:simpleType>
+               <xs:restriction base="xs:token">
+                  <xs:maxLength value="30"/>
+               </xs:restriction>
+            </xs:simpleType>
+         </xs:element>
+         <xs:element name="cheque" type="Cheque" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+   </xs:complexType>
+   <xs:simpleType name="DrawerName">
+      <xs:restriction base="Name"/>
+   </xs:simpleType>
+   <xs:simpleType name="PayeeName">
+      <xs:restriction base="Name"/>
+   </xs:simpleType>
+   <xs:complexType name="Cheque">
+      <xs:sequence>
+         <xs:element name="drawerName" type="DrawerName"/>
+         <xs:element name="payeeName" type="PayeeName"/>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="ECurrency">
+      <xs:sequence>
+         <xs:element name="description">
+            <xs:simpleType>
+               <xs:restriction base="xs:token">
+                  <xs:maxLength value="20"/>
+               </xs:restriction>
+            </xs:simpleType>
+         </xs:element>
+         <xs:element name="denomination" minOccurs="0">
+            <xs:complexType>
+               <xs:sequence>
+                  <xs:element name="currencyDesc">
+                     <xs:simpleType>
+                        <xs:restriction base="xs:token">
+                           <xs:maxLength value="35"/>
+                        </xs:restriction>
+                     </xs:simpleType>
+                  </xs:element>
+                  <xs:element name="amount" type="Amount"/>
+               </xs:sequence>
+            </xs:complexType>
+         </xs:element>
+         <xs:element name="backingAsset" minOccurs="0">
+            <xs:complexType>
+               <xs:choice>
+                  <xs:element name="assetType">
+                     <xs:simpleType>
+                        <xs:restriction base="xs:token">
+                           <xs:enumeration value="B"/>
+                           <xs:enumeration value="P"/>
+                        </xs:restriction>
+                     </xs:simpleType>
+                  </xs:element>
+                  <xs:element name="otherDesc">
+                     <xs:simpleType>
+                        <xs:restriction base="xs:token">
+                           <xs:maxLength value="20"/>
+                        </xs:restriction>
+                     </xs:simpleType>
+                  </xs:element>
+               </xs:choice>
+            </xs:complexType>
+         </xs:element>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="DigitalCurrency">
+      <xs:sequence>
+         <xs:element name="code">
+            <xs:simpleType>
+               <xs:restriction base="xs:token">
+                  <xs:maxLength value="20"/>
+                  <xs:pattern value="[a-zA-Z0-9]+[\\@\\$a-zA-Z0-9]*"/>
+               </xs:restriction>
+            </xs:simpleType>
+         </xs:element>
+         <xs:element name="description">
+            <xs:simpleType>
+               <xs:restriction base="xs:token">
+                  <xs:maxLength value="40"/>
+               </xs:restriction>
+            </xs:simpleType>
+         </xs:element>
+         <xs:element name="numberOfUnits" type="DecimalNumber"/>
+         <xs:element name="backingAsset" minOccurs="0">
+            <xs:simpleType>
+               <xs:restriction base="xs:token">
+                  <xs:maxLength value="35"/>
+               </xs:restriction>
+            </xs:simpleType>
+         </xs:element>
+         <xs:element name="fiatCurrencyAmount" type="CurrencyAmount" minOccurs="0"/>
+         <xs:element name="blockchainTransactionId" minOccurs="0">
+            <xs:simpleType>
+               <xs:restriction base="xs:token">
+                  <xs:maxLength value="4000"/>
+                  <xs:pattern value="[0-9a-zA-Z]*"/>
+               </xs:restriction>
+            </xs:simpleType>
+         </xs:element>
+      </xs:sequence>
+      <xs:attributeGroup ref="RequiredAttrs"/>
+   </xs:complexType>
+   <xs:complexType name="PartyReference">
+      <xs:attribute name="refId" type="xs:IDREF" use="required"/>
+   </xs:complexType>
+   <xs:simpleType name="ReasonForTransfer">
+      <xs:restriction base="xs:string">
+         <xs:maxLength value="4000"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="DetailsOfPayment">
+      <xs:restriction base="xs:string">
+         <xs:maxLength value="4000"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="SenderToReceiverInfo">
+      <xs:restriction base="xs:string">
+         <xs:maxLength value="210"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="OtherDetails">
+      <xs:restriction base="xs:string">
+         <xs:maxLength value="4000"/>
+      </xs:restriction>
+   </xs:simpleType>
+   <xs:simpleType name="YesNo">
+      <xs:restriction base="xs:token">
+         <xs:enumeration value="Y"/>
+         <xs:enumeration value="N"/>
+      </xs:restriction>
+   </xs:simpleType>
+</xs:schema>

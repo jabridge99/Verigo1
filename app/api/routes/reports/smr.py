@@ -32,6 +32,7 @@ from app.models.report import (
 from app.models.user import User
 from app.services import audit_service
 from app.services.reporting_service import generate_smr_from_case, register_submission
+from app.services.smr_service import build_smr_austrac_payload
 
 router = APIRouter()
 
@@ -441,6 +442,37 @@ def submit_smr(
         "status": r.status.value,
         "submitted_at": r.submitted_at,
         "disclaimer": "This record confirms submission was initiated. Confirm receipt with AUSTRAC.",
+    }
+
+
+@router.post("/smr/{report_id}/submit-austrac")
+def submit_smr_austrac(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_mlro_or_above),
+):
+    """
+    Build the AUSTRAC Connect API v2 submission payload for review.
+
+    DISCLAIMER: All decisions to lodge with AUSTRAC, including the
+    suspicion assessment itself, remain entirely with the reporting entity.
+    """
+    r = _get_smr_or_404(report_id, org_id_for(current_user), db)
+    if r.status not in (ReportStatus.approved, ReportStatus.submitted):
+        raise HTTPException(
+            409, "SMR requires MLRO sign-off (approved status) before AUSTRAC submission."
+        )
+    payload = build_smr_austrac_payload(r)
+    return {
+        "report_id": r.id,
+        "report_ref": r.report_ref,
+        "austrac_payload": payload,
+        "disclaimer": (
+            "This payload is for review only. Actual lodgement with AUSTRAC requires "
+            "a valid Data Exchange Agreement and AUSTRAC Connect OAuth 2.0 credentials. "
+            "All decisions to lodge, including the suspicion assessment itself, remain "
+            "with the reporting entity."
+        ),
     }
 
 

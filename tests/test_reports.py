@@ -129,3 +129,56 @@ class TestSMRTenantIsolation:
 
         get_resp = client.get(f"/api/v1/reports/smr/{report_id}", headers=mlro_headers)
         assert get_resp.status_code in (403, 404)
+
+
+class TestSMRAustracExport:
+    """The /smr/{id}/submit-austrac endpoint — previously, SMR had no
+    export path to AUSTRAC-shaped output at all (unlike IFTI-DRA/TTR,
+    which already had one)."""
+
+    def test_requires_mlro_sign_off_first(self, client, db):
+        compliance, compliance_headers, mlro, mlro_headers = _same_org_users(db)
+        report_id = _generate_smr(client, db, compliance_headers, mlro_headers, compliance)
+
+        resp = client.post(
+            f"/api/v1/reports/smr/{report_id}/submit-austrac", headers=mlro_headers
+        )
+        assert resp.status_code == 409
+
+    def test_returns_austrac_shaped_payload_after_sign_off(self, client, db):
+        from tests.conftest import _auth, _make_user
+        from app.models.user import UserRole
+
+        compliance, compliance_headers, mlro, mlro_headers = _same_org_users(db)
+        report_id = _generate_smr(client, db, compliance_headers, mlro_headers, compliance)
+
+        review_resp = client.post(
+            f"/api/v1/reports/smr/{report_id}/review", headers=compliance_headers
+        )
+        assert review_resp.status_code == 200
+
+        other_mlro = _make_user(db, UserRole.mlro, industry_id=mlro.org_id)
+        other_mlro_headers = _auth(other_mlro)
+        sign_off_resp = client.post(
+            f"/api/v1/reports/smr/{report_id}/mlro-sign-off",
+            headers=other_mlro_headers,
+        )
+        assert sign_off_resp.status_code == 200
+
+        export_resp = client.post(
+            f"/api/v1/reports/smr/{report_id}/submit-austrac",
+            headers=other_mlro_headers,
+        )
+        assert export_resp.status_code == 200
+        payload = export_resp.json()["austrac_payload"]
+        assert payload["_namespace"] == "http://austrac.gov.au/schema/reporting/SMR-2-0"
+        assert "suspPerson" in payload["report"]
+
+    def test_analyst_cannot_export(self, client, db, analyst_headers):
+        compliance, compliance_headers, mlro, mlro_headers = _same_org_users(db)
+        report_id = _generate_smr(client, db, compliance_headers, mlro_headers, compliance)
+
+        resp = client.post(
+            f"/api/v1/reports/smr/{report_id}/submit-austrac", headers=analyst_headers
+        )
+        assert resp.status_code == 403
