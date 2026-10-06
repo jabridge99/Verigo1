@@ -2235,3 +2235,12 @@ Both share one row-ingestion function (`_ingest_batch_item` in `app/api/routes/t
 **Fix:** added `--ignore-vuln CVE-2026-85394` to the CI `pip-audit` step, alongside the existing `PYSEC-2026-1325` entry, with the same inline reasoning-not-just-an-ID convention the file's comment already uses.
 **Verified:** `pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325 --ignore-vuln CVE-2026-85394` — "No known vulnerabilities found, 3 ignored" (the third being `ecdsa`'s duplicate advisory ID listing).
 **Detail:** `.github/workflows/ci.yml` only.
+
+---
+
+## Dependency CVE triage, 2026-10-06 — source-map-js GHSA-68fv-2mgg-jv7q (CVSS 7.5)
+
+**What happened:** immediately after the P32 Data Validations commit (backend-only diff), `npm audit --omit=dev --audit-level=high` started failing on both Frontend (Node 20) CI runs — a brand-new high-severity advisory against `source-map-js` 1.0.0–1.2.1 (event-loop DoS via indexed source-map section offsets), pulled in transitively via `postcss` (itself a `next` dependency). Same pattern as the `next` 16.3.5→16.3.8 fix (2026-10-01) and the python-jose CVE above: dependency-database drift surfacing on a commit that never touched `web/` at all, not a regression from that diff.
+**Unlike the python-jose case, a real non-breaking fix existed** — confirmed via `npm audit --omit=dev --audit-level=high --json`: `fixAvailable: true`, `effects: []` (no downstream breakage). Ran `npm audit fix` (not `--force`): bumped `source-map-js` 1.2.1→1.2.2 and, as a side effect of the same resolution pass, the dev-only `@next/eslint-plugin-next`/`eslint-config-next` 16.3.5→16.3.8 — both patch-level, `package.json`'s own version ranges already allowed them.
+**Verified:** `npm audit --omit=dev --audit-level=high` → 0 vulnerabilities (was 1 high); `npm run lint` → 0 errors (22 pre-existing warnings, unrelated); `npm run test` → 19/19 passed; `npm run build` → clean production build.
+**Detail:** `web/package-lock.json` only (no `package.json` change needed).
