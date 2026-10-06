@@ -37,6 +37,7 @@ from uuid import uuid4
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from app.models.ifti import IFTIDirection, IFTIRecord
 
@@ -597,6 +598,64 @@ IFTI_IN_COLUMNS: list[tuple[str, str]] = [
 ]
 
 
+# ── Dropdown validation lists ─────────────────────────────────────────────────
+# Exact option text and order transcribed from the real AUSTRAC IFTI-DRA_IN.xls
+# / IFTI-DRA_OUT.xls templates' own hidden "Data Validations" sheet (recovered
+# from the raw BIFF8 DV records, not guessed) -- including AUSTRAC's own
+# "- Please Select -" placeholder as the first option in every list.
+_MONEY_PROPERTY_OPTIONS = ["- Please Select -", "Money", "Property"]
+_BUSINESS_STRUCTURE_OPTIONS = [
+    "- Please Select -",
+    "Association",
+    "Company",
+    "Government body",
+    "Partnership",
+    "Registered body",
+    "Trust",
+]
+_YES_NO_OPTIONS = ["- Please Select -", "Yes", "No"]
+_ID_TYPE_OPTIONS = [
+    "- Please Select -",
+    "Alien registration number",
+    "Bank account",
+    "Benefits card/ID",
+    "Birth certificate",
+    "Business registration/licence",
+    "Credit/debit card",
+    "Customer account/ID",
+    "Driver's licence",
+    "Employee ID",
+    "Employer number",
+    "Identity card/number",
+    "Membership ID",
+    "Passport",
+    "Photo ID",
+    "Security ID",
+    "Social security ID",
+    "Student ID",
+    "Tax number/ID (except Australian tax file numbers (TFN))",
+    "Telephone/fax number",
+    "Other (provide description)",
+]
+
+# Column sub-header text -> its dropdown list, as wired in the real templates.
+# Matched by label text (not column index) so it stays correct independently
+# for IFTI_IN_COLUMNS and IFTI_OUT_COLUMNS, which don't share every column.
+_DROPDOWN_OPTIONS_BY_LABEL: dict[str, list[str]] = {
+    "Type of transfer": _MONEY_PROPERTY_OPTIONS,
+    "Business structure (if not an individual)": _BUSINESS_STRUCTURE_OPTIONS,
+    "Is this person/organisation accepting the money or property?": _YES_NO_OPTIONS,
+    "Is this person/organisation sending the transfer instruction?": _YES_NO_OPTIONS,
+    "Is this person/organisation distributing money or property?": _YES_NO_OPTIONS,
+    (
+        "Is there a separate retail outlet/business location at which the "
+        "money or property is being distributed?"
+    ): _YES_NO_OPTIONS,
+    "ID type (1)": _ID_TYPE_OPTIONS,
+    "ID type (2)": _ID_TYPE_OPTIONS,
+}
+
+
 def _row_out(r: IFTIRecord) -> list:
     """Map IFTIRecord → 112-value list matching IFTI-OUT column order."""
     return [
@@ -1026,6 +1085,42 @@ def generate_ifti_excel(
 
     # ── Reorder sheets ────────────────────────────────────────────────────────
     wb.move_sheet("Instructions", offset=1)
+
+    # ── Data Validations sheet (hidden) ─────────────────────────────────────
+    # Rebuilds AUSTRAC's own dropdown wiring: a hidden sheet holding one option
+    # block per dropdown column (in left-to-right column order, duplicating a
+    # list's text each time it recurs rather than sharing one range -- matching
+    # the real templates' own layout exactly), with each data column's cells
+    # restricted to a list formula pointing at its own block. Applied over the
+    # actual populated rows (3..2+n) rather than a large blank buffer, since
+    # the real templates' own DV ranges covered exactly their filled rows too.
+    # Created last (after the reorder above) so it lands as the third tab,
+    # matching the real templates' [main, Instructions, Data Validations] order.
+    dropdown_cols = [
+        (ci, label)
+        for ci, (_, label) in enumerate(columns, start=1)
+        if label in _DROPDOWN_OPTIONS_BY_LABEL
+    ]
+    if dropdown_cols and records:
+        wdv = wb.create_sheet("Data Validations")
+        dv_row = 1
+        last_row = 2 + len(records)
+        for ci, label in dropdown_cols:
+            options = _DROPDOWN_OPTIONS_BY_LABEL[label]
+            start_row = dv_row
+            for opt in options:
+                wdv.cell(row=dv_row, column=1, value=opt)
+                dv_row += 1
+            end_row = dv_row - 1
+            dv = DataValidation(
+                type="list",
+                formula1=f"'Data Validations'!$A${start_row}:$A${end_row}",
+                allow_blank=True,
+            )
+            col_letter = get_column_letter(ci)
+            dv.add(f"{col_letter}3:{col_letter}{last_row}")
+            ws.add_data_validation(dv)
+        wdv.sheet_state = "hidden"
 
     buf = io.BytesIO()
     wb.save(buf)

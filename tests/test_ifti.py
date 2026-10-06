@@ -350,3 +350,138 @@ class TestIFTIExport:
 
         assert amount_cell.value == 2000.0
         assert amount_cell.number_format == "#,##0.00"
+
+
+class TestIFTIDataValidations:
+    """The real AUSTRAC IFTI-DRA_IN.xls/IFTI-DRA_OUT.xls templates carry a
+    third, hidden "Data Validations" sheet wiring Excel dropdown lists to
+    specific columns (business structure, Yes/No, ID type, etc.) — recovered
+    from those templates' own raw BIFF8 DV records, not guessed. This was
+    P32's one remaining disclosed gap; these tests lock in that the generator
+    now reproduces it exactly: same sheet name/order/hidden state, same
+    option text, and the same real columns wired to the same lists."""
+
+    def _load(self, records, direction):
+        import io
+
+        from openpyxl import load_workbook
+
+        from app.services.ifti_service import generate_ifti_excel
+
+        return load_workbook(io.BytesIO(generate_ifti_excel(records, direction)))
+
+    def _sample_record(self, direction):
+        from datetime import date
+
+        from app.models.ifti import IFTIDirection, IFTIRecord
+
+        return IFTIRecord(
+            ifti_id="IFTI-TESTDV1",
+            direction=(
+                IFTIDirection.outgoing
+                if direction == "outgoing"
+                else IFTIDirection.incoming
+            ),
+            date_received=date(2026, 1, 1),
+            date_available=date(2026, 1, 2),
+            total_amount=1000.0,
+            oc_full_name="Ordering Customer",
+            bc_full_name="Beneficiary Customer",
+        )
+
+    def test_sheet_present_hidden_and_last(self):
+        wb = self._load([self._sample_record("outgoing")], "outgoing")
+        assert wb.sheetnames == ["IFTI-DRA OUT", "Instructions", "Data Validations"]
+        assert wb["Data Validations"].sheet_state == "hidden"
+
+    def test_no_sheet_when_no_records(self):
+        wb = self._load([], "outgoing")
+        assert "Data Validations" not in wb.sheetnames
+
+    def test_out_dropdown_columns_match_real_template(self):
+        """Column letters recovered from IFTI-DRA_OUT.xls's own DV records."""
+        wb = self._load([self._sample_record("outgoing")], "outgoing")
+        ws = wb["IFTI-DRA OUT"]
+        dv_by_sqref = {
+            str(dv.sqref): dv.formula1 for dv in ws.data_validations.dataValidation
+        }
+
+        expected_cols = ["E", "AA", "AB", "AF", "BB", "BM", "BN", "CI", "CP", "CQ"]
+        for col in expected_cols:
+            # A single-row range's str() collapses to one cell ref (no colon).
+            assert f"{col}3" in dv_by_sqref, f"missing dropdown on {col}"
+
+    def test_in_dropdown_columns_match_real_template(self):
+        """Column letters recovered from IFTI-DRA_IN.xls's own DV records
+        (no ID-type columns on IN — the real template has no ID section
+        for incoming transfers either)."""
+        wb = self._load([self._sample_record("incoming")], "incoming")
+        ws = wb["IFTI-DRA IN"]
+        dv_by_sqref = {
+            str(dv.sqref): dv.formula1 for dv in ws.data_validations.dataValidation
+        }
+
+        expected_cols = ["E", "AA", "AS", "BN", "BO", "BP", "CN", "CT", "CU"]
+        for col in expected_cols:
+            assert f"{col}3" in dv_by_sqref, f"missing dropdown on {col}"
+
+    def test_dropdown_options_match_real_template_text(self):
+        """Option text/order transcribed verbatim from the real templates'
+        own hidden Data Validations sheet, including the
+        '- Please Select -' placeholder as the first item of every list."""
+        wb = self._load([self._sample_record("outgoing")], "outgoing")
+        dv_sheet = wb["Data Validations"]
+        values = [dv_sheet.cell(r, 1).value for r in range(1, dv_sheet.max_row + 1)]
+
+        assert values[0:3] == ["- Please Select -", "Money", "Property"]
+        assert values[3:10] == [
+            "- Please Select -",
+            "Association",
+            "Company",
+            "Government body",
+            "Partnership",
+            "Registered body",
+            "Trust",
+        ]
+        # First ID-type block (AB "ID type (1)") starts right after it.
+        assert values[10] == "- Please Select -"
+        assert values[11:31] == [
+            "Alien registration number",
+            "Bank account",
+            "Benefits card/ID",
+            "Birth certificate",
+            "Business registration/licence",
+            "Credit/debit card",
+            "Customer account/ID",
+            "Driver's licence",
+            "Employee ID",
+            "Employer number",
+            "Identity card/number",
+            "Membership ID",
+            "Passport",
+            "Photo ID",
+            "Security ID",
+            "Social security ID",
+            "Student ID",
+            "Tax number/ID (except Australian tax file numbers (TFN))",
+            "Telephone/fax number",
+            "Other (provide description)",
+        ]
+
+    def test_in_data_validations_sheet_row_count_matches_real_template(self):
+        """The real IFTI-DRA_IN.xls's hidden Data Validations sheet has
+        exactly 43 rows (9 option blocks); OUT's has exactly 78 (10 blocks,
+        the 2 extra being the OUT-only ID-type lists)."""
+        wb_in = self._load([self._sample_record("incoming")], "incoming")
+        wb_out = self._load([self._sample_record("outgoing")], "outgoing")
+        assert wb_in["Data Validations"].max_row == 43
+        assert wb_out["Data Validations"].max_row == 78
+
+    def test_dropdown_range_covers_exactly_the_populated_rows(self):
+        """Matches the real templates' own behaviour: DV ranges cover exactly
+        the filled data rows (3..2+n), not a large blank buffer."""
+        records = [self._sample_record("outgoing") for _ in range(3)]
+        wb = self._load(records, "outgoing")
+        ws = wb["IFTI-DRA OUT"]
+        sqrefs = {str(dv.sqref) for dv in ws.data_validations.dataValidation}
+        assert "E3:E5" in sqrefs
