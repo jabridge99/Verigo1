@@ -333,9 +333,7 @@ def build_smr_austrac_payload(report: SMRReport) -> dict:
             "unidentPerson": [
                 _build_unident_person(d) for d in (report.unident_persons or [])
             ],
-            "txnDetail": [
-                _build_txn_detail(d) for d in (report.txn_details or [])
-            ],
+            "txnDetail": [_build_txn_detail(d) for d in (report.txn_details or [])],
             "additionalDetails": {
                 "offence": report.offence_type,
                 "prevReported": report.prev_reported_refs or [],

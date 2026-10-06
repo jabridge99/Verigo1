@@ -460,7 +460,8 @@ def submit_smr_austrac(
     r = _get_smr_or_404(report_id, org_id_for(current_user), db)
     if r.status not in (ReportStatus.approved, ReportStatus.submitted):
         raise HTTPException(
-            409, "SMR requires MLRO sign-off (approved status) before AUSTRAC submission."
+            409,
+            "SMR requires MLRO sign-off (approved status) before AUSTRAC submission.",
         )
     payload = build_smr_austrac_payload(r)
     return {
