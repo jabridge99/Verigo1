@@ -72,7 +72,21 @@ jobs:
           #  - PYSEC-2026-1325 (ecdsa): transitive python-jose dependency,
           #    never exercised (this app signs JWTs with HS256, not ECDSA).
           #    No fix version exists upstream.
-          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325
+          #  - CVE-2026-85394 (python-jose, CVSS 9.1): python-jose fails to
+          #    reject a DER-encoded asymmetric public key presented as an
+          #    HMAC secret during verification, letting an attacker who
+          #    holds the service's public key forge HS256 tokens -- but
+          #    only "when algorithms are not explicitly restricted" (the
+          #    advisory's own words) and only where a public key exists in
+          #    the verification flow at all. Checked app/services/auth_
+          #    service.py, the only jwt.decode() call site in this app:
+          #    it already pins algorithms=[settings.algorithm] (HS256,
+          #    app/config.py), and settings.secret_key is a fixed
+          #    server-side string, never a public key -- this app has no
+          #    asymmetric JWT flow (no RS256/ES256, no public key) for the
+          #    DER-confusion to attach to. python-jose 3.5.0 is the latest
+          #    release; no fix version exists upstream.
+          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325 --ignore-vuln CVE-2026-85394
 
       - name: Run tests
         run: |

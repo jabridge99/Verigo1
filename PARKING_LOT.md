@@ -2205,3 +2205,17 @@ Both share one row-ingestion function (`_ingest_batch_item` in `app/api/routes/t
 
 **Verified:** 28 new tests (`tests/test_ttr_service.py` — 16, `tests/test_smr_service.py` — 12) covering every fix above by exercising the actual payload/CSV output, not just reading the code; plus 3 new API-level tests in `tests/test_reports.py` for the new SMR export endpoint (role-gate, status-gate, and a live end-to-end MLRO sign-off → export). Full backend suite `pytest tests/` — 952 passed, 2 skipped (both pre-existing, unrelated); `ruff check` and `mypy` both clean on every new/changed file.
 **Detail:** new `app/services/smr_service.py`; `app/services/ttr_service.py` (non-cash spec tables + builders, `individualConductingTxn`/`recipient`/GS-choice fixes); `app/api/routes/reports/smr.py` (new `/submit-austrac` endpoint); `tests/test_ttr_service.py`, `tests/test_smr_service.py`, `tests/test_reports.py`; schemas committed at `docs/schemas/SMR-2-0.xsd`, `docs/schemas/TTR-FBS-3-0.xsd`, `docs/schemas/TTR-GS-2-0.xsd`, `docs/schemas/TTR-ISI-2-0.xsd`, `docs/schemas/TTR-MSB-2-0.xsd`.
+
+---
+
+## Dependency CVE triage, 2026-10-06 — python-jose CVE-2026-85394 (CVSS 9.1)
+
+**What happened:** CI's `pip-audit` step (Backend Python 3.11 leg) started failing on this PR's head after a commit that touched only SMR/TTR files — not a regression from that commit, but a brand-new CVE ID (published 2026-09-03, so freshly indexed into `pip-audit`'s database) against `python-jose` 3.5.0, the same dependency the already-documented `ecdsa`/`PYSEC-2026-1325` ignore entry covers. Same pattern as the `next` 16.3.5→16.3.8 CVE fix (2026-10-01): dependency drift over time, unrelated to the diff that happened to be running when it surfaced.
+
+**The CVE itself is real and severe if it applies:** python-jose fails to reject a DER-encoded asymmetric public key presented where an HMAC secret is expected during verification — an attacker holding the service's public key can forge HS256 tokens that pass verification, carrying arbitrary claims. The advisory's own scoping is the mitigation: this only applies "when algorithms are not explicitly restricted" and only where a public key exists in the verification flow for the DER-confusion to attach to.
+
+**Checked rather than assumed:** `app/services/auth_service.py` is the only `jwt.decode()` call site in this codebase. It already pins `algorithms=[settings.algorithm]`, and `app/config.py` fixes `algorithm = "HS256"` — never RS256/ES256. `settings.secret_key` is a plain server-side string (`"change-me-in-production"` default, overridden by env var in real deployments), never a public key, and this app has no code path anywhere that performs asymmetric JWT verification against a public key at all. The exploit requires a public key in the picture; this app's JWT scheme never has one. `python-jose` 3.5.0 is also already the latest version published (confirmed against PyPI) — there's no upgrade available even if a fix existed in the next release.
+
+**Fix:** added `--ignore-vuln CVE-2026-85394` to the CI `pip-audit` step, alongside the existing `PYSEC-2026-1325` entry, with the same inline reasoning-not-just-an-ID convention the file's comment already uses.
+**Verified:** `pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325 --ignore-vuln CVE-2026-85394` — "No known vulnerabilities found, 3 ignored" (the third being `ecdsa`'s duplicate advisory ID listing).
+**Detail:** `.github/workflows/ci.yml` only.
