@@ -17,50 +17,75 @@ from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.services.auth_service import TOKEN_BLACKLIST, decode_token
 
-# ── Token extraction ──────────────────────────────────────────────────────────
-
-
-def _extract_token(authorization: Optional[str] = Header(None)) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or malformed Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return authorization.split(" ", 1)[1]
-
-
 # ── Current user ──────────────────────────────────────────────────────────────
 
 
 def get_current_user(
-    token: str = Depends(_extract_token),
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> User:
     """
-    Validates JWT, checks blacklist, loads and returns the User ORM object.
+    Validates the caller's credentials and loads the User ORM object.
     Raises 401 on any failure — never leaks why the token was rejected.
+
+    Accepts either credential:
+    - `Authorization: Bearer <jwt>` — the normal browser session. Checked
+      first; unmetered.
+    - `X-API-Key: <key>` — external/integration access (the "Webhooks &
+      API access" plan feature), used only when no Bearer token is
+      present. Metered against the org's plan api_calls_month limit via
+      billing_service.record_api_call() — ordinary session traffic above
+      is never counted against that limit.
     """
-    payload = decode_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        payload = decode_token(token)
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    jti = payload.get("jti")
-    if jti and jti in TOKEN_BLACKLIST:
-        raise HTTPException(status_code=401, detail="Token has been revoked")
+        jti = payload.get("jti")
+        if jti and jti in TOKEN_BLACKLIST:
+            raise HTTPException(status_code=401, detail="Token has been revoked")
 
-    if payload.get("mfa_pending"):
-        raise HTTPException(status_code=401, detail="MFA challenge incomplete")
+        if payload.get("mfa_pending"):
+            raise HTTPException(status_code=401, detail="MFA challenge incomplete")
 
-    user_id: Optional[str] = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid token claims")
+        user_id: Optional[str] = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token claims")
 
-    user = db.query(User).filter(User.id == user_id, User.status == "active").first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found or inactive")
+        user = (
+            db.query(User).filter(User.id == user_id, User.status == "active").first()
+        )
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found or inactive")
+        return user
 
-    return user
+    if x_api_key:
+        from app.services import api_key_service, billing_service
+
+        key = api_key_service.authenticate_api_key(db, x_api_key)
+        if not key:
+            raise HTTPException(status_code=401, detail="Invalid or expired API key")
+
+        user = (
+            db.query(User)
+            .filter(User.id == key.user_id, User.status == "active")
+            .first()
+        )
+        if not user:
+            raise HTTPException(
+                status_code=401, detail="API key owner not found or inactive"
+            )
+        billing_service.record_api_call(db, user.org_id, user.industry_id)
+        return user
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Missing or malformed Authorization header",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # ── Role enforcement ──────────────────────────────────────────────────────────

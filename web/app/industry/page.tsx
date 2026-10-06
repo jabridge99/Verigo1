@@ -2,26 +2,18 @@
 import { useState, useEffect } from 'react'
 import { Building2, Search, CheckCircle, XCircle, Clock, Shield, ChevronRight, Globe, Phone, Mail, Hash, AlertTriangle, Edit2, Save, X } from 'lucide-react'
 import clsx from 'clsx'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-
-interface Tenant {
-  tenant_id: string
-  industry_id: string
-  name: string
-  display_name?: string
-  status: string
-  pack_id?: string
-  contact_email?: string
-  contact_name?: string
-  phone?: string
-  abn?: string
-  austrac_id?: string
-  settings?: Record<string, unknown>
-  branding?: Record<string, unknown>
-  created_at?: string
-  updated_at?: string
-}
+import { Badge, type BadgeTone } from '@/components/ui/badge'
+import {
+  Tenant,
+  TenantListItem,
+  listTenants,
+  getTenantStats,
+  getTenant,
+  createTenant as apiCreateTenant,
+  updateTenant,
+  suspendTenant,
+  activateTenant,
+} from '@/lib/api/tenants'
 
 const DEMO_TENANTS: Tenant[] = [
   { tenant_id: 'TENANT-DCE001', industry_id: 'dce', name: 'CryptoEdge Pty Ltd', display_name: 'CryptoEdge', status: 'active', pack_id: 'pack-dce', contact_email: 'compliance@cryptoedge.com.au', contact_name: 'Sarah Mitchell', phone: '+61 2 9876 5432', abn: '12 345 678 901', austrac_id: 'DCE-2024-001234', created_at: new Date(Date.now() - 86400000 * 90).toISOString() },
@@ -41,10 +33,10 @@ const INDUSTRY_LABELS: Record<string, string> = {
   casino: 'Casino / Gaming',
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  active: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-  suspended: 'bg-red-500/20 text-red-300 border border-red-500/30',
-  pending: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+const STATUS_TONE: Record<string, BadgeTone> = {
+  active: 'success',
+  suspended: 'danger',
+  pending: 'warning',
 }
 const STATUS_ICON: Record<string, React.ReactNode> = {
   active: <CheckCircle className="w-3 h-3" />,
@@ -65,7 +57,7 @@ const PACKS = Object.entries(PACK_LABELS).map(([id, label]) => ({ id, label }))
 const DEFAULT_FORM = { industry_id: '', name: '', display_name: '', contact_email: '', contact_name: '', phone: '', abn: '', austrac_id: '', pack_id: '', status: 'pending' }
 
 export default function IndustryPage() {
-  const [tenants, setTenants] = useState<Tenant[]>(DEMO_TENANTS)
+  const [tenants, setTenants] = useState<TenantListItem[]>(DEMO_TENANTS)
   const [selected, setSelected] = useState<Tenant | null>(null)
   const [tab, setTab] = useState<'list' | 'new'>('list')
   const [search, setSearch] = useState('')
@@ -74,11 +66,12 @@ export default function IndustryPage() {
   const [editForm, setEditForm] = useState<Partial<Tenant>>({})
   const [newForm, setNewForm] = useState({ ...DEFAULT_FORM })
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const [stats, setStats] = useState({ total: 5, active: 3, suspended: 1, pending: 1 })
 
   useEffect(() => {
-    fetch(`${API}/api/v1/tenants/`).then(r => r.ok ? r.json() : null).then(d => d && setTenants(d)).catch(() => {})
-    fetch(`${API}/api/v1/tenants/stats`).then(r => r.ok ? r.json() : null).then(d => d && setStats(d)).catch(() => {})
+    listTenants().then(setTenants).catch(() => {})
+    getTenantStats().then(setStats).catch(() => {})
   }, [])
 
   const filtered = tenants.filter(t => {
@@ -87,48 +80,59 @@ export default function IndustryPage() {
     return matchSearch && matchStatus
   })
 
-  async function doAction(tenantId: string, action: 'suspend' | 'activate') {
+  // TenantListItem (the real GET /tenants/ shape) lacks display_name/
+  // contact_name/phone/abn/austrac_id/settings/branding -- fetch the full
+  // detail before showing the panel, rather than opening it directly off
+  // a list row (see lib/api/tenants.ts's file-header comment). Falls back
+  // to the list row itself only if the detail fetch fails (e.g. demo mode
+  // with no real backend), matching this page's existing resilience design.
+  async function selectTenant(t: TenantListItem) {
+    setEditing(false)
+    setError('')
     try {
-      const r = await fetch(`${API}/api/v1/tenants/${tenantId}/${action}`, { method: 'POST' })
-      if (r.ok) {
-        const updated: Tenant = await r.json()
-        setTenants(prev => prev.map(t => t.tenant_id === tenantId ? updated : t))
-        if (selected?.tenant_id === tenantId) setSelected(updated)
-      }
+      setSelected(await getTenant(t.tenant_id))
     } catch {
-      const newStatus = action === 'suspend' ? 'suspended' : 'active'
-      setTenants(prev => prev.map(t => t.tenant_id === tenantId ? { ...t, status: newStatus } : t))
-      if (selected?.tenant_id === tenantId) setSelected(s => s ? { ...s, status: newStatus } : s)
+      setSelected(t)
+    }
+  }
+
+  async function doAction(tenantId: string, action: 'suspend' | 'activate') {
+    setError('')
+    try {
+      const updated = action === 'suspend' ? await suspendTenant(tenantId) : await activateTenant(tenantId)
+      setTenants(prev => prev.map(t => t.tenant_id === tenantId ? updated : t))
+      if (selected?.tenant_id === tenantId) setSelected(updated)
+    } catch {
+      setError(`Failed to ${action} tenant.`)
     }
   }
 
   async function saveEdit() {
     if (!selected) return
     setSaving(true)
+    setError('')
     try {
-      const r = await fetch(`${API}/api/v1/tenants/${selected.tenant_id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editForm) })
-      const updated: Tenant = r.ok ? await r.json() : { ...selected, ...editForm }
+      const updated = await updateTenant(selected.tenant_id, editForm)
       setTenants(prev => prev.map(t => t.tenant_id === selected.tenant_id ? updated : t))
       setSelected(updated)
+      setEditing(false)
     } catch {
-      const patched = { ...selected, ...editForm }
-      setTenants(prev => prev.map(t => t.tenant_id === selected.tenant_id ? patched : t))
-      setSelected(patched)
-    } finally { setSaving(false); setEditing(false) }
+      setError('Failed to save changes.')
+    } finally { setSaving(false) }
   }
 
-  async function createTenant() {
+  async function submitNewTenant() {
     setSaving(true)
+    setError('')
     try {
-      const r = await fetch(`${API}/api/v1/tenants/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newForm) })
-      const t: Tenant = r.ok ? await r.json() : { ...newForm, tenant_id: `TENANT-${Math.random().toString(36).slice(2, 8).toUpperCase()}`, created_at: new Date().toISOString() }
+      const t = await apiCreateTenant(newForm)
       setTenants(prev => [t, ...prev])
       setSelected(t)
+      setNewForm({ ...DEFAULT_FORM })
+      setTab('list')
     } catch {
-      const fake: Tenant = { ...newForm, tenant_id: `TENANT-${Math.random().toString(36).slice(2, 8).toUpperCase()}`, created_at: new Date().toISOString() }
-      setTenants(prev => [fake, ...prev])
-      setSelected(fake)
-    } finally { setSaving(false); setNewForm({ ...DEFAULT_FORM }); setTab('list') }
+      setError('Failed to create tenant.')
+    } finally { setSaving(false) }
   }
 
   return (
@@ -144,6 +148,7 @@ export default function IndustryPage() {
               <p className="text-sm text-white/50">Multi-tenant compliance configuration</p>
             </div>
           </div>
+          {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -186,15 +191,15 @@ export default function IndustryPage() {
               </div>
               <div className="space-y-3">
                 {filtered.map(t => (
-                  <button key={t.tenant_id} onClick={() => { setSelected(t); setEditing(false) }}
+                  <button key={t.tenant_id} onClick={() => selectTenant(t)}
                     className={clsx('w-full text-left bg-navy-800 border rounded-xl p-4 transition-all hover:border-brand-500/50', selected?.tenant_id === t.tenant_id ? 'border-brand-500' : 'border-white/5')}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-white text-sm truncate">{t.name}</span>
-                          <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium shrink-0', STATUS_COLOR[t.status])}>
-                            {STATUS_ICON[t.status]} {t.status}
-                          </span>
+                          <Badge tone={STATUS_TONE[t.status] ?? 'neutral'} bordered icon={STATUS_ICON[t.status]} capitalize={false} className="shrink-0">
+                            {t.status}
+                          </Badge>
                         </div>
                         <div className="text-xs text-white/40">{INDUSTRY_LABELS[t.industry_id] ?? t.industry_id}</div>
                         <div className="text-xs text-white/30 mt-1">{t.tenant_id}</div>
@@ -230,9 +235,9 @@ export default function IndustryPage() {
                   </div>
                   <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
                     <div className="flex items-center justify-between">
-                      <span className={clsx('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium', STATUS_COLOR[selected.status])}>
-                        {STATUS_ICON[selected.status]} {selected.status.charAt(0).toUpperCase() + selected.status.slice(1)}
-                      </span>
+                      <Badge tone={STATUS_TONE[selected.status] ?? 'neutral'} bordered icon={STATUS_ICON[selected.status]} size="md">
+                        {selected.status}
+                      </Badge>
                       <div className="flex gap-2">
                         {selected.status !== 'active' && <button onClick={() => doAction(selected.tenant_id, 'activate')} className="px-3 py-1 rounded-lg bg-emerald-600/20 text-emerald-300 text-xs hover:bg-emerald-600/30">Activate</button>}
                         {selected.status === 'active' && <button onClick={() => doAction(selected.tenant_id, 'suspend')} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-300 text-xs hover:bg-red-600/30">Suspend</button>}
@@ -333,7 +338,7 @@ export default function IndustryPage() {
                 ))}
               </div>
               <div className="flex gap-3 pt-2">
-                <button onClick={createTenant} disabled={saving || !newForm.industry_id || !newForm.name}
+                <button onClick={submitNewTenant} disabled={saving || !newForm.industry_id || !newForm.name}
                   className="px-6 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium disabled:opacity-50">
                   {saving ? 'Creating…' : 'Create Tenant'}
                 </button>

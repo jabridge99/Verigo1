@@ -8,29 +8,52 @@ import {
   UserPlus, Upload, Download,
 } from "lucide-react";
 import clsx from "clsx";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { DEMO_CUSTOMERS, DEMO_PROFILES, type Customer } from "@/lib/demoCustomers";
+import { listCustomers, type CustomerSummary } from "@/lib/api/customers";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// The real API's CustomerSummary shape doesn't match the page's demo-data
+// Customer type (e.g. the real id lives in `id`, not `customer_id`) — map
+// explicitly rather than assigning the raw response, which previously
+// crashed the page's render (customer_id.toLowerCase() on undefined) the
+// moment a real fetch succeeded.
+function toPageCustomer(c: CustomerSummary, index: number): Customer {
+  return {
+    id: index,
+    customer_id: c.id,
+    full_name: c.full_name,
+    email: c.email ?? "",
+    nationality: c.nationality ?? "",
+    country_of_residence: c.country_of_residence ?? "",
+    industry: "",
+    occupation: c.occupation ?? undefined,
+    status: c.status,
+    risk_level: c.risk_level,
+    risk_score: c.risk_score,
+    is_pep: c.is_pep ? 1 : 0,
+    created_at: c.created_at ?? undefined,
+  };
+}
 
-const RISK_COLOR: Record<string, string> = {
-  low:      "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-  medium:   "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  high:     "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  critical: "bg-red-500/20 text-red-300 border-red-500/30",
+const RISK_TONE: Record<string, BadgeTone> = {
+  low: "success",
+  medium: "warning",
+  high: "orange",
+  critical: "danger",
 };
 
 const RISK_BAR: Record<string, string> = {
   low: "bg-emerald-500", medium: "bg-amber-500", high: "bg-orange-500", critical: "bg-red-500",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  pending:        "bg-slate-500/20 text-slate-300",
-  kyc_in_progress:"bg-blue-500/20 text-blue-300",
-  kyc_approved:   "bg-emerald-500/20 text-emerald-300",
-  kyc_rejected:   "bg-red-500/20 text-red-300",
-  active:         "bg-teal-500/20 text-teal-300",
-  suspended:      "bg-red-500/20 text-red-300",
-  closed:         "bg-slate-500/20 text-slate-400",
+const STATUS_TONE: Record<string, BadgeTone> = {
+  pending: "neutral",
+  kyc_in_progress: "info",
+  kyc_approved: "success",
+  kyc_rejected: "danger",
+  active: "teal",
+  suspended: "danger",
+  closed: "muted",
 };
 
 export default function CustomerRiskDashboardPage() {
@@ -52,8 +75,8 @@ function CustomerRiskDashboard() {
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/customers/?limit=100`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setCustomers(d); }
+      const d = await listCustomers({ limit: 100 });
+      if (d.length) setCustomers(d.map(toPageCustomer));
     } catch {}
     setLoading(false);
   }, []);
@@ -161,9 +184,7 @@ function CustomerRiskDashboard() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-slate-100 text-sm">{c.full_name}</span>
                       {c.is_pep ? <span className="px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30">PEP</span> : null}
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[c.status] || "")}>
-                        {c.status.replace(/_/g," ")}
-                      </span>
+                      <Badge tone={STATUS_TONE[c.status] ?? "neutral"}>{c.status.replace(/_/g," ")}</Badge>
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5 font-mono">{c.customer_id} · {c.email}</div>
                     <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
@@ -175,9 +196,7 @@ function CustomerRiskDashboard() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col items-end gap-2">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border capitalize", RISK_COLOR[c.risk_level] || "")}>
-                        {c.risk_level}
-                      </span>
+                      <Badge tone={RISK_TONE[c.risk_level] ?? "neutral"} bordered>{c.risk_level}</Badge>
                       <div className="flex items-center gap-1.5">
                         <div className="w-20 h-1.5 rounded-full bg-navy-700">
                           <div className={`h-full rounded-full ${RISK_BAR[c.risk_level]}`} style={{ width: `${c.risk_score}%` }} />

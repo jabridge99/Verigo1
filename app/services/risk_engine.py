@@ -1,16 +1,27 @@
 """
-AML/CTF Risk Assessment Scoring Engine
+AML/CTF Risk Assessment Scoring Engine — the single ISO 31000-style source of
+truth for risk rating boundaries and the AUD statutory reporting threshold,
+used across the risk-scoring modules in this package (see risk_rating_pct()
+and TTR_CTR_THRESHOLD_AUD below).
 
 Scoring Methodology:
   Inherent Risk  = Likelihood (1-5) × Consequence (1-5)  → 1-25
   CEF            = {1: 0.20, 2: 0.40, 3: 0.60, 4: 0.80, 5: 1.00}
   Residual Risk  = Inherent Risk × CEF(ControlEffectiveness)
 
-Risk Rating Thresholds (residual):
+Risk Rating Thresholds (residual, native 1-25 scale):
   ≤ 5   → Low
   ≤ 12  → Medium
   ≤ 19  → High
   > 19  → Critical
+
+The same four-tier boundaries, expressed as a percentage of the 1-25 scale
+(5/25=20%, 12/25=48%, 19/25=76%), are the canonical thresholds every other
+percentage/point-based risk score in this codebase should rate against —
+see risk_rating_pct(). Before this module took on that role, several
+independent scoring modules each hardcoded their own threshold numbers with
+no shared source, which meant the same customer could be rated differently
+depending which code path scored them (see STRUCTURE_REVIEW.md §C3).
 
 GOVERNANCE DISCLAIMER: This engine is a calculation tool only. Final risk ratings
 and conclusions remain the sole responsibility of the reporting entity.
@@ -37,6 +48,23 @@ RISK_THRESHOLDS = [
     (19, "high"),
 ]
 
+# The same boundaries as RISK_THRESHOLDS, expressed as a percentage of the
+# 1-25 native scale (5/25, 12/25, 19/25). Any risk-scoring module that
+# produces a 0-100 (or 0-1) score should rate it via risk_rating_pct() below
+# rather than inventing its own cut points.
+RISK_THRESHOLDS_PCT = [
+    (20.0, "low"),
+    (48.0, "medium"),
+    (76.0, "high"),
+]
+
+# AML/CTF Act 2006 statutory threshold (AUD) that triggers a Threshold
+# Transaction Report, and the reference figure IFTI/CTR reporting logic
+# checks against. A fixed legal figure, not a judgment call — every
+# threshold-check in the codebase should reference this constant rather
+# than repeating the literal number.
+TTR_CTR_THRESHOLD_AUD = 10_000
+
 
 # ── Core scoring functions ────────────────────────────────────────────────────
 
@@ -59,9 +87,23 @@ def residual_risk(inherent: float, ce_score: int) -> float:
 
 
 def risk_rating(score: float) -> str:
-    """Return 'low' | 'medium' | 'high' | 'critical'."""
+    """Return 'low' | 'medium' | 'high' | 'critical' for a native 1-25 score."""
     for threshold, rating in RISK_THRESHOLDS:
         if score <= threshold:
+            return rating
+    return "critical"
+
+
+def risk_rating_pct(score: float, max_score: float = 100.0) -> str:
+    """
+    Return 'low' | 'medium' | 'high' | 'critical' for any score expressed as
+    a fraction of max_score (default 0-100), using the same ISO 31000-derived
+    boundaries as risk_rating() — the single rating function every
+    percentage/point-based risk-scoring module in this codebase should call.
+    """
+    pct = 0.0 if max_score <= 0 else max(0.0, min(100.0, score / max_score * 100.0))
+    for threshold, rating in RISK_THRESHOLDS_PCT:
+        if pct <= threshold:
             return rating
     return "critical"
 

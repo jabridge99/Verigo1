@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -304,7 +304,13 @@ def generate_purge_report(
     Returns a summary for compliance review — does NOT delete anything.
     """
     from app.models.customer import Customer
-    from app.models.kyc import KYCRecord
+    from app.models.kyc import (
+        CustomerAddressVerification,
+        CustomerEmailVerification,
+        CustomerIdentityDocument,
+        CustomerPhoneVerification,
+        CustomerSelfieVerification,
+    )
 
     now = datetime.now(timezone.utc)
     report: dict = {
@@ -319,41 +325,54 @@ def generate_purge_report(
         return now - timedelta(days=years * 365)
 
     # Customers
+    # Customer has a single tenant column (org_id, matching the industry_id
+    # scoping convention used everywhere else this model is queried -- e.g.
+    # app/api/routes/customers.py) -- there's no separate organisation_id
+    # column on this model to fall back to.
     cutoff = _cutoff(EntityScope.customer)
     q = db.query(Customer).filter(Customer.created_at < cutoff)
-    if organisation_id:
-        q = q.filter(
-            or_(
-                Customer.organisation_id == organisation_id,
-                (Customer.organisation_id.is_(None))
-                & (Customer.industry_id == industry_id),
-            )
-        )
-    elif industry_id:
-        q = q.filter(Customer.industry_id == industry_id)
+    if industry_id:
+        q = q.filter(Customer.org_id == industry_id)
     for c in q.all():
-        if not has_active_hold(db, EntityScope.customer, c.customer_id):
+        if not has_active_hold(db, EntityScope.customer, c.id):
             report["items"].append(
                 {
                     "scope": "customer",
-                    "id": c.customer_id,
+                    "id": c.id,
                     "created_at": c.created_at.isoformat() if c.created_at else None,
                     "action": "eligible_for_deletion",
                 }
             )
 
-    # KYC Records
+    # KYC records
+    # There is no single unified KYCRecord table -- app/models/kyc.py has
+    # five separate verification tables (identity document, selfie, address,
+    # phone, email), each independently created during onboarding. All five
+    # are swept against the same kyc_record retention policy.
     cutoff = _cutoff(EntityScope.kyc_record)
-    for k in db.query(KYCRecord).filter(KYCRecord.created_at < cutoff).all():
-        if not has_active_hold(db, EntityScope.kyc_record, k.kyc_id):
-            report["items"].append(
-                {
-                    "scope": "kyc_record",
-                    "id": k.kyc_id,
-                    "created_at": k.created_at.isoformat() if k.created_at else None,
-                    "action": "eligible_for_deletion",
-                }
-            )
+    kyc_models: list[tuple[str, Any]] = [
+        ("kyc_identity_document", CustomerIdentityDocument),
+        ("kyc_selfie_verification", CustomerSelfieVerification),
+        ("kyc_address_verification", CustomerAddressVerification),
+        ("kyc_phone_verification", CustomerPhoneVerification),
+        ("kyc_email_verification", CustomerEmailVerification),
+    ]
+    for scope_label, model in kyc_models:
+        kq = db.query(model).filter(model.created_at < cutoff)
+        if industry_id:
+            kq = kq.filter(model.org_id == industry_id)
+        for k in kq.all():
+            if not has_active_hold(db, EntityScope.kyc_record, k.id):
+                report["items"].append(
+                    {
+                        "scope": scope_label,
+                        "id": k.id,
+                        "created_at": k.created_at.isoformat()
+                        if k.created_at
+                        else None,
+                        "action": "eligible_for_deletion",
+                    }
+                )
 
     report["total_eligible"] = len(report["items"])
     return report

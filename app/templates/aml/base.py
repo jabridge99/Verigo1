@@ -8,7 +8,7 @@ Risk overlays are applied on top to adjust language for low/medium/high risk app
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -37,7 +37,7 @@ class AMLTemplateBase:
         "('the Organisation') in compliance with the Anti-Money Laundering and "
         "Counter-Terrorism Financing Act 2006 (Cth) ('AML/CTF Act') as amended by "
         "the Anti-Money Laundering and Counter-Terrorism Financing Amendment Act 2024, "
-        "and the AML/CTF Rules 2025 (commencing 31 March 2026).\n\n"
+        "and the AML/CTF Rules 2025 (commencing 1 July 2026).\n\n"
         "The Program is a single, consolidated risk-based document that sets out how "
         "the Organisation identifies, mitigates and manages its money laundering, "
         "terrorism financing and proliferation financing ('ML/TF/PF') risks.\n\n"
@@ -449,6 +449,13 @@ class AMLTemplateBase:
     austrac_registration_date: str = ""
     austrac_registration_expiry: str = ""
     designated_business_group: str = ""
+
+    # ── Seeded policies/controls ──────────────────────────────────────────────
+    # Populated by each industry's get_template() from BASE_POLICIES/BASE_CONTROLS
+    # (deep-copied, sometimes with industry-specific entries appended). Read via
+    # getattr() in factory.py when seeding an AMLProgram's policy/control records.
+    _policies: list[dict] = field(default_factory=list)
+    _controls: list[dict] = field(default_factory=list)
 
 
 # ── Default policies seeded per industry ─────────────────────────────────────

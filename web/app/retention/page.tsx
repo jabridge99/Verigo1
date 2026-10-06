@@ -1,24 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ApiError } from "@/lib/api/client";
+import {
+  listRetentionPolicies,
+  setRetentionPolicy,
+  listLegalHolds,
+  placeLegalHold,
+  releaseLegalHold,
+  getPurgeReport,
+  ENTITY_SCOPES,
+  type Policy,
+  type Hold,
+  type EntityScope,
+  type PurgeReport,
+} from "@/lib/api/retention";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts?.headers || {}) },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  if (res.status === 204) return null;
-  return res.json();
-}
-
-interface Policy { policy_id: string; entity_scope: string; retention_years: number; legal_hold: boolean; notes: string | null }
-interface Hold { hold_id: string; entity_scope: string; entity_id: string; reason: string; held_by: string; placed_at: string; active: boolean }
-interface PurgeItem { scope: string; id: string; created_at: string; action: string }
-
-const SCOPES = ["customer", "kyc_record", "document", "transaction", "audit_log", "report"];
+const SCOPES = ENTITY_SCOPES;
 
 const SCOPE_DESCRIPTIONS: Record<string, string> = {
   customer: "Customer profiles & personal data",
@@ -32,39 +30,40 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
 export default function RetentionPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [holds, setHolds] = useState<Hold[]>([]);
-  const [purge, setPurge] = useState<{ total_eligible: number; items: PurgeItem[] } | null>(null);
+  const [purge, setPurge] = useState<PurgeReport | null>(null);
   const [tab, setTab] = useState<"policies" | "holds" | "purge">("policies");
   const [editing, setEditing] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState<string | null>(null);
-  const [newHold, setNewHold] = useState({ entity_scope: "customer", entity_id: "", reason: "" });
+  const [newHold, setNewHold] = useState<{ entity_scope: EntityScope; entity_id: string; reason: string }>({
+    entity_scope: "customer", entity_id: "", reason: "",
+  });
   const [holdSaving, setHoldSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const errMsg = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
+
   const loadPolicies = () =>
-    apiFetch("/api/v1/retention/policies").then((d: Policy[]) => setPolicies(d)).catch((e) => setError(e.message));
+    listRetentionPolicies().then(setPolicies).catch((e) => setError(errMsg(e)));
 
   const loadHolds = () =>
-    apiFetch("/api/v1/retention/holds?active_only=false").then((d: Hold[]) => setHolds(d)).catch((e) => setError(e.message));
+    listLegalHolds(false).then(setHolds).catch((e) => setError(errMsg(e)));
 
   const loadPurge = () =>
-    apiFetch("/api/v1/retention/purge-report").then(setPurge).catch((e) => setError(e.message));
+    getPurgeReport().then(setPurge).catch((e) => setError(errMsg(e)));
 
   useEffect(() => { loadPolicies(); loadHolds(); }, []);
 
-  const savePolicy = async (scope: string) => {
+  const savePolicy = async (scope: EntityScope) => {
     const years = editing[scope];
     if (years === undefined) return;
     setSaving(scope);
     try {
-      await apiFetch("/api/v1/retention/policies", {
-        method: "PUT",
-        body: JSON.stringify({ entity_scope: scope, retention_years: years }),
-      });
+      await setRetentionPolicy({ entity_scope: scope, retention_years: years });
       await loadPolicies();
       const updated = { ...editing };
       delete updated[scope];
       setEditing(updated);
-    } catch (e: unknown) { setError(String(e)); }
+    } catch (e: unknown) { setError(errMsg(e)); }
     finally { setSaving(null); }
   };
 
@@ -72,19 +71,19 @@ export default function RetentionPage() {
     if (!newHold.entity_id.trim() || !newHold.reason.trim()) { setError("Fill in entity ID and reason"); return; }
     setHoldSaving(true);
     try {
-      await apiFetch("/api/v1/retention/holds", { method: "POST", body: JSON.stringify(newHold) });
+      await placeLegalHold(newHold);
       setNewHold({ entity_scope: "customer", entity_id: "", reason: "" });
       await loadHolds();
-    } catch (e: unknown) { setError(String(e)); }
+    } catch (e: unknown) { setError(errMsg(e)); }
     finally { setHoldSaving(false); }
   };
 
   const releaseHold = async (holdId: string) => {
     if (!confirm("Release this legal hold?")) return;
     try {
-      await apiFetch(`/api/v1/retention/holds/${holdId}/release`, { method: "POST" });
+      await releaseLegalHold(holdId);
       await loadHolds();
-    } catch (e: unknown) { setError(String(e)); }
+    } catch (e: unknown) { setError(errMsg(e)); }
   };
 
   const getPolicyYears = (scope: string) =>
@@ -175,7 +174,7 @@ export default function RetentionPage() {
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">Entity Type</label>
                   <select value={newHold.entity_scope}
-                    onChange={(e) => setNewHold({ ...newHold, entity_scope: e.target.value })}
+                    onChange={(e) => setNewHold({ ...newHold, entity_scope: e.target.value as EntityScope })}
                     className="w-full bg-[#152440] border border-[#1e3a5f] rounded px-3 py-2 text-sm">
                     {SCOPES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
@@ -217,7 +216,7 @@ export default function RetentionPage() {
                     </div>
                     <p className="text-sm text-gray-300">{h.reason}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Placed: {new Date(h.placed_at).toLocaleString()} by {h.held_by}
+                      Placed: {h.placed_at ? new Date(h.placed_at).toLocaleString() : "—"} by {h.held_by}
                     </p>
                   </div>
                   {h.active && (

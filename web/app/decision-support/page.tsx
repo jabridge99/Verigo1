@@ -7,67 +7,22 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import Link from "next/link";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const BASE = `${API}/api/v1/rule-builder`;
+import { ApiError } from "@/lib/api/client";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import {
+  listDecisionPanels,
+  getDecisionPanel,
+  createDecisionPanel,
+  submitReviewStep,
+  getWorkflowHistory,
+  type Panel,
+  type WorkflowStep,
+  type StepType,
+  type DecisionType,
+} from "@/lib/api/decisionSupport";
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
-type StepType = "analyst_review" | "compliance_review" | "mlro_review" | "senior_approval";
-type DecisionType = "approved" | "rejected" | "more_information" | "escalated";
-
-interface Panel {
-  id: string;
-  org_id: string;
-  transaction_id?: string | null;
-  case_id?: string | null;
-  customer_id: string;
-  risk_summary: {
-    customer_risk_score?: number | null;
-    customer_risk_level?: string | null;
-    transaction_risk_score?: number | null;
-    geographic_risk_score?: number | null;
-    product_risk_score?: number | null;
-    behaviour_risk_score?: number | null;
-    risk_matrix_score?: number | null;
-    alert_score?: number | null;
-    final_approval_score?: number | null;
-  };
-  triggered_rules: { rule_id: string }[];
-  required_actions: { text: string; regulatory_basis?: string }[];
-  recommended_actions: { text: string; regulatory_basis?: string }[];
-  reporting_obligations: {
-    potential_ttr?: boolean | null;
-    potential_ifti?: boolean | null;
-    potential_smr?: boolean | null;
-    rationale: Record<string, string>;
-  };
-  outstanding_tasks: unknown[];
-  missing_documents: unknown[];
-  workflow: {
-    current_step?: StepType | null;
-    is_complete: boolean;
-    final_decision?: DecisionType | null;
-    final_decision_by?: string | null;
-    final_decision_at?: string | null;
-    final_decision_notes?: string | null;
-  };
-  generated_by?: string | null;
-  generated_at: string;
-  disclaimer: string;
-}
-
-interface WorkflowStep {
-  id: string;
-  step_type: StepType;
-  step_order: number;
-  decision: DecisionType;
-  reviewer_id?: string | null;
-  review_notes: string;
-  conditions: string[];
-  risk_snapshot?: Record<string, unknown> | null;
-  reviewed_at: string;
-}
 
 const STEP_LABELS: Record<StepType, string> = {
   analyst_review: "Analyst Review",
@@ -76,6 +31,16 @@ const STEP_LABELS: Record<StepType, string> = {
   senior_approval: "Senior Approval",
 };
 
+const DECISION_TONE: Record<DecisionType, BadgeTone> = {
+  approved: "success",
+  rejected: "danger",
+  more_information: "warning",
+  escalated: "sky",
+};
+
+// Local color map, kept only for the "complete" workflow's detail-panel
+// decision chip below — that one uses rounded-lg (a rectangular chip),
+// not Badge's rounded-full pill shape, so it stays a plain span.
 const DECISION_COLOR: Record<DecisionType, string> = {
   approved: "bg-emerald-500/20 text-emerald-300",
   rejected: "bg-red-500/20 text-red-300",
@@ -100,11 +65,11 @@ export default function DecisionSupportPage() {
 
   const fetchAll = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (completeFilter !== "all") params.set("is_complete", completeFilter === "complete" ? "true" : "false");
-    fetch(`${BASE}/decision-support?${params.toString()}`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : []))
+    listDecisionPanels({
+      is_complete: completeFilter !== "all" ? completeFilter === "complete" : undefined,
+    })
       .then(setPanels)
+      .catch(() => setPanels([]))
       .finally(() => setLoading(false));
   }, [completeFilter]);
 
@@ -156,66 +121,58 @@ export default function DecisionSupportPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-6">
         <div className="overflow-x-auto rounded-xl border border-navy-700">
-          <table className="w-full text-sm">
-            <thead className="bg-navy-800 border-b border-navy-700">
+          <Table>
+            <TableHead>
               <tr>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Customer</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Risk</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Reporting</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Step</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Decision</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium">Generated</th>
+                <TableHeaderCell>Customer</TableHeaderCell>
+                <TableHeaderCell>Risk</TableHeaderCell>
+                <TableHeaderCell>Reporting</TableHeaderCell>
+                <TableHeaderCell>Step</TableHeaderCell>
+                <TableHeaderCell>Decision</TableHeaderCell>
+                <TableHeaderCell>Generated</TableHeaderCell>
               </tr>
-            </thead>
-            <tbody>
+            </TableHead>
+            <TableBody>
               {loading ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500">Loading…</td>
-                </tr>
+                <TableEmptyRow colSpan={6}>Loading…</TableEmptyRow>
               ) : panels.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500">No decision support panels found</td>
-                </tr>
+                <TableEmptyRow colSpan={6}>No decision support panels found</TableEmptyRow>
               ) : (
                 panels.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors"
-                    onClick={() => setSelected(p)}
-                  >
-                    <td className="px-4 py-3">
+                  <TableRow key={p.id} onClick={() => setSelected(p)}>
+                    <TableCell>
                       <div className="text-slate-200 font-medium">{p.customer_id}</div>
                       {p.transaction_id && <div className="text-xs text-slate-500">txn {p.transaction_id}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">
                       {p.risk_summary.customer_risk_level || "—"}
                       {p.risk_summary.alert_score != null && ` · alert ${p.risk_summary.alert_score.toFixed(0)}`}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">
                       {[
                         p.reporting_obligations.potential_ttr && "TTR",
                         p.reporting_obligations.potential_ifti && "IFTI",
                         p.reporting_obligations.potential_smr && "SMR",
                       ].filter(Boolean).join(", ") || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-400">
                       {p.workflow.current_step ? STEP_LABELS[p.workflow.current_step] : "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       {p.workflow.final_decision ? (
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", DECISION_COLOR[p.workflow.final_decision])}>
+                        <Badge tone={DECISION_TONE[p.workflow.final_decision]}>
                           {p.workflow.final_decision.replace("_", " ")}
-                        </span>
+                        </Badge>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600/20 text-slate-400">pending</span>
+                        <Badge tone="muted">pending</Badge>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{new Date(p.generated_at).toLocaleString("en-AU")}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500">{new Date(p.generated_at).toLocaleString("en-AU")}</TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 
@@ -280,21 +237,14 @@ function CreatePanelDrawer({
     }
     setSaving(true);
     try {
-      const params = new URLSearchParams({ customer_id: customerId });
-      if (transactionId) params.set("transaction_id", transactionId);
-      if (caseId) params.set("case_id", caseId);
-      const res = await fetch(`${BASE}/decision-support?${params.toString()}`, {
-        method: "POST",
-        credentials: "include",
+      const panel = await createDecisionPanel({
+        customer_id: customerId,
+        transaction_id: transactionId || undefined,
+        case_id: caseId || undefined,
       });
-      if (res.ok) {
-        onCreated(await res.json());
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Panel generation failed");
-      }
-    } catch {
-      showToast("error", "Panel generation failed");
+      onCreated(panel);
+    } catch (err) {
+      showToast("error", err instanceof ApiError ? err.message : "Panel generation failed");
     } finally {
       setSaving(false);
     }
@@ -536,29 +486,18 @@ function ReviewTab({
     }
     setSubmitting(true);
     try {
-      const res = await fetch(`${BASE}/decision-support/${panel.id}/review?step_type=${stepType}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          decision,
-          review_notes: notes,
-          conditions: conditions.split(",").map((c) => c.trim()).filter(Boolean),
-        }),
+      await submitReviewStep(panel.id, stepType, {
+        decision,
+        review_notes: notes,
+        conditions: conditions.split(",").map((c) => c.trim()).filter(Boolean),
       });
-      if (res.ok) {
-        await res.json();
-        const refreshed = await fetch(`${BASE}/decision-support/${panel.id}`, { credentials: "include" }).then((r) => r.json());
-        onUpdated(refreshed);
-        showToast("success", "Review recorded");
-        setNotes("");
-        setConditions("");
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Review failed");
-      }
-    } catch {
-      showToast("error", "Review failed");
+      const refreshed = await getDecisionPanel(panel.id);
+      onUpdated(refreshed);
+      showToast("success", "Review recorded");
+      setNotes("");
+      setConditions("");
+    } catch (err) {
+      showToast("error", err instanceof ApiError ? err.message : "Review failed");
     } finally {
       setSubmitting(false);
     }
@@ -609,9 +548,9 @@ function HistoryTab({ panelId }: { panelId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/decision-support/${panelId}/workflow-history`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : []))
+    getWorkflowHistory(panelId)
       .then(setSteps)
+      .catch(() => setSteps([]))
       .finally(() => setLoading(false));
   }, [panelId]);
 
@@ -624,9 +563,9 @@ function HistoryTab({ panelId }: { panelId: string }) {
         <div key={s.id} className="rounded-lg border border-navy-700 bg-navy-800 p-3 text-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="font-medium text-slate-200">{STEP_LABELS[s.step_type]}</span>
-            <span className={clsx("px-2 py-0.5 rounded-full font-medium capitalize", DECISION_COLOR[s.decision])}>
+            <Badge tone={DECISION_TONE[s.decision]}>
               {s.decision.replace("_", " ")}
-            </span>
+            </Badge>
           </div>
           <div className="text-slate-400">{s.review_notes}</div>
           {s.conditions?.length > 0 && (

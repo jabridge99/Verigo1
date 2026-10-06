@@ -6,43 +6,24 @@ import {
   BarChart3, Users, BookOpen, RotateCcw, FileBadge, ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type TrainingStatus = "assigned" | "in_progress" | "completed" | "overdue" | "expired" | "exempt";
-
-interface Course {
-  id: string;
-  course_code: string;
-  name: string;
-  training_type: string;
-  description?: string | null;
-  duration_minutes?: number | null;
-  has_assessment: boolean;
-  pass_mark?: number | null;
-  expiry_months?: number | null;
-  applicable_roles: string[];
-  applicable_industries: string[];
-  linked_control_ids: string[];
-  linked_risk_factor_categories: string[];
-  is_mandatory: boolean;
-  is_active: boolean;
-}
-
-interface TrainingRecord {
-  id: string;
-  course_id: string;
-  user_id: string;
-  assigned_date: string;
-  due_date: string;
-  completion_date?: string | null;
-  expiry_date?: string | null;
-  score?: number | null;
-  passed?: boolean | null;
-  attempt_number: number;
-  status: TrainingStatus;
-  is_exempt: boolean;
-}
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import {
+  listCourses,
+  listRecords,
+  getTrainingDashboard,
+  getComplianceReport,
+  seedStandardCourses,
+  seedIndustryPack,
+  completeTraining,
+  retakeTraining,
+  renewTraining,
+  createAssignment,
+  certificateHtmlUrl,
+  type Course,
+  type TrainingRecord,
+  type TrainingStatus,
+} from "@/lib/api/governanceTraining";
 
 const INDUSTRY_PACKS = [
   { key: "remittance", label: "Remittance" },
@@ -56,13 +37,13 @@ const INDUSTRY_PACKS = [
 
 const TRAINING_ROLES = ["admin", "mlro", "compliance", "analyst", "viewer", "director", "operations_staff", "auditor"];
 
-const STATUS_COLOR: Record<TrainingStatus, string> = {
-  assigned: "bg-slate-600/20 text-slate-400",
-  in_progress: "bg-brand-500/20 text-brand-300",
-  completed: "bg-emerald-500/20 text-emerald-300",
-  overdue: "bg-red-500/20 text-red-300",
-  expired: "bg-amber-500/20 text-amber-300",
-  exempt: "bg-slate-700/30 text-slate-500",
+const STATUS_TONE: Record<TrainingStatus, BadgeTone> = {
+  assigned: "muted",
+  in_progress: "info",
+  completed: "success",
+  overdue: "danger",
+  expired: "warning",
+  exempt: "muted",
 };
 
 const DEMO_COURSES: Course[] = [
@@ -99,24 +80,22 @@ export default function TrainingPage() {
   };
 
   const fetchAll = useCallback(async () => {
-    try {
-      const [cRes, rRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/governance/training/courses`, { credentials: "include" }),
-        fetch(`${API}/api/v1/governance/training/records`, { credentials: "include" }),
-        fetch(`${API}/api/v1/governance/training/dashboard`, { credentials: "include" }),
-      ]);
-      if (cRes.ok) { const d = await cRes.json(); if (d.courses?.length) setCourses(d.courses); }
-      if (rRes.ok) { const d = await rRes.json(); if (d.records?.length) setRecords(d.records); }
-      if (dRes.ok) setDashboard(await dRes.json());
-    } catch {}
+    const [cRes, rRes, dRes] = await Promise.allSettled([
+      listCourses(),
+      listRecords(),
+      getTrainingDashboard(),
+    ]);
+    if (cRes.status === "fulfilled" && cRes.value.courses?.length) setCourses(cRes.value.courses);
+    if (rRes.status === "fulfilled" && rRes.value.records?.length) setRecords(rRes.value.records);
+    if (dRes.status === "fulfilled") setDashboard(dRes.value);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const fetchReport = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/compliance-report`, { credentials: "include" });
-      if (res.ok) { setReport(await res.json()); return; }
+      setReport(await getComplianceReport());
+      return;
     } catch {}
     setReport({
       report_date: new Date().toISOString().slice(0, 10),
@@ -133,35 +112,30 @@ export default function TrainingPage() {
 
   const seedPack = async (industry: string | null) => {
     try {
-      const url = industry
-        ? `${API}/api/v1/governance/training/courses/seed-industry-pack?industry=${industry}`
-        : `${API}/api/v1/governance/training/courses/seed-industry-pack`;
-      const res = await fetch(url, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const d = await res.json();
-        showToast("success", d.message || "Pack seeded.");
-        fetchAll();
-        return;
-      }
+      const d = await seedIndustryPack(industry);
+      showToast("success", d.message || "Pack seeded.");
+      fetchAll();
+      return;
     } catch {}
     showToast("success", industry ? `${industry} pack seeded (demo).` : "All packs seeded (demo).");
   };
 
   const seedStandard = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/courses/seed`, { method: "POST", credentials: "include" });
-      if (res.ok) { const d = await res.json(); showToast("success", d.message || "Standard courses seeded."); fetchAll(); return; }
+      const d = await seedStandardCourses();
+      showToast("success", d.message || "Standard courses seeded.");
+      fetchAll();
+      return;
     } catch {}
     showToast("success", "Standard courses seeded (demo).");
   };
 
   const completeRecord = async (r: TrainingRecord, score: number) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/complete`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completion_date: new Date().toISOString().slice(0, 10), score }),
-      });
-      if (res.ok) { const updated = await res.json(); setRecords(prev => prev.map(x => x.id === r.id ? updated : x)); showToast("success", "Training marked complete."); return; }
+      const updated = await completeTraining(r.id, { completion_date: new Date().toISOString().slice(0, 10), score });
+      setRecords(prev => prev.map(x => x.id === r.id ? updated : x));
+      showToast("success", "Training marked complete.");
+      return;
     } catch {}
     setRecords(prev => prev.map(x => x.id === r.id ? { ...x, completion_date: new Date().toISOString().slice(0, 10), score, passed: score >= 75, status: "completed" } : x));
     showToast("success", "Training marked complete (demo).");
@@ -169,8 +143,10 @@ export default function TrainingPage() {
 
   const retakeRecord = async (r: TrainingRecord) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/retake`, { method: "POST", credentials: "include" });
-      if (res.ok) { const updated = await res.json(); setRecords(prev => prev.map(x => x.id === r.id ? updated : x)); showToast("success", "Retake initiated."); return; }
+      const updated = await retakeTraining(r.id);
+      setRecords(prev => prev.map(x => x.id === r.id ? updated : x));
+      showToast("success", "Retake initiated.");
+      return;
     } catch {}
     showToast("success", "Retake initiated (demo).");
   };
@@ -178,8 +154,10 @@ export default function TrainingPage() {
   const renewRecord = async (r: TrainingRecord) => {
     const dueDate = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/records/${r.id}/renew?due_date=${dueDate}`, { method: "POST", credentials: "include" });
-      if (res.ok) { const created = await res.json(); setRecords(prev => [created, ...prev]); showToast("success", "Renewal cycle created."); return; }
+      const created = await renewTraining(r.id, dueDate);
+      setRecords(prev => [created, ...prev]);
+      showToast("success", "Renewal cycle created.");
+      return;
     } catch {}
     showToast("success", "Renewal cycle created (demo).");
   };
@@ -228,7 +206,10 @@ export default function TrainingPage() {
           <RecordsTab records={records} courseName={courseName} onComplete={completeRecord} onRetake={retakeRecord} onRenew={renewRecord} />
         )}
         {tab === "assign" && (
-          <AssignTab courses={courses} onAssigned={() => { showToast("success", "Training assigned."); fetchAll(); }} />
+          <AssignTab courses={courses} onAssigned={(ok) => {
+            showToast(ok ? "success" : "error", ok ? "Training assigned." : "Failed to assign training.");
+            if (ok) fetchAll();
+          }} />
         )}
         {tab === "report" && <ReportTab report={report} />}
       </div>
@@ -367,32 +348,30 @@ function RecordsTab({ records, courseName, onComplete, onRetake, onRenew }: {
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-navy-700">
-      <table className="w-full text-sm">
-        <thead className="bg-navy-800 border-b border-navy-700">
+      <Table>
+        <TableHead>
           <tr>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">User</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Course</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Due</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Score</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-            <th className="text-left px-4 py-3 text-slate-400 font-medium">Actions</th>
+            <TableHeaderCell>User</TableHeaderCell>
+            <TableHeaderCell>Course</TableHeaderCell>
+            <TableHeaderCell>Due</TableHeaderCell>
+            <TableHeaderCell>Score</TableHeaderCell>
+            <TableHeaderCell>Status</TableHeaderCell>
+            <TableHeaderCell>Actions</TableHeaderCell>
           </tr>
-        </thead>
-        <tbody>
+        </TableHead>
+        <TableBody>
           {records.length === 0 ? (
-            <tr><td colSpan={6} className="text-center py-12 text-slate-500">No training records found</td></tr>
+            <TableEmptyRow colSpan={6}>No training records found</TableEmptyRow>
           ) : records.map(r => (
-            <tr key={r.id} className="border-b border-navy-800 hover:bg-navy-800/40 transition-colors">
-              <td className="px-4 py-3 text-slate-300">{r.user_id}</td>
-              <td className="px-4 py-3 text-slate-300">{courseName(r.course_id)}</td>
-              <td className="px-4 py-3 text-xs text-slate-500">{new Date(r.due_date).toLocaleDateString("en-AU")}</td>
-              <td className="px-4 py-3 text-xs text-slate-400">{r.score ?? "—"}</td>
-              <td className="px-4 py-3">
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[r.status])}>
-                  {r.status.replace("_", " ")}
-                </span>
-              </td>
-              <td className="px-4 py-3">
+            <TableRow key={r.id}>
+              <TableCell className="text-slate-300">{r.user_id}</TableCell>
+              <TableCell className="text-slate-300">{courseName(r.course_id)}</TableCell>
+              <TableCell className="text-xs text-slate-500">{new Date(r.due_date).toLocaleDateString("en-AU")}</TableCell>
+              <TableCell className="text-xs text-slate-400">{r.score ?? "—"}</TableCell>
+              <TableCell>
+                <Badge tone={STATUS_TONE[r.status]}>{r.status.replace("_", " ")}</Badge>
+              </TableCell>
+              <TableCell>
                 <div className="flex items-center gap-1.5">
                   {(r.status === "assigned" || r.status === "in_progress") && (
                     <button onClick={() => onComplete(r, 88)} className="p-1.5 rounded-lg hover:bg-navy-700 text-emerald-400" title="Mark complete">
@@ -410,22 +389,22 @@ function RecordsTab({ records, courseName, onComplete, onRetake, onRenew }: {
                     </button>
                   )}
                   {r.status === "completed" && (
-                    <a href={`${API}/api/v1/governance/training/records/${r.id}/certificate-html`} target="_blank" rel="noreferrer"
+                    <a href={certificateHtmlUrl(r.id)} target="_blank" rel="noreferrer"
                       className="p-1.5 rounded-lg hover:bg-navy-700 text-slate-400" title="Certificate">
                       <FileBadge className="w-4 h-4" />
                     </a>
                   )}
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
 
-function AssignTab({ courses, onAssigned }: { courses: Course[]; onAssigned: () => void }) {
+function AssignTab({ courses, onAssigned }: { courses: Course[]; onAssigned: (ok: boolean) => void }) {
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const [userIds, setUserIds] = useState("");
   const [roles, setRoles] = useState<string[]>([]);
@@ -445,16 +424,15 @@ function AssignTab({ courses, onAssigned }: { courses: Course[]; onAssigned: () 
       due_date: dueDate,
       trigger: "manual",
     };
+    let ok = true;
     try {
-      const res = await fetch(`${API}/api/v1/governance/training/assignments`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(await res.text());
-    } catch {}
+      await createAssignment(payload);
+    } catch {
+      ok = false;
+    }
     setSubmitting(false);
-    onAssigned();
-    setUserIds(""); setRoles([]);
+    onAssigned(ok);
+    if (ok) { setUserIds(""); setRoles([]); }
   };
 
   return (
@@ -532,28 +510,28 @@ function ReportTab({ report }: { report: any }) {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-navy-700">
-        <table className="w-full text-sm">
-          <thead className="bg-navy-800 border-b border-navy-700">
+        <Table>
+          <TableHead>
             <tr>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Training Type</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Assigned</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Completed</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Overdue</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium">Completion %</th>
+              <TableHeaderCell>Training Type</TableHeaderCell>
+              <TableHeaderCell>Assigned</TableHeaderCell>
+              <TableHeaderCell>Completed</TableHeaderCell>
+              <TableHeaderCell>Overdue</TableHeaderCell>
+              <TableHeaderCell>Completion %</TableHeaderCell>
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {report.by_training_type.map((row: any) => (
               <tr key={row.training_type} className="border-b border-navy-800">
-                <td className="px-4 py-3 text-slate-300 capitalize">{row.training_type.replace(/_/g, " ")}</td>
-                <td className="px-4 py-3 text-slate-400">{row.total_assigned}</td>
-                <td className="px-4 py-3 text-emerald-400">{row.completed}</td>
-                <td className="px-4 py-3 text-red-400">{row.overdue}</td>
-                <td className="px-4 py-3 text-slate-300">{row.completion_pct}%</td>
+                <TableCell className="text-slate-300 capitalize">{row.training_type.replace(/_/g, " ")}</TableCell>
+                <TableCell className="text-slate-400">{row.total_assigned}</TableCell>
+                <TableCell className="text-emerald-400">{row.completed}</TableCell>
+                <TableCell className="text-red-400">{row.overdue}</TableCell>
+                <TableCell className="text-slate-300">{row.completion_pct}%</TableCell>
               </tr>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <p className="text-[11px] text-slate-600">
         This summary is a governance tooling output only and does not constitute regulatory certification.

@@ -13,30 +13,42 @@ Revises: c7d8e9f0a1b2
 Create Date: 2026-06-21 00:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'd3e4f5a6b7c8'
-down_revision: Union[str, None] = 'c7d8e9f0a1b2'
+revision: str = "d3e4f5a6b7c8"
+down_revision: Union[str, None] = "c7d8e9f0a1b2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        'notifications', sa.Column('dedupe_key', sa.String(length=150), nullable=True)
-    )
-    op.create_index(
-        op.f('ix_notifications_dedupe_key'),
-        'notifications',
-        ['dedupe_key'],
-        unique=True,
-    )
+    # Guarded: on a database created fresh via the f73383da4e36 baseline
+    # (Base.metadata.create_all() against the *current* model, which already
+    # declares dedupe_key), this column/index already exist. On a database
+    # that predates that baseline, this migration is what adds them.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = {c["name"] for c in inspector.get_columns("notifications")}
+    if "dedupe_key" not in columns:
+        op.add_column(
+            "notifications",
+            sa.Column("dedupe_key", sa.String(length=150), nullable=True),
+        )
+    indexes = {ix["name"] for ix in inspector.get_indexes("notifications")}
+    if op.f("ix_notifications_dedupe_key") not in indexes:
+        op.create_index(
+            op.f("ix_notifications_dedupe_key"),
+            "notifications",
+            ["dedupe_key"],
+            unique=True,
+        )
 
 
 def downgrade() -> None:
-    op.drop_index(op.f('ix_notifications_dedupe_key'), table_name='notifications')
-    op.drop_column('notifications', 'dedupe_key')
+    op.drop_index(op.f("ix_notifications_dedupe_key"), table_name="notifications")
+    op.drop_column("notifications", "dedupe_key")

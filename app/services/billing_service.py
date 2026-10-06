@@ -28,6 +28,7 @@ from app.models.billing import (
     ADDON_CATALOGUE,
     DEFAULT_PLAN_FEATURES,
     FEATURE_DEFINITIONS,
+    FREE_TRIAL_LIMITS,
     PLAN_CATALOGUE,
     AddonKey,
     AddonStatus,
@@ -154,6 +155,26 @@ def get_stripe_price_id(
     if row and row.stripe_price_id:
         return row.stripe_price_id
     return _ENV_PRICE_IDS.get((plan, interval), "")
+
+
+def _plan_interval_for_price(
+    db: Session, price_id: str
+) -> Optional[tuple[BillingPlan, BillingInterval]]:
+    """Reverse lookup of get_stripe_price_id() — resolve a Stripe Price ID
+    back to (plan, interval), so the webhook handler can sync a plan change
+    made directly in the Stripe Customer Portal (not just one made through
+    change_subscription_plan())."""
+    row = (
+        db.query(StripePriceMapping)
+        .filter(StripePriceMapping.stripe_price_id == price_id)
+        .first()
+    )
+    if row:
+        return row.plan, row.interval
+    for (plan, interval), pid in _ENV_PRICE_IDS.items():
+        if pid and pid == price_id:
+            return plan, interval
+    return None
 
 
 def list_stripe_price_mappings(db: Session) -> List[dict]:
@@ -351,6 +372,225 @@ def is_active_subscriber(
     subscription lapses, access narrows to the latest version only."""
     sub = get_subscription(db, industry_id, organisation_id)
     return bool(sub and sub.status not in _INACTIVE_STATUSES)
+
+
+# ── Plan usage-limit enforcement ─────────────────────────────────────────────
+# PLAN_CATALOGUE's "limits" (customers/users/api_calls_month) were defined and
+# shown on the pricing page but never actually enforced anywhere in the app.
+# These three functions close that gap for the limits the plan explicitly
+# promises: per-org customer count, per-org user count, and the free-trial
+# "1 organisation" cap. A limit of -1 means unlimited. Each raises
+# HTTPException directly (rather than returning a bool) so every call site
+# gets the same clear upgrade-prompt message for free.
+
+
+def _plan_limits(db: Session, org_id: str, industry_id: Optional[str] = None) -> dict:
+    plan = current_plan(db, industry_id or "", org_id)
+    info = PLAN_CATALOGUE.get(plan)
+    return info["limits"] if info else FREE_TRIAL_LIMITS
+
+
+def _customer_capacity(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> tuple:
+    """Return (limit, current_count, remaining). remaining is None when the
+    plan's customer limit is unlimited (-1)."""
+    from app.models.customer import Customer
+
+    limit = _plan_limits(db, org_id, industry_id)["customers"]
+    current = db.query(Customer).filter(Customer.org_id == org_id).count()
+    remaining = None if limit < 0 else max(0, limit - current)
+    return limit, current, remaining
+
+
+def enforce_customer_limit(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> None:
+    """Raise if creating one more customer would exceed the org's plan cap."""
+    from fastapi import HTTPException
+
+    limit, _current, remaining = _customer_capacity(db, org_id, industry_id)
+    if remaining is not None and remaining <= 0:
+        raise HTTPException(
+            403,
+            f"Your plan's customer limit ({limit}) has been reached. "
+            "Upgrade your plan to onboard more customers.",
+        )
+
+
+def remaining_customer_capacity(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> Optional[int]:
+    """None = unlimited. Used by bulk flows (CSV import, bulk onboarding
+    invites) that need to cap how many rows they process rather than fail
+    the whole request outright the way a single-record create does."""
+    _limit, _current, remaining = _customer_capacity(db, org_id, industry_id)
+    return remaining
+
+
+def enforce_user_limit(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> None:
+    """Raise if adding one more member would exceed the org's plan cap."""
+    from fastapi import HTTPException
+
+    from app.models.organisation import MembershipStatus, OrganisationUser
+
+    limit = _plan_limits(db, org_id, industry_id)["users"]
+    if limit < 0:
+        return
+    current = (
+        db.query(OrganisationUser)
+        .filter(
+            OrganisationUser.organisation_id == org_id,
+            OrganisationUser.status == MembershipStatus.active,
+        )
+        .count()
+    )
+    if current >= limit:
+        raise HTTPException(
+            403,
+            f"Your plan's user limit ({limit}) has been reached. "
+            "Upgrade your plan to add more team members.",
+        )
+
+
+def enforce_org_creation_limit(db: Session, user) -> None:
+    """Free-trial accounts are limited to 1 organisation (the plan
+    catalogue's FREE/TRIAL tier). Once at least one organisation the user
+    owns has been upgraded to a paid plan, the cap no longer applies —
+    no paid tier's own description promises a further multi-organisation
+    limit to enforce, so this only ever blocks the free-trial case."""
+    from fastapi import HTTPException
+
+    from app.models.organisation import (
+        MembershipStatus,
+        Organisation,
+        OrganisationUser,
+    )
+    from app.services.org_service import get_system_role
+
+    owner_role = get_system_role(db, "owner")
+    if not owner_role:
+        return
+    owned = (
+        db.query(Organisation)
+        .join(OrganisationUser, OrganisationUser.organisation_id == Organisation.id)
+        .filter(
+            OrganisationUser.user_id == user.id,
+            OrganisationUser.role_id == owner_role.id,
+            OrganisationUser.status == MembershipStatus.active,
+        )
+        .all()
+    )
+    if not owned:
+        return
+    has_paid = any(
+        current_plan(db, o.industry_id, o.id) != BillingPlan.free_trial for o in owned
+    )
+    if not has_paid:
+        raise HTTPException(
+            403,
+            "Free trial accounts are limited to 1 organisation. "
+            "Upgrade a plan on your existing organisation to create another.",
+        )
+
+
+def _screening_capacity(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> tuple:
+    """Return (limit, current_count_this_month, remaining) for real
+    (non-simulated) sanctions/PEP screening checks. remaining is None when
+    the plan's quota is unlimited (-1). Screening is included up to this
+    quota per plan, per calendar month -- not metered/pay-per-click -- per
+    your direction (2026-09-14)."""
+    from app.models.screening import ScreeningRecord, ScreeningType
+
+    real_types = (
+        ScreeningType.pep,
+        ScreeningType.sanctions,
+        ScreeningType.ubo_pep,
+        ScreeningType.ubo_sanctions,
+    )
+    limit = _plan_limits(db, org_id, industry_id).get("screening_checks_month", -1)
+    if limit < 0:
+        return limit, 0, None
+    period_start = datetime.now(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    current = (
+        db.query(ScreeningRecord)
+        .filter(
+            ScreeningRecord.org_id == org_id,
+            ScreeningRecord.screening_type.in_(real_types),
+            ScreeningRecord.created_at >= period_start,
+        )
+        .count()
+    )
+    remaining = max(0, limit - current)
+    return limit, current, remaining
+
+
+def enforce_screening_limit(
+    db: Session, org_id: str, additional: int = 1, industry_id: Optional[str] = None
+) -> None:
+    """Raise if running `additional` more real sanctions/PEP checks this
+    calendar month would exceed the org's plan quota. Simulated screening
+    types (watchlist, adverse_media, regulatory, law_enforcement, ubo_adverse,
+    manual_review) are never metered here -- only the types that route to a
+    real, cost-incurring provider (see _run_real_screening in
+    app/api/routes/screening.py). The free, self-hosted DFAT/OFAC/UN sanctions
+    lookup (quick_screen's screen_name()) isn't metered either -- it has no
+    vendor cost to protect against."""
+    from fastapi import HTTPException
+
+    if additional <= 0:
+        return
+    limit, current, remaining = _screening_capacity(db, org_id, industry_id)
+    if remaining is not None and additional > remaining:
+        raise HTTPException(
+            403,
+            f"Your plan's real screening limit ({limit}/month) would be "
+            f"exceeded by this request ({current} used this month, {remaining} "
+            "remaining). Upgrade your plan for a higher limit.",
+        )
+
+
+def record_api_call(
+    db: Session, org_id: str, industry_id: Optional[str] = None
+) -> None:
+    """Increment this org's api_calls_month counter for the current UTC
+    calendar month and raise once its plan's cap is exceeded. Only call
+    this for requests authenticated via an API key (app/api/deps.py's
+    get_current_user, X-API-Key branch) -- api_calls_month is the
+    "Webhooks & API access" plan feature (external integration usage), not
+    ordinary browser/JWT session traffic, which is never metered here."""
+    from fastapi import HTTPException
+
+    from app.models.billing import ApiUsageCounter
+
+    if not org_id:
+        return
+
+    period = datetime.now(timezone.utc).strftime("%Y-%m")
+    counter = (
+        db.query(ApiUsageCounter)
+        .filter(ApiUsageCounter.org_id == org_id, ApiUsageCounter.period == period)
+        .first()
+    )
+    if counter is None:
+        counter = ApiUsageCounter(org_id=org_id, period=period, count=0)
+        db.add(counter)
+    counter.count += 1
+    db.commit()
+
+    limit = _plan_limits(db, org_id, industry_id)["api_calls_month"]
+    if limit >= 0 and counter.count > limit:
+        raise HTTPException(
+            429,
+            f"Your plan's API call limit ({limit}/month) has been reached. "
+            "Upgrade your plan for a higher limit.",
+        )
 
 
 # ── Price resolution ───────────────────────────────────────────────────────────
@@ -560,6 +800,30 @@ def create_checkout_session(
     stripe = _stripe()
     price_id = get_stripe_price_id(db, req.plan, req.interval)
 
+    sub = get_subscription(db, industry_id, organisation_id)
+    if (
+        stripe
+        and sub
+        and sub.stripe_subscription_id
+        and sub.status
+        in (
+            SubscriptionStatus.active,
+            SubscriptionStatus.trialing,
+            SubscriptionStatus.past_due,
+        )
+    ):
+        # A Checkout Session in mode="subscription" always creates a NEW,
+        # separate Stripe subscription — it has no concept of "this org
+        # already has one, replace it." Letting an already-subscribed org
+        # through here would silently double-bill them (the old
+        # subscription is never cancelled). Existing subscribers changing
+        # plan must go through change_subscription_plan() instead, which
+        # modifies the existing Stripe subscription in place.
+        raise ValueError(
+            "This organisation already has an active subscription — use "
+            "change_subscription_plan() to change plan, not checkout."
+        )
+
     if not stripe or not price_id:
         # Mock mode — return placeholder
         return {
@@ -567,7 +831,6 @@ def create_checkout_session(
             "session_id": f"cs_mock_{uuid.uuid4().hex[:16]}",
         }
 
-    sub = get_subscription(db, industry_id, organisation_id)
     stripe_customer_id = sub.stripe_customer_id if sub else None
 
     metadata = {
@@ -600,6 +863,56 @@ def create_checkout_session(
         automatic_tax={"enabled": True},
     )
     return {"checkout_url": session.url, "session_id": session.id}
+
+
+def change_subscription_plan(
+    db: Session,
+    industry_id: str,
+    plan: BillingPlan,
+    interval: BillingInterval,
+    organisation_id: Optional[str] = None,
+) -> Subscription:
+    """
+    Upgrade or downgrade an org's EXISTING subscription in place, by
+    swapping the price on its current Stripe subscription — as opposed to
+    create_checkout_session(), which creates a brand-new Stripe
+    subscription every time and would double-bill an already-subscribed
+    org (see the guard at the top of that function).
+    """
+    sub = get_subscription(db, industry_id, organisation_id)
+    if not sub:
+        raise ValueError("No subscription found for this organisation")
+
+    stripe = _stripe()
+    price_id = get_stripe_price_id(db, plan, interval)
+
+    if not stripe or not sub.stripe_subscription_id or not price_id:
+        # Mock mode, or a free-trial org with no real Stripe subscription
+        # yet — just record the intended plan locally.
+        sub.plan = plan
+        sub.interval = interval
+        sub.base_price_aud = effective_price(sub, db)
+        db.commit()
+        db.refresh(sub)
+        return sub
+
+    stripe_sub = stripe.Subscription.retrieve(sub.stripe_subscription_id)
+    item_id = stripe_sub["items"]["data"][0]["id"]
+    stripe.Subscription.modify(
+        sub.stripe_subscription_id,
+        items=[{"id": item_id, "price": price_id}],
+        proration_behavior="create_prorations",
+    )
+    # The customer.subscription.updated webhook (_handle_subscription_updated)
+    # is the authoritative sync once Stripe processes the change, but update
+    # optimistically here too so the UI reflects the new plan immediately
+    # rather than waiting for the webhook round-trip.
+    sub.plan = plan
+    sub.interval = interval
+    sub.base_price_aud = effective_price(sub, db)
+    db.commit()
+    db.refresh(sub)
+    return sub
 
 
 def create_customer_portal(
@@ -707,6 +1020,20 @@ def _handle_subscription_updated(db: Session, stripe_sub: dict):
     }
     sub.status = status_map.get(stripe_sub.get("status", ""), SubscriptionStatus.active)
     sub.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
+
+    # Sync plan/interval from the subscription's current price, so a plan
+    # change made directly in the Stripe Customer Portal (bypassing our own
+    # change_subscription_plan()) is still reflected here.
+    items = stripe_sub.get("items", {}).get("data", [])
+    if items:
+        price = items[0].get("price", {})
+        price_id = price.get("id")
+        if price_id:
+            resolved = _plan_interval_for_price(db, price_id)
+            if resolved:
+                sub.plan, sub.interval = resolved
+                sub.base_price_aud = effective_price(sub, db)
+
     if stripe_sub.get("current_period_start"):
         sub.current_period_start = datetime.fromtimestamp(
             stripe_sub["current_period_start"], tz=timezone.utc
@@ -819,6 +1146,8 @@ def addon_catalogue() -> List[dict]:
             "addon_key": key.value,
             "name": info["name"],
             "monthly_aud": info["monthly_aud"],
+            "price_aud": info["price_aud"],
+            "billing_interval": info["billing_interval"],
             "description": info["description"],
             "unlocks_providers": info["unlocks_providers"],
             "requires_plan": [p.value for p in info["requires_plan"]],
@@ -858,6 +1187,58 @@ def addon_for_provider(provider_name: str) -> Optional[AddonKey]:
     return None
 
 
+_ADDON_STRIPE_RECURRING = {
+    "month": {"interval": "month", "interval_count": 1},
+    "quarter": {"interval": "month", "interval_count": 3},
+    "year": {"interval": "year", "interval_count": 1},
+}
+
+
+def _quarterly_reports_in_trailing_year(db: Session, org_id: str) -> int:
+    """Count of real Quarterly Compliance Reports (board_reporting.py's
+    BoardReportType.quarterly_compliance) generated for this org in the
+    trailing 12 months -- the qualifying signal for the Annual Independent
+    Review's bundle discount (see addon_price())."""
+    from app.models.board_report import BoardReport, BoardReportType
+
+    since = datetime.now(timezone.utc) - timedelta(days=365)
+    return (
+        db.query(BoardReport)
+        .filter(
+            BoardReport.org_id == org_id,
+            BoardReport.report_type == BoardReportType.quarterly_compliance,
+            BoardReport.created_at >= since,
+        )
+        .count()
+    )
+
+
+def addon_price(db: Session, org_id: str, addon_key: AddonKey) -> dict:
+    """Effective price for purchasing this add-on right now, applying the
+    Annual Independent Review's bundle discount once the org has actually
+    generated `bundle_discount_requires_quarterly_reports` Quarterly
+    Compliance Reports in the trailing 12 months -- tied to reports genuinely
+    produced, not just the quarterly add-on being toggled on."""
+    info = ADDON_CATALOGUE.get(addon_key)
+    if not info:
+        raise ValueError(f"Unknown add-on: {addon_key}")
+
+    base = info["price_aud"]
+    discount_pct = 0.0
+    required_quarters = info.get("bundle_discount_requires_quarterly_reports")
+    if base is not None and required_quarters:
+        if _quarterly_reports_in_trailing_year(db, org_id) >= required_quarters:
+            discount_pct = info.get("bundle_discount_pct", 0.0)
+
+    price = round(base * (1 - discount_pct / 100), 2) if base is not None else None
+    return {
+        "base_price_aud": base,
+        "discount_pct": discount_pct,
+        "price_aud": price,
+        "billing_interval": info["billing_interval"],
+    }
+
+
 def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> SubscriptionAddon:
     info = ADDON_CATALOGUE.get(addon_key)
     if not info:
@@ -867,6 +1248,9 @@ def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> Subscriptio
     if not sub or sub.plan not in info["requires_plan"]:
         required = " or ".join(p.value for p in info["requires_plan"])
         raise ValueError(f"{info['name']} requires an active {required} plan")
+
+    pricing = addon_price(db, org_id, addon_key)
+    charge_aud = pricing["price_aud"]
 
     existing = (
         db.query(SubscriptionAddon)
@@ -878,8 +1262,37 @@ def purchase_addon(db: Session, org_id: str, addon_key: AddonKey) -> Subscriptio
     addon = existing or SubscriptionAddon(
         addon_id=_addon_id(), org_id=org_id, addon_key=addon_key
     )
+
+    stripe = _stripe()
+    if stripe and sub.stripe_customer_id and charge_aud:
+        # No pre-provisioned Stripe Price exists for add-ons (unlike the base
+        # plan's admin-pasted StripePriceMapping) -- price_data creates one
+        # inline, billed on the add-on's own recurring cadence (quarterly for
+        # the CO report, annual for the independent review) rather than
+        # forcing it onto the base subscription's interval.
+        recurring = _ADDON_STRIPE_RECURRING[info["billing_interval"]]
+        stripe_sub = stripe.Subscription.create(
+            customer=sub.stripe_customer_id,
+            items=[
+                {
+                    "price_data": {
+                        "currency": "aud",
+                        "product_data": {"name": info["name"]},
+                        "unit_amount": round(charge_aud * 100),
+                        "recurring": recurring,
+                    },
+                }
+            ],
+            metadata={"org_id": org_id, "addon_key": addon_key.value},
+        )
+        addon.stripe_subscription_id = stripe_sub.id
+    # Mock mode, or an org with no real Stripe customer yet (e.g. a
+    # super-admin-granted plan that never ran a real Checkout) -- record the
+    # entitlement locally without a charge, same fallback create_checkout_session
+    # and change_subscription_plan already use elsewhere in this file.
+
     addon.status = AddonStatus.active
-    addon.price_aud = info["monthly_aud"]
+    addon.price_aud = charge_aud
     addon.canceled_at = None
     db.add(addon)
     db.commit()
@@ -899,6 +1312,15 @@ def cancel_addon(
     )
     if not addon:
         return None
+    stripe = _stripe()
+    if stripe and addon.stripe_subscription_id:
+        try:
+            stripe.Subscription.delete(addon.stripe_subscription_id)
+        except stripe.error.StripeError:
+            # Best-effort -- e.g. already canceled directly in the Stripe
+            # dashboard. The local row is the source of truth for gating
+            # (has_addon() only reads AddonStatus), so still cancel it here.
+            pass
     addon.status = AddonStatus.canceled
     addon.canceled_at = datetime.now(timezone.utc)
     db.commit()

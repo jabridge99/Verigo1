@@ -24,6 +24,8 @@ DISCLAIMER: This module is a governance tooling aid only.
 from __future__ import annotations
 
 import enum
+from datetime import datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -39,6 +41,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -114,8 +117,10 @@ class GovernanceCustomField(Base):
 
     __tablename__ = "governance_custom_fields"
 
-    id = Column(String, primary_key=True, default=lambda: f"gcf_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gcf_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -123,34 +128,46 @@ class GovernanceCustomField(Base):
     )
 
     # ── Identity ──────────────────────────────────────────────────────────────
-    entity_type = Column(Enum(EntityType), nullable=False, index=True)
-    field_name = Column(String(50), nullable=False)
+    entity_type: Mapped[EntityType] = Column(
+        Enum(EntityType), nullable=False, index=True
+    )
+    field_name: Mapped[str] = Column(String(50), nullable=False)
     # internal key used in custom_fields JSON; snake_case; unique per entity_type + org
-    label = Column(String(100), nullable=False)
+    label: Mapped[str] = Column(String(100), nullable=False)
     # display label shown on UI
-    description = Column(Text)
-    placeholder = Column(String(255))
+    description: Mapped[Optional[str]] = Column(Text)
+    placeholder: Mapped[Optional[str]] = Column(String(255))
 
     # ── Field type ────────────────────────────────────────────────────────────
-    field_type = Column(Enum(CustomFieldType), nullable=False)
-    options = Column(JSON, default=list)
+    field_type: Mapped[CustomFieldType] = Column(Enum(CustomFieldType), nullable=False)
+    options: Mapped[Optional[Any]] = Column(JSON, default=list)
     # [{"value": "...", "label": "..."}] — for select / multi_select types
 
     # ── Validation ────────────────────────────────────────────────────────────
-    is_required = Column(Boolean, default=False)
-    validation_regex = Column(String(255))  # optional regex constraint
-    min_value = Column(Float)  # for number fields
-    max_value = Column(Float)
+    is_required: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    validation_regex: Mapped[Optional[str]] = Column(
+        String(255)
+    )  # optional regex constraint
+    min_value: Mapped[Optional[float]] = Column(Float)  # for number fields
+    max_value: Mapped[Optional[float]] = Column(Float)
 
     # ── Display ───────────────────────────────────────────────────────────────
-    sort_order = Column(Integer, default=0)
-    is_visible_in_list = Column(Boolean, default=False)  # show in table/register view
-    is_searchable = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
+    sort_order: Mapped[Optional[int]] = Column(Integer, default=0)
+    is_visible_in_list: Mapped[Optional[bool]] = Column(
+        Boolean, default=False
+    )  # show in table/register view
+    is_searchable: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
 
-    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -177,24 +194,34 @@ class GovernanceCustomList(Base):
 
     __tablename__ = "governance_custom_lists"
 
-    id = Column(String, primary_key=True, default=lambda: f"gcl_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gcl_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    category = Column(Enum(ListCategory), nullable=False, index=True)
-    value = Column(String(100), nullable=False)  # internal enum-style key
-    label = Column(String(255), nullable=False)  # display label
-    description = Column(Text)
-    sort_order = Column(Integer, default=0)
-    is_active = Column(Boolean, default=True)
-    colour = Column(String(7))  # #RRGGBB — optional UI colour tag
+    category: Mapped[ListCategory] = Column(
+        Enum(ListCategory), nullable=False, index=True
+    )
+    value: Mapped[str] = Column(String(100), nullable=False)  # internal enum-style key
+    label: Mapped[str] = Column(String(255), nullable=False)  # display label
+    description: Mapped[Optional[str]] = Column(Text)
+    sort_order: Mapped[Optional[int]] = Column(Integer, default=0)
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    colour: Mapped[Optional[str]] = Column(
+        String(7)
+    )  # #RRGGBB — optional UI colour tag
 
-    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -218,8 +245,10 @@ class GovernanceCustomWorkflow(Base):
 
     __tablename__ = "governance_custom_workflows"
 
-    id = Column(String, primary_key=True, default=lambda: f"gcw_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gcw_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -227,38 +256,46 @@ class GovernanceCustomWorkflow(Base):
     )
 
     # ── Scope ─────────────────────────────────────────────────────────────────
-    workflow_type = Column(String(50), nullable=False)
+    workflow_type: Mapped[str] = Column(String(50), nullable=False)
     # "policy_approval" | "control_review" | "training_sign_off"
-    applies_to = Column(JSON, default=list)
+    applies_to: Mapped[Optional[Any]] = Column(JSON, default=list)
     # e.g. for policy_approval: ["aml_ctf_program", "cdd_policy"] (policy_type values)
     # empty list = applies to all
 
     # ── Stage definition ──────────────────────────────────────────────────────
-    stage_name = Column(String(100), nullable=False)
-    stage_key = Column(String(50), nullable=False)  # snake_case internal key
-    description = Column(Text)
-    sort_order = Column(Integer, nullable=False)
+    stage_name: Mapped[str] = Column(String(100), nullable=False)
+    stage_key: Mapped[str] = Column(
+        String(50), nullable=False
+    )  # snake_case internal key
+    description: Mapped[Optional[str]] = Column(Text)
+    sort_order: Mapped[int] = Column(Integer, nullable=False)
 
     # ── Approver routing ──────────────────────────────────────────────────────
-    approver_role = Column(Enum(ApprovalRole), nullable=False)
-    specific_user_id = Column(
+    approver_role: Mapped[ApprovalRole] = Column(Enum(ApprovalRole), nullable=False)
+    specific_user_id: Mapped[Optional[str]] = Column(
         String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     # used when approver_role = specific_user
 
     # ── SLA ───────────────────────────────────────────────────────────────────
-    sla_days = Column(Integer, default=5)
-    escalation_days = Column(Integer, default=10)
+    sla_days: Mapped[Optional[int]] = Column(Integer, default=5)
+    escalation_days: Mapped[Optional[int]] = Column(Integer, default=10)
     # escalate to supervisor if not actioned within escalation_days
 
     # ── Options ───────────────────────────────────────────────────────────────
-    is_mandatory = Column(Boolean, default=True)
-    requires_comment = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
+    is_mandatory: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    requires_comment: Mapped[Optional[bool]] = Column(Boolean, default=False)
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
 
-    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -284,8 +321,10 @@ class GovernanceCustomScoring(Base):
 
     __tablename__ = "governance_custom_scoring"
 
-    id = Column(String, primary_key=True, default=lambda: f"gcs_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gcs_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -293,7 +332,7 @@ class GovernanceCustomScoring(Base):
     )
 
     # ── Control effectiveness thresholds (0-100 score → rating) ──────────────
-    effectiveness_thresholds = Column(JSON, default=dict)
+    effectiveness_thresholds: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {
     #   "effective": 90.0,           ← score >= this → effective
     #   "largely_effective": 75.0,   ← score >= this → largely_effective
@@ -302,35 +341,41 @@ class GovernanceCustomScoring(Base):
     # }
 
     # ── Finding severity deductions (points deducted per finding) ─────────────
-    severity_deductions = Column(JSON, default=dict)
+    severity_deductions: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {"critical": 50.0, "high": 25.0, "moderate": 10.0, "low": 3.0, "advisory": 0.0}
 
     # ── Remediation SLA in calendar days by severity ──────────────────────────
-    remediation_sla_days = Column(JSON, default=dict)
+    remediation_sla_days: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {"critical": 14, "high": 30, "moderate": 60, "low": 90, "advisory": 180}
 
     # ── Training health score weights (must sum to 1.0) ───────────────────────
-    training_health_weights = Column(JSON, default=dict)
+    training_health_weights: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {"completion_pct": 0.40, "not_overdue_pct": 0.30,
     #  "not_expiry_risk_pct": 0.20, "attestation_pct": 0.10}
 
     # ── Policy health score weights ────────────────────────────────────────────
-    policy_health_weights = Column(JSON, default=dict)
+    policy_health_weights: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {"not_overdue_review_pct": 0.40, "published_pct": 0.30,
     #  "attested_pct": 0.20, "version_current_pct": 0.10}
 
     # ── Control health score weights ───────────────────────────────────────────
-    control_health_weights = Column(JSON, default=dict)
+    control_health_weights: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {"effective_pct": 0.40, "tested_pct": 0.30,
     #  "no_critical_findings_pct": 0.20, "remediation_current_pct": 0.10}
 
     # ── Overall governance health weights ──────────────────────────────────────
-    governance_health_weights = Column(JSON, default=dict)
+    governance_health_weights: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # {"policy_health": 0.30, "control_health": 0.40, "training_health": 0.30}
 
-    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -355,8 +400,10 @@ class GovernanceApprovalMatrix(Base):
 
     __tablename__ = "governance_approval_matrix"
 
-    id = Column(String, primary_key=True, default=lambda: f"gam_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gam_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -364,28 +411,34 @@ class GovernanceApprovalMatrix(Base):
     )
 
     # ── Match criteria (null = match all) ─────────────────────────────────────
-    policy_type = Column(String(100))  # null = all policy types
-    policy_category = Column(String(50))  # null = all categories
-    risk_level = Column(String(20))  # null = all risk levels
+    policy_type: Mapped[Optional[str]] = Column(String(100))  # null = all policy types
+    policy_category: Mapped[Optional[str]] = Column(String(50))  # null = all categories
+    risk_level: Mapped[Optional[str]] = Column(String(20))  # null = all risk levels
 
     # ── Required approvers (evaluated in order) ────────────────────────────────
-    required_approver_roles = Column(JSON, default=list)
+    required_approver_roles: Mapped[Optional[Any]] = Column(JSON, default=list)
     # ["compliance_reviewer", "approver"] — all roles must complete their stage
 
-    specific_approver_ids = Column(JSON, default=list)
+    specific_approver_ids: Mapped[Optional[Any]] = Column(JSON, default=list)
     # [user_id] — specific users who must approve (in addition to roles)
 
     # ── SLA ───────────────────────────────────────────────────────────────────
-    approval_sla_days = Column(Integer, default=5)
-    escalation_sla_days = Column(Integer, default=10)
+    approval_sla_days: Mapped[Optional[int]] = Column(Integer, default=5)
+    escalation_sla_days: Mapped[Optional[int]] = Column(Integer, default=10)
 
     # ── Notes ─────────────────────────────────────────────────────────────────
-    description = Column(Text)
-    priority = Column(Integer, default=0)  # lower = evaluated first
-    is_active = Column(Boolean, default=True)
+    description: Mapped[Optional[str]] = Column(Text)
+    priority: Mapped[Optional[int]] = Column(
+        Integer, default=0
+    )  # lower = evaluated first
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
 
-    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -415,8 +468,10 @@ class GovernanceDashboardMetric(Base):
 
     __tablename__ = "governance_dashboard_metrics"
 
-    id = Column(String, primary_key=True, default=lambda: f"gdm_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"gdm_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
@@ -424,29 +479,45 @@ class GovernanceDashboardMetric(Base):
     )
 
     # ── Identity ──────────────────────────────────────────────────────────────
-    name = Column(String(100), nullable=False)
-    description = Column(Text)
-    section = Column(String(50))  # dashboard section to display in
+    name: Mapped[str] = Column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = Column(Text)
+    section: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # dashboard section to display in
 
     # ── Formula ───────────────────────────────────────────────────────────────
-    formula_type = Column(String(20))  # count | percentage | sum | avg | score
-    entity_type = Column(String(50))  # policy | control | training_record | etc.
-    filter_config = Column(JSON, default=dict)
+    formula_type: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # count | percentage | sum | avg | score
+    entity_type: Mapped[Optional[str]] = Column(
+        String(50)
+    )  # policy | control | training_record | etc.
+    filter_config: Mapped[Optional[Any]] = Column(JSON, default=dict)
     # e.g. {"status": ["overdue", "expired"], "risk_area": "sanctions_screening"}
-    numerator_filter = Column(JSON, default=dict)  # for percentage metrics
-    denominator_filter = Column(JSON, default=dict)
+    numerator_filter: Mapped[Optional[Any]] = Column(
+        JSON, default=dict
+    )  # for percentage metrics
+    denominator_filter: Mapped[Optional[Any]] = Column(JSON, default=dict)
 
     # ── Display ───────────────────────────────────────────────────────────────
-    display_format = Column(String(20))  # number | percentage | score | boolean
-    display_unit = Column(String(20))  # "days", "%", "" etc.
-    sort_order = Column(Integer, default=0)
+    display_format: Mapped[Optional[str]] = Column(
+        String(20)
+    )  # number | percentage | score | boolean
+    display_unit: Mapped[Optional[str]] = Column(String(20))  # "days", "%", "" etc.
+    sort_order: Mapped[Optional[int]] = Column(Integer, default=0)
 
     # ── Thresholds (drive RAG status) ──────────────────────────────────────────
-    green_threshold = Column(Float)  # value ≤ this → green
-    amber_threshold = Column(Float)  # value ≤ this → amber; above → red
-    higher_is_better = Column(Boolean, default=True)
+    green_threshold: Mapped[Optional[float]] = Column(Float)  # value ≤ this → green
+    amber_threshold: Mapped[Optional[float]] = Column(
+        Float
+    )  # value ≤ this → amber; above → red
+    higher_is_better: Mapped[Optional[bool]] = Column(Boolean, default=True)
     # True: green when high (e.g. completion %); False: green when low (e.g. overdue count)
 
-    is_active = Column(Boolean, default=True)
-    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_active: Mapped[Optional[bool]] = Column(Boolean, default=True)
+    created_by: Mapped[Optional[str]] = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )

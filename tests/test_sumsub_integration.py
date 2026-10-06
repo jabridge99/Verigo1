@@ -12,6 +12,7 @@ from app.integrations.base import ProviderUnavailableError
 from app.integrations.identity import factory as identity_factory
 from app.integrations.identity.sumsub import SumsubProvider
 from app.models.customer import Customer, CustomerStatus, CustomerType
+from app.models.organisation import IndustryType, Organisation
 from app.models.usage import UsageEventType, UsageRecordStatus
 from app.services.usage_billing_service import (
     find_by_reference,
@@ -23,6 +24,13 @@ from app.services.usage_billing_service import (
 
 
 def _make_customer(db, org_id, status=CustomerStatus.draft):
+    if not db.query(Organisation).filter_by(id=org_id).first():
+        db.add(
+            Organisation(
+                id=org_id, name=f"Test Org {org_id}", industry_type=IndustryType.remittance
+            )
+        )
+        db.commit()
     customer = Customer(
         customer_ref=f"CUST-{uuid.uuid4().hex[:8]}",
         org_id=org_id,

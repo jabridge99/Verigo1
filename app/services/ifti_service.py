@@ -30,12 +30,14 @@ Usage:
 from __future__ import annotations
 
 import io
-from datetime import date, datetime
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
+from uuid import uuid4
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from app.models.ifti import IFTIDirection, IFTIRecord
 
@@ -596,20 +598,69 @@ IFTI_IN_COLUMNS: list[tuple[str, str]] = [
 ]
 
 
-def _fmt_date(d) -> str:
-    """Format date as DD/MM/YYYY string for AUSTRAC."""
-    if d is None:
-        return ""
-    if isinstance(d, (date, datetime)):
-        return d.strftime("%d/%m/%Y")
-    return str(d)
+# ── Dropdown validation lists ─────────────────────────────────────────────────
+# Exact option text and order transcribed from the real AUSTRAC IFTI-DRA_IN.xls
+# / IFTI-DRA_OUT.xls templates' own hidden "Data Validations" sheet (recovered
+# from the raw BIFF8 DV records, not guessed) -- including AUSTRAC's own
+# "- Please Select -" placeholder as the first option in every list.
+_MONEY_PROPERTY_OPTIONS = ["- Please Select -", "Money", "Property"]
+_BUSINESS_STRUCTURE_OPTIONS = [
+    "- Please Select -",
+    "Association",
+    "Company",
+    "Government body",
+    "Partnership",
+    "Registered body",
+    "Trust",
+]
+_YES_NO_OPTIONS = ["- Please Select -", "Yes", "No"]
+_ID_TYPE_OPTIONS = [
+    "- Please Select -",
+    "Alien registration number",
+    "Bank account",
+    "Benefits card/ID",
+    "Birth certificate",
+    "Business registration/licence",
+    "Credit/debit card",
+    "Customer account/ID",
+    "Driver's licence",
+    "Employee ID",
+    "Employer number",
+    "Identity card/number",
+    "Membership ID",
+    "Passport",
+    "Photo ID",
+    "Security ID",
+    "Social security ID",
+    "Student ID",
+    "Tax number/ID (except Australian tax file numbers (TFN))",
+    "Telephone/fax number",
+    "Other (provide description)",
+]
+
+# Column sub-header text -> its dropdown list, as wired in the real templates.
+# Matched by label text (not column index) so it stays correct independently
+# for IFTI_IN_COLUMNS and IFTI_OUT_COLUMNS, which don't share every column.
+_DROPDOWN_OPTIONS_BY_LABEL: dict[str, list[str]] = {
+    "Type of transfer": _MONEY_PROPERTY_OPTIONS,
+    "Business structure (if not an individual)": _BUSINESS_STRUCTURE_OPTIONS,
+    "Is this person/organisation accepting the money or property?": _YES_NO_OPTIONS,
+    "Is this person/organisation sending the transfer instruction?": _YES_NO_OPTIONS,
+    "Is this person/organisation distributing money or property?": _YES_NO_OPTIONS,
+    (
+        "Is there a separate retail outlet/business location at which the "
+        "money or property is being distributed?"
+    ): _YES_NO_OPTIONS,
+    "ID type (1)": _ID_TYPE_OPTIONS,
+    "ID type (2)": _ID_TYPE_OPTIONS,
+}
 
 
 def _row_out(r: IFTIRecord) -> list:
     """Map IFTIRecord → 112-value list matching IFTI-OUT column order."""
     return [
-        _fmt_date(r.date_received),
-        _fmt_date(r.date_available),
+        r.date_received,
+        r.date_available,
         r.currency_code or "AUD",
         r.total_amount or "",
         r.transfer_type or "Money",
@@ -618,7 +669,7 @@ def _row_out(r: IFTIRecord) -> list:
         # Ordering customer
         r.oc_full_name or "",
         r.oc_other_name or "",
-        _fmt_date(r.oc_dob),
+        r.oc_dob,
         r.oc_address or "",
         r.oc_city or "",
         r.oc_state or "",
@@ -632,7 +683,7 @@ def _row_out(r: IFTIRecord) -> list:
         r.oc_phone or "",
         r.oc_email or "",
         r.oc_occupation or "",
-        r.oc_abn or "",
+        r.oc_abn or r.oc_acn or r.oc_arbn or "",
         r.oc_customer_number or "",
         r.oc_account_number or "",
         r.oc_business_structure or "",
@@ -648,7 +699,7 @@ def _row_out(r: IFTIRecord) -> list:
         r.oc_electronic_source or "",
         # Beneficiary customer
         r.bc_full_name or "",
-        _fmt_date(r.bc_dob),
+        r.bc_dob,
         r.bc_business_name or "",
         r.bc_address or "",
         r.bc_city or "",
@@ -663,7 +714,7 @@ def _row_out(r: IFTIRecord) -> list:
         r.bc_phone or "",
         r.bc_email or "",
         r.bc_occupation or "",
-        r.bc_abn or "",
+        r.bc_abn or r.bc_acn or r.bc_arbn or "",
         r.bc_business_structure or "",
         r.bc_account_number or "",
         r.bc_institution_name or "",
@@ -687,7 +738,7 @@ def _row_out(r: IFTIRecord) -> list:
         # Sending instruction (if different)
         r.send_full_name or "",
         r.send_other_name or "",
-        _fmt_date(r.send_dob),
+        r.send_dob,
         r.send_address or "",
         r.send_city or "",
         r.send_state or "",
@@ -699,7 +750,7 @@ def _row_out(r: IFTIRecord) -> list:
         r.send_phone or "",
         r.send_email or "",
         r.send_occupation or "",
-        r.send_abn or "",
+        r.send_abn or r.send_acn or r.send_arbn or "",
         r.send_business_structure or "",
         # Receiving transfer instruction
         r.recv_full_name or "",
@@ -736,8 +787,8 @@ def _row_out(r: IFTIRecord) -> list:
 def _row_in(r: IFTIRecord) -> list:
     """Map IFTIRecord → 115-value list matching IFTI-IN column order."""
     return [
-        _fmt_date(r.date_received),
-        _fmt_date(r.date_available),
+        r.date_received,
+        r.date_available,
         r.currency_code or "AUD",
         r.total_amount or "",
         r.transfer_type or "Money",
@@ -746,7 +797,7 @@ def _row_in(r: IFTIRecord) -> list:
         # Ordering customer
         r.oc_full_name or "",
         r.oc_other_name or "",
-        _fmt_date(r.oc_dob),
+        r.oc_dob,
         r.oc_address or "",
         r.oc_city or "",
         r.oc_state or "",
@@ -760,13 +811,13 @@ def _row_in(r: IFTIRecord) -> list:
         r.oc_phone or "",
         r.oc_email or "",
         r.oc_occupation or "",
-        r.oc_abn or "",
+        r.oc_abn or r.oc_acn or r.oc_arbn or "",
         r.oc_customer_number or "",
         r.oc_account_number or "",
         r.oc_business_structure or "",
         # Beneficiary customer (no ID section for IN)
         r.bc_full_name or "",
-        _fmt_date(r.bc_dob),
+        r.bc_dob,
         r.bc_business_name or "",
         r.bc_address or "",
         r.bc_city or "",
@@ -781,7 +832,7 @@ def _row_in(r: IFTIRecord) -> list:
         r.bc_phone or "",
         r.bc_email or "",
         r.bc_occupation or "",
-        r.bc_abn or "",
+        r.bc_abn or r.bc_acn or r.bc_arbn or "",
         r.bc_business_structure or "",
         r.bc_account_number or "",
         r.bc_institution_name or "",
@@ -790,7 +841,7 @@ def _row_in(r: IFTIRecord) -> list:
         # Accept instruction block (IN: full details + yes/no at end)
         r.accept_full_name or "",
         r.accept_other_name or "",
-        _fmt_date(r.accept_dob),
+        r.accept_dob,
         r.accept_address or "",
         r.accept_city or "",
         r.accept_state or "",
@@ -817,7 +868,7 @@ def _row_in(r: IFTIRecord) -> list:
         # Sending instruction (if different) — IN has country fields
         r.send_full_name or "",
         r.send_other_name or "",
-        _fmt_date(r.send_dob),
+        r.send_dob,
         r.send_address or "",
         r.send_city or "",
         r.send_state or "",
@@ -831,7 +882,7 @@ def _row_in(r: IFTIRecord) -> list:
         r.send_phone or "",
         r.send_email or "",
         r.send_occupation or "",
-        r.send_abn or "",
+        r.send_abn or r.send_acn or r.send_arbn or "",
         r.send_business_structure or "",
         # Receiving transfer instruction (IN: 7 cols, no country)
         r.recv_full_name or "",
@@ -926,6 +977,24 @@ def generate_ifti_excel(
         cell.alignment = _CENTER
         cell.border = _BORDER
 
+    # Column-level number formats, matching the real AUSTRAC template exactly
+    # (date-of-birth/transaction-date columns are real date cells formatted
+    # "dd/mmm/yyyy", not text; "Total amount/value" is a real number cell
+    # formatted "#,##0.00" — confirmed against AUSTRAC's own IFTI-DRA_IN.xls
+    # and IFTI-DRA_OUT.xls templates, not guessed).
+    _DATE_FORMAT = "dd/mmm/yyyy"
+    _AMOUNT_FORMAT = "#,##0.00"
+    column_formats: list[Optional[str]] = []
+    for _, label in columns:
+        if label == "Date of birth (if an individual)" or label.startswith(
+            "Date money/property"
+        ):
+            column_formats.append(_DATE_FORMAT)
+        elif label == "Total amount/value":
+            column_formats.append(_AMOUNT_FORMAT)
+        else:
+            column_formats.append(None)
+
     # ── Rows 3+: Data ─────────────────────────────────────────────────────────
     for ri, record in enumerate(records, start=3):
         row_data = row_mapper(record)
@@ -933,6 +1002,9 @@ def generate_ifti_excel(
             cell = ws.cell(row=ri, column=ci, value=value)
             cell.font = _DATA_FONT
             cell.alignment = _LEFT
+            fmt = column_formats[ci - 1]
+            if fmt and value is not None and value != "":
+                cell.number_format = fmt
             cell.border = _BORDER
 
     # ── Column widths ─────────────────────────────────────────────────────────
@@ -970,24 +1042,42 @@ def generate_ifti_excel(
     ws.freeze_panes = "A3"
 
     # ── Instructions sheet ────────────────────────────────────────────────────
+    # Text and row placement verified verbatim against AUSTRAC's own
+    # IFTI-DRA_IN.xls / IFTI-DRA_OUT.xls templates, not paraphrased.
     wi = wb.create_sheet("Instructions")
-    wi["A1"] = (
+    wi["A3"] = (
         "International Funds Transfer Instruction Report under a Designated Remittance Arrangement"
     )
-    wi["A1"].font = Font(bold=True, size=11)
-    wi["A3"] = (
+    wi["A3"].font = Font(bold=True, size=10)
+    wi["A4"] = (
         "Complete this form if you are a reporting entity receiving an international funds transfer "
         "instruction under a designated remittance arrangement as specified under items 3 and 4 of "
         "section 46 of the Anti-Money Laundering and Counter-Terrorism Financing Act 2006 (AML/CTF Act)."
     )
     wi["A5"] = (
+        "For assistance in completing this form, refer to the relevant explanatory guide, or visit "
+        "www.austrac.gov.au or call 1300 021 037."
+    )
+    wi["A6"] = (
         "Once complete, copy and paste the reports from this spreadsheet into the AUSTRAC Online "
         "spreadsheet and use the 'submit' button to send the reports to AUSTRAC."
     )
     wi["A7"] = (
-        "This spreadsheet may only be used to report transactions which involved no more than a single "
-        "ordering customer and beneficiary customer."
+        "Please note: This spreadsheet may only be used to report transactions which involved no more "
+        "than a single ordering customer and beneficiary customer. If you are reporting an international "
+        "funds transfer instruction which involves multiple transferors or multiple transferees, use the "
+        "single data entry reporting method instead."
     )
+    wi["A8"] = "Privacy statement"
+    wi["A8"].font = Font(bold=True, size=8)
+    wi["A9"] = (
+        "AUSTRAC is collecting the information on this form as required under section 45 of the "
+        "AML/CTF Act. Information reported to AUSTRAC is made available to certain revenue, law "
+        "enforcement, national security, regulatory and social justice bodies and may be disclosed to "
+        "other Commonwealth and international bodies pursuant to Part 11, Division 4 of the AML/CTF Act."
+    )
+    for cell in ("A4", "A5", "A6", "A7", "A9"):
+        wi[cell].font = Font(size=8)
     wi.column_dimensions["A"].width = 120
     for row in wi.iter_rows():
         for c in row:
@@ -995,6 +1085,42 @@ def generate_ifti_excel(
 
     # ── Reorder sheets ────────────────────────────────────────────────────────
     wb.move_sheet("Instructions", offset=1)
+
+    # ── Data Validations sheet (hidden) ─────────────────────────────────────
+    # Rebuilds AUSTRAC's own dropdown wiring: a hidden sheet holding one option
+    # block per dropdown column (in left-to-right column order, duplicating a
+    # list's text each time it recurs rather than sharing one range -- matching
+    # the real templates' own layout exactly), with each data column's cells
+    # restricted to a list formula pointing at its own block. Applied over the
+    # actual populated rows (3..2+n) rather than a large blank buffer, since
+    # the real templates' own DV ranges covered exactly their filled rows too.
+    # Created last (after the reorder above) so it lands as the third tab,
+    # matching the real templates' [main, Instructions, Data Validations] order.
+    dropdown_cols = [
+        (ci, label)
+        for ci, (_, label) in enumerate(columns, start=1)
+        if label in _DROPDOWN_OPTIONS_BY_LABEL
+    ]
+    if dropdown_cols and records:
+        wdv = wb.create_sheet("Data Validations")
+        dv_row = 1
+        last_row = 2 + len(records)
+        for ci, label in dropdown_cols:
+            options = _DROPDOWN_OPTIONS_BY_LABEL[label]
+            start_row = dv_row
+            for opt in options:
+                wdv.cell(row=dv_row, column=1, value=opt)
+                dv_row += 1
+            end_row = dv_row - 1
+            dv = DataValidation(
+                type="list",
+                formula1=f"'Data Validations'!$A${start_row}:$A${end_row}",
+                allow_blank=True,
+            )
+            col_letter = get_column_letter(ci)
+            dv.add(f"{col_letter}3:{col_letter}{last_row}")
+            ws.add_data_validation(dv)
+        wdv.sheet_state = "hidden"
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -1037,3 +1163,60 @@ def get_ifti(db, ifti_id: str) -> Optional[IFTIRecord]:
     from app.models.ifti import IFTIRecord
 
     return db.query(IFTIRecord).filter(IFTIRecord.ifti_id == ifti_id).first()
+
+
+# ── Generate from transaction ───────────────────────────────────────────────
+
+IFTI_DEADLINE_DAYS = 14  # 10 business days ~= 14 calendar days, matching the
+# same simplified (non-business-day-aware) convention reporting_service.py
+# already uses for TTR/SMR/IFTIReport due dates.
+
+
+def generate_ifti_from_transaction(
+    txn, customer, created_by: str, org_code: Optional[str] = None
+) -> IFTIRecord:
+    """
+    Populate a draft IFTIRecord from a cross-border transaction + its customer.
+    Returns an unsaved ORM object -- caller must db.add() and db.commit().
+    """
+    direction = (
+        IFTIDirection.incoming
+        if txn.direction.value == "incoming"
+        else IFTIDirection.outgoing
+    )
+    txn_date = (
+        txn.transaction_date.date()
+        if isinstance(txn.transaction_date, datetime)
+        else txn.transaction_date
+    )
+    due_date = (datetime.now(timezone.utc) + timedelta(days=IFTI_DEADLINE_DAYS)).date()
+
+    return IFTIRecord(
+        ifti_id=f"IFTI-{uuid4().hex[:12].upper()}",
+        industry_id=txn.org_id,
+        direction=direction,
+        created_by=created_by,
+        date_received=txn_date,
+        date_available=txn_date,
+        currency_code=txn.currency,
+        total_amount=txn.amount,
+        transaction_reference=txn.reference,
+        due_date=due_date,
+        oc_full_name=customer.full_name,
+        oc_dob=getattr(customer, "date_of_birth", None),
+        oc_address=getattr(customer, "address_line1", None),
+        oc_city=getattr(customer, "city", None),
+        oc_state=getattr(customer, "state", None),
+        oc_postcode=getattr(customer, "postcode", None),
+        oc_country=getattr(customer, "country_of_residence", None),
+        oc_phone=getattr(customer, "phone", None),
+        oc_email=getattr(customer, "email", None),
+        oc_occupation=getattr(customer, "occupation", None),
+        oc_account_number=getattr(txn, "source_account_number", None),
+        bc_full_name=txn.destination_account_name,
+        bc_account_number=txn.destination_account_number,
+        bc_institution_name=txn.destination_bank_name,
+        bc_institution_country=txn.destination_country,
+        bc_country=txn.destination_country,
+        reason_for_transfer=txn.purpose,
+    )

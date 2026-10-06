@@ -167,6 +167,149 @@ MSB_ACCOUNT_TYPE_CODES = {
     "VALCARD": "Stored value card account",
 }
 
+# ── Non-cash breakdown specs — one definitive list per industry/direction ──────
+#
+# Each (code, kind) is transcribed element-for-element from the real AUSTRAC
+# TTR-FBS-3-0 / TTR-GS-2-0 / TTR-MSB-2-0 XSDs' nonCashReceived / nonCashProvided
+# (and, for GS only, nonCashContraProvided / nonCashContraReceived) complexTypes
+# — not approximated or renamed to a generic vocabulary. ISI is intentionally
+# excluded: this platform does not serve the investment/super/insurance sector.
+#
+# "kind" selects the element's AUSTRAC XSD type, which determines its shape:
+#   "amount"    — NonCashAmount:             one amount field
+#   "cheque"    — NonCashAmountChequeOptional: an amount field; the schema also
+#                 allows an optional drawerName/payeeName pair per cheque, which
+#                 is not modelled here (same simplification already applied to
+#                 oti/oto before this pass) — the amount is the compliance-
+#                 relevant figure, and capturing individual cheque instruments
+#                 would need a repeating sub-form this data model doesn't have.
+#   "other"     — NonCashAmountOther:        amount + free-text description
+#   "ecurrency" — NonCashAmountECurrency:    amount + free-text description
+
+NON_CASH_RECEIVED_SPEC: dict[TTRIndustryType, list[tuple[str, str]]] = {
+    TTRIndustryType.FBS: [
+        ("fai", "amount"), ("iti", "amount"), ("dti", "amount"),
+        ("chi", "cheque"), ("bci", "cheque"), ("bdi", "cheque"),
+        ("tci", "cheque"), ("moi", "cheque"),
+        ("ldi", "amount"), ("ndi", "amount"), ("bpi", "amount"),
+        ("dfi", "amount"), ("sei", "amount"), ("bui", "amount"),
+        ("svi", "amount"), ("oti", "other"),
+    ],
+    TTRIndustryType.GS: [
+        ("fai", "amount"), ("gci", "amount"), ("egi", "amount"),
+        ("oci", "amount"), ("cri", "amount"), ("wti", "amount"),
+        ("tci", "cheque"), ("chi", "cheque"), ("bci", "cheque"), ("bdi", "cheque"),
+        ("svi", "amount"), ("oti", "other"),
+    ],
+    TTRIndustryType.MSB: [
+        ("fai", "amount"), ("iti", "amount"), ("dti", "amount"),
+        ("chi", "cheque"), ("bci", "cheque"), ("bdi", "cheque"),
+        ("tci", "cheque"), ("moi", "cheque"),
+        ("sci", "amount"), ("ssi", "amount"), ("ldi", "amount"),
+        ("eci", "ecurrency"), ("svi", "amount"), ("oti", "other"),
+    ],
+}  # fmt: skip
+
+NON_CASH_PROVIDED_SPEC: dict[TTRIndustryType, list[tuple[str, str]]] = {
+    TTRIndustryType.FBS: [
+        ("fao", "amount"), ("ito", "amount"), ("dto", "amount"),
+        ("cho", "cheque"), ("bco", "cheque"), ("bdo", "cheque"),
+        ("tco", "cheque"), ("moo", "cheque"),
+        ("hpo", "amount"), ("lro", "amount"), ("ndo", "amount"),
+        ("cpo", "amount"), ("dfo", "amount"), ("seo", "amount"),
+        ("buo", "amount"), ("sio", "amount"), ("sto", "amount"),
+        ("fco", "amount"), ("oto", "other"),
+    ],
+    TTRIndustryType.GS: [
+        ("fao", "amount"), ("ito", "amount"), ("gco", "amount"),
+        ("bio", "amount"), ("bpo", "amount"),
+        ("cho", "cheque"),
+        ("sio", "amount"), ("sto", "amount"), ("oto", "other"),
+    ],
+    TTRIndustryType.MSB: [
+        ("fao", "amount"), ("ito", "amount"), ("dto", "amount"),
+        ("cho", "cheque"), ("tco", "cheque"), ("moo", "cheque"),
+        ("sdo", "amount"), ("sso", "amount"), ("lro", "amount"),
+        ("eco", "ecurrency"), ("sio", "amount"), ("sto", "amount"),
+        ("fco", "amount"), ("oto", "other"),
+    ],
+}  # fmt: skip
+
+# GS-only: its moneyReceived/moneyProvided is a genuine xs:choice (only one of
+# the two is ever sent), but each side can nest the *opposite* direction's
+# lines for a simultaneous exchange (e.g. GAM_EXCH: cash in and chips out at
+# the same moment) — nonCashContraProvided inside moneyReceived, and
+# nonCashContraReceived (same element set as nonCashReceived) inside
+# moneyProvided.
+NON_CASH_CONTRA_PROVIDED_SPEC: list[tuple[str, str]] = [
+    ("fao", "amount"), ("ito", "amount"), ("gco", "amount"),
+    ("bio", "amount"), ("bpo", "amount"), ("mro", "amount"),
+    ("cho", "cheque"),
+    ("sio", "amount"), ("sto", "amount"), ("oto", "other"),
+]  # fmt: skip
+NON_CASH_CONTRA_RECEIVED_SPEC: list[tuple[str, str]] = NON_CASH_RECEIVED_SPEC[
+    TTRIndustryType.GS
+]
+
+
+def _non_cash_field_names(code: str, kind: str, prefix: str) -> list[str]:
+    """Flat industry_detail dict key(s) backing one non-cash element."""
+    if kind == "other":
+        return [f"{prefix}_{code}_desc", f"{prefix}_{code}_amount"]
+    if kind == "ecurrency":
+        return [f"{prefix}_{code}_description", f"{prefix}_{code}_amount"]
+    return [f"{prefix}_{code}"]
+
+
+def _non_cash_column_names(spec: list[tuple[str, str]], prefix: str) -> list[str]:
+    """Ordered flat column-name list for a non-cash spec, for CSV export."""
+    names: list[str] = []
+    for code, kind in spec:
+        names.extend(_non_cash_field_names(code, kind, prefix))
+    return names
+
+
+def _non_cash_detail_fields(spec: list[tuple[str, str]], prefix: str) -> dict:
+    """None-valued dict entries for every field a non-cash spec needs, to be
+    merged into a `_*_detail()` industry dict — so every real AUSTRAC element
+    has somewhere to be recorded, not just the subset a prior pass happened
+    to transcribe."""
+    fields: dict = {}
+    for code, kind in spec:
+        for name in _non_cash_field_names(code, kind, prefix):
+            fields[name] = None
+    return fields
+
+
+def _build_non_cash_section(
+    detail: dict, spec: list[tuple[str, str]], prefix: str
+) -> Optional[dict]:
+    """Build a nonCashReceived/nonCashProvided (or contra) payload section
+    from a flat detail dict, per the real per-industry element list. Returns
+    None if nothing in this section was actually set, so an empty section
+    never fabricates a claim that non-cash detail was reviewed."""
+    section: dict = {}
+    for code, kind in spec:
+        if kind == "other":
+            amount = detail.get(f"{prefix}_{code}_amount")
+            if amount is not None:
+                section[code] = {
+                    "amount": amount,
+                    "desc": detail.get(f"{prefix}_{code}_desc"),
+                }
+        elif kind == "ecurrency":
+            amount = detail.get(f"{prefix}_{code}_amount")
+            if amount is not None:
+                section[code] = {
+                    "amount": amount,
+                    "description": detail.get(f"{prefix}_{code}_description"),
+                }
+        else:  # "amount" or "cheque" — both are a bare amount field here
+            amount = detail.get(f"{prefix}_{code}")
+            if amount is not None:
+                section[code] = {"amount": amount}
+    return section or None
+
 
 # ── Industry-specific auto-population ─────────────────────────────────────────
 
@@ -257,37 +400,21 @@ def _fbs_detail(txn, customer) -> dict:
         "money_received_foreign_amount": _fmt_amount(getattr(txn, "amount", None))
         if is_foreign
         else None,
-        # Non-cash received (AUSTRAC element codes — fai/iti/dti/chi/bci etc.)
-        # fai = foreign agent incoming | iti = international transfer in | dti = domestic transfer in
-        # chi = cheque in | bci = bank cheque in | bdi = bank draft in | tci = traveller's cheque in
-        # moi = money order in | ldi = lease/deposit in | ndi = not otherwise included
-        # bpi = BPAY in | dfi = direct funds in | sei = security/equity in | bui = bullion in
-        # svi = stored value in | oti = other in
-        "non_cash_received_fai": None,  # foreign agent incoming (amount AUD)
-        "non_cash_received_iti": None,  # international transfer in
-        "non_cash_received_dti": None,  # domestic transfer in
-        "non_cash_received_chi": None,  # cheque in
-        "non_cash_received_bci": None,  # bank cheque in
-        "non_cash_received_bdi": None,  # bank draft in
-        "non_cash_received_tci": None,  # traveller's cheque in
-        "non_cash_received_moi": None,  # money order in
-        "non_cash_received_bui": None,  # bullion in (AUD)
-        "non_cash_received_svi": None,  # stored value card in
-        "non_cash_received_oti_desc": None,  # other in — description
-        "non_cash_received_oti_amount": None,  # other in — amount AUD
-        # Money provided (cash out) — same element codes with suffix 'o'
+        # Non-cash received/provided — every real element the TTR-FBS-3-0
+        # schema defines (see NON_CASH_RECEIVED_SPEC/NON_CASH_PROVIDED_SPEC),
+        # not just the subset a prior pass happened to transcribe.
+        **_non_cash_detail_fields(
+            NON_CASH_RECEIVED_SPEC[TTRIndustryType.FBS], "non_cash_received"
+        ),
+        # Money provided (cash out)
         "money_provided_aud_cash": _fmt_amount(
             getattr(txn, "amount_aud", None) or getattr(txn, "amount", None)
         )
         if _infer_cash_type(txn) in ("cash_withdrawal", "cash_exchange")
         else None,
-        "non_cash_provided_fao": None,  # foreign agent outgoing
-        "non_cash_provided_ito": None,  # international transfer out
-        "non_cash_provided_dto": None,  # domestic transfer out
-        "non_cash_provided_buo": None,  # bullion out
-        "non_cash_provided_sto": None,  # settlement out
-        "non_cash_provided_oto_desc": None,
-        "non_cash_provided_oto_amount": None,
+        **_non_cash_detail_fields(
+            NON_CASH_PROVIDED_SPEC[TTRIndustryType.FBS], "non_cash_provided"
+        ),
         # ── Account (AccountOptBSB — BSB is optional for FBS) ─────────────
         "account_title": getattr(txn, "source_account_name", None)
         or getattr(txn, "destination_account_name", None),
@@ -382,35 +509,25 @@ def _gs_detail(txn, customer) -> dict:
         # cashContra amounts (GS-only — used for GAM_EXCH service type)
         "cash_contra_aud_received": None,  # cash received contra (simultaneous exchange)
         "cash_contra_aud_provided": None,  # cash provided contra
-        # Non-cash received (GS-specific AUSTRAC element codes):
-        # fai = foreign agent incoming
-        # gci = gaming chips in | egi = e-gaming currency in | oci = other chips/tokens in
-        # cri = credit/debit card in | wti = winnings tokens in
-        # tci = traveller's cheque in | chi = cheque in | bci = bank cheque in | bdi = bank draft in
-        # svi = stored value card in | oti = other in
-        "non_cash_received_fai": None,
-        "non_cash_received_gci": None,  # gaming chips in (amount AUD)
-        "non_cash_received_egi": None,  # e-gaming currency in
-        "non_cash_received_oci": None,  # other chips/tokens in
-        "non_cash_received_cri": None,  # credit card in
-        "non_cash_received_wti": None,  # winnings tokens in
-        "non_cash_received_svi": None,  # stored value card in
-        "non_cash_received_oti_desc": None,
-        "non_cash_received_oti_amount": None,
-        # Non-cash provided (GS):
-        # fao = foreign agent out | ito = international transfer out | gco = gaming chips out
-        # bio = betting in out | bpo = bonus payout | mro = manual refund out | cho = cheque out
-        # sio = stored value issued | sto = security transaction out | oto = other out
-        "non_cash_provided_fao": None,
-        "non_cash_provided_ito": None,
-        "non_cash_provided_gco": None,  # gaming chips out
-        "non_cash_provided_bio": None,  # betting payout out
-        "non_cash_provided_bpo": None,  # bonus payout
-        "non_cash_provided_mro": None,  # manual refund
-        "non_cash_provided_cho": None,  # cheque out
-        "non_cash_provided_sio": None,  # stored value issued
-        "non_cash_provided_oto_desc": None,
-        "non_cash_provided_oto_amount": None,
+        # Non-cash received/provided — every real element the TTR-GS-2-0
+        # schema defines, split correctly between the plain nonCashReceived/
+        # nonCashProvided sets and the "contra" sets (nonCashContraProvided
+        # nests inside moneyReceived, nonCashContraReceived nests inside
+        # moneyProvided — used for a simultaneous exchange, e.g. GAM_EXCH).
+        # `mro` (manual refund out) only exists in the contra-provided set,
+        # not the plain one — a real distinction the prior version collapsed.
+        **_non_cash_detail_fields(
+            NON_CASH_RECEIVED_SPEC[TTRIndustryType.GS], "non_cash_received"
+        ),
+        **_non_cash_detail_fields(
+            NON_CASH_PROVIDED_SPEC[TTRIndustryType.GS], "non_cash_provided"
+        ),
+        **_non_cash_detail_fields(
+            NON_CASH_CONTRA_PROVIDED_SPEC, "non_cash_contra_provided"
+        ),
+        **_non_cash_detail_fields(
+            NON_CASH_CONTRA_RECEIVED_SPEC, "non_cash_contra_received"
+        ),
         # ── Account (AccountNoBSB — NO BSB field in GS schema) ────────────
         "account_title": None,  # account title/name (maxLength 140)
         "account_number": None,  # account number (maxLength 34) — no BSB
@@ -622,32 +739,18 @@ def _msb_detail(txn, customer) -> dict:
         "receiver_account_title": getattr(txn, "destination_account_name", None),
         "receiver_account_number": getattr(txn, "destination_account_number", None),
         "receiver_account_type": None,  # use MSB_ACCOUNT_TYPE_CODES keys
-        # ── Non-cash received (MSB codes) ─────────────────────────────────
-        # MSB: cheque | moneyOrder | travellersCheque | remittance | eCurrency
-        #      storedValueCard | otherNonCash
-        "non_cash_received_cheque_amount": None,
-        "non_cash_received_cheque_drawer": None,
-        "non_cash_received_cheque_payee": None,
-        "non_cash_received_money_order": None,
-        "non_cash_received_travellers_cheque": None,
-        "non_cash_received_remittance": None,
-        "non_cash_received_stored_value_card": None,
-        "non_cash_received_ecurrency_desc": None,
-        "non_cash_received_ecurrency_amount": None,
-        "non_cash_received_other_desc": None,  # maxLength 30
-        "non_cash_received_other_amount": None,
-        # Non-cash provided (same types)
-        "non_cash_provided_cheque_amount": None,
-        "non_cash_provided_cheque_drawer": None,
-        "non_cash_provided_cheque_payee": None,
-        "non_cash_provided_money_order": None,
-        "non_cash_provided_travellers_cheque": None,
-        "non_cash_provided_remittance": None,
-        "non_cash_provided_stored_value_card": None,
-        "non_cash_provided_ecurrency_desc": None,
-        "non_cash_provided_ecurrency_amount": None,
-        "non_cash_provided_other_desc": None,
-        "non_cash_provided_other_amount": None,
+        # Non-cash received/provided — every real element the TTR-MSB-2-0
+        # schema defines (see NON_CASH_RECEIVED_SPEC/NON_CASH_PROVIDED_SPEC).
+        # The prior version used a generic cheque/money-order/eCurrency
+        # vocabulary that collapsed several distinct real element codes
+        # (e.g. chi/bci/bdi/tci/moi all mapped to one "cheque" field) — now
+        # uses the real AUSTRAC element codes like every other industry.
+        **_non_cash_detail_fields(
+            NON_CASH_RECEIVED_SPEC[TTRIndustryType.MSB], "non_cash_received"
+        ),
+        **_non_cash_detail_fields(
+            NON_CASH_PROVIDED_SPEC[TTRIndustryType.MSB], "non_cash_provided"
+        ),
         # ── Agent chain (sub-agent / network member) ──────────────────────
         "agent_name": None,
         "agent_austrac_id": None,
@@ -791,27 +894,14 @@ _INDUSTRY_EXTRA_COLUMNS: dict[TTRIndustryType, list[str]] = {
         "money_received_foreign_currency_code",
         "money_received_foreign_amount",
         # Non-cash received
-        "non_cash_received_fai",
-        "non_cash_received_iti",
-        "non_cash_received_dti",
-        "non_cash_received_chi",
-        "non_cash_received_bci",
-        "non_cash_received_bdi",
-        "non_cash_received_tci",
-        "non_cash_received_moi",
-        "non_cash_received_bui",
-        "non_cash_received_svi",
-        "non_cash_received_oti_desc",
-        "non_cash_received_oti_amount",
+        *_non_cash_column_names(
+            NON_CASH_RECEIVED_SPEC[TTRIndustryType.FBS], "non_cash_received"
+        ),
         # Non-cash provided
         "money_provided_aud_cash",
-        "non_cash_provided_fao",
-        "non_cash_provided_ito",
-        "non_cash_provided_dto",
-        "non_cash_provided_buo",
-        "non_cash_provided_sto",
-        "non_cash_provided_oto_desc",
-        "non_cash_provided_oto_amount",
+        *_non_cash_column_names(
+            NON_CASH_PROVIDED_SPEC[TTRIndustryType.FBS], "non_cash_provided"
+        ),
         # Account
         "account_title",
         "account_bsb",
@@ -856,25 +946,18 @@ _INDUSTRY_EXTRA_COLUMNS: dict[TTRIndustryType, list[str]] = {
         "cash_aud_provided",
         "cash_contra_aud_received",
         "cash_contra_aud_provided",
-        "non_cash_received_fai",
-        "non_cash_received_gci",
-        "non_cash_received_egi",
-        "non_cash_received_oci",
-        "non_cash_received_cri",
-        "non_cash_received_wti",
-        "non_cash_received_svi",
-        "non_cash_received_oti_desc",
-        "non_cash_received_oti_amount",
-        "non_cash_provided_fao",
-        "non_cash_provided_ito",
-        "non_cash_provided_gco",
-        "non_cash_provided_bio",
-        "non_cash_provided_bpo",
-        "non_cash_provided_mro",
-        "non_cash_provided_cho",
-        "non_cash_provided_sio",
-        "non_cash_provided_oto_desc",
-        "non_cash_provided_oto_amount",
+        *_non_cash_column_names(
+            NON_CASH_RECEIVED_SPEC[TTRIndustryType.GS], "non_cash_received"
+        ),
+        *_non_cash_column_names(
+            NON_CASH_PROVIDED_SPEC[TTRIndustryType.GS], "non_cash_provided"
+        ),
+        *_non_cash_column_names(
+            NON_CASH_CONTRA_PROVIDED_SPEC, "non_cash_contra_provided"
+        ),
+        *_non_cash_column_names(
+            NON_CASH_CONTRA_RECEIVED_SPEC, "non_cash_contra_received"
+        ),
         "account_title",
         "account_number",
         "game_type",
@@ -989,26 +1072,12 @@ _INDUSTRY_EXTRA_COLUMNS: dict[TTRIndustryType, list[str]] = {
         "receiver_account_title",
         "receiver_account_number",
         "receiver_account_type",
-        "non_cash_received_cheque_amount",
-        "non_cash_received_cheque_drawer",
-        "non_cash_received_money_order",
-        "non_cash_received_travellers_cheque",
-        "non_cash_received_remittance",
-        "non_cash_received_stored_value_card",
-        "non_cash_received_ecurrency_desc",
-        "non_cash_received_ecurrency_amount",
-        "non_cash_received_other_desc",
-        "non_cash_received_other_amount",
-        "non_cash_provided_cheque_amount",
-        "non_cash_provided_cheque_drawer",
-        "non_cash_provided_money_order",
-        "non_cash_provided_travellers_cheque",
-        "non_cash_provided_remittance",
-        "non_cash_provided_stored_value_card",
-        "non_cash_provided_ecurrency_desc",
-        "non_cash_provided_ecurrency_amount",
-        "non_cash_provided_other_desc",
-        "non_cash_provided_other_amount",
+        *_non_cash_column_names(
+            NON_CASH_RECEIVED_SPEC[TTRIndustryType.MSB], "non_cash_received"
+        ),
+        *_non_cash_column_names(
+            NON_CASH_PROVIDED_SPEC[TTRIndustryType.MSB], "non_cash_provided"
+        ),
         "agent_name",
         "agent_austrac_id",
         "agent_abn",
@@ -1189,29 +1258,11 @@ def build_austrac_submission_payload(report: TTRReport) -> dict:
                 if report.account_number
                 else None,
             },
-            "individualConductingTxn": {
-                "sameAsCustomer": detail.get(
-                    "individual_conducting_txn_same_as_customer", True
-                ),
-                "fullName": detail.get("individual_conducting_txn_full_name"),
-                "dob": detail.get("individual_conducting_txn_dob"),
-                "phone": detail.get("individual_conducting_txn_phone"),
-                "identification": {
-                    "type": detail.get("individual_conducting_txn_id_type"),
-                    "number": detail.get("individual_conducting_txn_id_number"),
-                }
-                if detail.get("individual_conducting_txn_id_number")
-                else None,
-                "mainAddress": {
-                    "addr": detail.get("individual_conducting_txn_address"),
-                    "suburb": detail.get("individual_conducting_txn_suburb"),
-                    "state": detail.get("individual_conducting_txn_state"),
-                    "postcode": detail.get("individual_conducting_txn_postcode"),
-                    "country": detail.get("individual_conducting_txn_country"),
-                }
-                if detail.get("individual_conducting_txn_address")
-                else None,
-            },
+            # xs:choice in the schema: sameAsCustomer OR the full fallback
+            # sequence, never both at once (the prior version emitted both
+            # unconditionally, which doesn't conform to the schema's choice).
+            "individualConductingTxn": _build_individual_conducting_txn(detail),
+            "recipient": _build_recipient(report),
             "methodOfConductingTxn": {
                 "method": detail.get("method_of_conducting_txn"),
                 "otherMethod": detail.get("method_other_description"),
@@ -1223,12 +1274,7 @@ def build_austrac_submission_payload(report: TTRReport) -> dict:
                     "amount": _fmt_amount(report.total_amount),
                 },
                 "designatedSvc": detail.get("designated_svc"),
-                "moneyReceived": _build_money_section(
-                    "received", report, detail, industry
-                ),
-                "moneyProvided": _build_money_section(
-                    "provided", report, detail, industry
-                ),
+                **_build_transaction_money(industry, report, detail),
             },
         },
         "_submissionNote": (
@@ -1239,37 +1285,140 @@ def build_austrac_submission_payload(report: TTRReport) -> dict:
     return payload
 
 
+def _build_individual_conducting_txn(detail: dict) -> dict:
+    """individualConductingTxn is an xs:choice: either sameAsCustomer, or the
+    full fallback person sequence — never both in the same element."""
+    if detail.get("individual_conducting_txn_same_as_customer", True):
+        return {"sameAsCustomer": True}
+    return {
+        "fullName": detail.get("individual_conducting_txn_full_name"),
+        "dob": detail.get("individual_conducting_txn_dob"),
+        "phone": detail.get("individual_conducting_txn_phone"),
+        "identification": {
+            "type": detail.get("individual_conducting_txn_id_type"),
+            "number": detail.get("individual_conducting_txn_id_number"),
+        }
+        if detail.get("individual_conducting_txn_id_number")
+        else None,
+        "mainAddress": {
+            "addr": detail.get("individual_conducting_txn_address"),
+            "suburb": detail.get("individual_conducting_txn_suburb"),
+            "state": detail.get("individual_conducting_txn_state"),
+            "postcode": detail.get("individual_conducting_txn_postcode"),
+            "country": detail.get("individual_conducting_txn_country"),
+        }
+        if detail.get("individual_conducting_txn_address")
+        else None,
+    }
+
+
+def _build_recipient(report: TTRReport) -> dict:
+    """recipient (1..unbounded, REQUIRED) was previously missing from the
+    payload entirely. The model only captures a third party's name and
+    relationship (no separate address/account/dob for them), so the
+    fallback branch is intentionally thin rather than guessed at."""
+    if not report.third_party_name:
+        return {"sameAsCustomer": True}
+    return {
+        "fullName": report.third_party_name,
+        "relationship": report.third_party_relationship,
+    }
+
+
+def _build_cash(
+    detail: dict, cash_key: str, fx_currency_key: str, fx_amount_key: str
+) -> Optional[dict]:
+    amount = detail.get(cash_key)
+    if amount is None:
+        return None
+    cash: dict = {"ausCash": {"currency": "AUD", "amount": amount}}
+    fx_currency = detail.get(fx_currency_key) if fx_currency_key else None
+    if fx_currency:
+        cash["foreignCash"] = {
+            "currency": fx_currency,
+            "amount": detail.get(fx_amount_key) if fx_amount_key else None,
+        }
+    return cash
+
+
 def _build_money_section(
     direction: str, report: TTRReport, detail: dict, industry
-) -> dict:
-    """Build moneyReceived or moneyProvided section per AUSTRAC XML schema."""
-    suffix_i = "received" if direction == "received" else "provided"
-    suffix_nc = "received" if direction == "received" else "provided"
-
-    cash_key = (
-        f"money_{suffix_i}_aud_cash"
-        if direction == "received"
-        else f"money_{suffix_nc}_aud_cash"
+) -> Optional[dict]:
+    """Build one moneyReceived/moneyProvided section — cash plus the real
+    non-cash breakdown — for FBS/MSB (both elements are mandatory, though
+    each one's own children are all optional, so an "empty" section is a
+    legitimate {})."""
+    is_received = direction == "received"
+    cash_key = f"money_{direction}_aud_cash"
+    cash = _build_cash(
+        detail,
+        cash_key,
+        "money_received_foreign_currency_code" if is_received else None,
+        "money_received_foreign_amount" if is_received else None,
     )
-    if industry == TTRIndustryType.GS:
-        cash_key = f"cash_aud_{suffix_i}"
+    non_cash_spec = (
+        NON_CASH_RECEIVED_SPEC[industry]
+        if is_received
+        else NON_CASH_PROVIDED_SPEC[industry]
+    )
+    prefix = "non_cash_received" if is_received else "non_cash_provided"
+    non_cash = _build_non_cash_section(detail, non_cash_spec, prefix)
 
+    section: dict = {}
+    if cash:
+        section["cash"] = cash
+    if non_cash:
+        section["nonCashReceived" if is_received else "nonCashProvided"] = non_cash
+    return section
+
+
+def _build_gs_money_section(direction: str, detail: dict) -> dict:
+    """GS's moneyReceived/moneyProvided each nest the *opposite* direction's
+    element set as a "contra" side, for a simultaneous exchange (e.g.
+    GAM_EXCH: cash in and chips out at the same moment)."""
+    is_received = direction == "received"
+    cash_key = f"cash_aud_{direction}"
+    cash = _build_cash(detail, cash_key, None, None)
+    non_cash_spec = (
+        NON_CASH_RECEIVED_SPEC[TTRIndustryType.GS]
+        if is_received
+        else NON_CASH_PROVIDED_SPEC[TTRIndustryType.GS]
+    )
+    prefix = "non_cash_received" if is_received else "non_cash_provided"
+    non_cash = _build_non_cash_section(detail, non_cash_spec, prefix)
+
+    if is_received:
+        contra_spec = NON_CASH_CONTRA_PROVIDED_SPEC
+        contra_prefix = "non_cash_contra_provided"
+        contra_key = "nonCashContraProvided"
+    else:
+        contra_spec = NON_CASH_CONTRA_RECEIVED_SPEC
+        contra_prefix = "non_cash_contra_received"
+        contra_key = "nonCashContraReceived"
+    contra = _build_non_cash_section(detail, contra_spec, contra_prefix)
+
+    section: dict = {}
+    if cash:
+        section["cash"] = cash
+    if non_cash:
+        section["nonCashReceived" if is_received else "nonCashProvided"] = non_cash
+    if contra:
+        section[contra_key] = contra
+    return section
+
+
+def _build_transaction_money(industry, report: TTRReport, detail: dict) -> dict:
+    """The transaction element's money section(s). GS's schema makes
+    moneyReceived/moneyProvided a genuine xs:choice (only one is ever sent);
+    FBS/MSB require both elements present (each one's children are all
+    optional, so an empty {} is valid when nothing of that direction
+    happened)."""
+    if industry == TTRIndustryType.GS:
+        direction = detail.get("gambling_txn_direction") or "money_received"
+        if direction == "money_provided":
+            return {"moneyProvided": _build_gs_money_section("provided", detail)}
+        return {"moneyReceived": _build_gs_money_section("received", detail)}
     return {
-        "cash": {
-            "ausCash": {
-                "currency": "AUD",
-                "amount": detail.get(cash_key),
-            },
-            "foreignCash": {
-                "currency": detail.get("receive_currency")
-                or detail.get("money_received_foreign_currency_code"),
-                "amount": detail.get("amount_receive_foreign")
-                or detail.get("money_received_foreign_amount"),
-            }
-            if detail.get("money_received_foreign_currency_code")
-            or detail.get("receive_currency")
-            else None,
-        }
-        if detail.get(cash_key)
-        else None,
+        "moneyReceived": _build_money_section("received", report, detail, industry),
+        "moneyProvided": _build_money_section("provided", report, detail, industry),
     }

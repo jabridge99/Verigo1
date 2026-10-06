@@ -36,6 +36,8 @@ Benchmark metric glossary:
 from __future__ import annotations
 
 import enum
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -51,6 +53,7 @@ from sqlalchemy import (
     String,
     func,
 )
+from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
 
@@ -91,7 +94,7 @@ HIGHER_IS_BETTER = {
 }
 
 # Human-readable labels and descriptions
-METRIC_META = {
+METRIC_META: dict[str, dict[str, Any]] = {
     "smr_rate_per_1k": {
         "label": "SMR Rate (per 1,000 customers)",
         "unit": "per 1k",
@@ -181,55 +184,61 @@ class OrgMetricsSnapshot(Base):
 
     __tablename__ = "org_metrics_snapshots"
 
-    id = Column(String, primary_key=True, default=lambda: f"oms_{uuid4().hex[:12]}")
-    org_id = Column(
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"oms_{uuid4().hex[:12]}"
+    )
+    org_id: Mapped[str] = Column(
         String,
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    industry = Column(String(50), nullable=False, index=True)
-    period = Column(Enum(SnapshotPeriod), default=SnapshotPeriod.weekly, nullable=False)
-    period_label = Column(String(20), nullable=False, index=True)
+    industry: Mapped[str] = Column(String(50), nullable=False, index=True)
+    period: Mapped[SnapshotPeriod] = Column(
+        Enum(SnapshotPeriod), default=SnapshotPeriod.weekly, nullable=False
+    )
+    period_label: Mapped[str] = Column(String(20), nullable=False, index=True)
     # e.g. "2026-W24" (weekly) or "2026-06" (monthly)
-    period_start = Column(Date, nullable=False)
-    period_end = Column(Date, nullable=False)
+    period_start: Mapped[date] = Column(Date, nullable=False)
+    period_end: Mapped[date] = Column(Date, nullable=False)
 
     # ── Reporting metrics ─────────────────────────────────────────────────────
-    smr_count = Column(Integer, default=0)
-    ifti_count = Column(Integer, default=0)
-    ttr_count = Column(Integer, default=0)
-    smr_rate_per_1k = Column(Float)
-    ifti_volume = Column(Float)
-    ttr_volume = Column(Float)
-    alert_to_smr_pct = Column(Float)
+    smr_count: Mapped[Optional[int]] = Column(Integer, default=0)
+    ifti_count: Mapped[Optional[int]] = Column(Integer, default=0)
+    ttr_count: Mapped[Optional[int]] = Column(Integer, default=0)
+    smr_rate_per_1k: Mapped[Optional[float]] = Column(Float)
+    ifti_volume: Mapped[Optional[float]] = Column(Float)
+    ttr_volume: Mapped[Optional[float]] = Column(Float)
+    alert_to_smr_pct: Mapped[Optional[float]] = Column(Float)
 
     # ── Customer risk metrics ─────────────────────────────────────────────────
-    total_customers = Column(Integer, default=0)
-    high_risk_customer_pct = Column(Float)
-    edd_escalation_pct = Column(Float)
-    cdd_completion_pct = Column(Float)
-    pep_customer_pct = Column(Float)
-    sanctions_match_pct = Column(Float)
+    total_customers: Mapped[Optional[int]] = Column(Integer, default=0)
+    high_risk_customer_pct: Mapped[Optional[float]] = Column(Float)
+    edd_escalation_pct: Mapped[Optional[float]] = Column(Float)
+    cdd_completion_pct: Mapped[Optional[float]] = Column(Float)
+    pep_customer_pct: Mapped[Optional[float]] = Column(Float)
+    sanctions_match_pct: Mapped[Optional[float]] = Column(Float)
 
     # ── Monitoring metrics ────────────────────────────────────────────────────
-    total_alerts = Column(Integer, default=0)
-    open_alert_pct = Column(Float)
+    total_alerts: Mapped[Optional[int]] = Column(Integer, default=0)
+    open_alert_pct: Mapped[Optional[float]] = Column(Float)
 
     # ── Training metrics ──────────────────────────────────────────────────────
-    training_completion_pct = Column(Float)
-    training_overdue_pct = Column(Float)
+    training_completion_pct: Mapped[Optional[float]] = Column(Float)
+    training_overdue_pct: Mapped[Optional[float]] = Column(Float)
 
     # ── Governance metrics ────────────────────────────────────────────────────
-    policy_review_on_time_pct = Column(Float)
-    control_effectiveness_pct = Column(Float)
-    avg_case_days = Column(Float)
+    policy_review_on_time_pct: Mapped[Optional[float]] = Column(Float)
+    control_effectiveness_pct: Mapped[Optional[float]] = Column(Float)
+    avg_case_days: Mapped[Optional[float]] = Column(Float)
 
     # ── Raw counts for transparency ───────────────────────────────────────────
-    raw_counts = Column(JSON, default=dict)
+    raw_counts: Mapped[Optional[Any]] = Column(JSON, default=dict)
 
-    captured_at = Column(DateTime(timezone=True), server_default=func.now())
-    captured_by = Column(String, default="system")
+    captured_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    captured_by: Mapped[Optional[str]] = Column(String, default="system")
 
 
 class IndustryBenchmark(Base):
@@ -248,24 +257,30 @@ class IndustryBenchmark(Base):
 
     __tablename__ = "industry_benchmarks"
 
-    id = Column(String, primary_key=True, default=lambda: f"ib_{uuid4().hex[:12]}")
-    industry = Column(String(50), nullable=False, index=True)
-    metric = Column(Enum(BenchmarkMetric), nullable=False, index=True)
-    period_label = Column(String(20), nullable=False, index=True)
-    period_start = Column(Date, nullable=False)
-    period_end = Column(Date, nullable=False)
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: f"ib_{uuid4().hex[:12]}"
+    )
+    industry: Mapped[str] = Column(String(50), nullable=False, index=True)
+    metric: Mapped[BenchmarkMetric] = Column(
+        Enum(BenchmarkMetric), nullable=False, index=True
+    )
+    period_label: Mapped[str] = Column(String(20), nullable=False, index=True)
+    period_start: Mapped[date] = Column(Date, nullable=False)
+    period_end: Mapped[date] = Column(Date, nullable=False)
 
     # ── Aggregate statistics ──────────────────────────────────────────────────
-    org_count = Column(Integer, nullable=False)
-    mean = Column(Float)
-    std_dev = Column(Float)
-    minimum = Column(Float)
-    p25 = Column(Float)
-    median = Column(Float)
-    p75 = Column(Float)
-    maximum = Column(Float)
+    org_count: Mapped[int] = Column(Integer, nullable=False)
+    mean: Mapped[Optional[float]] = Column(Float)
+    std_dev: Mapped[Optional[float]] = Column(Float)
+    minimum: Mapped[Optional[float]] = Column(Float)
+    p25: Mapped[Optional[float]] = Column(Float)
+    median: Mapped[Optional[float]] = Column(Float)
+    p75: Mapped[Optional[float]] = Column(Float)
+    maximum: Mapped[Optional[float]] = Column(Float)
 
-    is_published = Column(Boolean, default=False)
+    is_published: Mapped[Optional[bool]] = Column(Boolean, default=False)
     # False if org_count < MIN_ORG_COUNT_FOR_BENCHMARK
 
-    computed_at = Column(DateTime(timezone=True), server_default=func.now())
+    computed_at: Mapped[Optional[datetime]] = Column(
+        DateTime(timezone=True), server_default=func.now()
+    )

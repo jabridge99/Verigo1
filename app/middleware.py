@@ -18,9 +18,10 @@ import time
 import uuid
 from typing import Callable
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 logger = logging.getLogger("tvg.access")
 
@@ -172,7 +173,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Sorted set TTL: 65 s (auto-expiry)
     """
 
-    def __init__(self, app: FastAPI, requests_per_minute: int = 200):
+    def __init__(self, app: ASGIApp, requests_per_minute: int = 200):
         super().__init__(app)
         self._rpm = requests_per_minute
         self._redis = None

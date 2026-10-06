@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -28,8 +27,21 @@ from app.api.deps import (
     require_mlro_or_above,
 )
 from app.db.database import get_db
-from app.models.task import Task, TaskEvent, TaskPriority, TaskStatus, TaskType
+from app.models.task import (
+    Task,
+    TaskEvent,
+    TaskStatus,
+    TaskType,
+)
 from app.models.user import User
+from app.schemas.task import (
+    AssignPayload,
+    CancelPayload,
+    CompletePayload,
+    RFIPayload,
+    TaskCreate,
+    TaskUpdate,
+)
 
 router = APIRouter(prefix="/tasks", tags=["Tasks & RFI Workflow"])
 
@@ -101,48 +113,6 @@ def _task_dict(t: Task) -> dict:
         "created_at": t.created_at,
         "updated_at": t.updated_at,
     }
-
-
-# ── Pydantic schemas ──────────────────────────────────────────────────────────
-
-
-class TaskCreate(BaseModel):
-    task_type: TaskType
-    title: str
-    description: Optional[str] = None
-    priority: TaskPriority = TaskPriority.normal
-    case_id: Optional[str] = None
-    customer_id: Optional[str] = None
-    assigned_to: Optional[str] = None
-    due_date: Optional[str] = None  # YYYY-MM-DD
-    rfi_channel: Optional[str] = None
-    related_document_ids: Optional[list] = None
-
-
-class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    priority: Optional[TaskPriority] = None
-    due_date: Optional[str] = None
-    rfi_channel: Optional[str] = None
-    related_document_ids: Optional[list] = None
-
-
-class AssignPayload(BaseModel):
-    assign_to: str
-
-
-class CompletePayload(BaseModel):
-    notes: Optional[str] = None
-
-
-class CancelPayload(BaseModel):
-    reason: str
-
-
-class RFIPayload(BaseModel):
-    channel: Optional[str] = "email"  # email | portal | mail | in_person
-    note: Optional[str] = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

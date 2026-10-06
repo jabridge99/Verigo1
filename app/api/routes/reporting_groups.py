@@ -8,10 +8,7 @@ under a single group with an optional shared AML program.
 All routes require the requesting user's org to be a group member.
 """
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -27,36 +24,15 @@ from app.models.reporting_group import (
     ReportingGroupStatus,
 )
 from app.models.user import User
+from app.schemas.reporting_group import (
+    AddMemberRequest,
+    AssignAMLProgramRequest,
+    CreateGroupRequest,
+    UpdateGroupRequest,
+)
 from app.services import reporting_group_service
 
 router = APIRouter(prefix="/reporting-groups", tags=["Reporting Groups"])
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class CreateGroupRequest(BaseModel):
-    name: str
-    group_type: GroupType = GroupType.holding_company
-    austrac_group_id: Optional[str] = None
-    shared_aml_program_id: Optional[str] = None
-
-
-class AddMemberRequest(BaseModel):
-    org_id: str
-    member_role: GroupMemberRole = GroupMemberRole.subsidiary
-    jurisdiction: Optional[str] = None
-
-
-class UpdateGroupRequest(BaseModel):
-    name: Optional[str] = None
-    status: Optional[ReportingGroupStatus] = None
-    austrac_group_id: Optional[str] = None
-    shared_aml_program_id: Optional[str] = None
-
-
-class AssignAMLProgramRequest(BaseModel):
-    shared_aml_program_id: str
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

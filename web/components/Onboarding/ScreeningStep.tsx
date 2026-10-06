@@ -3,29 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { ShieldCheck, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import {
+  getCustomerIdentityScore,
+  decideCustomerIdentityScore,
+  type IdentityScore,
+} from "@/lib/api/screening";
+import { ApiError } from "@/lib/api/client";
 
 interface Session {
   session_id: string;
   applicant_name: string;
   applicant_email: string;
   status: string;
-  customer_id?: string;
-}
-
-interface CategoryBreakdown {
-  score: number;
-  status: string;
-  label: string;
-}
-
-interface IdentityScore {
-  customer_id: string;
-  composite_score: number;
-  decision: "pass" | "ecdd_required" | "fail";
-  breakdown: Record<string, CategoryBreakdown>;
-  weight_per_category: number;
+  customer_id?: string | null;
 }
 
 const DECISION_STYLE: Record<string, { color: string; bar: string; Icon: any; label: string }> = {
@@ -50,10 +40,9 @@ export default function ScreeningStep({ sessions }: { sessions: Session[] }) {
     if (!selected?.customer_id) { setScore(null); return; }
     setLoading(true);
     setError(null);
-    fetch(`${API}/api/v1/screening/customers/${selected.customer_id}/identity-score`, { credentials: "include" })
-      .then(res => { if (!res.ok) throw new Error("Failed to load identity score"); return res.json(); })
+    getCustomerIdentityScore(selected.customer_id)
       .then(setScore)
-      .catch(e => setError(e.message))
+      .catch(e => setError(e instanceof ApiError ? e.message : "Failed to load identity score"))
       .finally(() => setLoading(false));
   }, [selected]);
 
@@ -67,16 +56,11 @@ export default function ScreeningStep({ sessions }: { sessions: Session[] }) {
     setDeciding(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/api/v1/screening/customers/${selected.customer_id}/identity-score/decide`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const data = await decideCustomerIdentityScore(selected.customer_id);
       setScore(data);
       setCustomerStatus(data.customer_status);
-    } catch (e: any) {
-      setError(e.message || "Failed to apply decision");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Failed to apply decision");
     } finally {
       setDeciding(false);
     }

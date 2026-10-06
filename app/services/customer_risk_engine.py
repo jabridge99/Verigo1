@@ -8,7 +8,15 @@ Scores:
   4. Channel Risk      — online vs branch, introduced, third-party reliance
   5. Transaction Risk  — expected volume, value, frequency, cross-border
 
-Weighted combination → overall score → decision gateway (CDD or EDD).
+Weighted combination → overall score (0-100) → decision gateway (CDD or EDD).
+
+Rating boundaries (low/medium/high/critical) come from
+app.services.risk_engine.risk_rating_pct() — the shared ISO 31000-derived
+thresholds used across every risk-scoring module in this codebase, not a
+separate scale defined here (see STRUCTURE_REVIEW.md §C3 for why that
+mattered: this engine and others used to each hardcode their own cut
+points, so the same customer could be rated differently depending which
+engine scored them).
 
 All country lists are illustrative starting points. Replace with live FATF/DFAT feeds.
 """
@@ -16,8 +24,11 @@ All country lists are illustrative starting points. Replace with live FATF/DFAT 
 from dataclasses import dataclass, field
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
 from app.models.customer import CDDLevel, Customer, RiskLevel
 from app.models.customer_workflow import EDDTrigger
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD, risk_rating_pct
 
 # ── Country Risk Lists (seed data — override with live feeds) ─────────────────
 
@@ -117,7 +128,8 @@ HIGH_RISK_OCCUPATIONS = frozenset(
     }
 )
 
-# Default weights — can be overridden per org via GovernanceCustomScoring
+# Default weights — used when an org has no RiskFramework yet, or as a
+# per-dimension fallback within get_org_risk_weights() below.
 DEFAULT_WEIGHTS = {
     "customer": 0.30,
     "product": 0.25,
@@ -126,12 +138,50 @@ DEFAULT_WEIGHTS = {
     "transaction": 0.10,
 }
 
-RISK_THRESHOLDS = {
-    "low": 33.0,
-    "medium": 66.0,
-    "high": 85.0,
-    # > high → critical
-}
+
+def get_org_risk_weights(db: Session, org_id: str) -> dict[str, float]:
+    """
+    Per-org, per-industry override for the 5 dimension weights above,
+    derived from the org's own Enterprise-Wide Risk Assessment framework
+    (RiskFramework.category_weights — seeded per-industry at onboarding by
+    risk/factory.py, and user-customisable afterward via
+    PATCH /risk/framework/category-weights) rather than a separate,
+    third weight-storage mechanism invented just for this engine.
+
+    The EWRA framework has 7 categories (customer/product/service/
+    geographic/channel/transaction/regulatory); this engine only scores 5
+    of them, so the relevant 5 are re-normalised to sum to 1.0 after
+    dropping "service" and "regulatory". Falls back to DEFAULT_WEIGHTS if
+    the org has no framework yet (shouldn't happen post-onboarding, since
+    seed_risk_framework() runs from attach_owner(), but defensive).
+    """
+    from app.models.risk_engine import RiskCategory, RiskFramework
+
+    framework = db.query(RiskFramework).filter(RiskFramework.org_id == org_id).first()
+    if not framework:
+        return DEFAULT_WEIGHTS
+
+    category_weights = framework.category_weights or {}
+    category_rows = {
+        c.category_type.value: c.weight
+        for c in db.query(RiskCategory).filter(
+            RiskCategory.framework_id == framework.id,
+            RiskCategory.is_active.is_(True),
+        )
+        if c.category_type is not None
+    }
+
+    raw: dict[str, float] = {
+        dim: float(
+            category_weights.get(dim, category_rows.get(dim, DEFAULT_WEIGHTS[dim]))
+            or DEFAULT_WEIGHTS[dim]
+        )
+        for dim in DEFAULT_WEIGHTS
+    }
+    total = sum(raw.values())
+    if total <= 0:
+        return DEFAULT_WEIGHTS
+    return {dim: v / total for dim, v in raw.items()}
 
 
 @dataclass
@@ -340,7 +390,7 @@ def score_transaction_risk(
         elif expected_monthly_volume_aud >= 100_000:
             score += 25.0
             factors["medium_monthly_volume"] = 25.0
-        elif expected_monthly_volume_aud >= 10_000:
+        elif expected_monthly_volume_aud >= TTR_CTR_THRESHOLD_AUD:
             score += 10.0
             factors["threshold_monthly_volume"] = 10.0
 
@@ -349,7 +399,7 @@ def score_transaction_risk(
             score += 25.0
             factors["high_single_transaction"] = 25.0
             flags["is_high_value"] = True
-        elif expected_max_transaction_aud >= 10_000:
+        elif expected_max_transaction_aud >= TTR_CTR_THRESHOLD_AUD:
             score += 10.0
             factors["threshold_single_transaction"] = 10.0
 
@@ -394,7 +444,7 @@ def _determine_gateway(
         edd_triggers.append(EDDTrigger.complex_ownership.value)
     if product_r.flags.get("crypto"):
         edd_triggers.append(EDDTrigger.crypto_exposure.value)
-    if overall_score > RISK_THRESHOLDS["medium"]:
+    if risk_rating_pct(overall_score) in ("high", "critical"):
         edd_triggers.append(EDDTrigger.high_risk_score.value)
 
     edd_triggers = list(set(edd_triggers))  # deduplicate
@@ -403,13 +453,7 @@ def _determine_gateway(
 
 
 def _level(score: float) -> str:
-    if score <= RISK_THRESHOLDS["low"]:
-        return "low"
-    if score <= RISK_THRESHOLDS["medium"]:
-        return "medium"
-    if score <= RISK_THRESHOLDS["high"]:
-        return "high"
-    return "critical"
+    return risk_rating_pct(score)
 
 
 # ── Main Entry Point ───────────────────────────────────────────────────────────
@@ -485,6 +529,15 @@ def assess_customer_risk(
     )
     overall = _clamp(overall)
 
+    # A confirmed sanctions match already forces the EDD gateway below, but
+    # on its own that left the *numeric* score/level exactly where the
+    # weighted dimensions put it — a sanctions match could be diluted by
+    # otherwise-low dimension scores and not read as critical. A confirmed
+    # match is definitionally the most severe outcome, so it forces the
+    # score to 100 (critical) outright, not just the workflow gateway.
+    if is_sanctions_match:
+        overall = 100.0
+
     gateway, triggers = _determine_gateway(
         overall, c_result, p_result, g_result, is_pep, is_sanctions_match
     )
@@ -506,7 +559,7 @@ def assess_customer_risk(
 def cdd_level_from_gateway(gateway: str, overall_score: float) -> CDDLevel:
     if gateway == "edd":
         return CDDLevel.enhanced
-    if overall_score <= RISK_THRESHOLDS["low"]:
+    if risk_rating_pct(overall_score) == "low":
         return CDDLevel.simplified
     return CDDLevel.standard
 

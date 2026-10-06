@@ -6,40 +6,21 @@ import {
   History, ShieldCheck, ArrowRight, Archive,
 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type PolicyType =
-  | "aml_ctf_program" | "risk_assessment_methodology" | "cdd_policy" | "edd_policy"
-  | "pep_policy" | "beneficial_ownership_policy" | "transaction_monitoring_policy"
-  | "sanctions_screening_policy" | "travel_rule_policy" | "reporting_policy"
-  | "record_keeping_policy" | "training_policy" | "outsourcing_policy"
-  | "whistleblower_policy" | "conflict_of_interest_policy" | "data_privacy_policy"
-  | "procedure" | "other";
-
-type PolicyStatus =
-  | "draft" | "internal_review" | "compliance_review" | "pending_approval"
-  | "published" | "periodic_review" | "superseded" | "archived";
-
-interface Policy {
-  id: string;
-  policy_number: string;
-  title: string;
-  policy_type: PolicyType;
-  status: PolicyStatus;
-  version_major: number;
-  version_minor: number;
-  effective_date?: string | null;
-  review_due_date: string;
-  approval_date?: string | null;
-  document_owner?: string | null;
-  compliance_reviewer?: string | null;
-  approver?: string | null;
-  summary?: string | null;
-  content?: string | null;
-  regulatory_references?: string[] | null;
-  created_at?: string | null;
-}
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
+import {
+  listPolicies,
+  listPolicyVersions,
+  runPolicyWorkflowAction,
+  createPolicy,
+  policyExportHtmlUrl,
+  type Policy,
+  type PolicyType,
+  type PolicyStatus,
+  type PolicyVersion,
+  type PolicyCreateInput,
+} from "@/lib/api/governancePolicies";
 
 const TYPE_LABELS: Record<PolicyType, string> = {
   aml_ctf_program: "AML/CTF Program",
@@ -53,6 +34,7 @@ const TYPE_LABELS: Record<PolicyType, string> = {
   travel_rule_policy: "Travel Rule Policy",
   reporting_policy: "Reporting Policy (SMR/TTR/IFTI)",
   record_keeping_policy: "Record Keeping Policy",
+  independent_review_policy: "Independent Review Policy",
   training_policy: "Training Policy",
   outsourcing_policy: "Outsourcing Policy",
   whistleblower_policy: "Whistleblower Policy",
@@ -62,15 +44,15 @@ const TYPE_LABELS: Record<PolicyType, string> = {
   other: "Other",
 };
 
-const STATUS_COLOR: Record<PolicyStatus, string> = {
-  draft: "bg-slate-500/20 text-slate-300",
-  internal_review: "bg-brand-500/20 text-brand-300",
-  compliance_review: "bg-brand-500/20 text-brand-300",
-  pending_approval: "bg-amber-500/20 text-amber-300",
-  published: "bg-emerald-500/20 text-emerald-300",
-  periodic_review: "bg-amber-500/20 text-amber-300",
-  superseded: "bg-slate-600/20 text-slate-500",
-  archived: "bg-slate-600/20 text-slate-500",
+const STATUS_TONE: Record<PolicyStatus, BadgeTone> = {
+  draft: "neutral",
+  internal_review: "info",
+  compliance_review: "info",
+  pending_approval: "warning",
+  published: "success",
+  periodic_review: "warning",
+  superseded: "muted",
+  archived: "muted",
 };
 
 const NEXT_ACTIONS: Record<PolicyStatus, { action: string; label: string }[]> = {
@@ -109,7 +91,7 @@ export default function PoliciesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState<Policy | null>(null);
-  const [versions, setVersions] = useState<any[]>([]);
+  const [versions, setVersions] = useState<PolicyVersion[]>([]);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const showToast = (type: "success" | "error", msg: string) => {
@@ -118,8 +100,8 @@ export default function PoliciesPage() {
 
   const fetchPolicies = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setPolicies(d); }
+      const d = await listPolicies();
+      if (d.length) setPolicies(d);
     } catch {}
   }, []);
 
@@ -127,9 +109,7 @@ export default function PoliciesPage() {
 
   const fetchVersions = async (policyId: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies/${policyId}/versions`, { credentials: "include" });
-      if (res.ok) setVersions(await res.json());
-      else setVersions([]);
+      setVersions(await listPolicyVersions(policyId));
     } catch { setVersions([]); }
   };
 
@@ -137,17 +117,11 @@ export default function PoliciesPage() {
 
   const runWorkflowAction = async (policy: Policy, action: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies/${policy.id}/workflow`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setPolicies(prev => prev.map(p => p.id === policy.id ? updated : p));
-        setSelected(updated);
-        showToast("success", `Policy moved to ${updated.status.replace("_", " ")}`);
-        return;
-      }
+      const updated = await runPolicyWorkflowAction(policy.id, action);
+      setPolicies(prev => prev.map(p => p.id === policy.id ? updated : p));
+      setSelected(updated);
+      showToast("success", `Policy moved to ${updated.status.replace("_", " ")}`);
+      return;
     } catch {}
     // Demo fallback — apply the transition locally
     const STATUS_MAP: Record<string, PolicyStatus> = {
@@ -163,11 +137,11 @@ export default function PoliciesPage() {
     const newStatus = STATUS_MAP[action] ?? policy.status;
     setPolicies(prev => prev.map(p => p.id === policy.id ? { ...p, status: newStatus } : p));
     setSelected(prev => prev ? { ...prev, status: newStatus } : prev);
-    showToast("success", `Policy moved to ${newStatus.replace("_", " ")}`);
+    showToast("success", `Policy moved to ${newStatus.replace("_", " ")} (demo)`);
   };
 
   const exportPdf = (policy: Policy) => {
-    window.open(`${API}/api/v1/governance/policies/${policy.id}/export-html`, "_blank");
+    window.open(policyExportHtmlUrl(policy.id), "_blank");
   };
 
   const filtered = policies.filter(p => {
@@ -246,53 +220,53 @@ export default function PoliciesPage() {
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
                 className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
                 <option value="all">Status — All</option>
-                {Object.keys(STATUS_COLOR).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                {Object.keys(STATUS_TONE).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
               </select>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-navy-700">
-              <table className="w-full text-sm">
-                <thead className="bg-navy-800 border-b border-navy-700">
+              <Table>
+                <TableHead>
                   <tr>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Policy No.</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Title</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Type</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Version</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Review Due</th>
-                    <th className="px-4 py-3" />
+                    <TableHeaderCell>Policy No.</TableHeaderCell>
+                    <TableHeaderCell>Title</TableHeaderCell>
+                    <TableHeaderCell>Type</TableHeaderCell>
+                    <TableHeaderCell>Version</TableHeaderCell>
+                    <TableHeaderCell>Status</TableHeaderCell>
+                    <TableHeaderCell>Review Due</TableHeaderCell>
+                    <TableHeaderCell />
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-500">No policies found</td></tr>
+                    <TableEmptyRow colSpan={7}>No policies found</TableEmptyRow>
                   ) : filtered.map(p => {
                     const overdue = new Date(p.review_due_date) < new Date() && p.status === "published";
                     return (
-                      <tr key={p.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => openPolicy(p)}>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-400">{p.policy_number}</td>
-                        <td className="px-4 py-3 text-slate-200">{p.title}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">{TYPE_LABELS[p.policy_type]}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">{p.version_major}.{p.version_minor}</td>
-                        <td className="px-4 py-3">
-                          <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[p.status])}>
+                      <TableRow key={p.id} onClick={() => openPolicy(p)}>
+                        <TableCell className="font-mono text-xs text-slate-400">{p.policy_number}</TableCell>
+                        <TableCell className="text-slate-200">{p.title}</TableCell>
+                        <TableCell className="text-xs text-slate-400">{TYPE_LABELS[p.policy_type]}</TableCell>
+                        <TableCell className="text-xs text-slate-400">{p.version_major}.{p.version_minor}</TableCell>
+                        <TableCell>
+                          <Badge tone={STATUS_TONE[p.status]}>
                             {p.status.replace("_", " ")}
-                          </span>
-                        </td>
-                        <td className={clsx("px-4 py-3 text-xs", overdue ? "text-red-400 font-medium" : "text-slate-500")}>
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={clsx("text-xs", overdue ? "text-red-400 font-medium" : "text-slate-500")}>
                           {new Date(p.review_due_date).toLocaleDateString("en-AU")}
-                        </td>
-                        <td className="px-4 py-3">
+                        </TableCell>
+                        <TableCell>
                           <button onClick={e => { e.stopPropagation(); exportPdf(p); }} title="Export PDF"
                             className="text-slate-500 hover:text-brand-400 transition-colors">
                             <Download className="w-4 h-4" />
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {policies.length} policies</div>
           </div>
@@ -308,8 +282,7 @@ export default function PoliciesPage() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-lg bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <Drawer onClose={() => setSelected(null)} size="lg">
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-mono text-xs text-slate-500 mb-1">{selected.policy_number} · v{selected.version_major}.{selected.version_minor}</div>
@@ -323,9 +296,9 @@ export default function PoliciesPage() {
               </div>
             </div>
 
-            <span className={clsx("inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status])}>
+            <Badge tone={STATUS_TONE[selected.status]}>
               {selected.status.replace("_", " ")}
-            </span>
+            </Badge>
 
             {selected.summary && (
               <div>
@@ -380,8 +353,7 @@ export default function PoliciesPage() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {toast && (
@@ -426,15 +398,11 @@ function CreatePolicyForm({ onCreated }: { onCreated: (p: Policy) => void }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/governance/policies`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          regulatory_references: form.regulatory_references.split(",").map(s => s.trim()).filter(Boolean),
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onCreated(await res.json());
+      const payload: PolicyCreateInput = {
+        ...form,
+        regulatory_references: form.regulatory_references.split(",").map(s => s.trim()).filter(Boolean),
+      };
+      onCreated(await createPolicy(payload));
     } catch {
       onCreated(buildPolicy());
     } finally { setSubmitting(false); }

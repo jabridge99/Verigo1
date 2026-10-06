@@ -7,17 +7,14 @@ Use POST /api/v1/integrations/migrate-legacy-connectors to copy existing
 rows into the Hub.
 """
 
-from datetime import datetime
-from typing import List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import _require_roles
 from app.db.database import get_db
-from app.models.connector import ConnectorProvider, ConnectorStatus
+from app.models.connector import ConnectorProvider
 from app.models.user import User, UserRole
+from app.schemas.connector import ConnectorCreate, ConnectorResponse, ConnectorUpdate
 from app.services.connector_service import (
     delete_credential,
     get_credentials,
@@ -26,38 +23,6 @@ from app.services.connector_service import (
 )
 
 router = APIRouter(prefix="/connectors", tags=["Connector Marketplace"])
-
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
-
-class ConnectorCreate(BaseModel):
-    provider: ConnectorProvider
-    credentials: dict  # plaintext — accepted once, immediately encrypted
-    label: Optional[str] = None
-    is_default: bool = False
-
-
-class ConnectorUpdate(BaseModel):
-    credentials: Optional[dict] = None
-    label: Optional[str] = None
-    is_default: Optional[bool] = None
-
-
-class ConnectorResponse(BaseModel):
-    credential_id: str
-    industry_id: str
-    provider: ConnectorProvider
-    label: Optional[str]
-    key_hint: Optional[str]
-    status: ConnectorStatus
-    is_default: bool
-    last_tested_at: Optional[datetime]
-    last_error: Optional[str]
-    created_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -75,18 +40,19 @@ def list_providers():
     }
 
 
-@router.get("/", response_model=List[ConnectorResponse])
+@router.get("/", response_model=list[ConnectorResponse])
 def list_connectors(
-    provider: Optional[ConnectorProvider] = None,
+    provider: ConnectorProvider | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(
         _require_roles(UserRole.admin, UserRole.mlro, UserRole.compliance)
     ),
 ):
-    industry_id = (
-        current_user.org_id
-        if current_user.role != UserRole.admin
-        else current_user.org_id
+    return get_credentials(
+        db,
+        current_user.org_id,
+        provider=provider,
+        organisation_id=current_user.primary_organisation_id,
     )
 
 

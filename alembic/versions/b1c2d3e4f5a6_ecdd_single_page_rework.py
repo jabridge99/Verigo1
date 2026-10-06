@@ -11,7 +11,9 @@ Revision ID: b1c2d3e4f5a6
 Revises: a9b8c7d6e5f4, e4f5a6b7c8d9
 Create Date: 2026-06-24
 """
+
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "b1c2d3e4f5a6"
@@ -20,16 +22,36 @@ branch_labels = None
 depends_on = None
 
 _EDD_TRIGGER_VALUES = [
-    "pep_match", "sanctions_match", "adverse_media", "high_risk_country",
-    "high_risk_score", "complex_ownership", "high_value_customer",
-    "crypto_exposure", "cash_intensive", "unusual_activity",
-    "compliance_discretion", "other",
+    "pep_match",
+    "sanctions_match",
+    "adverse_media",
+    "high_risk_country",
+    "high_risk_score",
+    "complex_ownership",
+    "high_value_customer",
+    "crypto_exposure",
+    "cash_intensive",
+    "unusual_activity",
+    "compliance_discretion",
+    "other",
 ]
 
 
 def upgrade() -> None:
     bind = op.get_bind()
     is_pg = bind.dialect.name == "postgresql"
+
+    # Guarded: on a database created fresh via the f73383da4e36 baseline
+    # (create_all() against the *current* model, which already has this
+    # migration's end-state shape — decided_by/decided_at/decision_notes,
+    # no completed_by/completed_at — see app/models/report.py:ECDDRecord),
+    # there is no legacy data to migrate and every column this migration
+    # would add already exists. On a database that predates that baseline,
+    # this migration performs the real column-add + data-migration.
+    inspector = sa.inspect(bind)
+    existing_columns = {c["name"] for c in inspector.get_columns("ecdd_records")}
+    if "decided_by" in existing_columns:
+        return
 
     if is_pg:
         op.execute("ALTER TYPE ecddstatus ADD VALUE IF NOT EXISTS 'rejected'")
@@ -40,7 +62,9 @@ def upgrade() -> None:
     op.add_column("ecdd_records", sa.Column("decision_notes", sa.Text()))
     op.add_column("ecdd_records", sa.Column("decided_by", sa.String()))
     op.add_column("ecdd_records", sa.Column("decided_at", sa.DateTime(timezone=True)))
-    op.add_column("ecdd_records", sa.Column("last_revised_at", sa.DateTime(timezone=True)))
+    op.add_column(
+        "ecdd_records", sa.Column("last_revised_at", sa.DateTime(timezone=True))
+    )
 
     # Pre-existing free-text trigger_reason values can't be reliably mapped to
     # a specific AUSTRAC/FATF category — preserve them verbatim in the new
@@ -68,7 +92,9 @@ def downgrade() -> None:
 
     if is_pg:
         op.add_column("ecdd_records", sa.Column("completed_by", sa.String()))
-        op.add_column("ecdd_records", sa.Column("completed_at", sa.DateTime(timezone=True)))
+        op.add_column(
+            "ecdd_records", sa.Column("completed_at", sa.DateTime(timezone=True))
+        )
         op.execute(
             "UPDATE ecdd_records SET completed_by = decided_by, completed_at = decided_at"
         )
@@ -77,7 +103,9 @@ def downgrade() -> None:
         # Postgres cannot drop a single enum value from ecddstatus without
         # recreating the type; 'rejected' is left in place.
 
-    op.execute("UPDATE ecdd_records SET trigger_reason = trigger_reason_other WHERE trigger_reason_other IS NOT NULL")
+    op.execute(
+        "UPDATE ecdd_records SET trigger_reason = trigger_reason_other WHERE trigger_reason_other IS NOT NULL"
+    )
     op.drop_column("ecdd_records", "last_revised_at")
     op.drop_column("ecdd_records", "decided_at")
     op.drop_column("ecdd_records", "decided_by")

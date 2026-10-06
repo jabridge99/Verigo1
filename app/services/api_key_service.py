@@ -5,6 +5,7 @@ API key and webhook management service.
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,8 @@ from app.models.api_key import (
     WebhookStatus,
 )
 from app.schemas.api_key import APIKeyCreate, WebhookCreate, WebhookUpdate
+
+log = logging.getLogger("verigo.webhooks")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -301,3 +304,29 @@ def dispatch_event(
         if event in (wh.events or []):
             deliveries.append(fire_webhook(db, wh, event, payload))
     return deliveries
+
+
+def dispatch_event_background(
+    event: str, payload: dict, industry_id: Optional[str] = None
+) -> None:
+    """
+    dispatch_event() makes a blocking httpx.post() (10s timeout) per
+    matching endpoint -- calling it inline from a request handler would let
+    a slow or unreachable customer-configured webhook URL stall that
+    request. Intended as a FastAPI BackgroundTasks target instead (see
+    app/worker.py::add_background_task) so delivery happens after the
+    response is already sent.
+
+    Opens its own DB session rather than reusing the request's: by the
+    time a background task runs, FastAPI has already torn down the
+    request's `Depends(get_db)` session.
+    """
+    from app.db.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        dispatch_event(db, event, payload, industry_id)
+    except Exception:
+        log.exception("dispatch_event_background failed for event=%s", event)
+    finally:
+        db.close()

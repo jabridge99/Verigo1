@@ -6,32 +6,18 @@ import {
   LayoutList, CalendarDays, GanttChartSquare, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type ItemType =
-  | "customer_review" | "kyc_expiry" | "edd_review" | "policy_review" | "control_test"
-  | "training_expiry" | "ttr_deadline" | "ifti_deadline" | "smr_deadline"
-  | "aml_program_review" | "risk_assessment_review" | "independent_review"
-  | "high_risk_customer_review" | "austrac_obligation" | "board_reporting" | "other";
-
-type ItemStatus = "scheduled" | "in_progress" | "completed" | "overdue" | "cancelled" | "escalated";
-
-interface CalendarItem {
-  id: string;
-  item_type: ItemType;
-  status: ItemStatus;
-  title: string;
-  description?: string;
-  due_date: string;
-  customer_id?: string | null;
-  assigned_to?: string | null;
-  is_recurring: boolean;
-  recurrence_months?: number | null;
-  is_overdue: boolean;
-  completed_at?: string | null;
-  created_at: string;
-}
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
+import {
+  listComplianceCalendarItems,
+  getCalendarDashboard,
+  completeCalendarItem,
+  type CalendarItem,
+  type CalendarDashboard as Dashboard,
+  type ItemType,
+  type ItemStatus,
+} from "@/lib/api/complianceCalendar";
 
 const TYPE_LABELS: Record<ItemType, string> = {
   customer_review: "Customer Review Cycle",
@@ -49,16 +35,17 @@ const TYPE_LABELS: Record<ItemType, string> = {
   high_risk_customer_review: "High Risk Customer Review",
   austrac_obligation: "AUSTRAC Obligation",
   board_reporting: "Board Reporting",
+  credential_expiry: "Integration Credential Expiry",
   other: "Other",
 };
 
-const STATUS_COLOR: Record<ItemStatus, string> = {
-  scheduled: "bg-slate-500/20 text-slate-300",
-  in_progress: "bg-brand-500/20 text-brand-300",
-  completed: "bg-emerald-500/20 text-emerald-300",
-  overdue: "bg-red-500/20 text-red-300",
-  cancelled: "bg-slate-600/20 text-slate-500",
-  escalated: "bg-amber-500/20 text-amber-300",
+const STATUS_TONE: Record<ItemStatus, BadgeTone> = {
+  scheduled: "neutral",
+  in_progress: "info",
+  completed: "success",
+  overdue: "danger",
+  cancelled: "muted",
+  escalated: "warning",
 };
 
 const DEMO_ITEMS: CalendarItem[] = [
@@ -71,14 +58,6 @@ const DEMO_ITEMS: CalendarItem[] = [
   { id: "cal_7", item_type: "risk_assessment_review", status: "scheduled", title: "ML/TF Risk Assessment Refresh", due_date: new Date(Date.now() + 18 * 86400000).toISOString().slice(0, 10), is_recurring: true, recurrence_months: 24, is_overdue: false, created_at: new Date().toISOString() },
   { id: "cal_8", item_type: "board_reporting", status: "scheduled", title: "Quarterly Board Compliance Report", due_date: new Date(Date.now() + 9 * 86400000).toISOString().slice(0, 10), is_recurring: true, recurrence_months: 3, is_overdue: false, created_at: new Date().toISOString() },
 ];
-
-interface Dashboard {
-  open_items: number;
-  overdue: number;
-  due_within_30_days: number;
-  by_type: Record<string, number>;
-  pending_reminders: number;
-}
 
 const DEMO_DASHBOARD: Dashboard = {
   open_items: DEMO_ITEMS.filter(i => i.status !== "completed").length,
@@ -106,27 +85,27 @@ export default function ComplianceCalendarPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [iRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/compliance-calendar`, { credentials: "include" }),
-        fetch(`${API}/api/v1/compliance-calendar/dashboard`, { credentials: "include" }),
+      const [items, dash] = await Promise.all([
+        listComplianceCalendarItems().catch(() => null),
+        getCalendarDashboard().catch(() => null),
       ]);
-      if (iRes.ok) { const d = await iRes.json(); if (d.length) setItems(d); }
-      if (dRes.ok) { const d = await dRes.json(); setDashboard(d); }
+      if (items && items.length) setItems(items);
+      if (dash) setDashboard(dash);
     } catch {}
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const completeItem = async (id: string) => {
+    let demo = false;
     try {
-      await fetch(`${API}/api/v1/compliance-calendar/${id}/complete`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-    } catch {}
-    setItems(prev => prev.map(i => i.id === id ? { ...i, status: "completed", completed_at: new Date().toISOString() } : i));
-    setSelected(prev => prev?.id === id ? { ...prev, status: "completed" } : prev);
-    showToast("success", "Item marked complete");
+      await completeCalendarItem(id);
+    } catch {
+      demo = true;
+    }
+    setItems(prev => prev.map(i => i.id === id ? { ...i, status: "completed" as ItemStatus, completed_at: new Date().toISOString() } : i));
+    setSelected(prev => prev?.id === id ? { ...prev, status: "completed" as ItemStatus } : prev);
+    showToast("success", demo ? "Item marked complete (demo)" : "Item marked complete");
   };
 
   const filtered = items.filter(i =>
@@ -195,7 +174,7 @@ export default function ComplianceCalendarPage() {
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
               className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500">
               <option value="all">Status — All</option>
-              {Object.keys(STATUS_COLOR).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+              {Object.keys(STATUS_TONE).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
             </select>
           </div>
         </div>
@@ -204,47 +183,47 @@ export default function ComplianceCalendarPage() {
       <div className="max-w-7xl mx-auto px-6 py-6">
         {view === "list" && (
           <div className="overflow-x-auto rounded-xl border border-navy-700">
-            <table className="w-full text-sm">
-              <thead className="bg-navy-800 border-b border-navy-700">
+            <Table>
+              <TableHead>
                 <tr>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Title</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Type</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Due Date</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium">Recurring</th>
-                  <th className="px-4 py-3" />
+                  <TableHeaderCell>Title</TableHeaderCell>
+                  <TableHeaderCell>Type</TableHeaderCell>
+                  <TableHeaderCell>Due Date</TableHeaderCell>
+                  <TableHeaderCell>Status</TableHeaderCell>
+                  <TableHeaderCell>Recurring</TableHeaderCell>
+                  <TableHeaderCell />
                 </tr>
-              </thead>
-              <tbody>
+              </TableHead>
+              <TableBody>
                 {sorted.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-12 text-slate-500">No calendar items found</td></tr>
+                  <TableEmptyRow colSpan={6}>No calendar items found</TableEmptyRow>
                 ) : sorted.map(i => (
-                  <tr key={i.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(i)}>
-                    <td className="px-4 py-3 text-slate-200">{i.title}</td>
-                    <td className="px-4 py-3 text-slate-400 text-xs">{TYPE_LABELS[i.item_type]}</td>
-                    <td className={clsx("px-4 py-3 text-xs", i.is_overdue ? "text-red-400 font-medium" : "text-slate-400")}>
+                  <TableRow key={i.id} onClick={() => setSelected(i)}>
+                    <TableCell className="text-slate-200">{i.title}</TableCell>
+                    <TableCell className="text-slate-400 text-xs">{TYPE_LABELS[i.item_type]}</TableCell>
+                    <TableCell className={clsx("text-xs", i.is_overdue ? "text-red-400 font-medium" : "text-slate-400")}>
                       {new Date(i.due_date).toLocaleDateString("en-AU")}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[i.status])}>
+                    </TableCell>
+                    <TableCell>
+                      <Badge tone={STATUS_TONE[i.status]}>
                         {i.status.replace("_", " ")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500">
                       {i.is_recurring ? `Every ${i.recurrence_months}mo` : "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       {i.status !== "completed" && (
                         <button onClick={e => { e.stopPropagation(); completeItem(i.id); }}
                           className="text-xs text-emerald-400 hover:text-emerald-300 font-medium">
                           Complete
                         </button>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
 
@@ -272,9 +251,9 @@ export default function ComplianceCalendarPage() {
                 <div className={clsx("text-xs font-medium", i.is_overdue ? "text-red-400" : "text-slate-400")}>
                   {new Date(i.due_date).toLocaleDateString("en-AU")}
                 </div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[i.status])}>
+                <Badge tone={STATUS_TONE[i.status]}>
                   {i.status.replace("_", " ")}
-                </span>
+                </Badge>
               </div>
             ))}
           </div>
@@ -282,8 +261,7 @@ export default function ComplianceCalendarPage() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-md bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <Drawer onClose={() => setSelected(null)} size="md">
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-xs text-slate-500 mb-1">{TYPE_LABELS[selected.item_type]}</div>
@@ -291,9 +269,9 @@ export default function ComplianceCalendarPage() {
               </div>
               <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-navy-700 text-slate-400 text-lg leading-none">&times;</button>
             </div>
-            <span className={clsx("inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status])}>
+            <Badge tone={STATUS_TONE[selected.status]}>
               {selected.status.replace("_", " ")}
-            </span>
+            </Badge>
             {selected.description && (
               <div className="text-sm text-slate-300 leading-relaxed">{selected.description}</div>
             )}
@@ -315,8 +293,7 @@ export default function ComplianceCalendarPage() {
                 <CheckCircle className="w-4 h-4" /> Mark Complete
               </button>
             )}
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {toast && (

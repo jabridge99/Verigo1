@@ -9,103 +9,52 @@ import clsx from "clsx";
 import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import {
+  listReviews,
+  getOrgDashboard,
+  getReviewDashboard,
+  listFindings,
+  listRecommendations,
+  listActions,
+  submitFindingResponse,
+  startFindingRemediation,
+  closeFinding as closeFindingApi,
+  boardAcknowledge as boardAcknowledgeApi,
+  type Review,
+  type Finding,
+  type Recommendation,
+  type ActionItem,
+  type ReviewDashboard as Dashboard,
+  type OrgDashboard,
+  type FindingRisk,
+  type FindingStatus,
+  type ReviewStatus,
+} from "@/lib/api/independentReview";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type ReviewStatus = "planned" | "in_progress" | "findings_issued" | "response_due" | "completed" | "archived";
-type FindingRisk = "low" | "medium" | "high" | "critical";
-type FindingStatus = "open" | "response_submitted" | "in_remediation" | "closed" | "overdue" | "accepted_risk";
-
-interface Review {
-  id: string;
-  review_ref: string;
-  review_type: string;
-  review_scope: string;
-  status: ReviewStatus;
-  overall_rating?: string | null;
-  title: string;
-  reviewer_name?: string | null;
-  reviewer_firm?: string | null;
-  review_period_start?: string | null;
-  review_period_end?: string | null;
-  finding_count_critical: number;
-  finding_count_high: number;
-  finding_count_medium: number;
-  finding_count_low: number;
-  management_response_due?: string | null;
-  board_acknowledged: boolean;
-  report_ref?: string | null;
-}
-
-interface Finding {
-  id: string;
-  finding_ref: string;
-  finding_number: number;
-  title: string;
-  description: string;
-  risk_rating: FindingRisk;
-  category: string;
-  status: FindingStatus;
-  regulatory_reference?: string | null;
-  policy_reference?: string | null;
-  affected_areas?: string[] | null;
-  management_response?: string | null;
-  response_due_date?: string | null;
-  closed_at?: string | null;
-  closure_evidence?: string | null;
-}
-
-interface Recommendation {
-  id: string;
-  recommendation_ref: string;
-  description: string;
-  priority: string;
-  status: string;
-  target_date?: string | null;
-}
-
-interface ActionItem {
-  id: string;
-  action_ref: string;
-  title: string;
-  status: string;
-  assigned_to?: string | null;
-  due_date?: string | null;
-  is_overdue: boolean;
-  completion_evidence?: string | null;
-}
-
-interface Dashboard {
-  review: { id: string; review_ref: string; status: string; overall_rating?: string | null; board_acknowledged: boolean };
-  findings: { total: number; by_risk: Record<string, number>; by_status: Record<string, number>; overdue: Finding[] };
-  recommendations: { total: number; open: number; accepted: number; in_progress: number; completed: number; rejected: number; overdue: Recommendation[] };
-  actions: { total: number; planned: number; in_progress: number; completed: number; verified: number; overdue: ActionItem[] };
-  disclaimer: string;
-}
-
-const RISK_COLOR: Record<FindingRisk, string> = {
-  critical: "bg-red-500/20 text-red-300 border-red-500/30",
-  high: "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  medium: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  low: "bg-slate-500/20 text-slate-300 border-slate-500/30",
+const RISK_TONE: Record<FindingRisk, BadgeTone> = {
+  critical: "danger",
+  high: "orange",
+  medium: "warning",
+  low: "neutral",
 };
 
-const FINDING_STATUS_COLOR: Record<string, string> = {
-  open: "bg-slate-500/20 text-slate-300",
-  response_submitted: "bg-brand-500/20 text-brand-300",
-  in_remediation: "bg-amber-500/20 text-amber-300",
-  closed: "bg-emerald-500/20 text-emerald-300",
-  overdue: "bg-red-500/20 text-red-300",
-  accepted_risk: "bg-purple-500/20 text-purple-300",
+const FINDING_STATUS_TONE: Record<string, BadgeTone> = {
+  open: "neutral",
+  response_submitted: "info",
+  in_remediation: "warning",
+  closed: "success",
+  overdue: "danger",
+  accepted_risk: "purple",
 };
 
-const REVIEW_STATUS_COLOR: Record<ReviewStatus, string> = {
-  planned: "bg-slate-500/20 text-slate-300",
-  in_progress: "bg-brand-500/20 text-brand-300",
-  findings_issued: "bg-amber-500/20 text-amber-300",
-  response_due: "bg-orange-500/20 text-orange-300",
-  completed: "bg-emerald-500/20 text-emerald-300",
-  archived: "bg-slate-600/20 text-slate-500",
+const REVIEW_STATUS_TONE: Record<ReviewStatus, BadgeTone> = {
+  planned: "neutral",
+  in_progress: "info",
+  findings_issued: "warning",
+  response_due: "orange",
+  completed: "success",
+  archived: "muted",
 };
 
 const DEMO_REVIEWS: Review[] = [
@@ -125,7 +74,7 @@ export default function IndependentReviewPage() {
 
   const [tab, setTab] = useState<Tab>("reviews");
   const [reviews, setReviews] = useState<Review[]>(DEMO_REVIEWS);
-  const [orgDash, setOrgDash] = useState<any>(null);
+  const [orgDash, setOrgDash] = useState<OrgDashboard | null>(null);
   const [demo, setDemo] = useState(false);
   const [selected, setSelected] = useState<Review | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -140,15 +89,16 @@ export default function IndependentReviewPage() {
   };
 
   const fetchReviews = useCallback(async () => {
-    try {
-      const [rRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/independent-reviews`, { credentials: "include" }),
-        fetch(`${API}/api/v1/independent-reviews/org-dashboard`, { credentials: "include" }),
-      ]);
-      if (rRes.ok) { const d = await rRes.json(); if (d.items?.length) setReviews(d.items); }
-      else throw new Error("api");
-      if (dRes.ok) setOrgDash(await dRes.json());
-    } catch { setDemo(true); }
+    const [reviewsResult, dashResult] = await Promise.allSettled([
+      listReviews(),
+      getOrgDashboard(),
+    ]);
+    if (reviewsResult.status === "fulfilled") {
+      if (reviewsResult.value.items.length) setReviews(reviewsResult.value.items);
+    } else {
+      setDemo(true);
+    }
+    if (dashResult.status === "fulfilled") setOrgDash(dashResult.value);
   }, []);
 
   useEffect(() => { if (!user) { router.push("/login"); return; } fetchReviews(); }, []);
@@ -156,16 +106,14 @@ export default function IndependentReviewPage() {
   const openReview = async (r: Review) => {
     setSelected(r);
     setSelectedFinding(null);
-    try {
-      const [dRes, fRes] = await Promise.all([
-        fetch(`${API}/api/v1/independent-reviews/${r.id}/dashboard`, { credentials: "include" }),
-        fetch(`${API}/api/v1/independent-reviews/${r.id}/findings`, { credentials: "include" }),
-      ]);
-      setDashboard(dRes.ok ? await dRes.json() : null);
-      if (fRes.ok) { const d = await fRes.json(); setFindings(d.items?.length ? d.items : DEMO_FINDINGS); }
-      else setFindings(DEMO_FINDINGS);
-    } catch {
-      setDashboard(null);
+    const [dashResult, findingsResult] = await Promise.allSettled([
+      getReviewDashboard(r.id),
+      listFindings(r.id),
+    ]);
+    setDashboard(dashResult.status === "fulfilled" ? dashResult.value : null);
+    if (findingsResult.status === "fulfilled" && findingsResult.value.items.length) {
+      setFindings(findingsResult.value.items);
+    } else {
       setFindings(DEMO_FINDINGS);
     }
   };
@@ -174,14 +122,14 @@ export default function IndependentReviewPage() {
     setSelectedFinding(f);
     if (!selected) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/recommendations`, { credentials: "include" });
-      const recs: Recommendation[] = res.ok ? (await res.json()).items ?? [] : [];
+      const recResult = await listRecommendations(selected.id, f.id);
+      const recs = recResult.items;
       setRecommendations(recs);
       const acts: Record<string, ActionItem[]> = {};
       await Promise.all(recs.map(async (rec) => {
         try {
-          const ar = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/recommendations/${rec.id}/actions`, { credentials: "include" });
-          acts[rec.id] = ar.ok ? (await ar.json()).items ?? [] : [];
+          const ar = await listActions(selected.id, f.id, rec.id);
+          acts[rec.id] = ar.items;
         } catch { acts[rec.id] = []; }
       }));
       setActionsByRec(acts);
@@ -193,27 +141,21 @@ export default function IndependentReviewPage() {
     const evidence = prompt("Closure evidence (required):");
     if (!evidence) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/close?closure_evidence=${encodeURIComponent(evidence)}`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const updated = await res.json();
-        setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
-        setSelectedFinding(updated);
-        showToast("success", `${f.finding_ref} closed`);
-      } else showToast("error", "Failed to close finding");
-    } catch { showToast("error", "Network error"); }
+      const updated = await closeFindingApi(selected.id, f.id, evidence);
+      setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
+      setSelectedFinding(updated);
+      showToast("success", `${f.finding_ref} closed`);
+    } catch { showToast("error", "Failed to close finding"); }
   };
 
   const startRemediation = async (f: Finding) => {
     if (!selected) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/start-remediation`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const updated = await res.json();
-        setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
-        setSelectedFinding(updated);
-        showToast("success", "Remediation started");
-      } else showToast("error", "Failed to transition finding");
-    } catch { showToast("error", "Network error"); }
+      const updated = await startFindingRemediation(selected.id, f.id);
+      setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
+      setSelectedFinding(updated);
+      showToast("success", "Remediation started");
+    } catch { showToast("error", "Failed to transition finding"); }
   };
 
   const submitResponse = async (f: Finding) => {
@@ -221,26 +163,20 @@ export default function IndependentReviewPage() {
     const response = prompt("Management response:");
     if (!response) return;
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${selected.id}/findings/${f.id}/submit-response?management_response=${encodeURIComponent(response)}`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const updated = await res.json();
-        setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
-        setSelectedFinding(updated);
-        showToast("success", "Management response submitted");
-      } else showToast("error", "Failed to submit response");
-    } catch { showToast("error", "Network error"); }
+      const updated = await submitFindingResponse(selected.id, f.id, response);
+      setFindings(prev => prev.map(x => x.id === f.id ? updated : x));
+      setSelectedFinding(updated);
+      showToast("success", "Management response submitted");
+    } catch { showToast("error", "Failed to submit response"); }
   };
 
   const boardAcknowledge = async (r: Review) => {
     try {
-      const res = await fetch(`${API}/api/v1/independent-reviews/${r.id}/board-acknowledge`, { method: "POST", credentials: "include" });
-      if (res.ok) {
-        const updated = await res.json();
-        setReviews(prev => prev.map(x => x.id === r.id ? updated : x));
-        if (selected?.id === r.id) setSelected(updated);
-        showToast("success", "Board acknowledgement recorded");
-      } else showToast("error", "Failed (MLRO role required)");
-    } catch { showToast("error", "Network error"); }
+      const updated = await boardAcknowledgeApi(r.id);
+      setReviews(prev => prev.map(x => x.id === r.id ? updated : x));
+      if (selected?.id === r.id) setSelected(updated);
+      showToast("success", "Board acknowledgement recorded");
+    } catch { showToast("error", "Failed (MLRO role required)"); }
   };
 
   return (
@@ -305,9 +241,9 @@ export default function IndependentReviewPage() {
                   <div className="font-medium text-slate-100 mt-0.5">{r.title}</div>
                   <div className="text-xs text-slate-500 mt-1">{r.reviewer_firm || r.reviewer_name || "—"}</div>
                 </div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize whitespace-nowrap", REVIEW_STATUS_COLOR[r.status])}>
+                <Badge tone={REVIEW_STATUS_TONE[r.status]} nowrap>
                   {r.status.replace(/_/g, " ")}
-                </span>
+                </Badge>
               </div>
               <div className="flex items-center gap-3 mt-3 text-xs">
                 {r.finding_count_critical > 0 && <span className="text-red-400 font-medium">{r.finding_count_critical} critical</span>}
@@ -363,15 +299,15 @@ export default function IndependentReviewPage() {
                   <div key={f.id} onClick={() => openFinding(f)}
                     className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer hover:border-brand-500/30 transition-colors",
                       selectedFinding?.id === f.id ? "border-brand-500/50 bg-navy-800/60" : "border-navy-700 bg-navy-900")}>
-                    <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap", RISK_COLOR[f.risk_rating])}>
+                    <Badge tone={RISK_TONE[f.risk_rating]} bordered nowrap capitalize={false}>
                       {f.risk_rating}
-                    </span>
+                    </Badge>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-slate-200 truncate">Finding #{String(f.finding_number).padStart(3, "0")} — {f.title}</div>
                     </div>
-                    <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize whitespace-nowrap", FINDING_STATUS_COLOR[f.status])}>
+                    <Badge tone={FINDING_STATUS_TONE[f.status]} nowrap>
                       {f.status.replace(/_/g, " ")}
-                    </span>
+                    </Badge>
                     <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />
                   </div>
                 ))}
@@ -385,9 +321,9 @@ export default function IndependentReviewPage() {
                     <div className="text-xs text-slate-500">{selectedFinding.finding_ref} · {selectedFinding.category.replace(/_/g, " ")}</div>
                     <h4 className="font-semibold text-slate-100">{selectedFinding.title}</h4>
                   </div>
-                  <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap", RISK_COLOR[selectedFinding.risk_rating])}>
+                  <Badge tone={RISK_TONE[selectedFinding.risk_rating]} bordered nowrap capitalize={false}>
                     Risk: {selectedFinding.risk_rating}
-                  </span>
+                  </Badge>
                 </div>
                 <p className="text-sm text-slate-400 mb-3">{selectedFinding.description}</p>
 

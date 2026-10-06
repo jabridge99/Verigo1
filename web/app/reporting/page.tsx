@@ -7,8 +7,25 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import QuickActions from "@/components/QuickActions";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
+import {
+  listTtrReports,
+  listSmrReports,
+  getReportingSummary,
+  reviewReport,
+  approveReport,
+  submitReport,
+  acknowledgeReport,
+} from '@/lib/api/reports'
+import {
+  listIftiRecords,
+  reviewIftiRecord,
+  approveIftiRecord,
+  submitIftiRecord,
+  acknowledgeIftiRecord,
+} from '@/lib/api/ifti'
 
 type ReportKind = "ifti" | "ttr" | "smr";
 
@@ -59,19 +76,19 @@ const TYPE_LABELS: Record<string, string> = {
   smr: "SMR — Suspicious Matter",
 };
 
-const TYPE_COLOR: Record<string, string> = {
-  ttr: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  ifti: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
-  smr: "bg-red-500/20 text-red-300 border-red-500/30",
+const TYPE_TONE: Record<string, BadgeTone> = {
+  ttr: "info",
+  ifti: "sky",
+  smr: "danger",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  draft:        "bg-slate-500/20 text-slate-300",
-  under_review: "bg-purple-500/20 text-purple-300",
-  approved:     "bg-emerald-500/20 text-emerald-300",
-  submitted:    "bg-brand-500/20 text-brand-300",
-  acknowledged: "bg-teal-500/20 text-teal-300",
-  rejected:     "bg-red-500/20 text-red-300",
+const STATUS_TONE: Record<string, BadgeTone> = {
+  draft:        "neutral",
+  under_review: "purple",
+  approved:     "success",
+  submitted:    "info",
+  acknowledged: "teal",
+  rejected:     "danger",
 };
 
 const STATUTORY_INFO: Record<string, { deadline: string; obligation: string; form: string }> = {
@@ -110,20 +127,18 @@ function mapReport(raw: any, type: ReportKind): Report {
   if (type === "ifti") {
     const austracType = raw.direction === "incoming" ? "ifti_incoming" : "ifti_outgoing";
     return {
-      id: raw.id,
-      report_ref: raw.report_ref,
+      id: raw.ifti_id,
+      report_ref: raw.ifti_id,
       report_type: "ifti",
       direction: raw.direction,
-      customer_id: raw.customer_id,
       status: raw.status,
-      priority: raw.priority,
-      title: `${AUSTRAC_LABEL[austracType]} — Customer ${raw.customer_id ?? "—"}`,
-      summary: `${raw.direction === "incoming" ? "Inbound" : "Outbound"} international funds transfer of ${raw.currency || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()}.`,
-      total_amount_flagged: raw.amount_aud ?? raw.total_amount ?? 0,
+      title: `${AUSTRAC_LABEL[austracType]} — ${raw.oc_full_name || raw.bc_full_name || raw.ifti_id}`,
+      summary: `${raw.direction === "incoming" ? "Inbound" : "Outbound"} international funds transfer of ${raw.currency_code || "AUD"} $${(raw.total_amount ?? 0).toLocaleString()}.`,
+      total_amount_flagged: raw.total_amount ?? 0,
       transaction_count: 1,
       austrac_report_type: AUSTRAC_LABEL[austracType],
       due_date: raw.due_date,
-      prepared_by: raw.prepared_by,
+      prepared_by: raw.created_by,
       reviewed_by: raw.reviewed_by,
       approved_by: raw.approved_by,
       submission_reference: raw.submission_reference,
@@ -162,26 +177,17 @@ function daysRemaining(dueDate?: string): number | undefined {
   return Math.ceil(ms / 86400000);
 }
 
-const DEMO_REPORTS: Report[] = [
-  mapReport({ id: "smr_demo001", report_ref: "SMR-DEMO00001", customer_id: "cust_demo01", status: "draft", priority: "urgent", suspicion_grounds: "Sanctions watchlist match on Ivan Petrov.", subject_name: "Ivan Petrov", total_amount: 15000, transaction_ids: ["txn_1"], due_date: new Date(Date.now() + 86400000).toISOString(), created_at: new Date(Date.now() - 3600000).toISOString() }, "smr"),
-  mapReport({ id: "ttr_demo001", report_ref: "TTR-DEMO00002", customer_id: "cust_demo02", status: "under_review", priority: "high", total_amount: 45000, currency: "AUD", due_date: new Date(Date.now() + 432000000).toISOString(), reviewed_by: "compliance@firm.com.au", created_at: new Date(Date.now() - 7200000).toISOString() }, "ttr"),
-  mapReport({ id: "ifti_demo001", report_ref: "IFTI-DEMO00003", customer_id: "cust_demo03", direction: "outgoing", status: "approved", priority: "medium", total_amount: 8500, amount_aud: 8500, currency: "AUD", due_date: new Date(Date.now() + 604800000).toISOString(), approved_by: "mlro@firm.com.au", created_at: new Date(Date.now() - 86400000).toISOString() }, "ifti"),
-  mapReport({ id: "smr_demo002", report_ref: "SMR-DEMO00004", customer_id: "cust_demo04", status: "submitted", priority: "high", suspicion_grounds: "Velocity breach over 24h period.", subject_name: "Li Wei", total_amount: 72400, transaction_ids: Array.from({ length: 18 }, (_, i) => `txn_${i}`), submission_reference: "REF-7A3B9C2D", submitted_at: new Date(Date.now() - 86400000).toISOString(), created_at: new Date(Date.now() - 172800000).toISOString() }, "smr"),
-  mapReport({ id: "ttr_demo002", report_ref: "TTR-DEMO00005", customer_id: "cust_demo05", status: "acknowledged", priority: "medium", total_amount: 12000, currency: "AUD", submission_reference: "REF-4D2E8F1A", created_at: new Date(Date.now() - 259200000).toISOString() }, "ttr"),
-];
-
-const DEMO_SUMMARY: Summary = {
-  total: 5, by_type: { smr: 2, ttr: 2, ifti: 1 },
-  by_status: { draft: 1, under_review: 1, approved: 1, submitted: 1, acknowledged: 1 },
-  overdue: 0, due_soon: 1, submitted: 2, draft: 1, under_review: 1,
+const EMPTY_SUMMARY: Summary = {
+  total: 0, by_type: {}, by_status: {},
+  overdue: 0, due_soon: 0, submitted: 0, draft: 0, under_review: 0,
 };
 
 type Tab = "reports" | "obligations";
 
 export default function ReportingDashboard() {
   const [tab, setTab] = useState<Tab>("reports");
-  const [reports, setReports] = useState<Report[]>(DEMO_REPORTS);
-  const [summary, setSummary] = useState<Summary>(DEMO_SUMMARY);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -193,35 +199,41 @@ export default function ReportingDashboard() {
   };
 
   const fetchData = useCallback(async () => {
-    try {
-      const [iRes, tRes, sRes, sumRes] = await Promise.all([
-        fetch(`${API}/api/v1/reports/ifti?limit=100`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/ttr?limit=100`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/smr?limit=100`, { credentials: "include" }),
-        fetch(`${API}/api/v1/reports/summary`, { credentials: "include" }),
-      ]);
-      const all: Report[] = [];
-      if (iRes.ok) (await iRes.json()).forEach((r: any) => all.push(mapReport(r, "ifti")));
-      if (tRes.ok) (await tRes.json()).forEach((r: any) => all.push(mapReport(r, "ttr")));
-      if (sRes.ok) (await sRes.json()).forEach((r: any) => all.push(mapReport(r, "smr")));
-      if (all.length) setReports(all);
-      if (sumRes.ok) { const d = await sumRes.json(); if (d.total !== undefined) setSummary(d); }
-    } catch {}
+    const [iResult, tResult, sResult, sumResult] = await Promise.allSettled([
+      listIftiRecords(),
+      listTtrReports(100),
+      listSmrReports(100),
+      getReportingSummary(),
+    ]);
+    if (iResult.status === "rejected" && tResult.status === "rejected" && sResult.status === "rejected" && sumResult.status === "rejected") {
+      showToast("error", "Failed to load reports");
+      return;
+    }
+    const all: Report[] = [];
+    if (iResult.status === "fulfilled") iResult.value.forEach(r => all.push(mapReport(r, "ifti")));
+    if (tResult.status === "fulfilled") tResult.value.forEach(r => all.push(mapReport(r, "ttr")));
+    if (sResult.status === "fulfilled") sResult.value.forEach(r => all.push(mapReport(r, "smr")));
+    setReports(all);
+    if (sumResult.status === "fulfilled") setSummary(sumResult.value);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const advanceStatus = async (report: Report, action: "review" | "approve" | "submit" | "acknowledge") => {
-    const base = `${API}/api/v1/reports/${report.report_type}/${report.id}`;
     const statusMap: Record<string, string> = { review: "under_review", approve: "approved", submit: "submitted", acknowledge: "acknowledged" };
-    let url = "";
-    if (action === "review") url = `${base}/review`;
-    else if (action === "approve") url = report.report_type === "smr" ? `${base}/mlro-sign-off` : `${base}/approve`;
-    else if (action === "submit") url = `${base}/submit?submission_reference=${encodeURIComponent(`AUTO-${Date.now()}`)}`;
-    else url = `${base}/acknowledge?acknowledgement_ref=${encodeURIComponent(`ACK-${Date.now()}`)}`;
     try {
-      const res = await fetch(url, { method: "POST", credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (report.report_type === "ifti") {
+        if (action === "review") await reviewIftiRecord(report.id);
+        else if (action === "approve") await approveIftiRecord(report.id);
+        else if (action === "submit") await submitIftiRecord(report.id, `AUTO-${Date.now()}`);
+        else await acknowledgeIftiRecord(report.id, `ACK-${Date.now()}`);
+      } else {
+        const reportType = report.report_type;
+        if (action === "review") await reviewReport(reportType, report.id);
+        else if (action === "approve") await approveReport(reportType, report.id);
+        else if (action === "submit") await submitReport(reportType, report.id, `AUTO-${Date.now()}`);
+        else await acknowledgeReport(reportType, report.id, `ACK-${Date.now()}`);
+      }
     } catch (err: any) {
       showToast("error", `Failed to ${action}: ${err.message || "request failed"}`);
       return;
@@ -371,43 +383,43 @@ export default function ReportingDashboard() {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-navy-700">
-              <table className="w-full text-sm">
-                <thead className="bg-navy-800 border-b border-navy-700">
+              <Table>
+                <TableHead>
                   <tr>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Report</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Type</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Amount</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Due</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Created</th>
-                    <th className="px-4 py-3" />
+                    <TableHeaderCell>Report</TableHeaderCell>
+                    <TableHeaderCell>Type</TableHeaderCell>
+                    <TableHeaderCell>Status</TableHeaderCell>
+                    <TableHeaderCell>Amount</TableHeaderCell>
+                    <TableHeaderCell>Due</TableHeaderCell>
+                    <TableHeaderCell>Created</TableHeaderCell>
+                    <TableHeaderCell />
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-500">No reports found</td></tr>
+                    <TableEmptyRow colSpan={7}>No reports found</TableEmptyRow>
                   ) : filtered.map(r => {
                     const dr = daysRemaining(r.due_date);
                     return (
-                    <tr key={r.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => setSelected(r)}>
-                      <td className="px-4 py-3">
+                    <TableRow key={r.id} onClick={() => setSelected(r)}>
+                      <TableCell>
                         <div className="font-mono text-xs text-slate-500 mb-0.5">{r.report_ref}</div>
                         <div className="text-slate-200 text-xs font-medium line-clamp-1 max-w-xs">{r.title}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border", TYPE_COLOR[r.report_type] || "bg-slate-500/20 text-slate-400")}>
+                      </TableCell>
+                      <TableCell>
+                        <Badge tone={TYPE_TONE[r.report_type] ?? "neutral"} bordered capitalize={false}>
                           {r.austrac_report_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[r.status] || "bg-slate-500/20 text-slate-400")}>
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>
                           {r.status.replace(/_/g, " ")}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-300">
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-300">
                         {r.total_amount_flagged > 0 ? `AUD $${r.total_amount_flagged.toLocaleString()}` : "—"}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         {r.due_date ? (
                           <div className={clsx("text-xs font-medium", (dr ?? 99) <= 1 ? "text-red-400" : (dr ?? 99) <= 3 ? "text-amber-400" : "text-slate-400")}>
                             {dr === 0 ? "Due today" : dr === 1 ? "1 day left" : dr !== undefined ? `${dr}d` : "—"}
@@ -415,17 +427,17 @@ export default function ReportingDashboard() {
                         ) : r.submitted_at ? (
                           <span className="text-xs text-teal-400">Submitted</span>
                         ) : <span className="text-slate-600">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500">
                         {r.created_at ? new Date(r.created_at).toLocaleDateString("en-AU") : "—"}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <Eye className="w-4 h-4 text-slate-600 hover:text-brand-400 transition-colors" />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );})}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {reports.length} reports</div>
           </div>
@@ -437,14 +449,13 @@ export default function ReportingDashboard() {
 
       {/* Report detail drawer */}
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-lg bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <Drawer onClose={() => setSelected(null)} size="lg">
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-mono text-xs text-slate-500 mb-1">{selected.report_ref}</div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium border", TYPE_COLOR[selected.report_type] || "")}>
+                <Badge tone={TYPE_TONE[selected.report_type] ?? "neutral"} bordered capitalize={false}>
                   {selected.austrac_report_type}
-                </span>
+                </Badge>
                 {selected.priority && (
                   <span className="ml-2 text-xs font-medium capitalize text-slate-400">
                     {selected.priority} priority
@@ -478,7 +489,7 @@ export default function ReportingDashboard() {
 
             <div className="grid grid-cols-2 gap-3 text-sm">
               {[
-                { label: "Status", value: <span className={clsx("px-2 py-0.5 rounded-full text-xs capitalize", STATUS_COLOR[selected.status] || "")}>{selected.status.replace(/_/g," ")}</span> },
+                { label: "Status", value: <Badge tone={STATUS_TONE[selected.status] ?? "neutral"}>{selected.status.replace(/_/g," ")}</Badge> },
                 { label: "Amount", value: selected.total_amount_flagged > 0 ? `AUD $${selected.total_amount_flagged.toLocaleString()}` : "—" },
                 { label: "Days remaining", value: (() => { const dr = daysRemaining(selected.due_date); return dr !== undefined ? `${dr}d` : "—"; })() },
                 { label: "Prepared by", value: selected.prepared_by || "—" },
@@ -548,8 +559,7 @@ export default function ReportingDashboard() {
                 ]} />
               </div>
             )}
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {toast && (

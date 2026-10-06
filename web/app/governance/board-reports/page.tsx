@@ -8,26 +8,21 @@ import {
 import clsx from "clsx";
 import { getStoredUser } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import {
+  BoardReport as Report,
+  ReportStatus,
+  ReportType,
+  ReportPeriod,
+  listBoardReports,
+  createBoardReport,
+  submitReportForReview,
+  approveBoardReport,
+  distributeBoardReport,
+  archiveBoardReport,
+} from "@/lib/api/boardReports";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type ReportStatus = "draft" | "under_review" | "approved" | "distributed" | "archived";
-type ReportType = "board_aml" | "quarterly_compliance" | "risk_committee" | "annual_aml";
-
-interface Report {
-  id: string;
-  report_ref: string;
-  report_type: ReportType;
-  status: ReportStatus;
-  period: string;
-  period_start: string;
-  period_end: string;
-  report_year: number;
-  title: string;
-  approved_by?: string | null;
-  distributed_to?: string[] | null;
-  version: number;
-}
 
 const TYPE_LABELS: Record<ReportType, string> = {
   board_aml: "Board AML/CTF Report",
@@ -36,17 +31,17 @@ const TYPE_LABELS: Record<ReportType, string> = {
   annual_aml: "Annual AML/CTF Program Report",
 };
 
-const STATUS_COLOR: Record<ReportStatus, string> = {
-  draft: "bg-slate-500/20 text-slate-300",
-  under_review: "bg-brand-500/20 text-brand-300",
-  approved: "bg-emerald-500/20 text-emerald-300",
-  distributed: "bg-purple-500/20 text-purple-300",
-  archived: "bg-slate-600/20 text-slate-500",
+const STATUS_TONE: Record<ReportStatus, BadgeTone> = {
+  draft: "neutral",
+  under_review: "info",
+  approved: "success",
+  distributed: "purple",
+  archived: "muted",
 };
 
 const DEMO_REPORTS: Report[] = [
-  { id: "br_1", report_ref: "BR-2026-Q2", report_type: "board_aml", status: "under_review", period: "q2", period_start: "2026-04-01", period_end: "2026-06-30", report_year: 2026, title: "Board AML/CTF Report — Q2 2026", version: 1 },
-  { id: "br_2", report_ref: "BR-2026-Q1", report_type: "board_aml", status: "distributed", period: "q1", period_start: "2026-01-01", period_end: "2026-03-31", report_year: 2026, title: "Board AML/CTF Report — Q1 2026", approved_by: "mlro_1", distributed_to: ["Board", "Audit Committee"], version: 1 },
+  { id: "br_1", report_ref: "BR-2026-Q2", org_id: "demo", report_type: "board_aml", status: "under_review", period: "q2", period_start: "2026-04-01", period_end: "2026-06-30", report_year: 2026, title: "Board AML/CTF Report — Q2 2026", is_confidential: true, version: 1 },
+  { id: "br_2", report_ref: "BR-2026-Q1", org_id: "demo", report_type: "board_aml", status: "distributed", period: "q1", period_start: "2026-01-01", period_end: "2026-03-31", report_year: 2026, title: "Board AML/CTF Report — Q1 2026", approved_by: "mlro_1", distributed_to: ["Board", "Audit Committee"], is_confidential: true, version: 1 },
 ];
 
 export default function BoardReportsPage() {
@@ -56,7 +51,9 @@ export default function BoardReportsPage() {
   const [reports, setReports] = useState<Report[]>(DEMO_REPORTS);
   const [demo, setDemo] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ report_ref: "", report_type: "board_aml" as ReportType, period: "q2", period_start: "", period_end: "" });
+  const [form, setForm] = useState<{ report_ref: string; report_type: ReportType; period: ReportPeriod; period_start: string; period_end: string }>(
+    { report_ref: "", report_type: "board_aml", period: "q2", period_start: "", period_end: "" }
+  );
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const showToast = (type: "success" | "error", msg: string) => {
@@ -65,11 +62,10 @@ export default function BoardReportsPage() {
 
   const fetchReports = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/board-reports`, { credentials: "include" });
-      if (!res.ok) throw new Error("api");
-      const d = await res.json();
-      if (d.items?.length) setReports(d.items);
-    } catch { setDemo(true); }
+      const d = await listBoardReports();
+      setReports(d.items);
+      setDemo(false);
+    } catch { setReports(DEMO_REPORTS); setDemo(true); }
   }, []);
 
   useEffect(() => { if (!user) { router.push("/login"); return; } fetchReports(); }, []);
@@ -80,39 +76,19 @@ export default function BoardReportsPage() {
       return;
     }
     try {
-      const res = await fetch(`${API}/api/v1/board-reports`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setReports(prev => [created, ...prev]);
-        setShowCreate(false);
-        showToast("success", `${created.report_ref} created with live data snapshot`);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || "Failed to create report");
-      }
-    } catch { showToast("error", "Network error"); }
+      const created = await createBoardReport(form);
+      setReports(prev => [created, ...prev]);
+      setShowCreate(false);
+      showToast("success", `${created.report_ref} created with live data snapshot`);
+    } catch (e: unknown) { showToast("error", e instanceof Error ? e.message : "Failed to create report"); }
   };
 
-  const transition = async (r: Report, action: string, body?: any) => {
+  const applyTransition = async (r: Report, action: string, update: () => Promise<Report>) => {
     try {
-      const url = `${API}/api/v1/board-reports/${r.id}/${action}`;
-      const res = await fetch(url, {
-        method: "POST", credentials: "include",
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setReports(prev => prev.map(x => x.id === r.id ? updated : x));
-        showToast("success", `${r.report_ref}: ${action.replace(/-/g, " ")}`);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showToast("error", err.detail || `Failed: ${action}`);
-      }
-    } catch { showToast("error", "Network error"); }
+      const updated = await update();
+      setReports(prev => prev.map(x => x.id === r.id ? updated : x));
+      showToast("success", `${r.report_ref}: ${action.replace(/-/g, " ")}`);
+    } catch (e: unknown) { showToast("error", e instanceof Error ? e.message : `Failed: ${action}`); }
   };
 
   return (
@@ -151,7 +127,7 @@ export default function BoardReportsPage() {
                 className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm">
                 {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
-              <select value={form.period} onChange={e => setForm(f => ({ ...f, period: e.target.value }))}
+              <select value={form.period} onChange={e => setForm(f => ({ ...f, period: e.target.value as ReportPeriod }))}
                 className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm">
                 {["q1", "q2", "q3", "q4", "h1", "h2", "annual", "custom"].map(p => <option key={p} value={p}>{p.toUpperCase()}</option>)}
               </select>
@@ -178,29 +154,29 @@ export default function BoardReportsPage() {
                   <div className="font-medium text-slate-100 mt-0.5">{r.title}</div>
                   <div className="text-xs text-slate-500 mt-1">{r.period_start} → {r.period_end}</div>
                 </div>
-                <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize whitespace-nowrap", STATUS_COLOR[r.status])}>
+                <Badge tone={STATUS_TONE[r.status]} nowrap>
                   {r.status.replace(/_/g, " ")}
-                </span>
+                </Badge>
               </div>
 
               <div className="flex items-center gap-2 mt-4 flex-wrap">
                 {r.status === "draft" && (
-                  <button onClick={() => transition(r, "submit-for-review")} className="btn-secondary text-xs py-1.5 px-3">
+                  <button onClick={() => applyTransition(r, "submit-for-review", () => submitReportForReview(r.id))} className="btn-secondary text-xs py-1.5 px-3">
                     <Send className="w-3.5 h-3.5" /> Submit for Review
                   </button>
                 )}
                 {r.status === "under_review" && (
-                  <button onClick={() => transition(r, "approve")} className="btn-primary text-xs py-1.5 px-3">
+                  <button onClick={() => applyTransition(r, "approve", () => approveBoardReport(r.id))} className="btn-primary text-xs py-1.5 px-3">
                     <ShieldCheck className="w-3.5 h-3.5" /> Approve (MLRO)
                   </button>
                 )}
                 {r.status === "approved" && (
-                  <button onClick={() => transition(r, "distribute", { distributed_to: ["Board", "Audit Committee"] })} className="btn-primary text-xs py-1.5 px-3">
+                  <button onClick={() => applyTransition(r, "distribute", () => distributeBoardReport(r.id, { distributed_to: ["Board", "Audit Committee"] }))} className="btn-primary text-xs py-1.5 px-3">
                     <Send className="w-3.5 h-3.5" /> Distribute to Board
                   </button>
                 )}
                 {r.status === "distributed" && (
-                  <button onClick={() => transition(r, "archive")} className="btn-secondary text-xs py-1.5 px-3">
+                  <button onClick={() => applyTransition(r, "archive", () => archiveBoardReport(r.id))} className="btn-secondary text-xs py-1.5 px-3">
                     <Archive className="w-3.5 h-3.5" /> Archive
                   </button>
                 )}

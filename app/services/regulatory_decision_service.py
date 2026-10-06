@@ -28,6 +28,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
+from app.services.risk_engine import TTR_CTR_THRESHOLD_AUD
+
 log = logging.getLogger("tvg.regulatory_decision")
 
 DISCLAIMER = (
@@ -38,8 +40,8 @@ DISCLAIMER = (
 
 # ── AUSTRAC threshold constants ────────────────────────────────────────────────
 
-IFTI_THRESHOLD_AUD = 10_000.0  # AML/CTF Act s.45
-TTR_THRESHOLD_AUD = 10_000.0  # AML/CTF Act s.43 (physical currency)
+IFTI_THRESHOLD_AUD = TTR_CTR_THRESHOLD_AUD  # AML/CTF Act s.45
+TTR_THRESHOLD_AUD = TTR_CTR_THRESHOLD_AUD  # AML/CTF Act s.43 (physical currency)
 STRUCTURING_WINDOW_THRESHOLD = 9_000.0  # Near-threshold structuring indicator
 HIGH_ALERT_SCORE_FOR_SMR = 65.0
 
@@ -353,7 +355,7 @@ def evaluate_transaction(
             "PEP transactions require Source of Funds and Source of Wealth verification"
         )
     if not getattr(customer, "source_of_funds", None):
-        if amount_aud >= 10_000:
+        if amount_aud >= TTR_THRESHOLD_AUD:
             sof_reasons.append("Source of Funds not on file for this customer")
 
     if sof_reasons:
@@ -471,7 +473,7 @@ def _industry_guidance(
                 "Remittance: Verify beneficiary identity and account details (FATF R.16 travel rule)"
             )
             guidance.append(
-                "Remittance: Consider IFTI obligation for international transfers ≥ AUD 10,000"
+                f"Remittance: Consider IFTI obligation for international transfers ≥ AUD {IFTI_THRESHOLD_AUD:,.0f}"
             )
         if is_cash:
             guidance.append(
@@ -525,9 +527,9 @@ def _industry_guidance(
         guidance.append(
             "Legal/Trust: Identify ultimate beneficial owner for property and corporate transactions"
         )
-        if amount_aud >= 10_000:
+        if amount_aud >= TTR_THRESHOLD_AUD:
             guidance.append(
-                "Legal/Trust: Consider Source of Funds for transactions ≥ AUD 10,000 (FATF R.22)"
+                f"Legal/Trust: Consider Source of Funds for transactions ≥ AUD {TTR_THRESHOLD_AUD:,.0f} (FATF R.22)"
             )
         if is_cash:
             guidance.append(

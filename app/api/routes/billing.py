@@ -1,7 +1,8 @@
 """
 Billing & Subscription endpoints.
 
-POST /billing/checkout          — create Stripe Checkout session
+POST /billing/checkout          — create Stripe Checkout session (new subscription only)
+POST /billing/subscription/change-plan — change plan on an existing subscription in place
 GET  /billing/portal            — Stripe customer portal redirect
 POST /billing/webhook           — Stripe webhook (unauthenticated, verified by sig)
 GET  /billing/plans             — public plan catalogue
@@ -33,6 +34,7 @@ from app.models.billing import AddonKey, BillingInterval, BillingPlan
 from app.models.user import User, UserRole
 from app.schemas.billing import (
     AddonResponse,
+    ChangePlanRequest,
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     CustomerPortalResponse,
@@ -113,14 +115,40 @@ def create_checkout(
 ):
     if not current_user.org_id:
         raise HTTPException(400, "User has no industry_id")
-    result = svc.create_checkout_session(
-        db,
-        current_user.org_id,
-        req,
-        current_user.email,
-        getattr(current_user, "primary_organisation_id", None),
-    )
+    try:
+        result = svc.create_checkout_session(
+            db,
+            current_user.org_id,
+            req,
+            current_user.email,
+            getattr(current_user, "primary_organisation_id", None),
+        )
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return result
+
+
+@router.post("/subscription/change-plan", response_model=SubscriptionResponse)
+def change_plan(
+    req: ChangePlanRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ROLE_GATE),
+):
+    """Upgrade or downgrade an already-subscribed org's plan in place —
+    use this instead of /checkout once a subscription exists, since
+    /checkout always creates a brand-new Stripe subscription."""
+    if not current_user.org_id:
+        raise HTTPException(400, "User has no industry_id")
+    try:
+        return svc.change_subscription_plan(
+            db,
+            current_user.org_id,
+            req.plan,
+            req.interval,
+            getattr(current_user, "primary_organisation_id", None),
+        )
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 @router.get("/portal", response_model=CustomerPortalResponse)

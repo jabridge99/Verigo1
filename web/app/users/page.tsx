@@ -4,44 +4,37 @@ import { useRouter } from 'next/navigation'
 import { Users, Plus, Search, Shield, CheckCircle, XCircle, Clock, AlertTriangle, X, Save } from 'lucide-react'
 import clsx from 'clsx'
 import { getStoredUser } from '@/lib/auth'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-
-interface AppUser {
-  id: number
-  user_id: string
-  email: string
-  full_name: string
-  role: string
-  status: string
-  industry_id?: string
-  mfa_enabled: boolean
-  last_login_at?: string
-  created_at?: string
-}
+import {
+  listUsers,
+  createUser as createUserApi,
+  suspendUser,
+  activateUser,
+  type AppUser,
+} from '@/lib/api/users'
+import { Badge, type BadgeTone } from '@/components/ui/badge'
 
 const DEMO_USERS: AppUser[] = [
-  { id: 1, user_id: 'USR-ADMIN001', email: 'admin@verigo.com', full_name: 'System Administrator', role: 'admin', status: 'active', mfa_enabled: true, last_login_at: new Date().toISOString(), created_at: new Date(Date.now() - 86400000 * 90).toISOString() },
-  { id: 2, user_id: 'USR-MLRO001', email: 'mlro@cryptoedge.com.au', full_name: 'Sarah Mitchell', role: 'mlro', status: 'active', industry_id: 'dce', mfa_enabled: true, last_login_at: new Date(Date.now() - 3600000).toISOString(), created_at: new Date(Date.now() - 86400000 * 60).toISOString() },
-  { id: 3, user_id: 'USR-ANA001', email: 'analyst1@cryptoedge.com.au', full_name: 'James Chen', role: 'analyst', status: 'active', industry_id: 'dce', mfa_enabled: false, last_login_at: new Date(Date.now() - 86400000).toISOString(), created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
-  { id: 4, user_id: 'USR-COM001', email: 'compliance@globalsend.com.au', full_name: 'James Nguyen', role: 'compliance', status: 'active', industry_id: 'remittance', mfa_enabled: true, last_login_at: new Date(Date.now() - 7200000).toISOString(), created_at: new Date(Date.now() - 86400000 * 45).toISOString() },
-  { id: 5, user_id: 'USR-VIW001', email: 'auditor@external.com', full_name: 'External Auditor', role: 'viewer', status: 'active', mfa_enabled: false, last_login_at: new Date(Date.now() - 86400000 * 14).toISOString(), created_at: new Date(Date.now() - 86400000 * 14).toISOString() },
-  { id: 6, user_id: 'USR-SUS001', email: 'suspended@old.com', full_name: 'Old Employee', role: 'analyst', status: 'suspended', mfa_enabled: false, created_at: new Date(Date.now() - 86400000 * 120).toISOString() },
+  { id: 'usr_admin001', email: 'admin@verigo.com', full_name: 'System Administrator', role: 'admin', status: 'active', mfa_enabled: true, email_verified: true, is_super_admin: false, last_login_at: new Date().toISOString(), created_at: new Date(Date.now() - 86400000 * 90).toISOString() },
+  { id: 'usr_mlro001', email: 'mlro@cryptoedge.com.au', full_name: 'Sarah Mitchell', role: 'mlro', status: 'active', industry_id: 'dce', mfa_enabled: true, email_verified: true, is_super_admin: false, last_login_at: new Date(Date.now() - 3600000).toISOString(), created_at: new Date(Date.now() - 86400000 * 60).toISOString() },
+  { id: 'usr_ana001', email: 'analyst1@cryptoedge.com.au', full_name: 'James Chen', role: 'analyst', status: 'active', industry_id: 'dce', mfa_enabled: false, email_verified: true, is_super_admin: false, last_login_at: new Date(Date.now() - 86400000).toISOString(), created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
+  { id: 'usr_com001', email: 'compliance@globalsend.com.au', full_name: 'James Nguyen', role: 'compliance', status: 'active', industry_id: 'remittance', mfa_enabled: true, email_verified: true, is_super_admin: false, last_login_at: new Date(Date.now() - 7200000).toISOString(), created_at: new Date(Date.now() - 86400000 * 45).toISOString() },
+  { id: 'usr_viw001', email: 'auditor@external.com', full_name: 'External Auditor', role: 'viewer', status: 'active', mfa_enabled: false, email_verified: true, is_super_admin: false, last_login_at: new Date(Date.now() - 86400000 * 14).toISOString(), created_at: new Date(Date.now() - 86400000 * 14).toISOString() },
+  { id: 'usr_sus001', email: 'suspended@old.com', full_name: 'Old Employee', role: 'analyst', status: 'suspended', mfa_enabled: false, email_verified: true, is_super_admin: false, created_at: new Date(Date.now() - 86400000 * 120).toISOString() },
 ]
 
-const ROLE_COLOR: Record<string, string> = {
-  admin:      'bg-red-500/20 text-red-300 border border-red-500/30',
-  mlro:       'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-  compliance: 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
-  analyst:    'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-  viewer:     'bg-slate-500/20 text-slate-300 border border-slate-500/30',
+const ROLE_TONE: Record<string, BadgeTone> = {
+  admin:      'danger',
+  mlro:       'purple',
+  compliance: 'teal',
+  analyst:    'info',
+  viewer:     'neutral',
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  active:    'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-  suspended: 'bg-red-500/20 text-red-300 border border-red-500/30',
-  pending:   'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-  inactive:  'bg-slate-500/20 text-slate-300 border border-slate-500/30',
+const STATUS_TONE: Record<string, BadgeTone> = {
+  active:      'success',
+  suspended:   'danger',
+  pending_mfa: 'warning',
+  inactive:    'muted',
 }
 
 const ROLES = ['admin', 'mlro', 'compliance', 'analyst', 'viewer']
@@ -57,6 +50,7 @@ export default function UsersPage() {
   const [newForm, setNewForm] = useState({ ...DEFAULT_NEW })
   const [saving, setSaving] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     const stored = getStoredUser()
@@ -65,9 +59,8 @@ export default function UsersPage() {
       return
     }
     setCurrentUser(stored)
-    fetch(`${API}/api/v1/auth/users`, { credentials: 'include' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d && setUsers(d))
+    listUsers()
+      .then(setUsers)
       .catch(() => {})
   }, [router])
 
@@ -79,37 +72,35 @@ export default function UsersPage() {
 
   async function toggleStatus(u: AppUser) {
     const action = u.status === 'active' ? 'suspend' : 'activate'
+    setError('')
     try {
-      if (action === 'suspend') {
-        await fetch(`${API}/api/v1/auth/users/${u.user_id}/suspend`, { method: 'POST', credentials: 'include' })
-      } else {
-        await fetch(`${API}/api/v1/auth/users/${u.user_id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) })
-      }
-    } catch {}
+      await (action === 'suspend' ? suspendUser(u.id) : activateUser(u.id))
+    } catch {
+      setError(`Failed to ${action} user.`)
+      return
+    }
     const newStatus = action === 'suspend' ? 'suspended' : 'active'
-    setUsers(prev => prev.map(x => x.user_id === u.user_id ? { ...x, status: newStatus } : x))
-    if (selected?.user_id === u.user_id) setSelected(s => s ? { ...s, status: newStatus } : s)
+    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, status: newStatus } : x))
+    if (selected?.id === u.id) setSelected(s => s ? { ...s, status: newStatus } : s)
+  }
+
+  function fakeUser(): AppUser {
+    return {
+      id: `usr_demo_${Math.random().toString(36).slice(2, 8)}`,
+      email: newForm.email, full_name: newForm.full_name, role: newForm.role as AppUser['role'],
+      status: 'active', industry_id: newForm.industry_id || null,
+      mfa_enabled: false, email_verified: false, is_super_admin: false,
+      created_at: new Date().toISOString(),
+    }
   }
 
   async function createUser() {
     setSaving(true)
     try {
-      const r = await fetch(`${API}/api/v1/auth/users`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newForm),
-      })
-      if (r.ok) {
-        const u: AppUser = await r.json()
-        setUsers(prev => [u, ...prev])
-      } else {
-        const fake: AppUser = { id: Date.now(), user_id: `USR-${Math.random().toString(36).slice(2, 8).toUpperCase()}`, email: newForm.email, full_name: newForm.full_name, role: newForm.role, status: 'active', industry_id: newForm.industry_id, mfa_enabled: false, created_at: new Date().toISOString() }
-        setUsers(prev => [fake, ...prev])
-      }
+      const u = await createUserApi({ ...newForm, role: newForm.role as AppUser['role'] })
+      setUsers(prev => [u, ...prev])
     } catch {
-      const fake: AppUser = { id: Date.now(), user_id: `USR-${Math.random().toString(36).slice(2, 8).toUpperCase()}`, email: newForm.email, full_name: newForm.full_name, role: newForm.role, status: 'active', industry_id: newForm.industry_id, mfa_enabled: false, created_at: new Date().toISOString() }
-      setUsers(prev => [fake, ...prev])
+      setUsers(prev => [fakeUser(), ...prev])
     } finally {
       setSaving(false)
       setNewForm({ ...DEFAULT_NEW })
@@ -136,6 +127,8 @@ export default function UsersPage() {
             <Plus className="w-4 h-4" /> Add User
           </button>
         </div>
+
+        {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -180,21 +173,17 @@ export default function UsersPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filtered.map(u => (
-                  <tr key={u.user_id} className="hover:bg-navy-700/50 transition-colors">
+                  <tr key={u.id} className="hover:bg-navy-700/50 transition-colors">
                     <td className="px-5 py-3">
                       <div className="font-medium text-white">{u.full_name}</div>
                       <div className="text-xs text-white/40">{u.email}</div>
                       {u.industry_id && <div className="text-xs text-brand-400 mt-0.5">{u.industry_id}</div>}
                     </td>
                     <td className="px-5 py-3">
-                      <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', ROLE_COLOR[u.role])}>
-                        {u.role}
-                      </span>
+                      <Badge tone={ROLE_TONE[u.role] ?? 'neutral'} capitalize={false}>{u.role}</Badge>
                     </td>
                     <td className="px-5 py-3">
-                      <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLOR[u.status])}>
-                        {u.status}
-                      </span>
+                      <Badge tone={STATUS_TONE[u.status] ?? 'neutral'} capitalize={false}>{u.status}</Badge>
                     </td>
                     <td className="px-5 py-3">
                       {u.mfa_enabled

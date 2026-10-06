@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, List, Optional, Sequence
 
-from app.models.governance import PolicyLifecycleStatus
 from app.models.governance_controls import (
     DEFAULT_EFFECTIVENESS_THRESHOLDS,
     DEFAULT_SEVERITY_DEDUCTIONS,
@@ -30,6 +29,7 @@ from app.models.governance_controls import (
     FindingSeverity,
     RemediationStatus,
 )
+from app.models.governance_policies import PolicyLifecycleStatus
 from app.models.governance_training import TrainingStatus
 
 # ══════════════════════════════════════════════════════════════════════════════

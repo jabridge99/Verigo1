@@ -1,44 +1,81 @@
 'use client'
 
+import { apiFetch, storeSession, type AuthUser } from '@/lib/auth'
+import { createCustomer } from '@/lib/api/customers'
+import {
+  listMyOrganisations,
+  createOrganisation,
+  updateOrganisation,
+  setOrganisationIndustry,
+  setOrganisationRiskProfile,
+  selectIndustry,
+  generateAmlProgram,
+  generateRiskAssessment,
+  listAmlProgramVersions,
+  getAmlProgramVersion,
+  exportAmlProgram,
+  getAmlProgramHealth,
+  acknowledgeAmlAccountability,
+  type Organisation,
+  type AmlProgramItem,
+  type AmlProgram,
+  type AmlProgramSectionCompletion,
+  type AmlProgramDocument,
+  type RiskFactor,
+  type RiskAssessment,
+  type AmlProgramVersion,
+  type AmlProgramVersionList,
+  type AmlProgramVersionDetail,
+  type ProgramHealth,
+} from '@/lib/api/organisations'
+
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 export interface RegisterResult {
   user_id: string
+  org_id: string
   email: string
   full_name: string
+  role: AuthUser['role']
+  industry_id?: string
+  is_super_admin?: boolean
+  access_token: string
   dev_verify_email_token?: string
 }
 
-export interface Organisation {
-  org_id: string
-  name: string
-  industry_id?: string
-  risk_profile?: 'low' | 'standard' | 'high'
-  abn?: string
-  business_address?: string
-  phone?: string
-  compliance_officer_name?: string
-  compliance_officer_email?: string
+// Organisation, AmlProgramItem, AmlProgram and the rest of the
+// organisations-resource types/functions below are re-exported from
+// lib/api/organisations.ts (the canonical definitions) to keep this
+// module's existing consumers (app/start-trial/StartTrialForm.tsx,
+// app/aml-program/page.tsx, components/OnboardingWizard.tsx) compiling
+// unchanged.
+export type {
+  Organisation,
+  AmlProgramItem,
+  AmlProgram,
+  AmlProgramSectionCompletion,
+  AmlProgramDocument,
+  RiskFactor,
+  RiskAssessment,
+  AmlProgramVersion,
+  AmlProgramVersionList,
+  AmlProgramVersionDetail,
+  ProgramHealth,
 }
-
-export interface AmlProgramItem {
-  category: string
-  title: string
-  description?: string
-  review_frequency?: string
-  is_required: boolean
-  locked?: boolean
-}
-
-export interface AmlProgram {
-  program_id: string
-  industry_id: string
-  risk_profile: string
-  status: string
-  version: number
-  items: AmlProgramItem[]
-  is_preview?: boolean
-  total_items?: number
+export {
+  listMyOrganisations,
+  createOrganisation,
+  updateOrganisation,
+  setOrganisationIndustry,
+  setOrganisationRiskProfile,
+  selectIndustry,
+  generateAmlProgram,
+  generateRiskAssessment,
+  listAmlProgramVersions,
+  getAmlProgramVersion,
+  exportAmlProgram,
+  getAmlProgramHealth,
+  acknowledgeAmlAccountability,
 }
 
 async function asJson(r: Response) {
@@ -53,18 +90,33 @@ export async function registerAccount(opts: {
   email: string
   password: string
   full_name: string
+  organisation_name?: string
 }): Promise<RegisterResult> {
-  const r = await fetch(`${API}/api/v1/auth/register`, {
+  const r = await apiFetch(`${API}/api/v1/auth/register`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(opts),
   })
-  return asJson(r)
+  const data: RegisterResult = await asJson(r)
+  if (data.access_token) {
+    storeSession(
+      {
+        user_id: data.user_id,
+        email: data.email,
+        full_name: data.full_name,
+        role: data.role,
+        industry_id: data.industry_id,
+        is_super_admin: data.is_super_admin,
+      },
+      data.access_token,
+    )
+  }
+  return data
 }
 
 export async function confirmEmailVerification(token: string): Promise<void> {
-  const r = await fetch(`${API}/api/v1/auth/email/verify/confirm`, {
+  const r = await apiFetch(`${API}/api/v1/auth/email/verify/confirm`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -73,138 +125,39 @@ export async function confirmEmailVerification(token: string): Promise<void> {
   await asJson(r)
 }
 
-export async function listMyOrganisations(): Promise<Organisation[]> {
-  const r = await fetch(`${API}/api/v1/organisations`, { credentials: 'include' })
-  return asJson(r)
+// The organisation's real AML/CTF Program document (app/api/routes/aml_program.py),
+// auto-drafted from the industry template as soon as an industry is selected --
+// distinct from the AmlProgram/generateAmlProgram() checklist above, which is a
+// separate, versioned deliverable with its own export/QR-verification workflow
+// (see web/app/aml-program/page.tsx). This document has no preview/paywall concept.
+
+// Uses /versions (not GET /aml-program, which only returns an *active*
+// program) because a freshly-seeded program is still a draft at this point
+// in onboarding -- nobody has reviewed/activated it yet. /versions returns
+// every version regardless of status, newest first, so the most recent one
+// is the org's real, just-seeded program document.
+export async function getLatestAmlProgramDocument(): Promise<AmlProgramDocument | null> {
+  const r = await apiFetch(`${API}/api/v1/aml-program/versions?page_size=1`, { credentials: 'include' })
+  const data = await asJson(r)
+  return data.versions?.[0] ?? null
 }
 
-export async function createOrganisation(name: string): Promise<Organisation> {
-  const r = await fetch(`${API}/api/v1/organisations`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  })
-  return asJson(r)
-}
-
-export async function updateOrganisation(orgId: string, fields: Partial<Organisation>): Promise<Organisation> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(fields),
-  })
-  return asJson(r)
-}
-
-export async function setOrganisationIndustry(orgId: string, industryId: string): Promise<Organisation> {
-  return updateOrganisation(orgId, { industry_id: industryId })
-}
-
-export async function setOrganisationRiskProfile(
-  orgId: string,
-  riskProfile: 'low' | 'standard' | 'high'
-): Promise<Organisation> {
-  return updateOrganisation(orgId, { risk_profile: riskProfile })
-}
-
-export async function generateAmlProgram(orgId: string): Promise<AmlProgram> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/generate`, {
-    method: 'POST',
-    credentials: 'include',
-  })
-  return asJson(r)
-}
-
-export interface RiskFactor {
-  factor: string
-  label: string
-  description: string
-  rating: string
-  locked?: boolean
-}
-
-export interface RiskAssessment {
-  industry_id: string
-  risk_profile: string
-  overall_rating: string
-  factors: RiskFactor[]
-  is_preview?: boolean
-  total_factors?: number
-}
-
-export async function generateRiskAssessment(orgId: string): Promise<RiskAssessment> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/risk-assessment/generate`, {
-    method: 'POST',
-    credentials: 'include',
-  })
-  return asJson(r)
-}
-
-export interface AmlProgramVersion {
-  version: number
-  generated_at?: string
-  item_count: number
-  content_hash: string
-  qr_token: string
-  is_current: boolean
-  locked?: boolean
-}
-
-export interface AmlProgramVersionList {
-  versions: AmlProgramVersion[]
-  full_history_available: boolean
-}
-
-export interface AmlProgramVersionDetail {
-  version: number
-  generated_at?: string
-  item_count: number
-  content_hash: string
-  qr_token: string
-  items: AmlProgramItem[]
-}
-
-export interface ProgramHealth {
-  score: number
-  up_to_date: boolean
-  suggestions: { category: string; title: string; description?: string }[]
-}
-
-export async function listAmlProgramVersions(orgId: string): Promise<AmlProgramVersionList> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/versions`, { credentials: 'include' })
-  return asJson(r)
-}
-
-export async function getAmlProgramVersion(orgId: string, version: number): Promise<AmlProgramVersionDetail> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/versions/${version}`, { credentials: 'include' })
-  return asJson(r)
-}
-
-export async function exportAmlProgram(orgId: string, reason: string): Promise<void> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/export`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reason }),
-  })
-  await asJson(r)
-}
-
-export async function getAmlProgramHealth(orgId: string): Promise<ProgramHealth> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-program/health`, { credentials: 'include' })
-  return asJson(r)
-}
-
-export async function acknowledgeAmlAccountability(orgId: string): Promise<void> {
-  const r = await fetch(`${API}/api/v1/organisations/${orgId}/aml-accountability/ack`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ acknowledged: true }),
-  })
-  await asJson(r)
+/**
+ * Downloads the document-controlled export (watermarked for unpaid orgs,
+ * 1-year validity stamp, print blocked) and returns it as HTML for the
+ * caller to open, e.g. via a Blob URL. See export_aml_program_html on the
+ * backend for the document-control policy this implements.
+ */
+export async function exportAmlProgramHtml(orgId: string, reason: string): Promise<string> {
+  const r = await apiFetch(
+    `${API}/api/v1/organisations/${orgId}/aml-program/export-html?reason=${encodeURIComponent(reason)}`,
+    { credentials: 'include' },
+  )
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Export failed')
+  }
+  return r.text()
 }
 
 export interface FirstCustomerInput {
@@ -223,11 +176,11 @@ export interface FirstCustomerInput {
 }
 
 export async function createFirstCustomer(payload: FirstCustomerInput): Promise<{ customer_id: string; full_name: string }> {
-  const r = await fetch(`${API}/api/v1/customers/`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return asJson(r)
+  // The real response is CustomerResponse (id, full_name, ...) — this
+  // function's declared shape (customer_id, full_name) predates that and
+  // was never actually populated correctly (its one caller doesn't read
+  // the result), so map id -> customer_id explicitly instead of trusting
+  // the raw response to already match.
+  const c = await createCustomer(payload)
+  return { customer_id: c.id, full_name: c.full_name }
 }

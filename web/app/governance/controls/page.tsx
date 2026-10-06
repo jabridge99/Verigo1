@@ -6,35 +6,21 @@ import {
   ClipboardCheck, Wrench, User,
 } from "lucide-react";
 import clsx from "clsx";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type RiskArea =
-  | "cdd" | "edd" | "pep_screening" | "sanctions_screening" | "transaction_monitoring"
-  | "ifti_reporting" | "smr_reporting" | "ttr_reporting" | "travel_rule"
-  | "record_keeping" | "training" | "governance" | "beneficial_ownership"
-  | "outsourcing" | "custom";
-
-type ControlStatus = "active" | "inactive" | "under_review" | "remediation" | "suspended";
-type Effectiveness = "effective" | "largely_effective" | "partially_effective" | "ineffective" | "not_tested";
-type Frequency = "continuous" | "daily" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual" | "ad_hoc" | "per_transaction";
-
-interface Control {
-  id: string;
-  control_ref: string;
-  name: string;
-  description?: string | null;
-  control_type: string;
-  risk_area: RiskArea;
-  control_owner: string;
-  business_unit?: string | null;
-  frequency: Frequency;
-  is_key_control: boolean;
-  status: ControlStatus;
-  effectiveness: Effectiveness;
-  last_tested_date?: string | null;
-  next_test_date?: string | null;
-}
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, TableEmptyRow } from "@/components/ui/table";
+import { Drawer } from "@/components/ui/drawer";
+import {
+  listControls,
+  listControlTests,
+  recordControlTest,
+  createControl,
+  type Control,
+  type RiskArea,
+  type ControlStatus,
+  type Effectiveness,
+  type Frequency,
+  type ControlTest,
+} from "@/lib/api/governanceControls";
 
 const RISK_AREA_LABELS: Record<RiskArea, string> = {
   cdd: "CDD", edd: "EDD", pep_screening: "PEP Screening", sanctions_screening: "Sanctions Screening",
@@ -44,12 +30,12 @@ const RISK_AREA_LABELS: Record<RiskArea, string> = {
   outsourcing: "Outsourcing", custom: "Custom",
 };
 
-const STATUS_COLOR: Record<ControlStatus, string> = {
-  active: "bg-emerald-500/20 text-emerald-300",
-  inactive: "bg-slate-600/20 text-slate-500",
-  under_review: "bg-brand-500/20 text-brand-300",
-  remediation: "bg-amber-500/20 text-amber-300",
-  suspended: "bg-red-500/20 text-red-300",
+const STATUS_TONE: Record<ControlStatus, BadgeTone> = {
+  active: "success",
+  inactive: "muted",
+  under_review: "info",
+  remediation: "warning",
+  suspended: "danger",
 };
 
 const EFFECTIVENESS_COLOR: Record<Effectiveness, string> = {
@@ -77,7 +63,7 @@ export default function ControlsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [riskAreaFilter, setRiskAreaFilter] = useState("all");
   const [selected, setSelected] = useState<Control | null>(null);
-  const [tests, setTests] = useState<any[]>([]);
+  const [tests, setTests] = useState<ControlTest[]>([]);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const showToast = (type: "success" | "error", msg: string) => {
@@ -86,8 +72,8 @@ export default function ControlsPage() {
 
   const fetchControls = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls`, { credentials: "include" });
-      if (res.ok) { const d = await res.json(); if (d.length) setControls(d); }
+      const d = await listControls();
+      if (d.length) setControls(d);
     } catch {}
   }, []);
 
@@ -96,8 +82,7 @@ export default function ControlsPage() {
   const openControl = async (c: Control) => {
     setSelected(c);
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls/${c.id}/tests`, { credentials: "include" });
-      setTests(res.ok ? await res.json() : []);
+      setTests(await listControlTests(c.id));
     } catch { setTests([]); }
   };
 
@@ -107,28 +92,33 @@ export default function ControlsPage() {
       sample_size: 10,
       passed_samples: result === "pass" ? 10 : 4,
       failed_samples: result === "pass" ? 0 : 6,
-      result: result === "pass" ? "pass" : "fail",
+      result: result === "pass" ? "pass" as const : "fail" as const,
     };
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls/${control.id}/tests`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const test = await res.json();
-        setTests(prev => [test, ...prev]);
-        const newEff: Effectiveness = result === "pass" ? "effective" : "ineffective";
-        setControls(prev => prev.map(c => c.id === control.id ? { ...c, effectiveness: newEff, last_tested_date: payload.test_date } : c));
-        setSelected(prev => prev ? { ...prev, effectiveness: newEff, last_tested_date: payload.test_date } : prev);
-        showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"}`);
-        return;
-      }
+      const test = await recordControlTest(control.id, payload);
+      setTests(prev => [test, ...prev]);
+      const newEff: Effectiveness = result === "pass" ? "effective" : "ineffective";
+      setControls(prev => prev.map(c => c.id === control.id ? { ...c, effectiveness: newEff, last_tested_date: payload.test_date } : c));
+      setSelected(prev => prev ? { ...prev, effectiveness: newEff, last_tested_date: payload.test_date } : prev);
+      showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"}`);
+      return;
     } catch {}
     const newEff: Effectiveness = result === "pass" ? "effective" : "ineffective";
-    setTests(prev => [{ id: `t_${Date.now()}`, ...payload, calculated_effectiveness: newEff, created_at: new Date().toISOString() }, ...prev]);
+    const demoTest: ControlTest = {
+      id: `t_${Date.now()}`,
+      control_id: control.id,
+      tester_id: "demo",
+      ...payload,
+      calculated_effectiveness: newEff,
+      action_required: false,
+      retest_required: false,
+      is_finalised: true,
+      created_at: new Date().toISOString(),
+    };
+    setTests(prev => [demoTest, ...prev]);
     setControls(prev => prev.map(c => c.id === control.id ? { ...c, effectiveness: newEff, last_tested_date: payload.test_date } : c));
     setSelected(prev => prev ? { ...prev, effectiveness: newEff, last_tested_date: payload.test_date } : prev);
-    showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"}`);
+    showToast("success", `Test recorded — ${result === "pass" ? "passed" : "failed"} (demo)`);
   };
 
   const filtered = controls.filter(c => {
@@ -213,50 +203,50 @@ export default function ControlsPage() {
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
                 className="bg-navy-800 border border-navy-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
                 <option value="all">Status — All</option>
-                {Object.keys(STATUS_COLOR).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                {Object.keys(STATUS_TONE).map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
               </select>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-navy-700">
-              <table className="w-full text-sm">
-                <thead className="bg-navy-800 border-b border-navy-700">
+              <Table>
+                <TableHead>
                   <tr>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Ref</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Control</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Risk Area</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Owner</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Frequency</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Effectiveness</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Status</th>
+                    <TableHeaderCell>Ref</TableHeaderCell>
+                    <TableHeaderCell>Control</TableHeaderCell>
+                    <TableHeaderCell>Risk Area</TableHeaderCell>
+                    <TableHeaderCell>Owner</TableHeaderCell>
+                    <TableHeaderCell>Frequency</TableHeaderCell>
+                    <TableHeaderCell>Effectiveness</TableHeaderCell>
+                    <TableHeaderCell>Status</TableHeaderCell>
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-500">No controls found</td></tr>
+                    <TableEmptyRow colSpan={7}>No controls found</TableEmptyRow>
                   ) : filtered.map(c => (
-                    <tr key={c.id} className="border-b border-navy-800 hover:bg-navy-800/40 cursor-pointer transition-colors" onClick={() => openControl(c)}>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-400">{c.control_ref}</td>
-                      <td className="px-4 py-3 text-slate-200">
+                    <TableRow key={c.id} onClick={() => openControl(c)}>
+                      <TableCell className="font-mono text-xs text-slate-400">{c.control_ref}</TableCell>
+                      <TableCell className="text-slate-200">
                         {c.name}
                         {c.is_key_control && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-brand-500/20 text-brand-300 border border-brand-500/30">KEY</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-400">{RISK_AREA_LABELS[c.risk_area]}</td>
-                      <td className="px-4 py-3 text-xs text-slate-400">{c.control_owner}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500 capitalize">{c.frequency.replace("_", " ")}</td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-400">{RISK_AREA_LABELS[c.risk_area]}</TableCell>
+                      <TableCell className="text-xs text-slate-400">{c.control_owner}</TableCell>
+                      <TableCell className="text-xs text-slate-500 capitalize">{c.frequency.replace("_", " ")}</TableCell>
+                      <TableCell>
                         <span className={clsx("font-medium text-xs capitalize", EFFECTIVENESS_COLOR[c.effectiveness])}>
                           {c.effectiveness.replace(/_/g, " ")}
                         </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[c.status])}>
+                      </TableCell>
+                      <TableCell>
+                        <Badge tone={STATUS_TONE[c.status]}>
                           {c.status.replace("_", " ")}
-                        </span>
-                      </td>
-                    </tr>
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="text-xs text-slate-500 text-right">{filtered.length} of {controls.length} controls</div>
           </div>
@@ -272,8 +262,7 @@ export default function ControlsPage() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-lg bg-navy-800 border-l border-navy-700 h-full overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <Drawer onClose={() => setSelected(null)} size="lg">
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-mono text-xs text-slate-500 mb-1">{selected.control_ref}</div>
@@ -283,9 +272,9 @@ export default function ControlsPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", STATUS_COLOR[selected.status])}>
+              <Badge tone={STATUS_TONE[selected.status]}>
                 {selected.status.replace("_", " ")}
-              </span>
+              </Badge>
               <span className={clsx("text-xs font-medium capitalize", EFFECTIVENESS_COLOR[selected.effectiveness])}>
                 {selected.effectiveness.replace(/_/g, " ")}
               </span>
@@ -343,8 +332,7 @@ export default function ControlsPage() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {toast && (
@@ -392,12 +380,7 @@ function CreateControlForm({ onCreated }: { onCreated: (c: Control) => void }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/api/v1/governance/controls`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onCreated(await res.json());
+      onCreated(await createControl(form));
     } catch {
       onCreated(buildControl());
     } finally { setSubmitting(false); }

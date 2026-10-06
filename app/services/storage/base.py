@@ -40,6 +40,11 @@ class StorageProvider(abc.ABC):
     @abc.abstractmethod
     async def stream(self, key: str, chunk_size: int = 65_536) -> AsyncIterator[bytes]:
         """Stream object content in chunks."""
+        # Every concrete adapter implements this as an async generator (uses
+        # `yield`), so mypy needs to see one here too to infer the matching
+        # `AsyncIterator[bytes]` type rather than `Coroutine[..., AsyncIterator]`.
+        raise NotImplementedError
+        yield b""  # pragma: no cover — unreachable; satisfies the generator check
 
     @abc.abstractmethod
     async def delete(self, key: str) -> None:

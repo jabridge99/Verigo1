@@ -116,6 +116,7 @@ class CaseListOut(BaseModel):
     is_overdue: bool
     assigned_to: Optional[str] = None
     due_date: Optional[date] = None
+    closed_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:

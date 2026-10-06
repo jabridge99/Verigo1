@@ -66,6 +66,11 @@ class CheckoutSessionResponse(BaseModel):
     session_id: str
 
 
+class ChangePlanRequest(BaseModel):
+    plan: BillingPlan
+    interval: BillingInterval
+
+
 class CustomerPortalResponse(BaseModel):
     portal_url: str
 

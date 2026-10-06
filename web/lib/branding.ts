@@ -1,3 +1,5 @@
+import { apiFetch } from "@/lib/auth";
+
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export interface BrandingConfig {
@@ -34,7 +36,7 @@ export async function fetchBranding(industryId?: string): Promise<BrandingConfig
     const url = industryId
       ? `${API}/api/v1/branding?industry_id=${encodeURIComponent(industryId)}`
       : `${API}/api/v1/branding`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await apiFetch(url, { cache: "no-store" });
     if (!res.ok) return DEFAULT_BRANDING;
     return await res.json();
   } catch {
@@ -43,7 +45,7 @@ export async function fetchBranding(industryId?: string): Promise<BrandingConfig
 }
 
 export async function saveBranding(data: Partial<BrandingConfig>): Promise<BrandingConfig> {
-  const res = await fetch(`${API}/api/v1/branding`, {
+  const res = await apiFetch(`${API}/api/v1/branding`, {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -57,7 +59,7 @@ export async function saveBranding(data: Partial<BrandingConfig>): Promise<Brand
 }
 
 export async function resetBranding(): Promise<void> {
-  await fetch(`${API}/api/v1/branding`, {
+  await apiFetch(`${API}/api/v1/branding`, {
     method: "DELETE",
     credentials: "include",
   });

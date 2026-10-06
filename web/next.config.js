@@ -19,7 +19,7 @@ const nextConfig = {
       },
       {
         source: '/packs',
-        destination: '/industry',
+        destination: '/industries',
         permanent: false,
       },
       {
@@ -30,7 +30,27 @@ const nextConfig = {
     ]
   },
   async headers() {
+    // P50 (Security Hardening): the page a browser actually loads from
+    // this app had no Content-Security-Policy or HSTS at all -- the CSP
+    // found during the Stage 15 survey (app/middleware.py's
+    // SecurityHeadersMiddleware) only wraps the FastAPI backend's JSON API
+    // responses, not this frontend's HTML/JS. vercel.json's existing
+    // X-Content-Type-Options/X-Frame-Options/Referrer-Policy headers are
+    // untouched; this adds the one that was missing entirely (HSTS).
+    //
+    // Content-Security-Policy itself is set in proxy.ts, not here --
+    // P50b's nonce-based script-src needs a fresh random value every
+    // request, which this static headers() config can't produce.
     return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
+        ],
+      },
       {
         source: '/sw.js',
         headers: [
